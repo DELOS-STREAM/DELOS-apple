@@ -174,6 +174,17 @@ stream_loader_lines_video_stream_2
 stream_menu_tile_disconnect
 stream_menu_tile_quit
 stream_menu_tile_resume
+stream_menu_tile_overlay
+common_on
+common_off
+stream_stats_decoder
+stream_stats_incoming
+stream_stats_rendering
+stream_stats_network
+stream_stats_pc_processing
+stream_stats_render_latency
+stream_stats_bandwidth
+stream_stats_lost_frames
 stream_quit_failed
 stream_result_back_to_library
 stream_result_closed_title

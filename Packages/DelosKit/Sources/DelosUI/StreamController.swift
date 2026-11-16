@@ -1,7 +1,9 @@
 import DelosCore
 import DelosInput
+import DelosMedia
 import Foundation
 import Observation
+import OSLog
 
 /// The display a stream is shown on, in pixels.
 struct DisplayInfo: Equatable, Sendable {
@@ -21,6 +23,7 @@ protocol StreamSteps: AnyObject {
     var events: AsyncStream<StreamEvent> { get }
     /// Where input goes once the stream runs; nil without a real session.
     var input: (any StreamInputSink)? { get }
+    var statisticsSource: StreamStatisticsSource? { get }
     /// Asks the PC and launches the app, or resumes it when it already runs.
     func launch(display: DisplayInfo) async throws(LaunchFailure)
     /// Connects the streaming core; returns once video and audio flow.
@@ -29,6 +32,11 @@ protocol StreamSteps: AnyObject {
     func stop() async
     /// Asks the PC to quit the app; false when it did not.
     func quitApp() async -> Bool
+}
+
+extension StreamSteps {
+    /// Attempts without a video renderer (including lifecycle tests) have no presentation telemetry.
+    var statisticsSource: StreamStatisticsSource? { nil }
 }
 
 /// One stream on the screen (`DelosStreamActivity` with `StreamLoader` of DELOS for Android): launch, the connecting
@@ -56,12 +64,15 @@ final class StreamController {
     /// `StreamLoader`).
     private(set) var progress = 0.0
     private(set) var menuOpen = false
+    private(set) var statisticsEnabled = false
+    private(set) var statistics: StreamStatistics?
 
     @ObservationIgnored private let makeSteps: @MainActor () -> any StreamSteps
     @ObservationIgnored private var steps: any StreamSteps
     @ObservationIgnored private var display: DisplayInfo?
     @ObservationIgnored private var attempt: Task<Void, Never>?
     @ObservationIgnored private var listener: Task<Void, Never>?
+    @ObservationIgnored private var statisticsTask: Task<Void, Never>?
     @ObservationIgnored private(set) var input: GameInput?
     @ObservationIgnored private var trackpad = TouchTrackpad()
     @ObservationIgnored private var swipe = MenuSwipe()
@@ -127,6 +138,7 @@ final class StreamController {
             connected()
         case .terminated(let termination):
             guard phase == .streaming || phase == .connecting else { return }
+            stopStatistics()
             stopInput()
             if let text = StreamText.termination(termination) { fail(text) } else { phase = .ended }
         case let .rumble(controller, low, high):
@@ -147,11 +159,13 @@ final class StreamController {
             input.start()
             self.input = input
         }
+        startStatistics()
     }
 
     private func fail(_ text: ResultText) {
         // Once the player leaves or the app goes to the background, what the interrupted attempt throws is no failure
         guard !suspended, phase == .connecting || phase == .streaming else { return }
+        stopStatistics()
         stopInput()
         menuOpen = false
         phase = .failed(text)
@@ -176,6 +190,36 @@ final class StreamController {
         input?.paused = false
     }
 
+    func toggleStatistics() {
+        statisticsEnabled.toggle()
+    }
+
+    private func startStatistics() {
+        guard let source = steps.statisticsSource else { return }
+        statisticsTask = Task { [weak self] in
+            do {
+                while !Task.isCancelled {
+                    try await Task.sleep(for: .seconds(1))
+                    let reading = await source.sample()
+                    guard !Task.isCancelled else { return }
+                    guard let self else { return }
+                    self.statistics = reading
+                }
+            } catch is CancellationError {
+                // Leaving, termination and suspension cancel the sampler before the core stops.
+            } catch {
+                Logger(subsystem: "io.github.meitoncz.delos", category: "StreamStatistics")
+                    .error("Statistics sampling clock failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    private func stopStatistics() {
+        statisticsTask?.cancel()
+        statisticsTask = nil
+        statistics = nil
+    }
+
     // MARK: Background
 
     /// The app goes to the background. iOS suspends it and the connection would break while it is away (the owner
@@ -183,6 +227,7 @@ final class StreamController {
     /// running on the PC. The loader shows until ``returnedToForeground()`` connects again.
     func enteredBackground() async {
         guard phase == .connecting || phase == .streaming, !suspended else { return }
+        stopStatistics()
         suspended = true
         menuOpen = false
         stopInput()
@@ -213,6 +258,7 @@ final class StreamController {
         case .connecting, .streaming:
             break
         }
+        stopStatistics()
         menuOpen = false
         phase = .leaving(quit ? L("stream_exit_quitting", steps.appName) : L("stream_exit_disconnecting"))
         stopInput()

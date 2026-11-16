@@ -34,6 +34,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   profile screen show the top navigation (Settings, Profile), and the left menu button of a controller opens the side
   menu with All settings.
 - Holding a direction on a controller or the keyboard repeats it, as on Android.
+- The full statistics panel and the stream menu's Overlay toggle from DELOS for Android: negotiated resolution and
+  codec, incoming and displayed frame rates, video payload bandwidth, network round-trip time, host processing,
+  presentation lateness and missing frames. Actual decode duration and RTP packet-loss percentage are unavailable
+  with the current renderer/core and are not invented. Live statistics on a real stream are not verified.
 
 ### Changed
 
