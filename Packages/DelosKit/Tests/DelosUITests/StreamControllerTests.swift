@@ -116,6 +116,40 @@ private let iPhone = DisplayInfo(pixelWidth: 1290, pixelHeight: 2796, maxFramesP
         #expect(text.details?.hasPrefix(L("stream_result_failed_stage", StreamStage.rtspHandshake.name, Int32(-408))) == true)
     }
 
+    @Test func theBackgroundClosesTheStreamAndTheReturnConnectsAgain() async {
+        final class Made { var steps: [FakeSteps] = [] }
+        let made = Made()
+        let controller = StreamController {
+            let steps = FakeSteps()
+            made.steps.append(steps)
+            return steps
+        }
+        controller.start(display: iPhone)
+        await eventually { made.steps.last?.isConnecting == true }
+        made.steps.last?.finishConnect()
+        await eventually { controller.phase == .streaming }
+        await controller.enteredBackground()
+        // Closed at once, no failure shown, the loader waits for the return
+        #expect(made.steps[0].stops == 1)
+        #expect(controller.phase == .connecting)
+        controller.returnedToForeground()
+        await eventually { made.steps.count == 2 && made.steps[1].isConnecting }
+        made.steps[1].finishConnect()
+        await eventually { controller.phase == .streaming }
+        #expect(controller.phase == .streaming)
+        #expect(made.steps[1].launchedOn == iPhone)
+    }
+
+    @Test func returningWithoutHavingLeftDoesNothing() async {
+        let steps = FakeSteps()
+        let controller = StreamController { steps }
+        controller.start(display: iPhone)
+        await eventually { steps.isConnecting }
+        controller.returnedToForeground()
+        #expect(steps.stops == 0)
+        #expect(controller.phase == .connecting)
+    }
+
     @Test func tryAgainStartsANewAttempt() async {
         final class Made { var steps: [FakeSteps] = [] }
         let made = Made()

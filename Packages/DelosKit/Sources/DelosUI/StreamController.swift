@@ -65,6 +65,8 @@ final class StreamController {
     @ObservationIgnored private(set) var input: GameInput?
     @ObservationIgnored private var trackpad = TouchTrackpad()
     @ObservationIgnored private var swipe = MenuSwipe()
+    /// The app went to the background during the stream: the connection was closed and is opened again on return.
+    @ObservationIgnored private(set) var suspended = false
 
     init(makeSteps: @escaping @MainActor () -> any StreamSteps) {
         self.makeSteps = makeSteps
@@ -148,8 +150,8 @@ final class StreamController {
     }
 
     private func fail(_ text: ResultText) {
-        // Once the player leaves, what the interrupted attempt throws is no failure
-        guard phase == .connecting || phase == .streaming else { return }
+        // Once the player leaves or the app goes to the background, what the interrupted attempt throws is no failure
+        guard !suspended, phase == .connecting || phase == .streaming else { return }
         stopInput()
         menuOpen = false
         phase = .failed(text)
@@ -172,6 +174,31 @@ final class StreamController {
         guard menuOpen else { return }
         menuOpen = false
         input?.paused = false
+    }
+
+    // MARK: Background
+
+    /// The app goes to the background. iOS suspends it and the connection would break while it is away (the owner
+    /// came back to a black screen and a failure), so the stream is closed now, as Disconnect does: the game keeps
+    /// running on the PC. The loader shows until ``returnedToForeground()`` connects again.
+    func enteredBackground() async {
+        guard phase == .connecting || phase == .streaming, !suspended else { return }
+        suspended = true
+        menuOpen = false
+        stopInput()
+        listener?.cancel()
+        attempt?.cancel()
+        phase = .connecting
+        progress = 0
+        await steps.stop()
+    }
+
+    /// The app is back: the same game is resumed on the PC with a new connection.
+    func returnedToForeground() {
+        guard suspended else { return }
+        suspended = false
+        steps = makeSteps()
+        run()
     }
 
     // MARK: Leaving

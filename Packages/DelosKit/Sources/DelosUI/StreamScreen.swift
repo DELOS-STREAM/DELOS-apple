@@ -22,6 +22,7 @@ struct StreamScreen: View {
     @Environment(Navigator.self) private var navigator
     @State private var controller: StreamController?
     @State private var renderer: DisplayLayerRenderer?
+    @Environment(\.scenePhase) private var scenePhase
 
     init(hostID: String, appID: Int, settings: StreamSettings) {
         self.hostID = hostID
@@ -39,6 +40,14 @@ struct StreamScreen: View {
         .onDisappear(perform: end)
         .onChange(of: controller?.phase) { _, phase in
             if phase == .ended { navigator.back() }
+        }
+        .onChange(of: scenePhase) { _, now in
+            guard let controller else { return }
+            switch now {
+            case .background: Task { await controller.enteredBackground() }
+            case .active: controller.returnedToForeground()
+            default: break
+            }
         }
         #if os(iOS)
         .persistentSystemOverlays(.hidden)

@@ -157,6 +157,9 @@ left edge of the touch screen (`MenuSwipe`: a touch starting in the left 4 % bel
 the PC; 12 % of the width to the right opens the menu). Android swipes up from the bottom edge, but on iPhone and iPad
 that edge belongs to the system's home gesture. The menu is minimal: Resume, Disconnect and Quit app from Android's dock.
 While it is open, `GameInput` sends nothing and releases every held button, key and mouse button at the PC.
+When the app goes to the background during a stream, iOS suspends it and the connection would break; the stream is
+closed at once instead (as Disconnect: the game keeps running on the PC), the loader shows, and on return the same game
+is resumed with a new connection (`StreamController.enteredBackground` / `returnedToForeground`).
 
 ### Input during a stream
 
