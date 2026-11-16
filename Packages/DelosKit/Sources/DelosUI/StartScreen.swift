@@ -105,7 +105,7 @@ public struct DelosRoot: View {
     private let appearances = AppearanceStore()
     private let streamSettings = StreamSettingsStore()
     /// The tab Settings opens with (debug builds: `-DelosSettings <tab>`).
-    private let settingsTab: SettingsTab
+    private let settingsTab: SettingsTab?
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     #if os(tvOS)
     @Namespace private var focusScope
@@ -128,7 +128,7 @@ public struct DelosRoot: View {
         _actions = State(initialValue: actions)
         if !profiles.isFirstRun { navigator.reset(to: .start, focus: actions.startFocus()) }
         var appearance = profiles.current.map { AppearanceStore().load(profile: $0.id) } ?? Appearance()
-        var settingsTab = SettingsTab.stream
+        var settingsTab: SettingsTab?
         #if DEBUG
         // Screenshots (docs/BUILDING.md): -DelosBackground <kind>, -DelosTheme light, -DelosPalette <name>,
         // -DelosScale <percent>, -DelosClock <system|h12|h24>, and -DelosSettings <tab> opens Settings on that tab,
@@ -166,10 +166,7 @@ public struct DelosRoot: View {
                 let entry = navigator.stack[navigator.stack.count - 1]
                 screen(entry)
                     .id(ObjectIdentifier(entry.focus))
-                    .transition(systemReduceMotion || appearance.reducedMotion ? .opacity : .asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 1.035)),
-                        removal: .opacity.combined(with: .scale(scale: 0.96))
-                    ))
+                    .transition(ScreenMotion.transition(reduced: systemReduceMotion || appearance.reducedMotion))
                 if case .stream = navigator.current {} else {
                     TopBar(
                         brand: navigator.current != .start, navigation: navigation(entry),
