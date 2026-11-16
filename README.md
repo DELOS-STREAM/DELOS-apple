@@ -2,7 +2,7 @@
 
 DELOS is a controller-first game streaming client for [Vibepollo](https://github.com/Nonary/Vibepollo),
 [Apollo](https://github.com/ClassicOldSong/Apollo) and [Sunshine](https://github.com/LizardByte/Sunshine). This repository
-is the port to iPhone, iPad, Apple TV and Mac. The Android app lives in [Meitoncz/DELOS](https://github.com/Meitoncz/DELOS);
+is the port to iPhone, iPad, Apple TV and Mac. The Android app lives in [DELOS-STREAM/DELOS-android](https://github.com/DELOS-STREAM/DELOS-android);
 the website is [delos-stream.com](https://delos-stream.com).
 
 > **Work in progress.** DELOS for Apple pairs with a PC and streams on iPhone and iPad (first device test on
@@ -16,12 +16,12 @@ the website is [delos-stream.com](https://delos-stream.com).
 | Apple TV | Planned after iPhone and iPad |
 | Mac | In development |
 
-The work is tracked in the [issues](https://github.com/Meitoncz/DELOS-apple/issues) and their milestones.
+The work is tracked in the [issues](https://github.com/DELOS-STREAM/DELOS-apple/issues) and their milestones.
 
 ## Technology
 
 The new app is written in Swift 6 with SwiftUI, SwiftData, async/await and Metal. The streaming protocol comes from the C
-core [Meitoncz/Delos-common-c](https://github.com/Meitoncz/Delos-common-c), which DELOS for Android uses too. The minimum
+core [DELOS-STREAM/Delos-common-c](https://github.com/DELOS-STREAM/Delos-common-c), which DELOS for Android uses too. The minimum
 system versions are iOS 18, iPadOS 18, tvOS 18 and macOS 15.
 
 ## Lineage

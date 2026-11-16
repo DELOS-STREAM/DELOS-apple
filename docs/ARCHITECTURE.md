@@ -1075,7 +1075,7 @@ The row of covers keeps its distance from the stage's bottom edge: its top is 43
 (Android's `HomeStandard.ROW_TOP`) and moves down by the extra height on a taller one, so on an iPad (1920 × 1440) the
 covers end 110 px above the bottom as on 16:9. The room above the row grows (the title is centred in it). Android's
 tall shape keeps the row at 430 from the top instead; the owner wants the bottom anchoring everywhere (issue in
-Meitoncz/DELOS).
+DELOS-STREAM/DELOS-android).
 
 The game background's hero is fitted to the width at the top and fades into a blurred extension; on a stage taller than
 16:9 that band would fill only a third of the screen, so it is scaled up to a share of the hero area that grows from half at 16:9 to two thirds at 4:3 and beyond

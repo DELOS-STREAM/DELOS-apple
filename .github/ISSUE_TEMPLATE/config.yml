@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: DELOS for Android
-    url: https://github.com/Meitoncz/DELOS/issues
+    url: https://github.com/DELOS-STREAM/DELOS-android/issues
     about: Problems and ideas for the Android app belong to its repository.
   - name: Report a vulnerability
-    url: https://github.com/Meitoncz/DELOS-apple/security/advisories/new
+    url: https://github.com/DELOS-STREAM/DELOS-apple/security/advisories/new
     about: Security problems are reported privately, never in a public issue.

@@ -7,7 +7,7 @@ for binaries, checksum (rule of [ENGINEERING_RULES.md](ENGINEERING_RULES.md)).
 
 | Component | Path | Origin | Version | License |
 |---|---|---|---|---|
-| delos-common-c, the DELOS streaming core (submodule; built as `CDelosCommon`) | `ThirdParty/delos-common-c` | [Meitoncz/Delos-common-c](https://github.com/Meitoncz/Delos-common-c) | `c54d2298c0717523a1c0967c82b85131ddf3aac0` (branch `fix/rtp-loss-counters`, one commit over `master` 8c20813: fills the video loss counters; not yet merged into the fork's master) | GPL-3.0 |
+| delos-common-c, the DELOS streaming core (submodule; built as `CDelosCommon`) | `ThirdParty/delos-common-c` | [DELOS-STREAM/Delos-common-c](https://github.com/DELOS-STREAM/Delos-common-c) | `c54d2298c0717523a1c0967c82b85131ddf3aac0` (branch `fix/rtp-loss-counters`, one commit over `master` 8c20813: fills the video loss counters; not yet merged into the fork's master) | GPL-3.0 |
 | ENet, fork for moonlight-common-c (submodule of delos-common-c) | `ThirdParty/delos-common-c/enet` | [cgutman/enet](https://github.com/cgutman/enet) | `98dbb897ac4a7208038e0782cddedf89dcf0723a` | MIT |
 | nanors, Reed-Solomon FEC (submodule of delos-common-c) | `ThirdParty/delos-common-c/nanors` | [sleepybishop/nanors](https://github.com/sleepybishop/nanors) | `a9b1636f9c98dbfdd0daeaf6982ccd24d1c30f29` | MIT |
 | libopus (submodule; built as `COpus`) | `ThirdParty/opus` | [xiph/opus](https://github.com/xiph/opus) | `v1.6.1`, `22244de5a79bd1d6d623c32e72bf1954b56235be` | BSD-3-Clause |

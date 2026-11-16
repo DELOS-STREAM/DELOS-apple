@@ -3,4 +3,4 @@
 	url = https://github.com/xiph/opus.git
 [submodule "ThirdParty/delos-common-c"]
 	path = ThirdParty/delos-common-c
-	url = https://github.com/Meitoncz/Delos-common-c.git
+	url = https://github.com/DELOS-STREAM/Delos-common-c.git

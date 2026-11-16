@@ -1,7 +1,7 @@
 # Engineering rules
 
 The permanent rules of DELOS are defined once, in the Android repository:
-[docs/ENGINEERING_RULES.md of Meitoncz/DELOS](https://github.com/Meitoncz/DELOS/blob/main/docs/ENGINEERING_RULES.md).
+[docs/ENGINEERING_RULES.md of DELOS-STREAM/DELOS-android](https://github.com/DELOS-STREAM/DELOS-android/blob/main/docs/ENGINEERING_RULES.md).
 They apply here unchanged: tests, security, history, binaries, claims, documentation, releases, commit messages and
 branch names. This page lists only what is specific to the Apple port.
 
@@ -11,7 +11,7 @@ branch names. This page lists only what is specific to the Apple port.
 |---|---|
 | Swift 6 language mode with strict concurrency, SwiftUI, Observation, SwiftData, async/await, Metal, VideoToolbox, AVFAudio, GameController, CryptoKit | Objective-C, storyboards and XIBs, UIKit view controllers (except the thin host of the video layer), Core Data, SDL2, FFmpeg |
 
-The C streaming core [Meitoncz/Delos-common-c](https://github.com/Meitoncz/Delos-common-c) is the only C code of the
+The C streaming core [DELOS-STREAM/Delos-common-c](https://github.com/DELOS-STREAM/Delos-common-c) is the only C code of the
 app and is shared with Android. It is changed in its own repository first, then pinned here.
 
 ## Minimum systems

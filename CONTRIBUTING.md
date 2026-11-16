@@ -6,8 +6,8 @@ this page says how to take part.
 
 ## Reporting bugs and ideas
 
-Open an [issue](https://github.com/Meitoncz/DELOS-apple/issues). Search existing issues first. Problems of the Android
-app belong to [Meitoncz/DELOS](https://github.com/Meitoncz/DELOS/issues); problems on the PC side belong to
+Open an [issue](https://github.com/DELOS-STREAM/DELOS-apple/issues). Search existing issues first. Problems of the Android
+app belong to [DELOS-STREAM/DELOS-android](https://github.com/DELOS-STREAM/DELOS-android/issues); problems on the PC side belong to
 [Vibepollo](https://github.com/Nonary/Vibepollo), [Apollo](https://github.com/ClassicOldSong/Apollo) or
 [Sunshine](https://github.com/LizardByte/Sunshine). Remove IP addresses, PC and account names from logs and screenshots.
 
@@ -29,7 +29,7 @@ the code (behaviour that needs a device), say so in the commit body with a line 
 ## Commit messages and branch names
 
 The same convention as DELOS for Android, described in its
-[CONTRIBUTING.md](https://github.com/Meitoncz/DELOS/blob/main/CONTRIBUTING.md#commit-messages): Conventional Commits
+[CONTRIBUTING.md](https://github.com/DELOS-STREAM/DELOS-android/blob/main/CONTRIBUTING.md#commit-messages): Conventional Commits
 with a subject of at most 72 characters, `[skip ci]` as the last line of the body on `main`, and Conventional Branch names
 such as `feature/1-swift-skeleton`. Two hooks check both; enable them once per clone:
 

@@ -13,7 +13,7 @@ The repository path must not contain spaces.
 ## First setup
 
 ```sh
-git clone --recurse-submodules https://github.com/Meitoncz/DELOS-apple.git
+git clone --recurse-submodules https://github.com/DELOS-STREAM/DELOS-apple.git
 cd DELOS-apple
 git config core.hooksPath tools/hooks
 cp Config/Local.example.xcconfig Config/Local.xcconfig   # only for a real device: put your team id there
