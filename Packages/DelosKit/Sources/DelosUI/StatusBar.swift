@@ -46,15 +46,24 @@ struct BatteryStatus: Equatable, Sendable {
 }
 
 /// The Wi-Fi of the default network (`WifiStatus` of DELOS for Android). iOS gives apps no signal strength, so it is
-/// connected (full bars) or not; another network (cellular, Ethernet) shows as no Wi-Fi, as on Android.
+/// connected (full bars) or not; another network (cellular, Ethernet) shows as no Wi-Fi, as on Android. Except on Apple
+/// TV, which is often wired: a connection by cable shows no icon at all instead of a Wi-Fi that is off.
 enum WifiStatus: Equatable, Sendable {
-    case connected, none
+    case connected, none, wired
 
-    init(satisfied: Bool, usesWifi: Bool) {
-        self = satisfied && usesWifi ? .connected : .none
+    /// - Parameter wired: the network is Ethernet (read on Apple TV only).
+    init(satisfied: Bool, usesWifi: Bool, wired: Bool = false) {
+        self = satisfied && usesWifi ? .connected : satisfied && wired ? .wired : .none
     }
 
-    var icon: String { self == .connected ? Symbols.wifi : Symbols.wifiOff }
+    /// The glyph of the status; nil when there is nothing to show.
+    var icon: String? {
+        switch self {
+        case .connected: Symbols.wifi
+        case .none: Symbols.wifiOff
+        case .wired: nil
+        }
+    }
 }
 
 extension BatteryStatus {
@@ -91,7 +100,12 @@ extension BatteryStatus {
         guard monitor == nil else { return }
         let monitor = NWPathMonitor()
         monitor.pathUpdateHandler = { [weak self] path in
-            let wifi = WifiStatus(satisfied: path.status == .satisfied, usesWifi: path.usesInterfaceType(.wifi))
+            #if os(tvOS)
+            let wired = path.usesInterfaceType(.wiredEthernet)
+            #else
+            let wired = false
+            #endif
+            let wifi = WifiStatus(satisfied: path.status == .satisfied, usesWifi: path.usesInterfaceType(.wifi), wired: wired)
             Task { @MainActor in self?.wifi = wifi }
         }
         monitor.start(queue: .main)
@@ -314,7 +328,7 @@ struct TopBar: View {
                             }
                             Spacer(minLength: 0)
                         }
-                        if let navigation { TopNav(buttons: navigation.buttons, focus: navigation.focus) }
+                        if let navigation { TopNav(buttons: navigation.buttons, focus: navigation.focus).tvFocusSection() }
                         StatusCluster(wifi: wifi, battery: battery, clock: clock)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     }
@@ -434,7 +448,7 @@ private struct StatusCluster: View {
 
     var body: some View {
         HStack(spacing: stage.px(gap)) {
-            SymbolView(symbol: wifi.icon, size: 30, color: colors.text)
+            if let icon = wifi.icon { SymbolView(symbol: icon, size: 30, color: colors.text) }
             if let battery {
                 HStack(spacing: stage.px(batteryGap)) {
                     BatteryIndicator(battery: battery)

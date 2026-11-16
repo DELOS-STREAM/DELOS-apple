@@ -71,7 +71,13 @@ public final class FocusModel {
         actions[id] = nil
         moves[id] = nil
         menus[id] = nil
-        if focused == id { focused = frames.keys.first }
+        guard focused == id else { return }
+        // A screen that leaves unregisters all its items one after the other: its focus must stay on the item it had, for
+        // the way back. So the focus moves on only if other items are still there once the layout has settled.
+        Task { [weak self] in
+            guard let self, focused == id, frames[id] == nil, let next = frames.keys.first else { return }
+            focused = next
+        }
     }
 
     /// The focused item's context menu and its frame (global points); nil when it has none.
@@ -109,6 +115,31 @@ public final class FocusModel {
         guard let next = FocusGeometry.next(from: current, direction: direction, candidates: others) else { return false }
         self.focused = next
         return true
+    }
+}
+
+extension EnvironmentValues {
+    /// The focus of the layer or the side menu that is open (tvOS): the items of every other focus cannot take the
+    /// system focus meanwhile. Nil: nothing is open.
+    @Entry var modalFocus: FocusModel?
+}
+
+extension EnvironmentValues {
+    /// The focus scope of the root (tvOS): items name their model's focused item as the preferred one in it.
+    @Entry var focusNamespace: Namespace.ID?
+}
+
+/// Marks the item as the preferred default focus of the root's scope, when there is one.
+private struct PreferredFocus: ViewModifier {
+    let preferred: Bool
+    let namespace: Namespace.ID?
+
+    func body(content: Content) -> some View {
+        #if os(tvOS)
+        if let namespace { content.prefersDefaultFocus(preferred, in: namespace) } else { content }
+        #else
+        content
+        #endif
     }
 }
 
@@ -153,16 +184,54 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
 
     #if os(tvOS)
     @FocusState private var systemFocused: Bool
+    @Environment(\.modalFocus) private var modalFocus
+    @Environment(\.focusNamespace) private var scope
+
+    /// A layer or the side menu is open and it is not this item's: the item cannot take the system focus.
+    private var blocked: Bool { modalFocus != nil && modalFocus !== model }
+
+    /// Asks the focus engine for the focus on this item, and again a moment later: it ignores a request made while the
+    /// item has just appeared or the item that had the focus is going away (a layer opened), and then keeps the old
+    /// focus until the next press.
+    private func requestFocus() {
+        guard model.focused == AnyHashable(id) else { return }
+        systemFocused = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            if model.focused == AnyHashable(id), !blocked { systemFocused = true }
+        }
+    }
+
     public var body: some View {
-        content(systemFocused)
-            .focusable()
+        // The element a layer belongs to keeps its focus look while the layer has the system focus
+        let item = content(systemFocused || (blocked && model.focused == AnyHashable(id)))
+            // The frames and actions are registered as on the other platforms: a context menu is placed beside its
+            // item, and the root's commands (Play/Pause, a controller's X) open the focused item's menu
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+                model.register(AnyHashable(id), frame: frame, moves: moves, menu: menu, action: action)
+            }
+            .onDisappear { model.unregister(AnyHashable(id)) }
+            .focusable(!blocked)
+            .focusEffectDisabled()
             .focused($systemFocused)
+            .modifier(PreferredFocus(preferred: model.focused == AnyHashable(id) && !blocked, namespace: scope))
             .onChange(of: systemFocused) { _, now in if now { model.focus(AnyHashable(id)) } }
             // The model moves the focus too (to the next step of a form, or the first item of a screen)
             .onChange(of: model.focused) { _, now in if now == AnyHashable(id) { systemFocused = true } }
-            .onAppear { if model.focused == AnyHashable(id) { systemFocused = true } }
+            // When the layer closes, the item that had the focus gets it back
+            .onChange(of: blocked) { _, now in if !now { requestFocus() } }
+            .onAppear { requestFocus() }
             // The Siri Remote's select is A, not a touch
             .onTapGesture(perform: action)
+        if menu != nil {
+            // A long press on the Siri Remote's touch surface opens the context menu, as Play/Pause does at the root
+            item.onLongPressGesture(minimumDuration: 0.6) {
+                model.focus(AnyHashable(id))
+                layers?.openContextMenu(of: model)
+            }
+        } else {
+            item
+        }
     }
     #else
     public var body: some View {
@@ -187,4 +256,18 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
         }
     }
     #endif
+}
+
+
+extension View {
+    /// tvOS: the view spans the full width and is a focus section, so Up or Down from an item beside it reaches the items
+    /// inside: the focus engine only moves to a view that overlaps the focused one along the other axis, and the top
+    /// navigation, the profile chip and the tabs are narrower than the items below them. No effect elsewhere.
+    @ViewBuilder func tvFocusSection() -> some View {
+        #if os(tvOS)
+        frame(maxWidth: .infinity).focusSection()
+        #else
+        self
+        #endif
+    }
 }

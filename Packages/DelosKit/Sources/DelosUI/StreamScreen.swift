@@ -69,7 +69,7 @@ struct StreamScreen: View {
         self.renderer = renderer
         self.controller = controller
         navigator.commandCapture = { [navigator] command in
-            Self.capture(command, controller: controller, focus: navigator.focus)
+            Self.capture(command, controller: controller, focus: navigator.focus, fromRemote: navigator.commandFromRemote)
         }
         IdleTimer.disabled = true
         // Quitting the app (the Mac: Command-Q, closing the window) leaves the stream first
@@ -88,11 +88,22 @@ struct StreamScreen: View {
     /// Who gets a controller or keyboard command: the PC while the stream runs (``GameInput`` sends it), the stream
     /// menu or the result overlay while they are shown (through the screen's focus); B closes the menu, leaves the
     /// result overlay (Back to library) and stops a stream that is still connecting.
-    static func capture(_ command: MenuCommand, controller: StreamController, focus: FocusModel) -> Bool {
+    ///
+    /// The Siri Remote (Apple TV, [fromRemote]) has no L3 + R3: its Play/Pause opens the stream menu, and so does its
+    /// Menu button when no game controller is connected (a controller's Menu button is Start for the PC, and the
+    /// system also reports it as Menu). Either closes the open menu.
+    static func capture(
+        _ command: MenuCommand, controller: StreamController, focus: FocusModel, fromRemote: Bool = false,
+        hasGamepad: @autoclosure () -> Bool = ConnectedControllers.hasGamepad
+    ) -> Bool {
         switch controller.phase {
         case .streaming:
-            guard controller.menuOpen else { return true }
-            if command == .back {
+            let remoteMenu = fromRemote && (command == .options || (command == .back && !hasGamepad()))
+            guard controller.menuOpen else {
+                if remoteMenu { controller.openMenu() }
+                return true
+            }
+            if command == .back || remoteMenu {
                 controller.closeMenu()
                 return true
             }
@@ -155,6 +166,25 @@ struct StreamContent: View {
             case .ended:
                 EmptyView()
             }
+            #if os(tvOS)
+            // Menu and Play/Pause reach the app only through a focused view: while nothing else is focusable (the
+            // loader, the running stream) this one holds the focus, so Menu does not leave the app for Apple TV's Home
+            if holdsFocus {
+                FocusItem(id: Self.sinkID, model: focus, action: {}) { _ in Color.clear.frame(width: 2, height: 2) }
+                    .onAppear { focus.focus(Self.sinkID) }
+            }
+            #endif
+        }
+    }
+
+    static let sinkID = "stream-sink"
+
+    /// Whether no other view of the stream screen can take the focus.
+    private var holdsFocus: Bool {
+        switch controller.phase {
+        case .connecting, .leaving: true
+        case .streaming: !controller.menuOpen
+        case .failed, .ended: false
         }
     }
 

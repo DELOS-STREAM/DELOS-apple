@@ -45,6 +45,9 @@ xcrun simctl launch <UDID> io.github.meitoncz.delos.debug -DelosBackground nebul
 ```
 
 The same arguments work on the Mac: `sh tools/mac.sh /tmp/shot.png 5 -DelosBackground nebula` ([below](#a-mac)).
+Apple TV: `sh tools/sim.sh tv /tmp/shot.png` shows the start screen in the Apple TV 4K simulator. The simulator has no remote
+input from `simctl`; a throwaway XCUITest bundle that calls `XCUIRemote.shared.press(.select)` and the like (and
+`XCUIScreen.main.screenshot()`) drives the real focus engine, Menu and Play/Pause against the installed debug app.
 
 ## Project layout
 

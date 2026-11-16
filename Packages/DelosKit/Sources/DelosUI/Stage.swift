@@ -43,11 +43,44 @@ public struct Stage: Equatable, Sendable {
     /// The interface scale (Settings → Appearance, 1.0 to 1.3) that text and icons are drawn at (``tpx(_:)``): Android's
     /// `StageMetrics.textScale`. Inside a ``ZoomedBar`` it is 1, because the whole bar is zoomed instead.
     public let textScale: Double
+    /// The smallest text or icon size in points ``tpx(_:)`` gives (0: none). On Apple TV text under 24 points is hard to
+    /// read from the sofa (Apple's tvOS guidelines name 23 as the smallest size), so the caption sizes of the 1920 × 1080
+    /// design, which was made for a handheld, are raised to it.
+    public let minimumText: Double
 
-    /// - Parameter textScale: the interface scale, `Appearance.uiScale / 100`.
-    public init(size: CGSize, safeArea: EdgeInsets = EdgeInsets(), textScale: Double = 1) {
+    /// The smallest text size on this platform: ``tvMinimumText`` on tvOS, none elsewhere.
+    public static let platformMinimumText: Double = {
+        #if os(tvOS)
+        tvMinimumText
+        #else
+        0
+        #endif
+    }()
+    public static let tvMinimumText = 24.0
+
+    /// The title-safe area of Apple TV in points (60 above and below, 90 at the sides), which content keeps within: the
+    /// system's safe area there is 60 and 80 and falls short of it.
+    public static let tvTitleSafeArea = EdgeInsets(top: 60, leading: 90, bottom: 60, trailing: 90)
+    public static let platformMinimumSafeArea: EdgeInsets = {
+        #if os(tvOS)
+        tvTitleSafeArea
+        #else
+        EdgeInsets()
+        #endif
+    }()
+
+    /// The system's safe area, at least [minimum] on each edge.
+    public static func safeArea(system: EdgeInsets, minimum: EdgeInsets) -> EdgeInsets {
+        EdgeInsets(top: max(system.top, minimum.top), leading: max(system.leading, minimum.leading),
+                   bottom: max(system.bottom, minimum.bottom), trailing: max(system.trailing, minimum.trailing))
+    }
+
+    /// - Parameters:
+    ///   - textScale: the interface scale, `Appearance.uiScale / 100`.
+    ///   - minimumText: the smallest text size in points, see ``minimumText``.
+    public init(size: CGSize, safeArea: EdgeInsets = EdgeInsets(), textScale: Double = 1, minimumText: Double = Stage.platformMinimumText) {
         guard size.width > 0, size.height > 0 else {
-            self.init(scale: 1, width: Self.designWidth, height: Self.designHeight, safe: EdgeInsets(), textScale: textScale)
+            self.init(scale: 1, width: Self.designWidth, height: Self.designHeight, safe: EdgeInsets(), textScale: textScale, minimumText: minimumText)
             return
         }
         let unit = max(min(size.width / Self.designWidth, size.height / Self.designHeight), Self.minPointsPerPixel)
@@ -57,17 +90,18 @@ public struct Stage: Equatable, Sendable {
             height: Self.snap(size.height / unit, Self.designHeight),
             safe: EdgeInsets(top: safeArea.top / unit, leading: safeArea.leading / unit,
                              bottom: safeArea.bottom / unit, trailing: safeArea.trailing / unit),
-            textScale: textScale
+            textScale: textScale, minimumText: minimumText
         )
     }
 
-    private init(scale: Double, width: Double, height: Double, shape: StageShape? = nil, safe: EdgeInsets, textScale: Double) {
+    private init(scale: Double, width: Double, height: Double, shape: StageShape? = nil, safe: EdgeInsets, textScale: Double, minimumText: Double) {
         self.scale = scale
         self.width = width
         self.height = height
         self.shape = shape ?? Self.classify(width: width, height: height)
         self.safe = safe
         self.textScale = textScale
+        self.minimumText = minimumText
     }
 
     /// The limiting axis is exactly 1920 or 1080, not w / (w / 1920) with its rounding error.
@@ -89,7 +123,7 @@ public struct Stage: Equatable, Sendable {
     public func px(_ value: Double) -> CGFloat { CGFloat(value * scale) }
 
     /// A text or icon size in stage pixels, in points, at the interface scale (Android's `tpx`).
-    public func tpx(_ value: Double) -> CGFloat { CGFloat(value * scale * textScale) }
+    public func tpx(_ value: Double) -> CGFloat { CGFloat(max(value * scale * textScale, minimumText)) }
 
     /// The stage of a bar zoomed as a whole by [uiScale] (Android's `ZoomedBar`, the prototype's CSS zoom): a stage pixel
     /// is [uiScale] times larger, so the bar has as many stage pixels across as the zoomed bar really has room for; text
@@ -99,7 +133,7 @@ public struct Stage: Equatable, Sendable {
             scale: scale * uiScale, width: width / uiScale, height: height / uiScale, shape: shape,
             safe: EdgeInsets(top: safe.top / uiScale, leading: safe.leading / uiScale,
                              bottom: safe.bottom / uiScale, trailing: safe.trailing / uiScale),
-            textScale: 1)
+            textScale: 1, minimumText: minimumText)
     }
 }
 
@@ -128,7 +162,7 @@ public struct StageReader<Content: View>: View {
             GeometryReader { proxy in
                 content
                     .frame(width: proxy.size.width, height: proxy.size.height)
-                    .environment(\.stage, Stage(size: proxy.size, safeArea: safeArea, textScale: textScale))
+                    .environment(\.stage, Stage(size: proxy.size, safeArea: Stage.safeArea(system: safeArea, minimum: Stage.platformMinimumSafeArea), textScale: textScale))
             }
             .ignoresSafeArea()
         }

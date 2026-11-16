@@ -171,20 +171,36 @@ struct PairAddressScreen: View {
     var body: some View {
         VStack(spacing: stage.px(48)) {
             Heading(title: L("devices_address_title"), sub: L("devices_address_note"))
-            FocusItem(id: "field", model: focus, moves: [.down: "add"], action: { typing = true }) { focused in
-                TextPill(
-                    label: L("pairing_pc_address_hint"), icon: Symbols.mapPin, placeholder: "192.168.1.20", text: $text,
-                    editing: $typing, focused: focused, address: true, onSubmit: { focus.focus("add") }
-                )
-            }
+            addressField
             FocusItem(id: "add", model: focus, moves: [.up: "field"], action: { onSubmit(text) }) { focused in
                 PillButton(label: L("devices_address_action"), icon: Symbols.addLink, primary: true, focused: focused)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onChange(of: typing) { _, now in navigator.isEditingText = now }
+        .onChange(of: typing) { _, now in navigator.textEditing(now) }
         .onChange(of: navigator.isEditingText) { _, now in if !now { typing = false } }
         .onAppear { typing = true }
+    }
+}
+
+extension PairAddressScreen {
+    @ViewBuilder fileprivate var addressField: some View {
+        #if os(tvOS)
+        // The text field takes the focus itself and opens the system keyboard when it is selected; a focus item around it
+        // would take the select instead. Done on the keyboard goes on to the button.
+        TextPill(
+            label: L("pairing_pc_address_hint"), icon: Symbols.mapPin, placeholder: "192.168.1.20", text: $text,
+            editing: $typing, focused: false, address: true, onSubmit: { focus.focus("add") }
+        )
+        .tvFocusSection()
+        #else
+        FocusItem(id: "field", model: focus, moves: [.down: "add"], action: { typing = true }) { focused in
+            TextPill(
+                label: L("pairing_pc_address_hint"), icon: Symbols.mapPin, placeholder: "192.168.1.20", text: $text,
+                editing: $typing, focused: focused, address: true, onSubmit: { focus.focus("add") }
+            )
+        }
+        #endif
     }
 }
 

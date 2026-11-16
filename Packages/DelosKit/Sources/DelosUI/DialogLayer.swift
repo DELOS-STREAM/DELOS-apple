@@ -84,7 +84,7 @@ struct DialogLayer: View {
         .animation(.easeOut(duration: 0.25), value: keyboardTop)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { layerFrame = $0 }
-        .onChange(of: typing != nil) { _, now in navigator.isEditingText = now }
+        .onChange(of: typing != nil) { _, now in navigator.textEditing(now) }
         .onChange(of: navigator.isEditingText) { _, now in if !now { typing = nil } }
         .onDisappear { if typing != nil { navigator.isEditingText = false } }
         #if os(iOS)
@@ -127,6 +127,25 @@ private struct DialogFieldView: View {
     @FocusState private var editing: Bool
 
     var body: some View {
+        #if os(tvOS)
+        // The text field takes the focus itself and opens the system keyboard when it is selected; a focus item around it
+        // would take the select instead
+        TextPill(
+            label: nil, icon: field.icon, placeholder: field.placeholder, text: $value, editing: $editing, focused: false,
+            secret: field.secret, width: width, onSubmit: onSubmit
+        )
+        .multilineTextAlignment(.leading)
+        .onChange(of: editing) { _, now in if now { focus.focus(DialogLayer.fieldID(index)) } }
+        .onChange(of: value) { _, now in
+            if now.count > field.maxLength { value = String(now.prefix(field.maxLength)) }
+        }
+        #else
+        item
+        #endif
+    }
+
+    #if !os(tvOS)
+    private var item: some View {
         FocusItem(id: DialogLayer.fieldID(index), model: focus, action: { typing = index }) { focused in
             TextPill(
                 label: nil, icon: field.icon, placeholder: field.placeholder, text: $value, editing: $editing, focused: focused,
@@ -148,4 +167,5 @@ private struct DialogFieldView: View {
             if now.count > field.maxLength { value = String(now.prefix(field.maxLength)) }
         }
     }
+    #endif
 }

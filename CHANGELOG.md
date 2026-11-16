@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Apple TV: the Siri Remote and game controllers work on every screen through the system focus engine (Menu is back,
+  Play/Pause opens context menus and the stream menu), title-safe margins, a 24-point text floor, system keyboard
+  fields, and the artwork matches kept in the caches.
 - A new Swift app, DELOS, for iPhone, iPad and Apple TV next to the Moonlight reference app. So far it shows the
   start screen: the greeting, the Contour background, the DELOS palette, fonts and icons, and a focus that a game
   controller or the arrow keys move between two circles (iOS and iPadOS) or the Apple TV remote moves (tvOS).
