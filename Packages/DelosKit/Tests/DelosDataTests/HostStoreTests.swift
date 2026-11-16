@@ -74,6 +74,29 @@ import Testing
         #expect(HostStore(defaults: defaults).host("DDDD")?.name == "Old")
     }
 
+    @Test func removingAPCForgetsItAndItsPairingAcrossLaunches() throws {
+        let defaults = suite()
+        let store = HostStore(defaults: defaults)
+        let pin = HostPin(certificate: Data([1, 2, 3]), httpsPort: 47984)
+        store.store(try record(id: "AAAA", name: "Found PC"))
+        store.store(try record(id: "BBBB", name: "Desk PC").paired(with: pin))
+        store.remove("BBBB")
+        store.remove("ZZZZ")
+        #expect(store.hosts.map(\.id) == ["AAAA"])
+        #expect(HostStore(defaults: defaults).hosts.isEmpty)
+    }
+
+    @Test func aPCThatIsNotOnlineOrNotPairedIsNotAskedToUnpair() async throws {
+        let store = HostStore(defaults: suite())
+        let pin = HostPin(certificate: Data([1, 2, 3]), httpsPort: 47984)
+        store.store(try record(id: "AAAA", name: "Found PC"))
+        store.store(try record(id: "BBBB", name: "Desk PC").paired(with: pin).markedOffline())
+        #expect(await store.unpairOnPC("AAAA") == .notPaired)
+        #expect(await store.unpairOnPC("BBBB") == .offline)
+        #expect(await store.unpairOnPC("ZZZZ") == .offline)
+        #expect(store.host("BBBB")?.pin == pin)
+    }
+
     /// A store whose paired PC answers through `host`: its refresh waits there until the test releases it.
     private func storeWithPairedPC(at host: HoldingHost, defaults: UserDefaults) throws -> HostStore {
         let store = HostStore(defaults: defaults, identities: Self.identities)

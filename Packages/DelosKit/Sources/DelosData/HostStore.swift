@@ -131,6 +131,38 @@ public final class HostStore {
         if let address = record.activeAddress ?? record.localAddress { try? await client(address).unpair() }
     }
 
+    /// What unpairing a PC from the Devices screen came to (`PcSetup.UnpairResult` of DELOS for Android).
+    public enum UnpairResult: Equatable, Sendable {
+        case unpaired
+        /// The PC is not online: only an online PC can be asked to forget this client.
+        case offline
+        /// The PC is not paired with this client.
+        case notPaired
+        /// The PC still reports being paired after the request.
+        case failed
+        /// The PC did not answer.
+        case unreachable
+    }
+
+    /// Asks an online PC to forget this client and forgets the pairing here once it has (`PcSetup.unpair`): unlike
+    /// ``unpair(_:)``, a PC that cannot be reached keeps its pairing, and the result says why.
+    public func unpairOnPC(_ id: String) async -> UnpairResult {
+        guard let record = host(id), let address = record.activeAddress, record.reachability == .online else { return .offline }
+        guard record.pin != nil else { return .notPaired }
+        do {
+            let http = try client(address)
+            try await http.unpair()
+            let info = try await http.serverInfo(pin: nil).info
+            guard !info.pairStatus else { return .failed }
+        } catch {
+            return .unreachable
+        }
+        trustChanged(id)
+        if let current = host(id) { store(current.unpaired()) }
+        apps[id] = nil
+        return .unpaired
+    }
+
     private func trustGeneration(_ id: String) -> Int { trustGenerations[id, default: 0] }
 
     private func trustChanged(_ id: String) { trustGenerations[id, default: 0] += 1 }
@@ -200,9 +232,23 @@ public final class HostStore {
 
     // MARK: Storage
 
+    /// Removes a PC from DELOS (`PcSetup.remove`): it is forgotten here, pairing included, and can be found and paired
+    /// again. The PC itself is not asked to unpair.
+    public func remove(_ id: String) {
+        guard host(id) != nil else { return }
+        trustChanged(id)
+        hosts.removeAll { $0.id == id }
+        apps[id] = nil
+        persist()
+    }
+
     func store(_ record: HostRecord) {
         if let index = hosts.firstIndex(where: { $0.id == record.id }) { hosts[index] = record } else { hosts.append(record) }
         hosts.sort { ($0.pin != nil ? 0 : 1, $0.name.lowercased()) < ($1.pin != nil ? 0 : 1, $1.name.lowercased()) }
+        persist()
+    }
+
+    private func persist() {
         // Only paired PCs are kept across launches; found ones are found again
         if let data = try? JSONEncoder().encode(hosts.filter { $0.pin != nil }) { defaults.set(data, forKey: Self.key) }
     }

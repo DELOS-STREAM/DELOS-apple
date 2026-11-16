@@ -50,6 +50,58 @@ final class ShellActions {
         return ContextMenu(title: host.name, items: items, below: true)
     }
 
+    /// The Devices screen's first focus (`DevicesLogic.firstFocus`).
+    func devicesFocus() -> String { DevicesLogic.firstFocus(DevicesLogic.paired(hosts.hosts)) }
+
+    /// The menu of a PC on the Devices screen (`deviceMenu`): connect or open its apps, make it the default or not, rename
+    /// it, wake it (offline), unpair it (online), remove it from DELOS. Android's menu has no default row; the start
+    /// screen's has, and the task of this screen includes it.
+    func devicesMenu(_ hostID: String) -> ContextMenu? {
+        guard let host = hosts.host(hostID) else { return nil }
+        let active = hostID == libraryHostID
+        let items = DevicesLogic.actions(host, active: active, isDefault: profiles.startup.defaultPC == hostID).map { action in
+            switch action {
+            case .connect(let openApps):
+                MenuItem(icon: Symbols.login, label: L(openApps ? "devices_menu_open_games" : "devices_menu_connect")) { [self] in
+                    go { navigator.openHome(hostID: hostID) }
+                }
+            case .makeDefault: MenuItem(icon: Symbols.star, label: L("devices_menu_default_on")) { [self] in setDefault(host) }
+            case .clearDefault: MenuItem(icon: Symbols.star, label: L("devices_menu_default_off")) { [self] in setDefault(nil) }
+            case .rename: MenuItem(icon: Symbols.edit, label: L("devices_menu_rename")) { [self] in rename(hostID) }
+            case .wake: MenuItem(icon: Symbols.wake, label: L("devices_menu_wake")) { [self] in wake(hostID) }
+            case .unpair: MenuItem(icon: Symbols.linkOff, label: L("devices_menu_unpair")) { [self] in unpair(hostID) }
+            case .remove: MenuItem(icon: Symbols.delete, label: L("devices_menu_remove"), danger: true) { [self] in remove(hostID) }
+            }
+        }
+        return ContextMenu(title: host.name, items: items, below: true)
+    }
+
+    /// Asks the online PC to forget this client (`unpair`); the PC leaves the list once it has.
+    private func unpair(_ hostID: String) {
+        guard let name = hosts.host(hostID)?.name else { return }
+        Task {
+            let result = await hosts.unpairOnPC(hostID)
+            if result == .unpaired {
+                if profiles.startup.defaultPC == hostID { profiles.setDefaultPC(nil) }
+                navigator.dropLibrary(of: hostID)
+            } else {
+                feedback?.play(.error)
+            }
+            toasts.show(
+                DevicesLogic.unpairText(result, name: name), icon: result == .unpaired ? Symbols.linkOff : Symbols.error,
+                kind: result == .unpaired ? .success : .error)
+        }
+    }
+
+    /// Removes the PC from DELOS at once (`remove`): choosing it is the confirmation; the PC can be found and paired again.
+    private func remove(_ hostID: String) {
+        guard let name = hosts.host(hostID)?.name else { return }
+        hosts.remove(hostID)
+        if profiles.startup.defaultPC == hostID { profiles.setDefaultPC(nil) }
+        navigator.dropLibrary(of: hostID)
+        toasts.show(L("devices_removed_toast", name), icon: Symbols.delete)
+    }
+
     private func setDefault(_ host: HostRecord?) {
         profiles.setDefaultPC(host?.id)
         toasts.show(host.map { L("devices_default_set_toast", $0.name) } ?? L("devices_default_cleared_toast"), icon: Symbols.star)

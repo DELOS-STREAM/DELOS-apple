@@ -304,6 +304,10 @@ public struct DelosRoot: View {
                     onAdd: { go { navigator.push(.createProfile(editing: false), focus: CreateProfileScreen.avatarID(0)) } }
                 )
             }
+        case .devices:
+            DevicesScreen(
+                focus: entry.focus, activeID: actions.libraryHostID, defaultPC: profiles.startup.defaultPC, actions: actions,
+                onPair: { go { navigator.push(.pair, focus: PairPCScreen.firstFocus(hosts.hosts)) } })
         case .pair:
             PairPCScreen(
                 focus: entry.focus,
@@ -347,7 +351,8 @@ public struct DelosRoot: View {
         let buttons = TopNav.buttons(
             current: entry.screen,
             onSettings: { go { navigator.openFromNavigation(.settings, focus: SettingsScreen.initialFocus) } },
-            onProfile: { go { navigator.openFromNavigation(.profile, focus: "change-avatar") } })
+            onProfile: { go { navigator.openFromNavigation(.profile, focus: "change-avatar") } },
+            onDevices: { go { navigator.openFromNavigation(.devices, focus: actions.devicesFocus()) } })
         return TopBar.Navigation(buttons: buttons, focus: entry.focus)
     }
 

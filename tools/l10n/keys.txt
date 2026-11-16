@@ -58,7 +58,11 @@ devices_start_pair_note
 devices_start_choose_note
 devices_pair_new
 devices_pair_new_meta
+devices_title
+devices_note
 devices_status_online
+devices_status_asleep
+devices_status_connected
 devices_status_asleep_wakes
 devices_status_offline
 devices_status_default
@@ -66,6 +70,10 @@ devices_status_with_default
 devices_menu_default_on
 devices_menu_default_off
 devices_menu_wake
+devices_menu_connect
+devices_menu_open_games
+devices_menu_unpair
+devices_menu_remove
 devices_menu_rename
 devices_default_set_toast
 devices_default_cleared_toast
@@ -78,6 +86,12 @@ devices_rename_action
 devices_rename_done_toast
 devices_rename_reset_toast
 devices_unreachable
+devices_removed_toast
+devices_unpaired
+devices_unpair_offline
+devices_unpair_not_paired
+devices_unpair_failed
+devices_starting
 
 # Pairing
 pairing_pc_title
@@ -158,6 +172,7 @@ common_cancel
 # Status bar, navigation and side menu
 shell_nav_settings
 shell_nav_profile
+shell_nav_devices
 shell_side_not_connected
 shell_side_connected
 shell_side_offline
