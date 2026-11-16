@@ -54,4 +54,7 @@ INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=macosx*] = NO
 INFOPLIST_KEY_UILaunchScreen_Generation[sdk=macosx*] = NO
 INFOPLIST_KEY_NSHumanReadableCopyright[sdk=macosx*] = DELOS for Apple is free software under the GNU General Public License, version 3.
 
+// Empty disables all game metadata requests. The optional local file overrides this value.
+DELOS_METADATA_URL =
+
 #include? "Local.xcconfig"

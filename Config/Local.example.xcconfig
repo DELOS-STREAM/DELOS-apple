@@ -2,3 +2,8 @@
 // The team id is shown in Xcode → Settings → Accounts, or by: security find-identity -v -p codesigning
 
 DEVELOPMENT_TEAM = ABCDE12345
+
+// Optional metadata Worker endpoint. Empty disables IGDB, PCGamingWiki, Steam tags AND HowLongToBeat.
+// Never commit the real endpoint. In xcconfig URLs, write https:/$()/host/path: a literal // starts a comment.
+// DELOS_METADATA_URL = https:/$()/your-private-worker.example
+DELOS_METADATA_URL =

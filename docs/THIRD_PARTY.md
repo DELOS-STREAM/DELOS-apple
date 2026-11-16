@@ -80,6 +80,18 @@ license.
 | `wizard.webp` | `e67bf9eeda7b75d86b88e6e61ff6254bd181cee8aee68fdbfb5b79730fe3ebb0` |
 | `wolf.webp` | `2391c5bffa9aa0e26bd33addba8ecea90537f00d7fa45c2e4b1aa3f033dd9747` |
 
+## Game metadata services
+
+The metadata data layer ports DELOS for Android's `GameMetadata`, policy and clients (project GPL-3.0).
+IGDB, PCGamingWiki and Steam tags are requested through the private DELOS metadata Worker, never with embedded
+provider credentials. HowLongToBeat is requested directly; its website is not an official public API and can change.
+Provider content remains subject to each service's terms. No service response is embedded in the app.
+
+The HLTB search flow and payload derive from [howlongtobeatpy](https://github.com/ScrappyCocco/HowLongToBeat-PythonAPI)
+1.0.24, `HTMLRequests.py`, commit `4275a452b9ccd230b7c2a82b8d1a5d851285eb14`, MIT, Copyright (c) 2018 Michele.
+The complete MIT notice is retained in `MetadataHowLongToBeat.swift`. Offline metadata test fixtures cite the
+corresponding Android client tests in their Swift test files.
+
 ## Swift packages
 
 | Package | Origin | Version | Pin |

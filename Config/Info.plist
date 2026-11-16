@@ -8,6 +8,8 @@ Shared.xcconfig (GENERATE_INFOPLIST_FILE = YES).
 -->
 <plist version="1.0">
 <dict>
+	<key>DelosMetadataURL</key>
+	<string>$(DELOS_METADATA_URL)</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>NSBonjourServices</key>
