@@ -260,6 +260,10 @@ While it is open, `GameInput` sends nothing and releases every held button, key 
 When the app goes to the background during a stream, iOS suspends it and the connection would break; the stream is
 closed at once instead (as Disconnect: the game keeps running on the PC), the loader shows, and on return the same game
 is resumed with a new connection (`StreamController.enteredBackground` / `returnedToForeground`).
+Each attempt (the first, the return from the background, Try again) has an identity: what an ended attempt reports or
+returns afterwards (a launch that fails late, a connect that completes late, queued events) is ignored. A new attempt
+launches only once the previous one has stopped, since the core runs one connection at a time; leaving uses the steps
+of the attempt that ran.
 
 ### Input during a stream
 

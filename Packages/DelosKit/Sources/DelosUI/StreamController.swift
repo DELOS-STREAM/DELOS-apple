@@ -72,6 +72,11 @@ final class StreamController {
     @ObservationIgnored private var display: DisplayInfo?
     @ObservationIgnored private var attempt: Task<Void, Never>?
     @ObservationIgnored private var listener: Task<Void, Never>?
+    /// Identifies the current attempt: what an attempt reports or returns after it ended is ignored.
+    @ObservationIgnored private var attemptID = 0
+    /// The stop of the attempts that ended. The core runs one connection at a time, so the next attempt launches only
+    /// once this is over.
+    @ObservationIgnored private var cleanup: Task<Void, Never>?
     @ObservationIgnored private var statisticsTask: Task<Void, Never>?
     @ObservationIgnored private(set) var input: GameInput?
     @ObservationIgnored private var trackpad = TouchTrackpad()
@@ -92,43 +97,74 @@ final class StreamController {
         run()
     }
 
-    /// Try again: the same game on the same PC with a new attempt.
+    /// Try again: the same game on the same PC with a new attempt, once the failed one has stopped (after a lost
+    /// connection the session stops itself, and the core stays taken until it has).
     func retry() {
         guard case .failed = phase, display != nil else { return }
+        endAttempt()
         steps = makeSteps()
         run()
     }
 
     private func run() {
         guard let display else { return }
+        attemptID += 1
+        let id = attemptID
         phase = .connecting
         progress = 0
         line = StageLines.line(.platform, pcName: steps.pcName)
         let steps = self.steps
+        let cleanup = self.cleanup
         listener = Task { [weak self] in
             for await event in steps.events {
-                self?.handle(event)
+                self?.handle(event, from: id)
             }
         }
         attempt = Task { [weak self] in
+            await cleanup?.value
+            guard self?.isCurrent(id) == true else { return }
             do throws(LaunchFailure) {
                 try await steps.launch(display: display)
             } catch {
-                self?.fail(StreamText.launchFailure(error, pcName: steps.pcName, appName: steps.appName))
+                // An attempt that ended meanwhile was stopped by whoever ended it
+                guard let self, self.isCurrent(id) else { return }
+                self.fail(StreamText.launchFailure(error, pcName: steps.pcName, appName: steps.appName))
                 await steps.stop()
                 return
             }
-            guard let self, self.phase == .connecting else { return }
+            guard let self, self.isCurrent(id), self.phase == .connecting else { return }
             do throws(StreamError) {
                 try await steps.connect()
-                self.connected()
+                if self.isCurrent(id) { self.connected() }
             } catch {
-                if let text = StreamText.startFailure(error) { self.fail(text) }
+                if self.isCurrent(id), let text = StreamText.startFailure(error) { self.fail(text) }
             }
         }
     }
 
-    private func handle(_ event: StreamEvent) {
+    private func isCurrent(_ id: Int) -> Bool { id == attemptID }
+
+    /// Ends the current attempt: its events and results are ignored from now on (a cancelled listener can still
+    /// deliver what was queued, a cancelled launch can still return), and its stop joins ``cleanup``. Returns that.
+    @discardableResult
+    private func endAttempt() -> Task<Void, Never> {
+        attemptID += 1
+        listener?.cancel()
+        attempt?.cancel()
+        listener = nil
+        attempt = nil
+        let steps = self.steps
+        let previous = cleanup
+        let stop = Task {
+            await steps.stop()
+            await previous?.value
+        }
+        cleanup = stop
+        return stop
+    }
+
+    private func handle(_ event: StreamEvent, from id: Int) {
+        guard isCurrent(id) else { return }
         switch event {
         case .stageStarting(let stage):
             guard phase == .connecting else { return }
@@ -224,21 +260,22 @@ final class StreamController {
 
     /// The app goes to the background. iOS suspends it and the connection would break while it is away (the owner
     /// came back to a black screen and a failure), so the stream is closed now, as Disconnect does: the game keeps
-    /// running on the PC. The loader shows until ``returnedToForeground()`` connects again.
-    func enteredBackground() async {
-        guard phase == .connecting || phase == .streaming, !suspended else { return }
+    /// running on the PC. The loader shows until ``returnedToForeground()`` connects again. Synchronous, so a return
+    /// right after it finds the stream suspended; the returned task ends when the connection is closed.
+    @discardableResult
+    func enteredBackground() -> Task<Void, Never>? {
+        guard phase == .connecting || phase == .streaming, !suspended else { return nil }
         stopStatistics()
         suspended = true
         menuOpen = false
         stopInput()
-        listener?.cancel()
-        attempt?.cancel()
         phase = .connecting
         progress = 0
-        await steps.stop()
+        return endAttempt()
     }
 
-    /// The app is back: the same game is resumed on the PC with a new connection.
+    /// The app is back: the same game is resumed on the PC with a new connection, launched once the closed one has
+    /// stopped.
     func returnedToForeground() {
         guard suspended else { return }
         suspended = false
@@ -260,11 +297,12 @@ final class StreamController {
         }
         stopStatistics()
         menuOpen = false
+        // No return from the background starts another attempt now; the one that ran is the one the PC quits
+        suspended = false
+        let steps = self.steps
         phase = .leaving(quit ? L("stream_exit_quitting", steps.appName) : L("stream_exit_disconnecting"))
         stopInput()
-        attempt?.cancel()
-        await steps.stop()
-        listener?.cancel()
+        await endAttempt().value
         if quit, await !steps.quitApp() {
             phase = .failed(StreamText.quitFailure(appName: steps.appName))
             return
