@@ -10,6 +10,25 @@ final class OrientationLock: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
         .landscape
     }
+
+    /// Also tells each window scene that it is landscape only, so the system does not start a rotation it then
+    /// refuses (the device still played the rotation animation with the delegate's answer alone).
+    func application(
+        _ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        let configuration = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        configuration.delegateClass = LandscapeScene.self
+        return configuration
+    }
+}
+
+/// Asks the scene's geometry for landscape when it connects.
+final class LandscapeScene: NSObject, UIWindowSceneDelegate {
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+        guard let windowScene = scene as? UIWindowScene else { return }
+        windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscape))
+    }
 }
 #endif
 
