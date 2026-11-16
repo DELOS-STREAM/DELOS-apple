@@ -14,6 +14,7 @@ final class LiveStream: StreamSteps {
     private(set) var appName: String
     let events: AsyncStream<StreamEvent>
     var input: (any StreamInputSink)? { session }
+    let statisticsSource: StreamStatisticsSource?
 
     private let hosts: HostStore
     private let hostID: String
@@ -33,7 +34,9 @@ final class LiveStream: StreamSteps {
         pcName = hosts.host(hostID)?.name ?? L("stream_result_default_pc")
         appName = hosts.apps[hostID]?.first { $0.id == appID }?.title ?? ""
         formats = DecoderSupport.device
-        session = StreamSession(videoSink: VideoOutput(renderer: renderer, supportedFormats: formats), audioSink: AudioOutput())
+        let video = VideoOutput(renderer: renderer, supportedFormats: formats)
+        session = StreamSession(videoSink: video, audioSink: AudioOutput())
+        statisticsSource = StreamStatisticsSource(video: video.statistics, renderer: renderer, session: session)
         events = session.events
     }
 

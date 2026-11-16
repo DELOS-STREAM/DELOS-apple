@@ -8,8 +8,7 @@ import UIKit
 
 /// A stream of one app of one PC (`DelosStreamActivity` of DELOS for Android, as far as P4 goes): the loader while it
 /// connects, the video full screen with the controllers, keyboard, mouse and touch going to the PC, a minimal stream
-/// menu (Resume, Disconnect, Quit app), and the result overlay when the stream failed. The statistics overlay is not
-/// ported yet.
+/// menu (Resume, Overlay, Disconnect, Quit app), the statistics panel and the result overlay when the stream failed.
 ///
 /// The stream menu opens like on Android by default: L3 + R3 held together on a controller (``MenuShortcut``), or a
 /// swipe from the left edge of the touch screen (``MenuSwipe``).
@@ -128,6 +127,9 @@ struct StreamContent: View {
             case .connecting:
                 StreamLoader(greeting: controller.greeting, line: controller.line, progress: controller.progress)
             case .streaming:
+                if controller.statisticsEnabled, let statistics = controller.statistics {
+                    StreamStatsOverlay(statistics: statistics)
+                }
                 if controller.menuOpen {
                     StreamMenu(focus: focus, controller: controller)
                         .environment(\.glassOverMedia, true)
@@ -217,6 +219,12 @@ private struct StreamMenu: View {
             HStack(alignment: .top, spacing: stage.px(64)) {
                 FocusItem(id: "stream-resume", model: focus, action: { controller.closeMenu() }) { focused in
                     CircleItem(icon: Symbols.resume, label: L("stream_menu_tile_resume"), big: false, focused: focused)
+                }
+                FocusItem(id: "stream-statistics", model: focus, action: { controller.toggleStatistics() }) { focused in
+                    CircleItem(
+                        icon: Symbols.overlay, label: L("stream_menu_tile_overlay"),
+                        meta: controller.statisticsEnabled ? L("common_on") : L("common_off"),
+                        big: false, selected: controller.statisticsEnabled, focused: focused)
                 }
                 FocusItem(id: "stream-disconnect", model: focus, action: { Task { await controller.leave(quit: false) } }) { focused in
                     CircleItem(icon: Symbols.logout, label: L("stream_menu_tile_disconnect"), big: false, focused: focused)

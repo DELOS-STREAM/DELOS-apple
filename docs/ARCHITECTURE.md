@@ -135,8 +135,9 @@ decode unit's buffers into one Annex B or OBU frame, wraps it with `VideoSamples
 that cannot be shown answers `needIDRFrame`, so the core asks the host for a key frame. `AudioOutput` decodes the Opus
 packets on the core's audio thread into an `AudioRing` and plays them through an `AVAudioEngine` source node in the
 playback audio session; the ring keeps at most 60 ms and drops the oldest samples beyond that, so a network burst does
-not add lasting delay. The core calls each sink from one thread at a time, which is why their state has no lock; only the
-ring, read by the render thread, has one.
+not add lasting delay. The core calls each sink from one thread at a time, so their decoding state has no lock.
+`VideoStatistics` has a separate mutex for scalar frame/byte/host-time counters read by the statistics sampler; the
+audio ring, read by the audio render thread, has its own lock.
 
 ## The stream screen
 
@@ -160,7 +161,38 @@ Back to library, and the technical text behind Details. B is Back to library. A 
 During the stream the screen stays on (`isIdleTimerDisabled`), the system overlays are hidden and the system gestures
 deferred. `Navigator.commandCapture` gives the stream screen every controller and keyboard command first: while the
 stream runs nothing reaches the screens behind it, the stream menu and the result overlay use the screen's focus, B
-closes the menu, and B while connecting leaves. The statistics overlay is not ported yet.
+closes the menu, and B while connecting leaves.
+
+### Stream statistics
+
+The stream menu's Overlay tile toggles the full statistics panel (`StreamStatsOverlay`): Android's top-left panel,
+stage-pixel sizes, tabular figures and two columns of labels and values. The panel uses the panel glass role with
+`glassOverMedia`, keeps clear of the stage's safe area and does not intercept touches. Its labels and the tile's
+On/Off state come from the Android String Catalog. It starts off; the choice lasts for the screen's retry/resume
+lifecycle.
+
+`VideoOutput` records reassembled frames, payload bytes, frame numbers, HDR and the host's processing latency in
+`VideoStatistics`, with no allocation or formatting per frame. `StreamStatisticsSource` samples on its actor;
+`StreamController.startStatistics` runs the one-second clock and publishes the result on the main actor. Leaving,
+failure, termination and background suspension cancel sampling before the core stops.
+
+| Reading | Source and meaning |
+|---|---|
+| Resolution and codec | The format the core negotiated in `VideoOutput.setup`, not a saved preference |
+| Incoming FPS and bandwidth | Frames and compressed video payload bytes over the actual sampling interval; bandwidth excludes audio, RTP headers and FEC, unlike Android's whole-app traffic reading |
+| Rendering FPS | Deltas of the renderer's `totalNumberOfFrames` minus `numberOfDroppedFrames`, obtained with `videoPerformanceMetrics`; the first reading establishes a baseline |
+| Network | The running core's `estimatedRoundTrip` and variance |
+| PC processing | Nonzero decode-unit host latency, converted from tenths of a millisecond; minimum, maximum and average |
+| Render latency | The renderer's accumulated presentation lateness divided by displayed frames; not decoding time or button-to-screen latency |
+| Lost frames | Gaps in decode-unit frame numbers, including UInt32 rollover, divided by expected frames in the window; not packet loss or renderer drops |
+
+Missing readings are omitted (the header uses a dash before measured rendering FPS). The display-layer API does not
+expose actual decode duration, so decoding time and total latency are not shown. Current common-c RTP video loss
+counters are not populated; its packet totals are sampled but are not used to manufacture a packet-loss percentage.
+Counter resets establish a new renderer baseline, and gaps between renderer readings use their own elapsed interval.
+`StreamStatisticsTests` covers FPS/bitrate windows, loss/wrap/reordering, host timing, missing readings and resets.
+Live stream values and presentation-delay behavior on physical Apple devices are not verified.
+
 
 ### The stream menu
 
@@ -168,7 +200,8 @@ It opens as in DELOS for Android by default: L3 + R3 held together (`MenuShortcu
 button that completes the shortcut is kept from the PC, the menu opens when both are let go), or a swipe from the
 left edge of the touch screen (`MenuSwipe`: a touch starting in the left 4 % belongs to the swipe and does not reach
 the PC; 12 % of the width to the right opens the menu). Android swipes up from the bottom edge, but on iPhone and iPad
-that edge belongs to the system's home gesture. The menu is minimal: Resume, Disconnect and Quit app from Android's dock.
+that edge belongs to the system's home gesture. The menu is minimal: Resume, Overlay (statistics), Disconnect and Quit
+app from Android's dock.
 While it is open, `GameInput` sends nothing and releases every held button, key and mouse button at the PC.
 When the app goes to the background during a stream, iOS suspends it and the connection would break; the stream is
 closed at once instead (as Disconnect: the game keeps running on the PC), the loader shows, and on return the same game
