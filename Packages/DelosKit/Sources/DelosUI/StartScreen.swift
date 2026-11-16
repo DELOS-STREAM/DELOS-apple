@@ -86,6 +86,7 @@ public struct DelosRoot: View {
     @State private var appearance: Appearance
     @State private var input: MenuInput?
     @State private var feedback: Feedback?
+    @State private var videoCoversBackdrop = false
     /// The side menu's focus while it is open.
     @State private var sideMenu: FocusModel?
     private let appearances = AppearanceStore()
@@ -117,7 +118,7 @@ public struct DelosRoot: View {
     public var body: some View {
         StageReader {
             ZStack {
-                Backdrop(kind: appearance.background)
+                if !videoCoversBackdrop { Backdrop(kind: appearance.background) }
                 let entry = navigator.stack[navigator.stack.count - 1]
                 screen(entry)
                     .id(ObjectIdentifier(entry.focus))
@@ -144,6 +145,7 @@ public struct DelosRoot: View {
                 ToastOverlay(toasts: toasts)
             }
         }
+        .onPreferenceChange(VideoCoversBackdrop.self) { videoCoversBackdrop = $0 }
         .environment(hosts)
         .environment(navigator)
         .environment(\.delosColors, colors)

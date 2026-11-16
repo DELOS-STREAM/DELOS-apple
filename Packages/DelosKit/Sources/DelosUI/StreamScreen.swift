@@ -113,6 +113,7 @@ struct StreamContent: View {
         ZStack {
             // Black under the video and the exit; the loader and the result overlay lie on DELOS's background
             Color.black.ignoresSafeArea().opacity(showsBlack ? 1 : 0)
+                .preference(key: VideoCoversBackdrop.self, value: showsBlack)
             VideoSurface(
                 layer: renderer.layer,
                 onDisplay: { controller.start(display: $0) },
@@ -150,6 +151,13 @@ struct StreamContent: View {
         case .connecting, .failed: false
         }
     }
+}
+
+/// True while the video covers the whole screen: the animated background behind it is not drawn then, so it costs the
+/// GPU nothing during the stream.
+struct VideoCoversBackdrop: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
 }
 
 /// The loader while the stream connects (`StreamLoader` of DELOS for Android, without the launch tunnel and the game

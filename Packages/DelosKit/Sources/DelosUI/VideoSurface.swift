@@ -62,9 +62,23 @@ final class VideoHostView: UIView {
         CATransaction.commit()
     }
 
+    /// Keeps the display at its highest refresh rate while the video is shown. ProMotion screens slow down to save power
+    /// when nothing asks for more, and the display layer alone does not ask: a 120 fps stream ran at 60 and stuttered
+    /// on the owner's iPad Pro (M5). Moonlight for iOS keeps a display link for the same reason.
+    private var refreshLink: CADisplayLink?
+
+    @objc private func refreshTick(_ link: CADisplayLink) {}
+
     override func didMoveToWindow() {
         super.didMoveToWindow()
+        refreshLink?.invalidate()
+        refreshLink = nil
         guard let screen = window?.windowScene?.screen else { return }
+        let fastest = Float(screen.maximumFramesPerSecond)
+        let link = CADisplayLink(target: self, selector: #selector(refreshTick))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: fastest, maximum: fastest, preferred: fastest)
+        link.add(to: .main, forMode: .common)
+        refreshLink = link
         let size = screen.nativeBounds.size
         let info = DisplayInfo(pixelWidth: Int(size.width), pixelHeight: Int(size.height), maxFramesPerSecond: screen.maximumFramesPerSecond)
         // Not inside the view update that added this view
