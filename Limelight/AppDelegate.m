@@ -8,6 +8,51 @@
 
 #import "AppDelegate.h"
 
+/// DELOS: iOS and tvOS 27 stop apps that do not use the scene lifecycle at launch ("no scene lifecycle adoption").
+/// The scene delegate builds the window the storyboard used to build and keeps AppDelegate.window pointing at it, so the
+/// existing code that asks the app delegate or the key window for it keeps working.
+@interface SceneDelegate : UIResponder <UIWindowSceneDelegate>
+@property (strong, nonatomic) UIWindow *window;
+@end
+
+@implementation SceneDelegate
+
+- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions {
+    if (![scene isKindOfClass:[UIWindowScene class]]) {
+        return;
+    }
+    AppDelegate *app = (AppDelegate *)[[UIApplication sharedApplication] delegate];
+#if TARGET_OS_TV
+    NSString *storyboardName = @"Main";
+#else
+    NSString *storyboardName = ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPad) ? @"iPad" : @"iPhone";
+    UIApplicationShortcutItem *shortcut = connectionOptions.shortcutItem;
+    if (shortcut != nil) {
+        app.pcUuidToLoad = (NSString *)[shortcut.userInfo objectForKey:@"UUID"];
+    }
+#endif
+    UIStoryboard *storyboard = [UIStoryboard storyboardWithName:storyboardName bundle:nil];
+    self.window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
+    self.window.rootViewController = [storyboard instantiateInitialViewController];
+    app.window = self.window;
+    [self.window makeKeyAndVisible];
+}
+
+#if !TARGET_OS_TV
+- (void)windowScene:(UIWindowScene *)windowScene performActionForShortcutItem:(UIApplicationShortcutItem *)shortcutItem completionHandler:(void (^)(BOOL))completionHandler {
+    AppDelegate *app = (AppDelegate *)[[UIApplication sharedApplication] delegate];
+    app.pcUuidToLoad = (NSString *)[shortcutItem.userInfo objectForKey:@"UUID"];
+    app.shortcutCompletionHandler = completionHandler;
+}
+#endif
+
+- (void)sceneDidEnterBackground:(UIScene *)scene {
+    // With scenes the app no longer always gets applicationWillTerminate: before it is stopped, so save here as well
+    [(AppDelegate *)[[UIApplication sharedApplication] delegate] saveContext];
+}
+
+@end
+
 @implementation AppDelegate
 
 @synthesize managedObjectContext = _managedObjectContext;
