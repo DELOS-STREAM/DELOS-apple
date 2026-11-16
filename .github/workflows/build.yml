@@ -46,5 +46,7 @@ jobs:
           swift --version
           xcodebuild -downloadComponent MetalToolchain
 
-      - name: Package tests, app builds, repository checks
+      # tools/test.sh: the package tests, the app builds for the iOS and tvOS simulators and for macOS (ad hoc signed,
+      # no certificate on the runner), the repository checks
+      - name: Package tests, app builds (iOS, tvOS, macOS), repository checks
         run: sh tools/test.sh

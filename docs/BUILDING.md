@@ -23,9 +23,10 @@ cp Config/Local.example.xcconfig Config/Local.xcconfig   # only for a real devic
 
 | Command | What it does |
 |---|---|
-| `open DELOS.xcodeproj` | Opens the app in Xcode; the scheme `DELOS` runs on iPhone, iPad and Apple TV |
+| `open DELOS.xcodeproj` | Opens the app in Xcode; the scheme `DELOS` runs on iPhone, iPad, Apple TV and My Mac |
 | `sh tools/sim.sh iphone /tmp/shot.png` | Builds, installs and starts DELOS in the iPhone 18 Pro Max simulator and saves a screenshot (`ipad`, `tv` or a simulator UDID work too) |
-| `sh tools/test.sh` | The package tests, the app build for the iOS and tvOS simulators and the repository checks |
+| `sh tools/mac.sh /tmp/shot.png` | Builds DELOS for this Mac (ad-hoc signed), starts it and saves a screenshot of its window (`sh tools/mac.sh build` only builds) |
+| `sh tools/test.sh` | The package tests, the app build for the iOS and tvOS simulators and for the Mac, and the repository checks |
 | `cd Packages/DelosKit && swift test` | Only the package tests, on the Mac |
 | `python3 tools/l10n/import_android.py ../Delos` | Regenerates the String Catalog from a DELOS for Android checkout (after editing `tools/l10n/keys.txt`) |
 
@@ -43,6 +44,8 @@ installed app:
 xcrun simctl launch <UDID> io.github.meitoncz.delos.debug -DelosBackground nebula -DelosTheme light -DelosSettings appearance
 ```
 
+The same arguments work on the Mac: `sh tools/mac.sh /tmp/shot.png 5 -DelosBackground nebula` ([below](#a-mac)).
+
 ## Project layout
 
 The app target is thin: `App/` holds the entry point and is a folder-synchronized group, so a new file there needs no
@@ -54,3 +57,23 @@ change of `DELOS.xcodeproj`. Everything else lives in the Swift package `Package
 A free Apple ID is enough: sign in to Xcode (Settings → Accounts), turn on Developer Mode on the device, put the team
 id into `Config/Local.xcconfig` and run the `DELOS` scheme on the device. An app signed this way stops starting after
 seven days and has to be installed again.
+
+## A Mac
+
+The scheme `DELOS` also runs on My Mac (macOS 15 or later): choose the destination in Xcode, or run
+`sh tools/mac.sh [/tmp/shot.png]`. The script builds into `/tmp/delos-dd-mac` without a team (an ad-hoc signature, no
+Developer ID), turns the hardened runtime on, quits the copy it started before, starts the new one and saves a
+screenshot of its window; `DELOS_PROFILE=<name>` first puts a profile into the app's container, because Settings and
+the start screen need one:
+
+```sh
+DELOS_PROFILE=Player sh tools/mac.sh /tmp/mac.png 5 -DelosSettings stream -AppleLanguages "(en)"
+```
+
+The screenshot needs the Screen Recording permission of the terminal. The app is sandboxed: its preferences and caches
+are in `~/Library/Containers/io.github.meitoncz.delos.debug`. An ad-hoc build gets a new signature identity at every
+build, so the first read of the client identity after a rebuild can make macOS ask for the login password to let the
+build use the keychain item (Always Allow); running from Xcode with the team of `Config/Local.xcconfig` keeps one
+identity. The entitlements are in `Config/DELOS-macOS.entitlements` (sandbox, network client and server for the stream
+and Bonjour); the ad-hoc copy adds `Config/DELOS-macOS-adhoc.entitlements`' library-validation exception, since an
+ad-hoc signature has no team and the hardened runtime would not load the app's own `OpenSSL.framework`.

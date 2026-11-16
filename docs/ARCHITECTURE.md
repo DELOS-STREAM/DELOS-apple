@@ -66,7 +66,7 @@ middle, and at the right Wi-Fi, the battery with its percentage and the clock, i
 | Part | Source | Shown |
 |---|---|---|
 | Wi-Fi | `NWPathMonitor` (`DeviceStatus`) | Wi-Fi while the default network is a satisfied Wi-Fi path, else Wi-Fi off (cellular and Ethernet too, as on Android). iOS gives apps no signal strength, so there are no bars |
-| Battery | `UIDevice` battery monitoring | The iOS-style battery of Android's `BatteryIndicator`: filled green to the level, red at 20 % and below while not charging, a bolt and a pulse while charging; none where the level is unknown (simulators, Apple TV) |
+| Battery | `UIDevice` battery monitoring; on the Mac IOKit's power sources | The iOS-style battery of Android's `BatteryIndicator`: filled green to the level, red at 20 % and below while not charging, a bolt and a pulse while charging (a Mac on the charger shows the bolt); none where the level is unknown (simulators, Apple TV, a Mac without a battery) |
 | Clock | `StatusClock`, every minute | The `Hm` or `hm` pattern of the app's locale (the narrow space before AM / PM becomes a space); Settings → Appearance → Clock: System follows the device's 24-Hour Time (the locale's hour cycle), 12-hour, 24-hour |
 
 A compact stage gets `CompactStatusBar`: 56 px navigation buttons, the PC only as its dot with the PC glyph (the name
@@ -77,8 +77,8 @@ measured by hidden copies.
 
 ## Focus
 
-On iPhone and iPad every screen that can go back shows a back button at the top left: a touch user has no B button,
-and iOS has no system back (Android's system back covers this there).
+On iPhone, iPad and Mac every screen that can go back shows a back button at the top left: a touch or mouse user has no
+B button, and neither OS has a system back (Android's system back covers this there; on the Mac Escape also goes back).
 
 
 On tvOS the system focus engine moves the focus. On iPhone, iPad and Mac a game controller does not drive SwiftUI's
@@ -261,8 +261,9 @@ It opens as in DELOS for Android by default: L3 + R3 held together (`MenuShortcu
 button that completes the shortcut is kept from the PC, the menu opens when both are let go), or a swipe from the
 left edge of the touch screen (`MenuSwipe`: a touch starting in the left 4 % belongs to the swipe and does not reach
 the PC; 12 % of the width to the right opens the menu). Android swipes up from the bottom edge, but on iPhone and iPad
-that edge belongs to the system's home gesture. The menu is minimal: Resume, Overlay (statistics), Disconnect and Quit
-app from Android's dock.
+that edge belongs to the system's home gesture. A hardware keyboard opens it with Control + Option + Shift + M or by
+holding Escape for a second (`MenuKeyShortcut`, [the Mac app](#the-mac-app)). The menu is minimal: Resume, Overlay
+(statistics), Disconnect and Quit app from Android's dock.
 While it is open, `GameInput` sends nothing and releases every held button, key and mouse button at the PC.
 When the app goes to the background during a stream, iOS suspends it and the connection would break; the stream is
 closed at once instead (as Disconnect: the game keeps running on the PC), the loader shows, and on return the same game
@@ -292,6 +293,37 @@ handlers), so both work; `commandCapture` decides who uses the commands.
 `CADisableMinimumFrameDurationOnPhone` is in `Config/Info.plist` (no `INFOPLIST_KEY_*` setting exists for it), so a
 ProMotion iPhone reports and can show 120 Hz; the stream asks the host for the profile's frame rate (60 fps by default,
 as DELOS for Android) with the display's refresh rate as the client refresh rate.
+
+## The Mac app
+
+The `DELOS` target is one multiplatform target: `SUPPORTED_PLATFORMS` of `Config/Shared.xcconfig` lists `macosx`, and
+what differs is set per SDK there (`[sdk=macosx*]`: the deployment target 15.0, the run path of the frameworks, the
+entitlements, the hardened runtime, no UIKit scene or launch screen keys). It is native SwiftUI, not Catalyst; the
+Mac parts are behind `#if os(macOS)` in `App/` and in the package.
+
+| Part | On the Mac |
+|---|---|
+| Window | One `Window` scene (a second window would be a second interface over the one streaming core), hidden title bar, opens at 1920 × 1080 points (the system keeps it on the screen), resizes to any shape from 960 × 540 (the Stage adapts; the traffic lights lie over its corner, and 960 × 540 keeps the first status bar button below them) and goes full screen. Closing it ends the app |
+| Quitting | `MacAppDelegate` answers Command-Q, the menu's Quit and the window's close with `.terminateLater`, has `StreamShutdown` leave every registered stream (Disconnect: the game keeps running on the PC; `StreamController.leave` joins a leaving that is already running) and quits when they are closed or after 5 s |
+| Video | `VideoSurface`'s AppKit host (`NSViewRepresentable`) holds the `AVSampleBufferDisplayLayer` on black, aspect fit. In a window it reports the screen's pixel size (`convertRectToBacking`) and `NSScreen.maximumFramesPerSecond`, and a display link (`NSView.displayLink`) asks the screen for its highest refresh rate, as on iPhone and iPad |
+| Display and Settings | `StreamDevice.current` reads `NSScreen.main` the same way. The audio session code is iOS-only (`AVAudioSession` does not exist on the Mac) |
+| Keyboard and mouse | `GameInput` (`GCKeyboard`, `GCMouse`) as on iPad; `GCMouse` gives relative motion without the system pointer. The Mac has no touch input |
+| Pointer lock | While the stream runs and its menu is closed, `PointerLock` (DelosInput) asks the AppKit backend to warp the pointer to the middle of the video, detach it from the mouse (`CGAssociateMouseAndMouseCursorPosition`) and hide it. It lets go when the menu opens, the stream ends or fails, the app is no longer the active app, the window is no longer key, or the window closes |
+| Stream menu | L3 + R3 as everywhere; with a keyboard Control + Option + Shift + M (the M is kept from the PC and the pause lets go of the modifiers) or Escape held for one second (a quick Escape goes to the PC; the pause lets go of the held one). Both free the pointer by opening the menu |
+| Key sound | A local `NSEvent` monitor drops key-down events that the interface does not use, so AppKit does not beep for each key the game keyboard reads; Command shortcuts and keys typed into a text field pass |
+| Activity | During a stream a process activity keeps the display awake and App Nap off (the Mac's `isIdleTimerDisabled`); a Mac does not suspend a window that other windows cover, so the iOS rule to close the stream in the background is off |
+| Status bar | The battery from IOKit power sources once a minute (`BatteryStatus(powerSource:)`; none on a Mac without one); the back button and the profile and settings entries of the profile menu are shown for the mouse |
+| Language | The About tab with its language row is omitted, as on tvOS; the app language is chosen in System Settings |
+
+### Signing and sandbox
+
+The app is sandboxed (`Config/DELOS-macOS.entitlements`: App Sandbox, network client and network server, for the stream's
+and Wake-on-LAN's sockets, HTTP to the PC and Bonjour) and built with the hardened runtime. A build without a team is
+signed ad hoc; the data protection keychain needs an application identifier from a provisioning profile there (error
+-34018), so on the Mac `KeychainStorage` keeps its items in the login keychain. `tools/mac.sh` signs with
+`Config/DELOS-macOS-adhoc.entitlements`, the same plus `disable-library-validation`: the hardened runtime only loads
+libraries of the same team, and an ad-hoc signature has none, so the app could not load its own `OpenSSL.framework`
+and debug dylib. A build signed with a team does not need it and uses the plain file. No Developer ID, no notarization.
 
 ## Sounds and haptics
 
@@ -686,6 +718,16 @@ has no such setting; both are in `Config/Info.plist`, which Xcode merges with th
   with a fake stage, the result overlay of a timed-out RTSP handshake, the stream menu, and the two H.264 test-pattern
   frames of `frames.h264` through `VideoSamples` into `DisplayLayerRenderer` and `VideoSurface` (the pattern shows,
   aspect fit on black). The built app's `Info.plist` contains `CADisableMinimumFrameDurationOnPhone` (`plutil -p`).
+- The Mac app (macOS 27.2, arm64, 2026-11-16): `sh tools/mac.sh` builds it ad-hoc signed with the hardened runtime
+  (`codesign -dvv`: `flags=0x10002(adhoc,runtime)`); without the library-validation exception the app aborts at launch
+  loading `OpenSSL.framework` (the crash report says "different Team IDs"), with it the app starts. The first-run, start
+  and Settings screens were looked at in the 1920 × 1080 window (a Czech system, and English with `-AppleLanguages`).
+  Throwaway probes with the same entitlements and signing (a sandboxed ad-hoc command-line tool with an Info.plist):
+  `NWBrowser` for `_nvstream._tcp` found the real PC, and generic-password items of the login keychain were added,
+  read and deleted, while the data protection keychain fails there with -34018. `PointerLockTests`,
+  `MenuKeyShortcutTests`, `KeyboardMenuTests`, `StreamShutdownTests` and `MacBatteryTests` (`swift test`): the lock
+  rules, the parking point, the chord and the Escape hold with a recording sink, the termination hook with a leaver
+  that never ends, the IOKit power source description.
 
 ### Not verified
 
@@ -706,3 +748,9 @@ has no such setting; both are in `Config/Info.plist`, which Xcode merges with th
 - The Local Network permission prompt and Bonjour discovery on a device.
 - Typing a profile name: the simulators were not driven by a keyboard, a controller or the Siri Remote, so the text
   field, B while typing and the tvOS keyboard were not tried.
+- The Mac app against a real PC: a stream (video, audio, input, the 120 Hz display path), the feel of the locked
+  pointer (speed, scrolling direction, the trackpad as `GCMouse`), the keyboard shortcut and Escape hold on a physical
+  keyboard, controllers on the Mac, Command-Q and closing the window during a stream, full screen, a second display,
+  and Wake-on-LAN and pairing from the sandbox. The window, the screens, the start of the sandboxed ad-hoc signed
+  app and its discovery and keychain calls were tried (above), nothing that needs a PC or a keyboard. The battery
+  was read only as far as the parsing of a power source description goes: the test Mac has no internal battery.
