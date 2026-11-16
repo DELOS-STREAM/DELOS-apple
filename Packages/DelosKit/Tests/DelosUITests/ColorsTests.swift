@@ -1,3 +1,4 @@
+import DelosData
 import Testing
 @testable import DelosUI
 
@@ -14,6 +15,11 @@ import Testing
     func hslMatchesTheCSSFormula(h: Double, s: Double, l: Double, r: Double, g: Double, b: Double) {
         let c = hsl(h, s, l)
         #expect(abs(c.red - r) < 1e-5 && abs(c.green - g) < 1e-5 && abs(c.blue - b) < 1e-5, "\(h) \(s) \(l) → \(c)")
+    }
+
+    @Test func everyStoredPaletteNameHasItsPalette() {
+        #expect(Set(PaletteName.allCases.map(\.rawValue)) == Set(Palette.allCases.map(\.rawValue)))
+        #expect(Palette(.graphite) == .graphite)
     }
 
     @Test func alphaIsClamped() {

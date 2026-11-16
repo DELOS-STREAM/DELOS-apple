@@ -33,6 +33,7 @@ let package = Package(
             resources: [.process("Resources")],
             swiftSettings: strict
         ),
+        .testTarget(name: "DelosDataTests", dependencies: ["DelosData"], swiftSettings: strict),
         .testTarget(name: "DelosInputTests", dependencies: ["DelosInput"], swiftSettings: strict),
         .testTarget(name: "DelosUITests", dependencies: ["DelosUI"], swiftSettings: strict),
     ]

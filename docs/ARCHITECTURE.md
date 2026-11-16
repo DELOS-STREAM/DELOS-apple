@@ -57,6 +57,12 @@ Moving the focus plays move, activating an item plays select.
 The animated backgrounds are Metal stitchable shaders in `DelosUI`, ported line by line from the AGSL sources of DELOS
 for Android (`shell/ui/BackgroundShaders.kt`). Contour exists so far.
 
+## Settings
+
+`Appearance` (DelosData) holds Settings → Appearance with the defaults of DELOS for Android. `AppearanceStore` keeps one
+per profile in `UserDefaults`; reading is lenient, so an unknown option falls back to its default without losing the
+other settings.
+
 ## Strings
 
 User-visible text comes from DELOS for Android's string resources, so both apps say the same thing in the same ten

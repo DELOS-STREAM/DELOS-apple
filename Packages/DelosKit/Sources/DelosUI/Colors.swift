@@ -1,3 +1,4 @@
+import DelosData
 import SwiftUI
 
 /// A color as linear components in the sRGB space, 0...1, with straight (not premultiplied) alpha.
@@ -70,6 +71,14 @@ public enum Palette: String, CaseIterable, Sendable {
         case .graphite: (220, 7, 205, 175, 45, true)
         case .mint: (190, 22, 150, 190, 330, true)
         }
+    }
+}
+
+extension Palette {
+    /// The palette a stored ``PaletteName`` stands for.
+    public init(_ name: PaletteName) {
+        // Both enums list the same names (ColorsTests checks it)
+        self = Palette(rawValue: name.rawValue) ?? .delos
     }
 }
 
