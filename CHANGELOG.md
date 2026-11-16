@@ -43,6 +43,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Removed
 
+- The Moonlight for iOS/tvOS reference app it was forked from (Objective-C, storyboards, Core Data), its prebuilt
+  FFmpeg, SDL2 and Opus libraries (71 MB without recorded sources) and the X1Kit and moonlight-common-c submodules.
 - The inherited Moonlight workflow that ran on every push and pull request, and the Moonlight bot configurations.
 
 ### Fixed

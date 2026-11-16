@@ -48,8 +48,3 @@ change of `DELOS.xcodeproj`. Everything else lives in the Swift package `Package
 A free Apple ID is enough: sign in to Xcode (Settings → Accounts), turn on Developer Mode on the device, put the team
 id into `Config/Local.xcconfig` and run the `DELOS` scheme on the device. An app signed this way stops starting after
 seven days and has to be installed again.
-
-## The Moonlight reference app
-
-`Moonlight.xcodeproj` is the Moonlight for iOS/tvOS app this repository was forked from. It is kept as a reference
-until DELOS streams on a device, then it is deleted. It is not part of `tools/test.sh`.

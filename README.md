@@ -5,9 +5,8 @@ DELOS is a controller-first game streaming client for [Vibepollo](https://github
 is the port to iPhone, iPad, Apple TV and Mac. The Android app lives in [Meitoncz/DELOS](https://github.com/Meitoncz/DELOS);
 the website is [delos-stream.com](https://delos-stream.com).
 
-> **Work in progress.** There is no DELOS build for Apple devices yet. The repository still contains the Moonlight for
-> iOS/tvOS code it was forked from; that code is the reference for the new app and is removed once the new app streams on
-> a device.
+> **Work in progress.** DELOS for Apple pairs with a PC and streams on iPhone and iPad (first device test on
+> 2026-11-16); most of the DELOS interface is still being ported. There is no public build yet.
 
 ## Status
 
@@ -27,8 +26,9 @@ system versions are iOS 18, iPadOS 18, tvOS 18 and macOS 15.
 
 ## Lineage
 
-DELOS for Apple is a fork of [Moonlight for iOS/tvOS](https://github.com/moonlight-stream/moonlight-ios). The `master`
-branch mirrors that project; DELOS work happens on `main`.
+DELOS for Apple is a fork of [Moonlight for iOS/tvOS](https://github.com/moonlight-stream/moonlight-ios). The app is
+written anew in Swift; the Moonlight code it was forked from is gone from `main`, and the `master` branch mirrors that
+project.
 
 ## Contributing and security
 
