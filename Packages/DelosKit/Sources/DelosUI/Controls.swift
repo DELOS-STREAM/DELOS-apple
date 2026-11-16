@@ -28,7 +28,7 @@ struct PillButton: View {
             if primary {
                 Capsule().fill(colors.accent.color)
             } else {
-                Capsule().fill(colors.surface.color)
+                GlassShape(Capsule(), tint: colors.surface)
                     .overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
             }
         }
@@ -109,7 +109,7 @@ struct TextPill: View {
         .padding(.horizontal, stage.px(28))
         .frame(width: stage.px(520), height: stage.px(84), alignment: .leading)
         .background {
-            Capsule().fill(colors.surface2.color)
+            GlassShape(Capsule(), tint: colors.surface2)
                 .overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
         }
         #if os(tvOS)
@@ -139,8 +139,8 @@ extension View {
     /// The focus look of a pill: it grows by [scale], gets a ring of [ring] stage pixels as far outside it, and a glow of
     /// [glowBlur] (CSS box-shadow blur) moved down by [glowY]; no glow when [glowBlur] is 0. [corner] makes the ring a
     /// rounded rectangle around a shape with that corner radius (a cover) instead of a pill.
-    func focusLook(_ focused: Bool, scale: Double, ring: Double, glowBlur: Double, glowY: Double, corner: Double? = nil) -> some View {
-        modifier(FocusLook(focused: focused, scale: scale, ring: ring, glowBlur: glowBlur, glowY: glowY, corner: corner))
+    func focusLook(_ focused: Bool, scale: Double, ring: Double, glowBlur: Double, glowY: Double, corner: Double? = nil, anchor: UnitPoint = .center) -> some View {
+        modifier(FocusLook(focused: focused, scale: scale, ring: ring, glowBlur: glowBlur, glowY: glowY, corner: corner, anchor: anchor))
     }
 }
 
@@ -151,6 +151,8 @@ private struct FocusLook: ViewModifier {
     let glowBlur: Double
     let glowY: Double
     let corner: Double?
+    /// The point that stays put while the item grows (the wide first cover grows to the left only).
+    let anchor: UnitPoint
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -169,7 +171,7 @@ private struct FocusLook: ViewModifier {
                 .opacity(focused ? 1 : 0)
             }
             .shadow(color: focused && glowBlur > 0 ? colors.glow.color : .clear, radius: stage.px(glowBlur / 2), y: stage.px(glowY))
-            .scaleEffect(focused ? scale : 1)
+            .scaleEffect(focused ? scale : 1, anchor: anchor)
             .zIndex(focused ? 1 : 0)
             .animation(reduceMotion ? .easeOut(duration: 0.18) : .spring(response: 0.32, dampingFraction: 0.68), value: focused)
     }

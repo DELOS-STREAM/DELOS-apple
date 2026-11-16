@@ -144,7 +144,8 @@ private struct Cover: View {
         .frame(width: stage.px(width), height: stage.px(AppRow.height))
         .clipShape(shape)
         .overlay(shape.strokeBorder(colors.line.color, lineWidth: stage.px(1)))
-        .focusLook(focused, scale: 1.08, ring: 5, glowBlur: 50, glowY: 18, corner: 26)
+        // Android's TILE_FOCUS_SCALE; the wide first cover grows only to the left, so it never covers its neighbour
+        .focusLook(focused, scale: 1.055, ring: 5, glowBlur: 50, glowY: 18, corner: 26, anchor: wide ? .trailing : .center)
         .task(id: app.id) { await load() }
     }
 

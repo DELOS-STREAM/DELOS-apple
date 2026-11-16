@@ -90,8 +90,7 @@ struct CircleItem: View {
                 if let avatar {
                     AvatarBadge(avatar: avatar, size: side, iconSize: iconSize)
                 } else {
-                    Circle()
-                        .fill(colors.surface2.color)
+                    GlassShape(Circle(), tint: colors.surface2)
                         .overlay(Circle().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
                     SymbolView(symbol: icon, size: iconSize, color: colors.text, filled: focused)
                 }

@@ -324,7 +324,7 @@ struct TopBar: View {
                     Button(action: onBack) {
                         SymbolView(symbol: Symbols.arrowBack, size: 34, color: colors.text)
                             .frame(width: stage.px(68), height: stage.px(68))
-                            .background(Circle().fill(colors.surface.color))
+                            .background(GlassShape(Circle(), tint: colors.surface))
                             .overlay(Circle().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
                     }
                     .buttonStyle(.plain)

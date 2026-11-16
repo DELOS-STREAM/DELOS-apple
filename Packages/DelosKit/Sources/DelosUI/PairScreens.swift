@@ -266,7 +266,7 @@ private struct PinDigits: View {
                     .foregroundStyle(colors.text.color)
                     .frame(width: stage.px(148), height: stage.px(176))
                     .background {
-                        RoundedRectangle(cornerRadius: stage.px(32)).fill(colors.surface2.color)
+                        GlassShape(RoundedRectangle(cornerRadius: stage.px(32)), tint: colors.surface2)
                             .overlay(RoundedRectangle(cornerRadius: stage.px(32)).strokeBorder(colors.line.color, lineWidth: stage.px(1)))
                     }
                     .opacity(shown ? 1 : 0)

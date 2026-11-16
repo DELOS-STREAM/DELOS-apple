@@ -164,8 +164,7 @@ private struct StreamLoader: View {
                     .animation(.easeOut(duration: 0.25), value: line)
             }
             if let progress {
-                Capsule()
-                    .fill(colors.surface2.color)
+                GlassShape(Capsule(), tint: colors.surface2)
                     .frame(width: stage.px(600), height: stage.px(8))
                     .overlay(alignment: .leading) {
                         Capsule()
@@ -280,7 +279,7 @@ private struct StreamResultLayer: View {
                         }
                         .frame(maxWidth: stage.px(1100), maxHeight: stage.px(stage.compact ? 200 : 280))
                         .fixedSize(horizontal: false, vertical: true)
-                        .background(colors.surface.color, in: RoundedRectangle(cornerRadius: stage.px(28)))
+                        .background(GlassShape(RoundedRectangle(cornerRadius: stage.px(28)), tint: colors.surface))
                         .overlay(RoundedRectangle(cornerRadius: stage.px(28)).strokeBorder(colors.line.color, lineWidth: stage.px(1)))
                         .transition(.opacity)
                     }

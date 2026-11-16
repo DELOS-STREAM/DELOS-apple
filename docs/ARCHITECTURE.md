@@ -170,6 +170,12 @@ the display's refresh rate as the client refresh rate.
 they mix with other audio and follow the silent switch, and on iPhone and iPad a matching system haptic.
 Moving the focus plays move, activating an item plays select.
 
+## Glass
+
+Where DELOS for Android blurs the background behind a surface (`Modifier.glass`: circles, chips, pills, the stream
+menu, toasts), the Apple app uses Liquid Glass (`GlassShape`, iOS, iPadOS and tvOS 26 and later), tinted with the
+surface token at a lighter alpha; before 26 the token is a plain fill.
+
 ## Backgrounds
 
 `Backdrop(kind:)` draws every background of DELOS for Android (`BackgroundKind`), ported from `AnimatedBackground` in

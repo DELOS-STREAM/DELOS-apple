@@ -47,7 +47,7 @@ struct ToastOverlay: View {
                 .padding(.horizontal, stage.px(32))
                 .frame(minHeight: stage.px(72))
                 .background {
-                    Capsule().fill(colors.surface2.color)
+                    GlassShape(Capsule(), tint: colors.surface2)
                         .overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
                 }
                 .id(toast.id)

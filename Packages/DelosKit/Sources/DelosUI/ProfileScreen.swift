@@ -71,7 +71,7 @@ struct ProfileChip: View {
         .padding(.trailing, stage.px(26))
         .frame(height: stage.px(68))
         .background {
-            Capsule().fill(colors.surface.color)
+            GlassShape(Capsule(), tint: colors.surface)
                 .overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
         }
         .focusLook(focused, scale: 1.06, ring: 4, glowBlur: 40, glowY: 14)
