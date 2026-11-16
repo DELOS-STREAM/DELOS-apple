@@ -117,6 +117,7 @@ struct StreamContent: View {
             case .streaming:
                 if controller.menuOpen {
                     StreamMenu(focus: focus, controller: controller)
+                        .environment(\.glassOverMedia, true)
                 }
             case .leaving(let text):
                 StreamLoader(greeting: text, line: "", progress: nil)
@@ -164,7 +165,7 @@ private struct StreamLoader: View {
                     .animation(.easeOut(duration: 0.25), value: line)
             }
             if let progress {
-                GlassShape(Capsule(), tint: colors.surface2)
+                Capsule().fill(colors.surface2.color)
                     .frame(width: stage.px(600), height: stage.px(8))
                     .overlay(alignment: .leading) {
                         Capsule()
@@ -279,7 +280,7 @@ private struct StreamResultLayer: View {
                         }
                         .frame(maxWidth: stage.px(1100), maxHeight: stage.px(stage.compact ? 200 : 280))
                         .fixedSize(horizontal: false, vertical: true)
-                        .background(GlassShape(RoundedRectangle(cornerRadius: stage.px(28)), tint: colors.surface))
+                        .background(GlassShape(RoundedRectangle(cornerRadius: stage.px(28)), tint: colors.surface, role: .panel))
                         .overlay(RoundedRectangle(cornerRadius: stage.px(28)).strokeBorder(colors.line.color, lineWidth: stage.px(1)))
                         .transition(.opacity)
                     }

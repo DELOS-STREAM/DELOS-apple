@@ -172,9 +172,17 @@ Moving the focus plays move, activating an item plays select.
 
 ## Glass
 
-Where DELOS for Android blurs the background behind a surface (`Modifier.glass`: circles, chips, pills, the stream
-menu, toasts), the Apple app uses Liquid Glass (`GlassShape`, iOS, iPadOS and tvOS 26 and later), tinted with the
-surface token at a lighter alpha; before 26 the token is a plain fill.
+Where DELOS for Android blurs the background behind a surface (`Modifier.glass`), the Apple app uses Liquid Glass
+(`GlassShape`, iOS, iPadOS and tvOS 26 and later); before 26 the surface token is a plain fill. Every glass surface has
+one role, so the same kind of element looks the same everywhere:
+
+| Role | Elements | Glass |
+|---|---|---|
+| `control` | Circles, chips, secondary pills, the back button, text fields: what can be pressed or focused | Regular, tinted with the surface token at 45 % of its alpha, interactive on iPhone and iPad (it reacts to touch) |
+| `panel` | Cards, panels, toasts, the PIN digits: what is read | Regular, tinted at 60 %, not interactive, for text contrast |
+| over the video (`glassOverMedia`) | The stream menu and anything shown over the stream | Clear (the picture shows through), tinted with the scrim token for contrast |
+
+Not glass: primary buttons (solid main color, as on Android), focus rings, progress bars and cover art.
 
 ## Backgrounds
 
