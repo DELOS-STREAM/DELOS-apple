@@ -21,7 +21,8 @@ iOS 18, iPadOS 18, tvOS 18, macOS 15.
 ## CI
 
 The only workflow runs when a release tag (`vX.Y.Z` or `vX.Y.Z-rc.N`) is pushed. Nothing runs on a push or a pull
-request, and no workflow is started by hand. Until the first release there is no workflow.
+request, and no workflow is started by hand. The workflow (`.github/workflows/build.yml`) runs `tools/test.sh`: the
+package tests, the app builds for the iOS and tvOS simulators and the repository checks.
 
 ## Commit messages and branch names
 
