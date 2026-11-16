@@ -50,11 +50,15 @@ enum CanvasBackgrounds {
             let sp = 0.35 + fi * 0.12
             var path = Path()
             path.move(to: CGPoint(x: 0, y: p.h))
+            let wave = { (x: Double) in y0 + sin(x * k + t * sp + fi) * amp + sin(x * k * 2.3 - t * sp * 0.7) * amp * 0.35 }
             var x = 0.0
-            while x <= p.w {
-                path.addLine(to: CGPoint(x: x, y: y0 + sin(x * k + t * sp + fi) * amp + sin(x * k * 2.3 - t * sp * 0.7) * amp * 0.35))
+            while x < p.w {
+                path.addLine(to: CGPoint(x: x, y: wave(x)))
                 x += 12
             }
+            // Android samples up to x <= w only, which ends on the edge at 16:9 (960 = 80 × 12); on a wider canvas the
+            // last sample falls short and the wave would slope down to the corner, so the edge is always sampled
+            path.addLine(to: CGPoint(x: p.w, y: wave(p.w)))
             path.addLine(to: CGPoint(x: p.w, y: p.h))
             path.closeSubpath()
             // Three of the six waves in the main color, two in the secondary one, one in the accent

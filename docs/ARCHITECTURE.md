@@ -76,8 +76,10 @@ The clock runs at 0.96 per second, 0.15 of that with reduced motion. `Background
 
 The Metal ports differ from the AGSL text only where Metal must: GLSL's `mod()` is written out (`x - y * floor(x / y)`,
 Metal's `fmod` keeps the sign of `x`), `atan` is `atan2`, the hash uses `precise::sin` (large arguments), and Orbit's
-`pow(d, 2.0)` of a negative `d` is `d * d`. The fallback of Android below version 13 (Aurora in place of a shader) is
-not needed. The focused game's colors (`clock.tints`) and the game background are not ported yet; Material You has no
+`pow(d, 2.0)` of a negative `d` is `d * d`. Tide always samples its waves at the right edge too: Android stops at the
+last multiple of 12 pixels, which is the edge only at 16:9, and on a wider screen the waves would slope down to the
+corner. The fallback of Android below version 13 (Aurora in place of a shader) is not needed. The focused game's colors
+(`clock.tints`) and the game background are not ported yet; Material You has no
 counterpart. In debug builds `-DelosBackground <kind>` and `-DelosTheme light` pick the background and the theme
 ([BUILDING.md](BUILDING.md)).
 
@@ -103,7 +105,8 @@ bundle the same ten languages; without it iOS shows the package's strings in Eng
   and that every background shader is in the Metal library.
 - `sh tools/sim.sh iphone|ipad|tv`: the start screen in the simulators.
 - The start screen in Czech in the iPhone simulator (`-AppleLanguages (cs)`).
-- Every background in the iPhone simulator (dark theme; Contour and Nebula also light), compared with the Android code.
+- Every background in the iPhone simulator (dark theme; Contour, Nebula and Aurora also light), compared with the
+  Android code; Nebula, Lava and Orbit also against a NumPy reimplementation of their AGSL at the same clock.
 - `python3 -m unittest discover -s tools/l10n`: placeholder and escape conversion, the usage check.
 
 ### Not verified
