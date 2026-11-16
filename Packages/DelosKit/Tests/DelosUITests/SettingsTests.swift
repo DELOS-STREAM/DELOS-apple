@@ -14,9 +14,10 @@ private let iPhone = StreamDevice(pixelWidth: 1290, pixelHeight: 2796, maxFrames
         #expect(form.rows(.audio).map(\.id) == ["checkbox_host_audio"])
         #expect(Set(form.rows(.stream).map(\.section)) == ["Video Settings"])
         #expect(form.rows(.audio)[0].section == "Host Settings")
+        #expect(SettingsTab.allCases == [.stream, .audio, .controls, .appearance])
         #expect(SettingsTab.stream.step(1) == .audio)
-        #expect(SettingsTab.stream.step(-1) == .audio)
-        #expect(SettingsTab.audio.step(1) == .stream)
+        #expect(SettingsTab.stream.step(-1) == .appearance)
+        #expect(SettingsTab.appearance.step(1) == .stream)
     }
 
     @Test func theRowsShowAndroidsLabels() throws {

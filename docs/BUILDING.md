@@ -29,12 +29,15 @@ cp Config/Local.example.xcconfig Config/Local.xcconfig   # only for a real devic
 | `cd Packages/DelosKit && swift test` | Only the package tests, on the Mac |
 | `python3 tools/l10n/import_android.py ../Delos` | Regenerates the String Catalog from a DELOS for Android checkout (after editing `tools/l10n/keys.txt`) |
 
-Debug builds read two launch arguments, for screenshots of each background and theme: `-DelosBackground <kind>`
-(`aurora`, `tide`, `silk`, `contour`, `nebula`, `plasma`, `lava`, `caustics`, `bokeh`, `orbit` or `still`) and
-`-DelosTheme light`. With an installed app:
+Debug builds read launch arguments for screenshots of each background, theme and palette: `-DelosBackground <kind>`
+(`aurora`, `tide`, `silk`, `contour`, `nebula`, `plasma`, `lava`, `caustics`, `bokeh`, `orbit` or `still`),
+`-DelosTheme light`, `-DelosPalette <name>` (`delos`, `ember`, `rose`, `orchid`, `dusk`, `iris`, `graphite` or `mint`)
+and, once a profile exists, `-DelosSettings <tab>` (`stream`, `audio`, `controls` or `appearance`), which opens Settings
+on that tab, focused on its first row or on `-DelosFocus <row id>` (Android's key, such as `ui_palette`). With an
+installed app:
 
 ```sh
-xcrun simctl launch <UDID> io.github.meitoncz.delos.debug -DelosBackground nebula -DelosTheme light
+xcrun simctl launch <UDID> io.github.meitoncz.delos.debug -DelosBackground nebula -DelosTheme light -DelosSettings appearance
 ```
 
 ## Project layout

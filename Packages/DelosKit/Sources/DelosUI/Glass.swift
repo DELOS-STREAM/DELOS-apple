@@ -14,6 +14,10 @@ enum GlassRole {
 extension EnvironmentValues {
     /// True over the stream's video: glass there is clear (the picture shows through) with a darker tint for contrast.
     @Entry var glassOverMedia = false
+    /// Interface motion is reduced: the profile's Animations setting (Settings → Appearance) or the system's Reduce
+    /// Motion (``DelosRoot`` sets it; `LocalReducedMotion` of DELOS for Android). The animated background keeps its
+    /// pace, as on Android, and slows down only for the system setting.
+    @Entry var reducedMotion = false
 }
 
 /// A surface of Liquid Glass where DELOS for Android blurs the background (`Modifier.glass`); iOS, iPadOS and tvOS 26
