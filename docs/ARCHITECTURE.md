@@ -14,8 +14,8 @@ The app target (`App/`) only starts the interface. All code is in the Swift pack
 | `DelosUI` | Design tokens, fonts, icons, shaders, components, the focus engine, the screens | Yes |
 | `DelosData` | Stored data: hosts, profiles, settings, playtime, artwork | No |
 | `DelosHost` | Discovery, pairing, the HTTPS client of the host | No |
-| `DelosCore` | The C streaming core `delos-common-c` and its Swift wrapper | No |
-| `DelosMedia` | Video decoding and rendering, audio | No |
+| `DelosCore` | The C streaming core `delos-common-c` (C target `CDelosCommon`) and its Swift wrapper | No |
+| `DelosMedia` | Video decoding and rendering, audio; Opus decoding (C target `COpus`) | No |
 | `DelosInput` | Controllers, keyboard, touch, rumble, motion | No |
 
 Modules that are still empty contain one file that names their phase.
@@ -28,6 +28,9 @@ graph LR
   DelosData --> DelosHost
   DelosHost --> DelosCore
   DelosMedia --> DelosCore
+  DelosMedia --> COpus
+  DelosCore --> CDelosCommon
+  CDelosCommon --> OpenSSL
   DelosInput --> DelosCore
 ```
 
@@ -115,11 +118,54 @@ format, plurals as plural variations). Swift reads them with `L("name")`; `tools
 `tools/test.sh`) fails when a used name is missing or lacks a language. `App/Shared/InfoPlist.xcstrings` gives the app
 bundle the same ten languages; without it iOS shows the package's strings in English only.
 
+## The streaming core
+
+### C sources
+
+The C code comes from two submodules: `ThirdParty/delos-common-c` (the DELOS core, shared with DELOS for Android,
+with its own submodules `enet` and `nanors`) and `ThirdParty/opus` (libopus at a release tag). SwiftPM builds only
+files inside the package directory, so each C target directory holds a relative symlink to its submodule:
+
+| Target | Symlink | Built files | Settings |
+|---|---|---|---|
+| `CDelosCommon` | `Sources/CDelosCommon/core` → `ThirdParty/delos-common-c` | `src/*.c`, the Unix files of `enet`, `nanors/rs.c` and `oblas_*`, as in the core's `CMakeLists.txt`; plus `DelosLog.c` | `HAS_SOCKLEN_T`, `__APPLE_USE_RFC_3542`; `LC_DEBUG` in debug, `NDEBUG` in release, as in Moonlight's `moonlight-common.xcodeproj`; OpenSSL from `OpenSSL-Package` |
+| `COpus` | `Sources/COpus/opus` → `ThirdParty/opus` | the lists of `opus_sources.mk`, `celt_sources.mk` and `silk_sources.mk` for a floating-point build | `config/config.h` replaces the generated configuration; NEON intrinsics are presumed on arm64 (`neon/` compiles the NEON files on arm64 only, because SwiftPM cannot select files by architecture) |
+
+`include/` of each target has the umbrella header of its Clang module. The only C written for DELOS is `DelosLog.c`:
+the core logs through a variadic callback, which Swift cannot define, so it formats the message and hands a plain
+string to Swift. Apple's toolchain warns about 64-to-32-bit conversions in the third-party code; the targets switch
+that warning off instead of changing the submodules.
+
+### Swift wrapper
+
+`StreamConfiguration` and `ServerInformation` map to the core's `STREAM_CONFIGURATION` and `SERVER_INFORMATION`; the
+bit sets `VideoFormats`, `ServerCodecModes` and `EncryptionFlags` carry the core's constants, and the PyroWave fields
+are carried for parity with Android but unused. `StreamSession` (an actor) runs one connection: `start` runs the
+blocking `LiStartConnection` on its own thread and throws `StreamError` with the failing stage, `stop` runs
+`LiStopConnection`, and `events` is an `AsyncStream` of stage progress, connection status, termination, rumble, LEDs,
+motion and trigger requests. Video decode units and audio packets go to `Sendable` sinks (`VideoDecodeUnitSink`,
+`AudioSampleSink`); a `DecodeUnit` is non-copyable and borrowed, so the core's memory cannot outlive the call. Input
+(`sendController`, mouse, keyboard, text, scroll, touch) and statistics are `nonisolated` and call the core directly.
+
+The core keeps its connection in global state and its callbacks get no context pointer. So one global `CoreContext`
+(`CoreBridge`, behind a `Mutex`) connects the callbacks to the session that holds the core; a second session cannot
+start while one is active. The callbacks run on the core's threads.
+
+`OpusMultistreamDecoder` (DelosMedia) decodes the host's multistream packets to interleaved float samples and conceals
+lost packets.
+
 ## Verification
 
 - `swift test` in `Packages/DelosKit`: colors against an independent HSL implementation, focus geometry and model,
   stage scaling, controller stick and key mapping, the background lights and saturations against the Kotlin formulas,
-  and that every background shader is in the Metal library.
+  and that every background shader is in the Metal library; the stream configuration and server information against the C
+  structures, the audio, video format and codec bits against the protocol values, the C callbacks against events and
+  sinks, input without a stream, a start against a closed local port (fails in the RTSP handshake with
+  `ECONNREFUSED` after the core's 10-second retry), `stop()` and task cancellation during that retry (the start ends
+  within a second), an invalid configuration, Opus encode → decode of stereo sweeps (2.5 ms delay, both channels
+  above 15 dB SNR), packet loss concealment, 5.1 layout, invalid layouts and packets.
+- `xcodebuild -scheme DelosCore` and `-scheme DelosMedia` for `generic/platform=iOS`, `tvOS`, `macOS` and the iOS and
+  tvOS simulators.
 - `sh tools/sim.sh iphone|ipad|tv`: the start screen in the simulators.
 - DelosMediaTests decode the first frame of an H.264, an HEVC and an 8-bit and a 10-bit AV1 stream with VideoToolbox on
   the Mac (AV1 is skipped where the Mac has no hardware AV1 decoder; the M6 used on 2026-11-16 has one).
@@ -134,3 +180,7 @@ bundle the same ten languages; without it iOS shows the package's strings in Eng
   covered by the unit tests only.
 - GPU cost of the backgrounds (the shaders and the canvas ones) on a device.
 - How the sounds and haptics feel on a device.
+- A real stream: start, video and audio sinks with real data, input, statistics and termination against a host. The
+  owner runs streams; P4 connects the sinks.
+- libopus on x86_64 (Intel Macs and simulators) was only compiled; the tests ran on arm64, where the NEON paths are
+  used.
