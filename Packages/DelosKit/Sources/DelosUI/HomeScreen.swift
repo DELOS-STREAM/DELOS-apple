@@ -76,7 +76,7 @@ struct HomeScreen: View {
     let hostID: String
     let focus: FocusModel
     let actions: ShellActions
-    let onApp: @MainActor (HostApp) -> Void
+    @Environment(Layers.self) private var layers
     @Environment(HostStore.self) private var hosts
     @Environment(HomeArt.self) private var art
     @State private var loadFailed = false
@@ -91,7 +91,7 @@ struct HomeScreen: View {
             case .loading: HomeMessage(icon: Symbols.loading, title: L("home_loading"), text: nil)
             case .offline: HomeMessage(icon: Symbols.wifiOff, title: L("home_offline_title", name), text: nil)
             case .empty: HomeMessage(icon: Symbols.sportsEsports, title: L("home_empty_title", name), text: L("home_empty_note"))
-            case .apps(let apps): GameLibrary(hostID: hostID, apps: actions.libraryOrder(hostID: hostID, apps: apps), focus: focus, actions: actions, onApp: onApp)
+            case .apps(let apps): GameLibrary(hostID: hostID, apps: actions.libraryOrder(hostID: hostID, apps: apps), focus: focus, actions: actions)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -114,83 +114,340 @@ struct HomeScreen: View {
     }
 }
 
+/// What A (or a tap) on a cover does (`GameTile`'s `activate`).
+enum GameActivation: Equatable {
+    /// Start or resume the game.
+    case start
+    /// Another game runs on the PC: open the game's menu (quit that one and start this one, or resume the running one)
+    /// instead of quitting the running game by a stray press.
+    case offerChoices
+
+    /// [running]: the game running on the PC, when it is one of the library's.
+    static func of(app: Int, running: Int?) -> GameActivation {
+        guard let running, running != app else { return .start }
+        return .offerChoices
+    }
+}
+
+/// Which cover has the focus when the library opens, and where the focus goes when its game disappears.
+enum LibraryFocus {
+    /// The index of the cover that opens focused: the one the screen's focus still holds ([focused], an app id), else the
+    /// one remembered from the last time this PC's library was shown, else the first (`HomeScreen`'s
+    /// `focusedIndex`). [apps]: the library's app ids in order.
+    static func initial(apps: [Int], focused: Int?, remembered: Int?) -> Int {
+        if let focused, let index = apps.firstIndex(of: focused) { return index }
+        if let remembered, let index = apps.firstIndex(of: remembered) { return index }
+        return 0
+    }
+
+    /// The index that takes the focus when the focused game disappeared from a library of [count] games (hidden,
+    /// removed): its neighbour, which now stands where it stood.
+    static func afterRemoval(count: Int, lastIndex: Int) -> Int {
+        max(min(lastIndex, count - 1), 0)
+    }
+}
+
+/// The wrap of the row: left on the first cover goes round to the last one, right on the last one back to the first.
+enum LibraryWrap {
+    static func moves(index: Int, ids: [AnyHashable]) -> [FocusDirection: AnyHashable] {
+        guard ids.count > 1 else { return [:] }
+        if index == 0 { return [.left: ids[ids.count - 1]] }
+        if index == ids.count - 1 { return [.right: ids[0]] }
+        return [:]
+    }
+
+    /// Whether the focus going from cover [from] to cover [to] is a wrap round the row.
+    static func isWrap(from: Int?, to: Int, count: Int) -> Bool {
+        guard let from, count > 2 else { return false }
+        return (from == 0 && to == count - 1) || (from == count - 1 && to == 0)
+    }
+
+    /// A wrap over more than this many covers fades out, jumps this far short of the other end and fades in again, so the
+    /// glide does not have to cross every cover.
+    static let glideItems = 12
+
+    /// How far the row overshoots the end it arrives at before it settles back, stage pixels, for a glide of [distance]
+    /// (`rowBounce` of `HomeScreen.kt`: a spring kicked with the glide's speed, at most 4200 px/s).
+    static func bounce(distance: Double) -> Double {
+        min(distance * 1.75 / 0.36, 4200) * 0.035
+    }
+}
+
+/// The covers of a state of the context menu: the ones beside the focused cover idle slightly muted
+/// (`saturate(.86) brightness(.92)`) and dim further while a context menu is open (`.6` and `.5`), so the cover the
+/// menu belongs to stands out. The focused cover keeps its colors.
+enum CoverTone {
+    static func of(focused: Bool, menuOpen: Bool) -> (saturation: Double, brightness: Double) {
+        if focused { return (1, 1) }
+        return menuOpen ? (0.6, 0.5) : (0.86, 0.92)
+    }
+
+    /// The info block's opacity: it dims behind an open context menu.
+    static func info(menuOpen: Bool) -> Double { menuOpen ? 0.4 : 1 }
+}
+
+/// The row's edge fades (`fadeMask` of DELOS for Android): transparent up to [startClear] stage pixels from the left
+/// edge, opaque from [startSolid], opaque until [endSolid] before the right edge and transparent from [endClear] before it.
+enum RowFade {
+    static func stops(width: Double, startClear: Double, startSolid: Double, endSolid: Double, endClear: Double)
+        -> [(location: Double, opacity: Double)]
+    {
+        func at(_ px: Double) -> Double { min(max(px / width, 0), 1) }
+        return [
+            (0, 0), (at(startClear), 0), (at(startSolid), 1),
+            (1 - at(endSolid), 1), (1 - at(endClear), 0), (1, 0),
+        ]
+    }
+
+    /// The fade at the left edge, stage pixels, when covers lie beyond it.
+    static let start = 120.0
+    /// The fade at the right edge, and the clear strip at its end, when covers lie beyond it.
+    static let endSolid = 260.0, endClear = 20.0
+}
+
+/// The row's edge fades, each of which fades out ([back], [forward] from 1 to 0) while no cover lies beyond its edge,
+/// so the first cover's ring and glow are not faded at the start nor the last one's at the end.
+private struct RowEdgeFade: ViewModifier, Animatable {
+    var back: Double
+    var forward: Double
+    /// The stage's width in stage pixels.
+    let width: Double
+    let overdraw: Double
+
+    nonisolated var animatableData: AnimatablePair<Double, Double> {
+        get { AnimatablePair(back, forward) }
+        set { (back, forward) = (newValue.first, newValue.second) }
+    }
+
+    func body(content: Content) -> some View {
+        let stops = RowFade.stops(
+            width: width, startClear: 0, startSolid: RowFade.start * back,
+            endSolid: RowFade.endSolid * forward, endClear: RowFade.endClear * forward)
+        content.mask {
+            LinearGradient(
+                stops: stops.map { .init(color: .black.opacity($0.opacity), location: $0.location) },
+                startPoint: .leading, endPoint: .trailing
+            )
+            // The glow and the ring of a cover reach above and below the row: the mask only cuts sideways
+            .padding(.vertical, -overdraw)
+        }
+    }
+}
+
+/// Which ends of the row have covers beyond them.
+private struct ScrollEnds: Equatable {
+    var back = false
+    var forward = false
+}
+
 /// The games: the focused one's title and info above the row of covers. The focused cover stays where the first one
-/// starts (Android keeps it at the left edge too).
-private struct GameLibrary: View {
+/// starts (Android keeps it at the left edge too). The focused game is remembered, so the way back from Settings,
+/// Profile, Devices or a stream returns to it with the row scrolled to it; the row wraps at its ends and fades where
+/// more covers continue; the covers of the first screenful enter one after the other.
+struct GameLibrary: View {
     let hostID: String
     let apps: [HostApp]
     let focus: FocusModel
     let actions: ShellActions
-    let onApp: @MainActor (HostApp) -> Void
     @Environment(HostStore.self) private var hosts
     @Environment(HomeArt.self) private var art
+    @Environment(Layers.self) private var layers
     @Environment(\.stage) private var stage
+    @Environment(\.reducedMotion) private var reduceMotion
     @State private var position = ScrollPosition(edge: .leading)
     @State private var lastFocusMove = Date.distantPast
+    /// Where the focused game stood, for the one that takes its place when it disappears.
+    @State private var lastIndex = 0
+    @State private var ends = ScrollEnds()
+    /// The row faded out for a moment while a long wrap jumps close to the other end.
+    @State private var rowAlpha = 1.0
+    /// The overshoot at the end of a wrap, stage pixels.
+    @State private var rowBounce = 0.0
+    @State private var wrap: Task<Void, Never>?
 
     static let tile = 300.0, height = 450.0, gap = 44.0
     /// The wide first cover: three covers and the two gaps between them.
     static let wide = 3 * tile + 2 * gap
     /// Room above and below the covers for the focus scale, the ring and the glow, which the scroll view would cut.
     static let rowPad = 40.0
+    static let focusScale = 1.055
 
     /// Where cover [index] starts in the row, stage pixels from the first one.
     static func itemStart(_ index: Int) -> Double {
         index == 0 ? 0 : wide + gap + Double(index - 1) * (tile + gap)
     }
 
+    /// The room after the last cover (`CoverGeometry.endPadding`): the focused wide first cover grows only to the left, so
+    /// it ends closer to the edge than the others, which grow evenly; the last cover, focused, is as far from the right
+    /// edge as the first one, focused, is from the left one (about 104 px for the first cover's 150 px).
+    static func endPadding(start: Double) -> Double {
+        start - wide * (focusScale - 1) + tile * (focusScale - 1) / 2
+    }
+
+    /// A or a tap on [app] opens its menu (another game runs on the PC) instead of starting it.
+    private func offersChoices(_ app: HostApp) -> Bool {
+        let running = hosts.host(hostID).flatMap { $0.runningAppID == 0 ? nil : $0.runningAppID }
+        let known = running.flatMap { id in apps.first { $0.id == id }?.id }
+        return GameActivation.of(app: app.id, running: known) == .offerChoices
+    }
+
+    private var menuOpen: Bool {
+        if case .context = layers.layer { true } else { false }
+    }
+
     var body: some View {
+        let ids = apps.map(\.id)
         let focusedIndex = apps.firstIndex { focus.focused == AnyHashable(Self.id($0)) }
-        let focused = apps[focusedIndex ?? 0]
+        // Before the library takes the focus, the game it will take it with is the one shown
+        let current = focusedIndex ?? LibraryFocus.initial(apps: ids, focused: nil, remembered: actions.homeGame(hostID: hostID))
+        let focused = apps[current]
         let layout = HomeLayout(scale: stage.textScale, safeTop: stage.safe.top, stageHeight: stage.height)
         let host = hosts.host(hostID)
         let running = host.flatMap { $0.runningAppID == 0 ? nil : $0.runningAppID }
         let last = actions.lastPlayed(hostID: hostID)
         let start = 150 + stage.safe.leading
+        let end = Self.endPadding(start: 150 + stage.safe.trailing)
+        let keys = apps.map { AnyHashable(Self.id($0)) }
         ZStack(alignment: .topLeading) {
             GameInfo(hostID: hostID, app: focused, pcName: host?.name ?? "", running: running == focused.id,
                      playtime: actions.playtime(hostID: hostID, appID: focused.id), layout: layout)
                 .padding(.leading, stage.px(start))
                 .padding(.top, stage.px(layout.titleTop))
+                // Behind an open context menu the info block dims to 40 %
+                .opacity(CoverTone.info(menuOpen: menuOpen))
+                .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: menuOpen)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: stage.px(Self.gap)) {
                     ForEach(Array(apps.enumerated()), id: \.element.id) { index, app in
                         let badge: CoverBadge? = app.id == running ? .running : index == 0 && app.id == last ? .lastPlayed : nil
-                        FocusItem(id: Self.id(app), model: focus, menu: { actions.gameMenu(hostID: hostID, app: app) }, action: { onApp(app) }) { isFocused in
-                            Cover(hostID: hostID, app: app, wide: index == 0, focused: isFocused, badge: badge)
+                        FocusItem(
+                            id: Self.id(app), model: focus, moves: LibraryWrap.moves(index: index, ids: keys),
+                            menu: { actions.gameMenu(hostID: hostID, app: app) },
+                            // The offer menu plays its own OPEN cue, not SELECT
+                            clickCue: offersChoices(app) ? nil : .select,
+                            action: { actions.activate(hostID: hostID, app: app, focus: focus) }
+                        ) { isFocused in
+                            Cover(hostID: hostID, app: app, wide: index == 0, focused: isFocused, menuOpen: menuOpen, badge: badge)
                         }
+                        .staggerEntrance()
                     }
                 }
-                .padding(.horizontal, stage.px(start))
+                .padding(.leading, stage.px(start))
+                .padding(.trailing, stage.px(end))
                 .padding(.vertical, stage.px(Self.rowPad))
             }
+            .entranceScope()
             .scrollClipDisabled()
             // The row is moved by the focus alone: without this a hardware keyboard's arrow keys also scroll the
             // scroll view by themselves, on top of the focus (owner's iPad with a Magic Keyboard: a crawl, then the
             // focus ran off the screen)
             .focusable(false)
             .scrollPosition($position)
+            .onScrollGeometryChange(for: ScrollEnds.self) { geometry in
+                ScrollEnds(back: geometry.visibleRect.minX > 1, forward: geometry.visibleRect.maxX < geometry.contentSize.width - 1)
+            } action: { _, now in
+                ends = now
+            }
             .padding(.top, stage.px(layout.coverTop - Self.rowPad))
-            .onChange(of: focusedIndex) { _, now in
+            .modifier(RowEdgeFade(back: ends.back ? 1 : 0, forward: ends.forward ? 1 : 0, width: stage.width, overdraw: stage.px(1000)))
+            .animation(.easeInOut(duration: 0.3), value: ends)
+            .opacity(rowAlpha)
+            .offset(x: stage.px(rowBounce))
+            #if os(tvOS)
+            // The system focus engine has nowhere to go past the ends: the wrap is made here
+            .onMoveCommand { direction in
+                guard let focusedIndex else { return }
+                for (move, target) in LibraryWrap.moves(index: focusedIndex, ids: keys) where move.matches(direction) {
+                    focus.focus(target)
+                }
+            }
+            #endif
+            .onChange(of: focusedIndex) { old, now in
                 guard let now else { return }
+                lastIndex = now
+                actions.rememberHomeGame(hostID: hostID, appID: apps[now].id)
+                if LibraryWrap.isWrap(from: old, to: now, count: apps.count) {
+                    glide(to: now, from: old ?? now)
+                    return
+                }
+                wrap?.cancel()
+                rowAlpha = 1
+                rowBounce = 0
                 // A held arrow moves the focus every 50 ms: overlapping 200 ms animations lagged behind it, so a fast
                 // move scrolls in one short step and a single press glides
                 let fast = Date.now.timeIntervalSince(lastFocusMove) < 0.12
                 lastFocusMove = .now
-                withAnimation(fast ? .linear(duration: 0.05) : .easeOut(duration: 0.2)) {
-                    position.scrollTo(x: stage.px(Self.itemStart(now)))
-                }
+                scroll(to: now, animation: fast ? .linear(duration: 0.05) : .timingCurve(0.33, 1, 0.68, 1, duration: 0.2))
+            }
+            // The focused game disappeared (hidden, removed): its neighbour takes the focus
+            .onChange(of: ids) { _, now in
+                guard focusedIndex == nil, !apps.isEmpty else { return }
+                focus.focus(Self.id(apps[LibraryFocus.afterRemoval(count: now.count, lastIndex: lastIndex)]))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        // The first cover takes the focus, before the covers register (the model would take whichever comes first)
-        .onAppear { if focusedIndex == nil { focus.focus(Self.id(apps[0])) } }
+        // The covers register after the screen shows, and the model would take whichever comes first: the game that had
+        // the focus when the library was left (or was remembered from the last time), else the first one, takes it,
+        // and the row opens scrolled to it
+        .onAppear {
+            let focusedID = apps.first { focus.focused == AnyHashable(Self.id($0)) }?.id
+            let index = LibraryFocus.initial(apps: ids, focused: focusedID, remembered: actions.homeGame(hostID: hostID))
+            lastIndex = index
+            actions.rememberHomeGame(hostID: hostID, appID: apps[index].id)
+            focus.focus(Self.id(apps[index]))
+            scroll(to: index, animation: nil)
+        }
+        .onDisappear { wrap?.cancel() }
         // The game background follows the focus with a short delay, so it does not flicker while scrolling fast
         .task(id: "\(GameArt.key(hostID, focused.id))#\(art.artwork.version)") {
             let image = await heroImage(focused)
             try? await Task.sleep(for: .milliseconds(140))
             guard !Task.isCancelled else { return }
             art.hero = GameArt(hostID: hostID, app: focused, image: image)
+        }
+    }
+
+    /// Scrolls the row so cover [index] stands at its start: animated, or at once with reduced motion or no [animation].
+    private func scroll(to index: Int, animation: Animation?) {
+        let x = stage.px(Self.itemStart(index))
+        if let animation, !reduceMotion {
+            withAnimation(animation) { position.scrollTo(x: x) }
+        } else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { position.scrollTo(x: x) }
+        }
+    }
+
+    /// The wrap round the row (`GameLibrary`'s key handler of Android): far away, the row fades out, jumps near the other
+    /// end and fades in; then it glides there without slowing down and, arriving, overshoots the end a little and settles
+    /// back. With reduced motion it jumps.
+    private func glide(to target: Int, from source: Int) {
+        wrap?.cancel()
+        if reduceMotion {
+            scroll(to: target, animation: nil)
+            return
+        }
+        wrap = Task { @MainActor in
+            if abs(target - source) > LibraryWrap.glideItems {
+                withAnimation(.easeOut(duration: 0.11)) { rowAlpha = 0 }
+                try? await Task.sleep(for: .milliseconds(110))
+                guard !Task.isCancelled else { return }
+                scroll(to: target == 0 ? LibraryWrap.glideItems : max(target - LibraryWrap.glideItems, 0), animation: nil)
+                try? await Task.sleep(for: .milliseconds(40))
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.26)) { rowAlpha = 1 }
+            }
+            let distance = abs(Self.itemStart(target) - Self.itemStart(min(source, apps.count - 1)))
+            scroll(to: target, animation: .timingCurve(0.45, 0.05, 0.8, 0.65, duration: 0.36))
+            try? await Task.sleep(for: .milliseconds(360))
+            guard !Task.isCancelled else { return }
+            // Arriving at the last cover the content moves left, at the first one right
+            let overshoot = LibraryWrap.bounce(distance: distance) * (target == 0 ? 1 : -1)
+            withAnimation(.easeOut(duration: 0.09)) { rowBounce = overshoot }
+            try? await Task.sleep(for: .milliseconds(90))
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.36)) { rowBounce = 0 }
         }
     }
 
@@ -336,6 +593,8 @@ private struct Cover: View {
     let app: HostApp
     let wide: Bool
     let focused: Bool
+    /// A context menu is open: the covers beside the focused one dim.
+    let menuOpen: Bool
     let badge: CoverBadge?
     @Environment(HostStore.self) private var hosts
     @Environment(HomeArt.self) private var art
@@ -348,6 +607,7 @@ private struct Cover: View {
 
     var body: some View {
         let width = wide ? GameLibrary.wide : GameLibrary.tile
+        let tone = CoverTone.of(focused: focused, menuOpen: menuOpen)
         let shape = RoundedRectangle(cornerRadius: stage.px(26))
         let placeholder = GameArt(hostID: hostID, app: app)
         ZStack(alignment: .topLeading) {
@@ -356,6 +616,10 @@ private struct Cover: View {
                 if let shown {
                     Image(decorative: shown, scale: 1).resizable().scaledToFill()
                         .frame(width: stage.px(width), height: stage.px(GameLibrary.height))
+                        // The idle and menu filters (`IdleCoverFilter`, `menuDimCoverFilter`); the placeholder art has none
+                        .saturation(tone.saturation)
+                        .colorMultiply(Color(white: tone.brightness))
+                        .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: menuOpen)
                         .transition(.opacity)
                 } else {
                     PlaceholderArt(
@@ -464,5 +728,18 @@ private struct HomeMessage: View {
             }
         }
         .multilineTextAlignment(.center)
+        .staggerEntrance(index: 0, base: Motion.menuDelay)
     }
 }
+
+#if os(tvOS)
+extension FocusDirection {
+    /// Whether this is the direction of the remote's move command.
+    func matches(_ command: MoveCommandDirection) -> Bool {
+        switch (self, command) {
+        case (.left, .left), (.right, .right), (.up, .up), (.down, .down): true
+        default: false
+        }
+    }
+}
+#endif

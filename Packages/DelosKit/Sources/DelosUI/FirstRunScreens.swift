@@ -102,28 +102,24 @@ struct BootLogo: View {
 /// `#scr-create` (`CreateProfileScreen` in DELOS for Android): the sixteen avatars in circles, the name and Create.
 /// [editing] changes the current profile ([initial]) instead of creating one.
 ///
-/// The name is typed straight into the field (touch or a hardware keyboard); a controller user keeps the default name.
-/// DELOS for Android shows the name in a pill with a "Change name" button that opens its text dialog, which does not
-/// exist here yet.
+/// The name is shown in a pill that is not an input; "Change name" opens the profile name dialog (the one Rename profile
+/// uses), and when it is accepted the focus goes on to Create. Create without a name opens the dialog too.
 struct CreateProfileScreen: View {
     let editing: Bool
     let focus: FocusModel
-    let navigator: Navigator
-    let feedback: Feedback?
+    let actions: ShellActions
     let onDone: (_ name: String, _ avatar: Int) -> Void
     @State private var avatar: Int
     @State private var name: String
-    @FocusState private var typing: Bool
     @Environment(\.stage) private var stage
 
     init(
-        editing: Bool, initial: Profile?, focus: FocusModel, navigator: Navigator, feedback: Feedback?,
+        editing: Bool, initial: Profile?, focus: FocusModel, actions: ShellActions,
         onDone: @escaping (_ name: String, _ avatar: Int) -> Void
     ) {
         self.editing = editing
         self.focus = focus
-        self.navigator = navigator
-        self.feedback = feedback
+        self.actions = actions
         self.onDone = onDone
         _avatar = State(initialValue: Avatar.of(initial?.avatar ?? 0).index)
         _name = State(initialValue: initial?.name ?? L("firstrun_create_default_name"))
@@ -131,6 +127,9 @@ struct CreateProfileScreen: View {
 
     /// The focus id of an avatar's circle.
     static func avatarID(_ index: Int) -> AnyHashable { AnyHashable("avatar-\(index)") }
+
+    /// The focus id of "Change name".
+    static let changeNameID = "change-name"
 
     /// Eight columns: 144 px circles in 184 px cells, 32 px apart (1696 px); a compact stage takes four.
     private var columns: Int { stage.compact ? 4 : 8 }
@@ -141,8 +140,17 @@ struct CreateProfileScreen: View {
                 title: editing ? L("firstrun_create_edit_title") : L("firstrun_create_new_title"),
                 sub: editing ? L("firstrun_create_edit_note") : L("firstrun_create_new_note")
             )
+            .staggerEntrance()
             avatarGrid
-            nameField.tvFocusSection()
+            HStack(spacing: stage.px(stage.compact ? 44 : 24)) {
+                ValuePill(
+                    label: L("firstrun_create_name_label"), value: name, icon: Symbols.badge,
+                    placeholder: L("firstrun_create_name_placeholder"))
+                FocusItem(id: Self.changeNameID, model: focus, action: askName) { focused in
+                    PillButton(label: L("firstrun_create_change_name"), icon: Symbols.edit, focused: focused)
+                }
+            }
+            .tvFocusSection()
             FocusItem(id: "create", model: focus, action: submit) { focused in
                 PillButton(
                     label: editing ? L("firstrun_create_save") : L("firstrun_create_create"),
@@ -151,11 +159,7 @@ struct CreateProfileScreen: View {
             }
             .tvFocusSection()
         }
-        .onChange(of: typing) { _, now in navigator.textEditing(now) }
-        .onChange(of: navigator.isEditingText) { _, now in if !now { typing = false } }
-        .onChange(of: name) { _, now in
-            if now.count > Profile.maxNameLength { name = String(now.prefix(Profile.maxNameLength)) }
-        }
+        .entranceScope()
     }
 
     /// All avatars in rows. Up and down move to the same column; left at the start of a row and right at its end
@@ -173,6 +177,7 @@ struct CreateProfileScreen: View {
                                 diameter: 144, width: 184, focused: focused
                             )
                         }
+                        .staggerEntrance()
                     }
                 }
             }
@@ -190,42 +195,74 @@ struct CreateProfileScreen: View {
     private func pick(_ index: Int) {
         avatar = index
         // A new profile goes on to its name
-        if !editing { focus.focus("name") }
+        if !editing { focus.focus(Self.changeNameID) }
     }
 
-    @ViewBuilder private var nameField: some View {
-        #if os(tvOS)
-        // The system focus engine moves onto the text field itself; selecting it opens the system keyboard
-        TextPill(
-            label: L("firstrun_create_name_label"), icon: Symbols.badge, placeholder: L("firstrun_create_name_placeholder"),
-            text: $name, editing: $typing, focused: false, onSubmit: nameEntered
-        )
-        .onChange(of: typing) { _, now in if now { focus.focus("name") } }
-        .onChange(of: focus.focused) { _, now in if now == AnyHashable("name") { typing = true } }
-        #else
-        FocusItem(id: "name", model: focus, action: { typing = true }) { focused in
-            TextPill(
-                label: L("firstrun_create_name_label"), icon: Symbols.badge, placeholder: L("firstrun_create_name_placeholder"),
-                text: $name, editing: $typing, focused: focused, onSubmit: nameEntered
-            )
+    /// The profile name dialog; the accepted name is shown and the focus goes on to Create / Save.
+    private func askName() {
+        actions.openProfileNameDialog(title: L("firstrun_create_name_title"), initial: name) { entered in
+            name = entered
+            focus.focus("create")
         }
-        #endif
     }
 
-    /// The name is accepted: the focus goes on to Create / Save.
-    private func nameEntered() {
-        typing = false
-        focus.focus("create")
-    }
-
-    /// Without a name there is nothing to create: the field asks for one.
+    /// Without a name there is nothing to create: the dialog asks for one.
     private func submit() {
         guard let clean = Profile.cleanName(name) else {
-            feedback?.play(.error)
-            focus.focus("name")
-            typing = true
+            askName()
             return
         }
         onDone(clean, avatar)
+    }
+}
+
+/// A labelled value that looks like a ``TextPill`` but is not an input (`ValuePill` in DELOS for Android): the text is
+/// typed in a dialog, the page shows what is there ([value], or [placeholder] in the muted color while it is empty).
+struct ValuePill: View {
+    let label: String
+    let value: String
+    let icon: String
+    let placeholder: String
+    var width = 520.0
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+
+    var body: some View {
+        HStack(spacing: stage.px(16)) {
+            SymbolView(symbol: icon, size: 34, color: colors.text3)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(label.uppercased(with: .current))
+                    .font(DelosFonts.figtree(stage.tpx(17), .semibold))
+                    .tracking(stage.tpx(17) * 0.08)
+                    .foregroundStyle(colors.text3.color)
+                    .lineLimit(1)
+                Text(value.isEmpty ? placeholder : value)
+                    .font(DelosFonts.figtree(stage.tpx(30), .semibold))
+                    .foregroundStyle((value.isEmpty ? colors.text3 : colors.text).color)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, stage.px(28))
+        .frame(width: stage.px(width), height: stage.px(84), alignment: .leading)
+        .background {
+            GlassShape(Capsule(), tint: colors.surface2)
+                .overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
+        }
+    }
+}
+
+/// Where Create goes after a profile was made (`CreateProfileScreen`'s `onDone` in `Shell.kt`).
+enum FirstRunLanding: Equatable {
+    /// The first run, no PC paired yet: the start screen with the pairing screen above it.
+    case pair
+    /// The first run with PCs paired already (the last profile was deleted, or the PCs were paired in the classic UI):
+    /// the start screen, no pairing needed.
+    case start
+    /// A profile added from the profile screen: back to it.
+    case back
+
+    static func after(fromBoot: Bool, pairedPCs: Bool) -> FirstRunLanding {
+        guard fromBoot else { return .back }
+        return pairedPCs ? .start : .pair
     }
 }

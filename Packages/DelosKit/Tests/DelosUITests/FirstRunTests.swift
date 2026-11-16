@@ -124,3 +124,18 @@ import Testing
         #expect(L("devices_start_greeting", "Ann").contains("Ann"))
     }
 }
+
+@Suite struct FirstRunLandingTests {
+    @Test func theFirstRunPairsWhenNoPCIsPaired() {
+        #expect(FirstRunLanding.after(fromBoot: true, pairedPCs: false) == .pair)
+    }
+
+    @Test func theFirstRunWithPairedPCsGoesToTheStartScreen() {
+        #expect(FirstRunLanding.after(fromBoot: true, pairedPCs: true) == .start)
+    }
+
+    @Test func aProfileAddedFromTheProfileScreenGoesBack() {
+        #expect(FirstRunLanding.after(fromBoot: false, pairedPCs: false) == .back)
+        #expect(FirstRunLanding.after(fromBoot: false, pairedPCs: true) == .back)
+    }
+}

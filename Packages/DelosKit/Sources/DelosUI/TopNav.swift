@@ -86,13 +86,17 @@ struct TopNav: View {
 
 /// The side menu (`SideMenuLayer` of DELOS for Android), which the left menu button (View, Select, Create) opens on the
 /// start screen and the screens of the top navigation: a 620 px glass panel from the left with the profile and the
-/// connected PC at its top. Android's quick settings (theme, background, sounds, haptics) are not ported yet; the one
-/// row is All settings. A tap beside the panel, B or the menu button again closes it.
+/// connected PC at its top, the quick settings (``QuickSettings``: theme, background, interface sounds, haptics; A or a tap
+/// steps one, left and right step it either way) and All settings. A tap beside the panel, B or the menu button again closes it.
 struct SideMenu: View {
     let profile: Profile?
     /// The PC whose library is open: its name and whether it is online.
     let pc: (name: String, online: Bool)?
     let focus: FocusModel
+    /// The current profile's appearance, whose values the quick settings show.
+    let appearance: Appearance
+    /// A quick setting [id] was stepped by a direction (1 or -1).
+    let onStep: @MainActor (_ id: String, _ direction: Int) -> Void
     let onSettings: @MainActor () -> Void
     let onClose: @MainActor () -> Void
     @Environment(\.delosColors) private var colors
@@ -108,6 +112,11 @@ struct SideMenu: View {
                 .onTapGesture(perform: onClose)
             VStack(alignment: .leading, spacing: stage.px(10)) {
                 header
+                ForEach(QuickSettings.rows(appearance)) { row in
+                    FocusItem(id: row.id, model: focus, action: { onStep(row.id, 1) }) { focused in
+                        SettingRowView(row: row, focused: focused, compact: true)
+                    }
+                }
                 FocusItem(id: Self.settingsID, model: focus, action: onSettings) { focused in
                     SettingRowView(
                         row: SettingRow(

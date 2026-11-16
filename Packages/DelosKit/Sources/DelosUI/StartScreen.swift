@@ -59,6 +59,7 @@ struct StartScreen: View {
                 title: profile.map { L("devices_start_greeting", $0.name) } ?? L("devices_start_welcome"),
                 sub: paired.isEmpty ? L("devices_start_pair_note") : L("devices_start_choose_note")
             )
+            .staggerEntrance()
             CircleRow {
                 ForEach(paired, id: \.id) { host in
                     FocusItem(id: Self.pcID(host.id), model: focus, menu: { actions.startMenu(host.id) }, action: { onPC(host) }) { focused in
@@ -67,6 +68,7 @@ struct StartScreen: View {
                             metaDot: host.reachability == .online ? .onlineGreen : nil, selected: host.id == defaultPC, focused: focused
                         )
                     }
+                    .staggerEntrance()
                 }
                 FocusItem(id: "pair", model: focus, action: onPair) { focused in
                     CircleItem(
@@ -76,8 +78,10 @@ struct StartScreen: View {
                         focused: focused
                     )
                 }
+                .staggerEntrance()
             }
         }
+        .entranceScope()
     }
 }
 
@@ -179,7 +183,7 @@ public struct DelosRoot: View {
                 }
                 if let sideMenu {
                     SideMenu(
-                        profile: profiles.current, pc: connectedPC, focus: sideMenu,
+                        profile: profiles.current, pc: connectedPC, focus: sideMenu, appearance: appearance, onStep: { id, direction in _ = quickStep(id, by: direction) },
                         onSettings: {
                             closeSideMenu(sound: nil)
                             go { navigator.openFromNavigation(.settings, focus: SettingsScreen.initialFocus) }
@@ -259,6 +263,10 @@ public struct DelosRoot: View {
     /// A swipe or a controller's direction: the focus engine moves the focus on its own; only a screen that takes
     /// over left and right (the value of a Settings row) gets them first.
     private func routeMove(_ direction: MoveCommandDirection) {
+        if let sideMenu, direction == .left || direction == .right {
+            adjustQuickSetting(of: sideMenu, direction == .right ? 1 : -1)
+            return
+        }
         guard sideMenu == nil, !layers.isOpen, !navigator.isEditingText, let capture = navigator.commandCapture else { return }
         switch direction {
         case .left: navigator.commandRepeat = 0; _ = capture(.left)
@@ -281,7 +289,8 @@ public struct DelosRoot: View {
             case .back, .menu: closeSideMenu(sound: .back)
             case .accept: feedback.activate(sideMenu.acceptCue) { sideMenu.handle(.accept) }
             case .up, .down: if sideMenu.handle(command) { feedback.play(.move) }
-            case .left, .right, .previousTab, .nextTab, .options, .toastAction: break
+            case .left, .right: adjustQuickSetting(of: sideMenu, command == .right ? 1 : -1)
+            case .previousTab, .nextTab, .options, .toastAction: break
             }
             return
         }
@@ -299,7 +308,7 @@ public struct DelosRoot: View {
         if let capture = navigator.commandCapture, capture(command) { return }
         if command == .menu, navigator.current.hasSideMenu {
             feedback.play(.open)
-            withAnimation(.easeOut(duration: 0.3)) { self.sideMenu = FocusModel(initial: SideMenu.settingsID) }
+            withAnimation(.easeOut(duration: 0.3)) { self.sideMenu = FocusModel(initial: QuickSettings.ids[0]) }
             return
         }
         // While a text field is typed in, the keys belong to it; B and Escape stop typing
@@ -337,13 +346,15 @@ public struct DelosRoot: View {
     @ViewBuilder private func screen(_ entry: Navigator.Entry) -> some View {
         switch entry.screen {
         case .boot:
-            BootScreen(focus: entry.focus, onBegin: { go { navigator.push(.createProfile(editing: false), focus: CreateProfileScreen.avatarID(0)) } })
+            BootScreen(
+                focus: entry.focus,
+                onBegin: { go { navigator.push(.createProfile(editing: false), focus: CreateProfileScreen.avatarID(0)) } },
+                onSkip: bootSkip)
         case .createProfile(let editing):
             CreateProfileScreen(
-                editing: editing, initial: editing ? profiles.current : nil, focus: entry.focus, navigator: navigator,
-                feedback: feedback
+                editing: editing, initial: editing ? profiles.current : nil, focus: entry.focus, actions: actions
             ) { name, avatar in
-                profileDone(editing: editing, name: name, avatar: avatar)
+                actions.profileDone(editing: editing, name: name, avatar: avatar)
             }
         case .start:
             StartScreen(
@@ -388,7 +399,7 @@ public struct DelosRoot: View {
                 }
             )
         case .home(let hostID):
-            HomeScreen(hostID: hostID, focus: entry.focus, actions: actions) { app in actions.play(hostID: hostID, app: app) }
+            HomeScreen(hostID: hostID, focus: entry.focus, actions: actions)
         case .stream(let hostID, let appID):
             StreamScreen(hostID: hostID, appID: appID, settings: streamSettings.load(profile: profiles.current?.id ?? ""))
         case .settings:
@@ -413,6 +424,12 @@ public struct DelosRoot: View {
         return TopBar.Navigation(buttons: buttons, focus: entry.focus)
     }
 
+    /// "Skip to home" on the boot screen: only when PCs are paired already.
+    private var bootSkip: (@MainActor () -> Void)? {
+        guard !hosts.paired.isEmpty else { return nil }
+        return { actions.skipBoot() }
+    }
+
     /// The PC whose library is open below the current screen, for the side menu.
     private var connectedPC: (name: String, online: Bool)? {
         for entry in navigator.stack.reversed() {
@@ -426,6 +443,21 @@ public struct DelosRoot: View {
     private func closeSideMenu(sound: Cue?) {
         if let sound { feedback?.play(sound) }
         withAnimation(.easeOut(duration: 0.24)) { sideMenu = nil }
+    }
+
+    /// A quick setting of the side menu stepped (the side menu's rows): applied at once and kept with the current
+    /// profile's appearance. False when nothing changed.
+    private func quickStep(_ id: String, by direction: Int) -> Bool {
+        guard let profile = profiles.current?.id, let next = QuickSettings.step(id, by: direction, from: appearance) else { return false }
+        appearance = next
+        appearances.save(next, profile: profile)
+        return true
+    }
+
+    /// Left or right on the side menu's focused row: a quick setting takes the next or the previous value.
+    private func adjustQuickSetting(of menu: FocusModel, _ direction: Int) {
+        guard let id = menu.focused as? String, quickStep(id, by: direction) else { return }
+        feedback?.play(.move)
     }
 
     /// "Add PC" on the address screen (`addAndPair` of DELOS for Android): asks the address who it is, then pairs with
@@ -460,25 +492,6 @@ public struct DelosRoot: View {
             } catch {
                 feedback?.play(.error)
                 toasts.show(L("devices_add_no_answer", address.description), icon: Symbols.error)
-            }
-        }
-    }
-
-    /// Create / Save on the profile page. A profile made in the first run goes on to pairing (the start screen below
-    /// it); one added or changed from the profile screen returns there.
-    private func profileDone(editing: Bool, name: String, avatar: Int) {
-        if editing {
-            if let id = profiles.current?.id { profiles.update(id, name: name, avatar: avatar) }
-            go { navigator.back() }
-            return
-        }
-        profiles.create(name: name, avatar: avatar)
-        go {
-            if navigator.stack.first?.screen == .boot {
-                navigator.reset(to: .start, focus: actions.startFocus())
-                navigator.push(.pair, focus: PairPCScreen.firstFocus(hosts.hosts))
-            } else {
-                navigator.back()
             }
         }
     }
