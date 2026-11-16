@@ -50,8 +50,9 @@ import Testing
     func setupConnectsTheEngine(audio: AudioConfiguration) {
         let channels = audio.channelCount
         let opus = OpusMultistreamConfiguration(
-            sampleRate: 48000, channelCount: channels, streams: channels == 2 ? 1 : 4,
-            coupledStreams: channels == 2 ? 1 : 2, samplesPerFrame: 240, mapping: (0..<channels).map(UInt8.init))
+            // The host's layouts: stereo 1 coupled stream, 5.1 four streams (two coupled), 7.1 five (three coupled)
+            sampleRate: 48000, channelCount: channels, streams: [2: 1, 6: 4, 8: 5][channels]!,
+            coupledStreams: [2: 1, 6: 2, 8: 3][channels]!, samplesPerFrame: 240, mapping: (0..<channels).map(UInt8.init))
         let output = AudioOutput()
         #expect(output.setup(configuration: audio, opus: opus))
         output.cleanup()
