@@ -24,6 +24,20 @@ from verified sources; the licence files are next to them in `Packages/DelosKit/
 | `phosphor_regular.ttf` (subset) | [phosphor-icons/web](https://github.com/phosphor-icons/web) | `v2.1.2` | MIT | `8bd032eee68c9fba5e822d613d26d874ad3bf2f4866d1182b349995dc31faf63` |
 | `phosphor_fill.ttf` (subset) | phosphor-icons/web | `v2.1.2` | MIT | `79723fd6a2025abee9e17ef6d06c46afc31542f7282a390afd3fbce07db4c3fa` |
 
+## Sounds
+
+The five interface sounds in `Packages/DelosKit/Sources/DelosUI/Resources/Sounds/` are copied byte for byte from DELOS
+for Android (`app/src/main/res/raw/`), where `tools/sounds/make_ui_sounds.py` generates them with the Python standard
+library. Original to DELOS, project license.
+
+| File | SHA-256 |
+|---|---|
+| `ui_back.wav` | `86bae9cbe479da868cf6618c91ccb54bdb235b6f637cd7eb59120f8b16893063` |
+| `ui_error.wav` | `f1f61cb7b44c6a890d523028c1496fdfe612bd6f9fca9cc0df1ae2ac7555ae16` |
+| `ui_move.wav` | `441a2145027ebbdf2a3730276f19523eee03b10af95d5b58d4fa68b05d011429` |
+| `ui_open.wav` | `6aaa9375991c24123c5f582bd3431acba8a6e0d691bb2aae2bf363641e2c769e` |
+| `ui_select.wav` | `c896cdcc6cf480adb352d6db7680b1f2068fd0eff364904b0db44c46baf7cc47` |
+
 ## Swift packages
 
 | Package | Origin | Version | Pin |

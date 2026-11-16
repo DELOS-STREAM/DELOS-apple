@@ -46,6 +46,12 @@ focus, so `MenuInput` (DelosInput) turns the D-pad, the left stick, A, B and the
 commands, and `FocusModel` (DelosUI) moves the focus to the nearest item in the pressed direction (`FocusGeometry`).
 `FocusItem` wraps a view for both engines.
 
+## Sounds and haptics
+
+`Feedback` plays the five interface sounds of DELOS for Android (move, select, back, open, error) in the ambient audio
+session, so they mix with other audio and follow the silent switch, and on iPhone and iPad a matching system haptic.
+Moving the focus plays move, activating an item plays select.
+
 ## Backgrounds
 
 The animated backgrounds are Metal stitchable shaders in `DelosUI`, ported line by line from the AGSL sources of DELOS
@@ -73,3 +79,4 @@ bundle the same ten languages; without it iOS shows the package's strings in Eng
 - Moving the focus with a real game controller on iPhone and iPad (the simulator has no controller); the logic is
   covered by the unit tests only.
 - Performance of the Contour shader on a device.
+- How the sounds and haptics feel on a device.
