@@ -86,7 +86,10 @@ public struct DelosRoot: View {
     @State private var appearance: Appearance
     @State private var input: MenuInput?
     @State private var feedback: Feedback?
+    /// The side menu's focus while it is open.
+    @State private var sideMenu: FocusModel?
     private let appearances = AppearanceStore()
+    private let streamSettings = StreamSettingsStore()
 
     public init() {
         let profiles = ProfileStore()
@@ -122,7 +125,20 @@ public struct DelosRoot: View {
                         insertion: .opacity.combined(with: .scale(scale: 1.035)),
                         removal: .opacity.combined(with: .scale(scale: 0.96))
                     ))
-                if case .stream = navigator.current {} else { TopBar(brand: navigator.current != .start) }
+                if case .stream = navigator.current {} else {
+                    TopBar(brand: navigator.current != .start, navigation: navigation(entry))
+                        // The navigation's buttons belong to the focus of the screen shown
+                        .id(ObjectIdentifier(entry.focus))
+                }
+                if let sideMenu {
+                    SideMenu(
+                        profile: profiles.current, pc: connectedPC, focus: sideMenu,
+                        onSettings: {
+                            closeSideMenu(sound: nil)
+                            go { navigator.openFromNavigation(.settings, focus: SettingsScreen.initialFocus) }
+                        },
+                        onClose: { closeSideMenu(sound: .back) })
+                }
                 ToastOverlay(toasts: toasts)
             }
         }
@@ -149,8 +165,23 @@ public struct DelosRoot: View {
             feedback.soundsEnabled = appearance.sounds
             feedback.hapticsEnabled = appearance.haptics
             self.feedback = feedback
-            let input = MenuInput { [navigator, feedback] command in
+            let input = MenuInput { [navigator, feedback] command, repeatCount in
+                navigator.commandRepeat = repeatCount
+                if let sideMenu {
+                    // The side menu takes every command while it is open
+                    switch command {
+                    case .back, .menu: closeSideMenu(sound: .back)
+                    case .up, .down, .accept: if sideMenu.handle(command) { feedback.play(command == .accept ? .select : .move) }
+                    case .left, .right, .previousTab, .nextTab: break
+                    }
+                    return
+                }
                 if let capture = navigator.commandCapture, capture(command) { return }
+                if command == .menu, navigator.current.hasSideMenu {
+                    feedback.play(.open)
+                    withAnimation(.easeOut(duration: 0.3)) { self.sideMenu = FocusModel(initial: SideMenu.settingsID) }
+                    return
+                }
                 // While a text field is typed in, the keys belong to it; B and Escape stop typing
                 if navigator.isEditingText {
                     if command == .back { navigator.isEditingText = false }
@@ -233,8 +264,35 @@ public struct DelosRoot: View {
                 go { navigator.openStream(hostID: hostID, appID: app.id) }
             }
         case .stream(let hostID, let appID):
-            StreamScreen(hostID: hostID, appID: appID)
+            StreamScreen(hostID: hostID, appID: appID, settings: streamSettings.load(profile: profiles.current?.id ?? ""))
+        case .settings:
+            SettingsScreen(profileID: profiles.current?.id ?? "", focus: entry.focus, navigator: navigator, feedback: feedback)
         }
+    }
+
+    /// The top navigation of the screen [entry] shows, if it has one.
+    private func navigation(_ entry: Navigator.Entry) -> TopBar.Navigation? {
+        guard entry.screen.showsNavigation else { return nil }
+        let buttons = TopNav.buttons(
+            current: entry.screen,
+            onSettings: { go { navigator.openFromNavigation(.settings, focus: SettingsScreen.initialFocus) } },
+            onProfile: { go { navigator.openFromNavigation(.profile, focus: "change-avatar") } })
+        return TopBar.Navigation(buttons: buttons, focus: entry.focus)
+    }
+
+    /// The PC whose library is open below the current screen, for the side menu.
+    private var connectedPC: (name: String, online: Bool)? {
+        for entry in navigator.stack.reversed() {
+            if case .home(let hostID) = entry.screen, let host = hosts.host(hostID) {
+                return (host.name, host.reachability == .online)
+            }
+        }
+        return nil
+    }
+
+    private func closeSideMenu(sound: Cue?) {
+        if let sound { feedback?.play(sound) }
+        withAnimation(.easeOut(duration: 0.24)) { sideMenu = nil }
     }
 
     /// The start screen's first focus: the first paired PC that is online, else the first one, else "Pair a new PC".
@@ -304,17 +362,28 @@ public struct DelosRoot: View {
     withAnimation(.easeOut(duration: 0.5), change)
 }
 
-/// The status bar: the brand at the top left, 72 stage pixels from the side, in a 104 px high bar. The start screen
-/// leaves the brand out: the profile chip is at the top there.
+/// The status bar: the brand at the top left, 72 stage pixels from the side, in a 104 px high bar, and on the screens of
+/// the top navigation its buttons in the middle. The start screen leaves the brand out: the profile chip is at the top
+/// there.
 struct TopBar: View {
+    /// The buttons of the top navigation and the focus they belong to.
+    struct Navigation {
+        let buttons: [NavButton]
+        let focus: FocusModel
+    }
+
     var brand = true
+    var navigation: Navigation?
     @Environment(\.stage) private var stage
 
     var body: some View {
         VStack {
-            HStack {
-                if brand { Brand() }
-                Spacer()
+            ZStack {
+                HStack {
+                    if brand { Brand() }
+                    Spacer()
+                }
+                if let navigation { TopNav(buttons: navigation.buttons, focus: navigation.focus) }
             }
             .frame(height: stage.px(104))
             .padding(.top, stage.px(stage.safe.top))

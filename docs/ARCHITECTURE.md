@@ -51,18 +51,22 @@ to an edge keeps clear of the safe area itself. Views read the stage from the en
 ## Focus
 
 On tvOS the system focus engine moves the focus. On iPhone, iPad and Mac a game controller does not drive SwiftUI's
-focus, so `MenuInput` (DelosInput) turns the D-pad, the left stick, A, B and the arrow, Return and Escape keys into
-commands, and `FocusModel` (DelosUI) moves the focus to the nearest item in the pressed direction (`FocusGeometry`).
+focus, so `MenuInput` (DelosInput) turns the D-pad, the left stick, A, B, L1, R1, the left menu button (View, Select,
+Create: `buttonOptions`) and the arrow, Return and Escape keys into commands, and `FocusModel` (DelosUI) moves the focus
+to the nearest item in the pressed direction (`FocusGeometry`). A direction held down repeats as a held key does on
+Android (after 500 ms, every 50 ms); the handler gets the number of the repeat (`Navigator.commandRepeat`), which the
+settings use to speed up a slider and to stop a held Up at the first row.
 `FocusItem` wraps a view for both engines.
 A `FocusItem` can name where a direction leads instead of the nearest item (`moves`): the avatar grid continues a
-row's end in the next row.
+row's end in the next row. Its `tap` is what a touch does when it is not what A does (a settings row's choice opens its
+list on a tap, A steps it); a tap always focuses the item first.
 
 ## Navigation
 
 `Navigator` (DelosUI) is the screen router: an `@Observable` back stack of `Screen` values (`boot`, `createProfile`,
-`start`, `profile`, `pair`, `pairAddress`, `pin`, `home`, `stream`), each entry with its own `FocusModel`, so going back
-returns the focus to where it was. `DelosRoot` shows the top entry with the screen transition of the prototype (a fade
-with a slight zoom), and puts the navigator and the one `HostStore` in the environment.
+`start`, `profile`, `pair`, `pairAddress`, `pin`, `home`, `stream`, `settings`), each entry with its own `FocusModel`, so
+going back returns the focus to where it was. `DelosRoot` shows the top entry with the screen transition of the
+prototype (a fade with a slight zoom), and puts the navigator and the one `HostStore` in the environment.
 
 | Call | Use |
 |---|---|
@@ -71,11 +75,21 @@ with a slight zoom), and puts the navigator and the one `HostStore` in the envir
 | `reset(to:focus:)` | Replaces the stack: the first run is over, or starts again after the last profile was deleted |
 | `openHome(hostID:)` | A PC's library above the start screen (from the start screen, or once pairing is done: B returns to the start screen) |
 | `openStream(hostID:appID:)` | Pushes the stream of an app |
+| `openFromNavigation(_:focus:)` | Settings or Profile from the top navigation or the side menu: they take each other's place, so B returns to the screen below them (Android: their `back` is the library) |
 
 While a text field is typed in, `isEditingText` is true and `DelosRoot` gives the controller and keyboard commands to
 the field instead of the focus; B or Escape stops typing. The Return that ends typing also reaches `MenuInput` as a key
 press, so an accept within 0.3 s after it is ignored (`swallowsAccept`). While `commandCapture` is set (the stream
-screen), every command goes there first.
+screen, the settings), every command goes there first.
+
+The screens of Android's top navigation (`Screen.main`: the library, Settings and Profile; `showsNavigation`) show
+`TopNav` in the middle of the status bar: Settings and Profile as round buttons in a glass capsule (Android's Devices
+waits for its screen); the buttons are items of the shown screen's focus, so Up from the library or the first settings
+row reaches them. On those screens and on the start screen (`hasSideMenu`), the left menu button opens the side menu
+(`SideMenu`, Android's `SideMenuLayer`): the profile and the connected PC at the top and All settings; it takes every
+command while it is open, and B, the menu button or a tap beside it closes it. Android's quick settings in the side
+menu (theme, background, sounds, haptics) are not ported yet. Android has no touch way to the side menu, so on the
+start screen touch reaches Settings through the profile chip and the profile screen's top navigation.
 
 Short messages (a pairing that failed, an address that does not answer) are toasts (`Toasts`): one at a time at the
 bottom of the stage, gone after 3.5 s.
@@ -117,7 +131,7 @@ that talk to the PC and the core are behind the `StreamSteps` protocol, so the t
 | Step | What happens |
 |---|---|
 | Display | `VideoSurface` (a thin `UIView` host of the `AVSampleBufferDisplayLayer`, full screen, aspect fit, black) reports the screen's pixel size and highest refresh rate once it is in a window; the stream starts then |
-| Launch | `HostStore.refresh` asks the PC again over its pinned connection: offline and "not paired" end here. The app is found in the loaded app list (else it is loaded). `StreamSettings.forDisplay` and `StreamPlan` with the formats VideoToolbox decodes in hardware (`DecoderSupport`: H.264 always, HEVC and AV1 8-bit where supported; 10-bit waits for HDR). The app is resumed when the PC runs it, another running app is quit first, else it is launched (`NvConnection.startApp` of DELOS for Android) |
+| Launch | `HostStore.refresh` asks the PC again over its pinned connection: offline and "not paired" end here. The app is found in the loaded app list (else it is loaded). `StreamPlan` with the current profile's `StreamSettings` and the formats VideoToolbox decodes in hardware (`DecoderSupport`: H.264 always, HEVC and AV1 8-bit where supported; 10-bit waits for HDR), of which the chosen codec offers some. The app is resumed when the PC runs it, another running app is quit first, else it is launched (`NvConnection.startApp` of DELOS for Android) |
 | Connect | `StreamSession.start` with `VideoOutput(DisplayLayerRenderer)` and `AudioOutput`, the server information of the launch's session URL. Each `stageStarting` event tells a line of the stage (Android's `stream_loader_lines_*`) and adds 8 % to the progress, up to 92 % |
 | Stream | `connectionStarted`: the video shows, `GameInput` starts; rumble events go to the controllers. A termination shows the result overlay (`StreamText.termination`, Android's `describeStreamFailure`); a graceful end goes back (without Android's toast "The PC ended the stream" yet) |
 | Leave | Disconnect stops the session (the app keeps running on the PC); Quit app also asks the PC to quit it (`cancel`), and a refusal shows "The PC did not quit …". Leaving the screen any other way disconnects |
@@ -157,8 +171,8 @@ handlers), so both work; `commandCapture` decides who uses the commands.
 ### Frame rate
 
 `CADisableMinimumFrameDurationOnPhone` is in `Config/Info.plist` (no `INFOPLIST_KEY_*` setting exists for it), so a
-ProMotion iPhone reports and can show 120 Hz; the stream asks the host for 60 fps (the default of DELOS for Android) with
-the display's refresh rate as the client refresh rate.
+ProMotion iPhone reports and can show 120 Hz; the stream asks the host for the profile's frame rate (60 fps by default,
+as DELOS for Android) with the display's refresh rate as the client refresh rate.
 
 ## Sounds and haptics
 
@@ -198,14 +212,51 @@ counterpart. In debug builds `-DelosBackground <kind>` and `-DelosTheme light` p
 per profile in `UserDefaults`; reading is lenient, so an unknown option falls back to its default without losing the
 other settings.
 
+`StreamSettings` (DelosData) holds Settings → Stream and the Audio tab's "Play audio on PC", and `StreamSettingsStore`
+keeps one per profile the same way (key `stream.<profile id>`), lenient and clamped:
+
+| Field | Android key | Default | Values |
+|---|---|---|---|
+| `resolution` | `list_resolution` | nil: the display's resolution capped at 1080p (`StreamResolution.forDisplay`) | the six presets (360p to 4K) and the display's own, portrait too on a squarish display (`StreamChoices.resolutions`) |
+| `fps` | `list_fps` | 60 | 30, 60, 90, 120 up to the display's highest rate (`maximumFramesPerSecond`, at least 60, 2 Hz to spare), and that rate when it is none of them (`StreamChoices.frameRates`) |
+| `bitrateKbps` | `seekbar_bitrate_kbps` | nil: `StreamPlan.defaultBitrateKbps` of the resolution and frame rate, so it follows them until the slider moves | 1 to 1000 Mbps in steps of 1 Mbps |
+| `codec` | `video_format` (same stored values) | Automatic | Automatic (H.264, HEVC), AV1, HEVC, H.264, each only when the device decodes it (`VideoCodec.choices`); `formats(decodable:)` is what the stream offers, Android's decoder choice |
+| `playAudioOnHost` | `checkbox_host_audio` | off | |
+
+Android caps the presets by the display and the decoder; VideoToolbox decodes 4K on every device of the minimum systems,
+so all six are offered. A stored value the device does not offer is replaced when Settings opens (`StreamChoices.normalized`,
+Android's `normalize`): the last preset, 60 fps, Automatic. Android has no "Automatic" resolution: here it is the first
+choice and reads "Automatic · 1920x884" (`videoformat_auto` and the display's resolution, joined by
+`settings_screen_dot_join`). Optimize game settings (GeForce Experience's `sops`) is no setting: DELOS for Android always
+sends it off, and so does `StreamPlan`.
+
+`SettingsScreen` (DelosUI) is Android's settings screen on a stage that is not compact: the title at (150, 124), the
+tabs between their L1 and R1 badges at y 206, centred, the rows from y 312 and the 520 px description panel 56 px to
+their right. `StreamSettingsForm` makes the rows (`SettingRow`: Android's key, tab, section, icon, label, value, help)
+from the settings and the device (`StreamDevice`: the screen's native pixels and highest rate, `DecoderSupport`) and
+applies every change, so the view only draws; the help is `SettingsHelp.details` (the chosen value and its line, a
+blank line, `help_<key>`). Where Android's help names something not ported (Warp modes for the frame rate, the stream
+menu's bitrate), the summary of the catalog or no value line is used instead.
+
+| Input | Rows |
+|---|---|
+| Up, down | Move between the rows; a held Up stops at the first row, a new press goes on to the top navigation |
+| Left, right | Change the focused row's value and never leave the row: the previous or next choice (wrapping), a slider's step, faster while held (`sliderAcceleration` of Android) |
+| A | The next choice, a slider's next step, a switch flips (Android's `activate`) |
+| L1, R1 | The previous or next tab (the tabs are never focused, as on Android) |
+| Tap | Focuses the row, so the panel shows its help; a switch also flips, a choice opens the list of its values (`ChoicePicker`: a glass card at the row's right end, the current value checked; a tap picks, a tap beside it closes it; up, down, A and B work in it too), a slider waits for its track (a tap or a drag sets the value when the finger lifts). A tab is tapped to select it |
+
+Not ported yet: the other tabs, search, the impact chips, the compact layout (the help dock under the list), the
+gliding focus plate and the auto-scrolling help, and Android's link guidance rows.
+
 ## Profiles and the first run
 
 `ProfileStore` (DelosData) keeps the profiles of DELOS for Android (`shell/data/Profiles.kt`): an id (a lower-case
 UUID), a name (trimmed, at most 20 characters, never blank) and the index of the avatar. The list and the current id are
 one Codable value in `UserDefaults`; reading is lenient, so an unreadable profile is skipped and the others are kept. A
-new profile starts with a copy of the current one's appearance and becomes the current one; deleting a profile removes
-its appearance, and the first remaining profile takes over. Each profile's settings are stored under its id
-(`AppearanceStore`), and `DelosRoot` applies the current profile's appearance.
+new profile starts with a copy of the current one's appearance and stream settings and becomes the current one;
+deleting a profile removes its settings, and the first remaining profile takes over. Each profile's settings are stored
+under its id (`AppearanceStore`, `StreamSettingsStore`), and `DelosRoot` applies the current profile's appearance.
 
 Without a profile DELOS is on its first run: `DelosRoot` starts on the boot screen, "Get started" opens the
 create-profile page, and creating the profile goes on to pairing, above the start screen. The start screen greets the
@@ -228,8 +279,8 @@ known PC again (over HTTPS to its pinned certificate once paired; no answer mark
 pairing with a four-digit PIN the app shows, and `loadApps` reads a paired PC's apps. Only paired PCs are stored
 (`UserDefaults`, JSON; a record that no longer decodes is skipped, the others are kept); they start offline until
 refreshed. `StreamPlan` makes the launch request and the stream configuration of one stream with one random remote
-input key (the IV is the key id, big-endian), the default bitrate of DELOS for Android (`getDefaultBitrate`) and
-stereo audio; `StreamSettings.forDisplay` takes the display's resolution, capped at 1080p.
+input key (the IV is the key id, big-endian), the profile's `StreamSettings` on the display it is shown on, the default
+bitrate of DELOS for Android (`getDefaultBitrate`) and stereo audio.
 
 The screens (DelosUI, as DELOS for Android's `DeviceScreens.kt`, `PairScreens.kt` and `HomeScreen.kt`):
 
@@ -395,6 +446,12 @@ has no such setting; both are in `Config/Info.plist`, which Xcode merges with th
   Quit app and a refused quit, leaving while connecting, who gets the controller commands), the failure texts against
   Android's rules, the PC's launch answers (470, 525, 599), the controller button flags, stick and trigger scaling,
   controller numbers, the menu shortcut, the keyboard table, the trackpad and the bottom-edge swipe, the decoder formats.
+- Settings without a screen (`swift test`): `StreamSettings` read leniently and clamped, stored per profile, copied to
+  a new profile and removed with it; the bitrate default following the resolution and frame rate; the resolution, frame
+  rate and codec lists for several displays and decoders, the formats each codec offers, the replacement of values a
+  device lacks; the stream plan with stored settings (display default, chosen resolution, bitrate, codec, audio on the
+  PC, `sops` off); the rows' order, labels and help, stepping and wrapping, picking, the slider's grid and speed-up; the
+  navigation between Settings and Profile, which screens have the navigation and the side menu, which commands repeat.
 - A throwaway debug harness in the iPhone 18 Pro Max simulator (iOS 27.2, 2026-11-16), removed afterwards: the loader
   with a fake stage, the result overlay of a timed-out RTSP handshake, the stream menu, and the two H.264 test-pattern
   frames of `frames.h264` through `VideoSamples` into `DisplayLayerRenderer` and `VideoSurface` (the pattern shows,

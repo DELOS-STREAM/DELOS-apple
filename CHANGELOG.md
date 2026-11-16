@@ -27,11 +27,19 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   and touch as a trackpad to the PC. L3 + R3 or a swipe up from the bottom edge opens a small stream menu (Resume,
   Disconnect, Quit app); a stream that fails shows Android's result screen with Try again. Not yet tried with a real
   stream.
+- Settings, with the Stream and Audio tabs of DELOS for Android: the video resolution (the presets and the display's
+  own), the frame rate (up to what the display shows), the bitrate, the video codec (only the ones the device decodes)
+  and playing audio on the PC. Each profile keeps its own; streams use them. A tap on a choice opens the list of its
+  values, a tap on a switch flips it, and the help of the tapped setting shows beside the list. The library and the
+  profile screen show the top navigation (Settings, Profile), and the left menu button of a controller opens the side
+  menu with All settings.
+- Holding a direction on a controller or the keyboard repeats it, as on Android.
 
 ### Changed
 
 - The repository is set up for DELOS: README, contribution and security policy, third-party record, commit and branch
   hooks. CI runs only for release tags.
+- Streams no longer ask GeForce Experience to optimize the game's settings, as DELOS for Android.
 
 ### Removed
 

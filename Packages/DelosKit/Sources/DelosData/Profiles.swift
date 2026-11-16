@@ -72,7 +72,8 @@ private struct Lenient<Value: Decodable>: Decodable {
 }
 
 /// Keeps the profiles in `UserDefaults` (kept on tvOS, which may purge files), the list and the current id in one
-/// value so they never disagree. Each profile's settings are stored by its id (``AppearanceStore``).
+/// value so they never disagree. Each profile's settings are stored by its id (``AppearanceStore``,
+/// ``StreamSettingsStore``).
 ///
 /// Without a profile DELOS is on its first run: it shows the first-run screens until one is created
 /// (`ShellActivity` in DELOS for Android).
@@ -82,12 +83,14 @@ public final class ProfileStore {
     public private(set) var profiles: Profiles
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let appearance: AppearanceStore
+    @ObservationIgnored private let stream: StreamSettingsStore
     private static let key = "profiles"
 
     /// - Parameter suiteName: a `UserDefaults` suite; nil is the app's standard defaults.
     public init(suiteName: String? = nil) {
         defaults = suiteName.flatMap(UserDefaults.init(suiteName:)) ?? .standard
         appearance = AppearanceStore(suiteName: suiteName)
+        stream = StreamSettingsStore(suiteName: suiteName)
         profiles = defaults.data(forKey: Self.key)
             .flatMap { try? JSONDecoder().decode(Profiles.self, from: $0) } ?? Profiles()
     }
@@ -105,6 +108,7 @@ public final class ProfileStore {
         let profile = Profile(id: UUID().uuidString.lowercased(), name: name, avatar: max(avatar, 0))
         if let current = profiles.current {
             appearance.save(appearance.load(profile: current.id), profile: profile.id)
+            stream.save(stream.load(profile: current.id), profile: profile.id)
         }
         save(Profiles(all: profiles.all + [profile], currentID: profile.id))
         return profile
@@ -148,6 +152,7 @@ public final class ProfileStore {
         let rest = profiles.all.filter { $0.id != id }
         save(Profiles(all: rest, currentID: wasCurrent ? rest.first?.id : profiles.currentID))
         appearance.remove(profile: id)
+        stream.remove(profile: id)
         return !rest.isEmpty
     }
 
