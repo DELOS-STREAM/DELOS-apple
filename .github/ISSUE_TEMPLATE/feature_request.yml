@@ -1,0 +1,16 @@
+name: Feature request
+description: An idea for DELOS for Apple.
+labels: ["feature"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What you would like DELOS to do, and why.
+    validations:
+      required: true
+  - type: textarea
+    id: android
+    attributes:
+      label: DELOS for Android
+      description: Does the Android app have this already? If so, how should the Apple version differ, if at all?

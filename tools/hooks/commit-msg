@@ -1,0 +1,81 @@
+#!/bin/sh
+# Checks a commit message against the Delos convention: Conventional Commits 1.0.0 with the types and scopes of
+# docs/ENGINEERING_RULES.md, "Commit messages and branch names".
+# Enable once per clone:  git config core.hooksPath tools/hooks
+# Tests:                  sh tools/hooks/test-commit-msg.sh
+#
+# Rules: the subject (first line that is not a comment) is `<type>[(scope)][!]: <description>` with a type and a
+# scope of the lists below, has at most 72 characters, does not end with a period, is not a WIP, fixup or squash
+# commit, and is followed by an empty line when a body follows. `[skip ci]` is the last line of the body, never in
+# the subject. A breaking-change footer is spelled `BREAKING CHANGE: `. Merge and revert subjects that git writes
+# itself are not checked.
+
+MAX_SUBJECT=72
+TYPES='feat|fix|docs|test|refactor|perf|build|ci|chore|style|revert'
+SCOPES='ui|stream|pyrowave|input|host|l10n|deps|docs|ci|tools|release'
+
+fail() {
+    echo "commit-msg: $1" >&2
+    echo "commit-msg: see CONTRIBUTING.md, \"Commit messages\"" >&2
+    exit 1
+}
+
+[ -n "$1" ] && [ -f "$1" ] || { echo "commit-msg: usage: commit-msg <message file>" >&2; exit 2; }
+
+# The message as git will store it: without comment lines and without anything below the scissors line.
+message=$(sed -e '/^# -\{24\} >8 -\{24\}$/,$d' -e '/^#/d' "$1")
+subject=$(printf '%s\n' "$message" | sed -n '1p')
+second=$(printf '%s\n' "$message" | sed -n '2p')
+
+[ -n "$(printf '%s' "$subject" | tr -d '[:space:]')" ] || fail "the subject line is empty"
+
+case "$subject" in
+    Merge\ *|Revert\ \"*) exit 0 ;;
+esac
+
+if printf '%s' "$subject" | grep -Eqi '^(wip|fixup!|squash!|amend!)([^[:alnum:]]|$)|(^|[^[:alnum:]])wip([^[:alnum:]]|$)'; then
+    fail "work-in-progress commits (WIP, fixup!, squash!) do not belong on main: say what changed"
+fi
+
+length=$(printf '%s' "$subject" | wc -m | tr -d '[:space:]')
+if [ "$length" -gt "$MAX_SUBJECT" ]; then
+    fail "the subject has $length characters; the limit is $MAX_SUBJECT. Say what changed in the subject and move the details to the body"
+fi
+
+case "$subject" in
+    *"[skip ci]"*) fail "put [skip ci] on the last line of the body, not in the subject" ;;
+esac
+
+# Conventional Commits header, from the most general mistake to the most specific one.
+if ! printf '%s' "$subject" | grep -Eq '^[^ :()!]+(\([^()]*\))?!?: '; then
+    fail "the subject must be '<type>[(scope)][!]: <description>', for example 'fix(stream): keep the bitrate after a failed request'"
+fi
+type=$(printf '%s' "$subject" | sed -E 's/^([^(!:]+).*$/\1/')
+if ! printf '%s' "$type" | grep -Eqx "$TYPES"; then
+    fail "unknown type '$type'; the types are: $(printf '%s' "$TYPES" | sed 's/|/, /g')"
+fi
+if printf '%s' "$subject" | grep -Eq '^[^(:]+\('; then
+    scope=$(printf '%s' "$subject" | sed -E 's/^[^(]+\(([^)]*)\).*$/\1/')
+    if ! printf '%s' "$scope" | grep -Eqx "$SCOPES"; then
+        fail "unknown scope '$scope'; the scopes are: $(printf '%s' "$SCOPES" | sed 's/|/, /g')"
+    fi
+fi
+description=$(printf '%s' "$subject" | sed -E 's/^[^:]*: //')
+case "$description" in
+    ""|" "*) fail "the description must follow the colon and one space" ;;
+    *.) fail "the subject does not end with a period" ;;
+esac
+
+[ -z "$second" ] || fail "the second line must be empty (subject, empty line, body)"
+
+body=$(printf '%s\n' "$message" | sed '1d')
+if printf '%s\n' "$body" | grep -Eqi '^breaking[ -]change' &&
+   printf '%s\n' "$body" | grep -Ei '^breaking[ -]change' | grep -Evq '^BREAKING[ -]CHANGE: [^ ]'; then
+    fail "a breaking-change footer is spelled 'BREAKING CHANGE: <description>' (upper case, colon, space)"
+fi
+if printf '%s\n' "$body" | grep -Fq '[skip ci]'; then
+    last=$(printf '%s\n' "$body" | sed '/^[[:space:]]*$/d' | tail -n 1)
+    [ "$last" = "[skip ci]" ] || fail "[skip ci] stands alone on the last line of the body, after the footers"
+fi
+
+exit 0

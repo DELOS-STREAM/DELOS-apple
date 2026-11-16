@@ -1,24 +1,42 @@
-# Moonlight iOS/tvOS
+# DELOS for Apple
 
-[![CI](https://github.com/moonlight-stream/moonlight-ios/actions/workflows/ci.yml/badge.svg)](https://github.com/moonlight-stream/moonlight-ios/actions/workflows/ci.yml)
+DELOS is a controller-first game streaming client for [Vibepollo](https://github.com/Nonary/Vibepollo),
+[Apollo](https://github.com/ClassicOldSong/Apollo) and [Sunshine](https://github.com/LizardByte/Sunshine). This repository
+is the port to iPhone, iPad, Apple TV and Mac. The Android app lives in [Meitoncz/DELOS](https://github.com/Meitoncz/DELOS);
+the website is [delos-stream.com](https://delos-stream.com).
 
-[Moonlight for iOS/tvOS](https://moonlight-stream.org) is an open source client for [Sunshine](https://github.com/LizardByte/Sunshine) and NVIDIA GameStream. Moonlight for iOS/tvOS allows you to stream your full collection of games and apps from your powerful desktop computer to your iOS device or Apple TV.
+> **Work in progress.** There is no DELOS build for Apple devices yet. The repository still contains the Moonlight for
+> iOS/tvOS code it was forked from; that code is the reference for the new app and is removed once the new app streams on
+> a device.
 
-Moonlight also has a [PC client](https://github.com/moonlight-stream/moonlight-qt) and [Android client](https://github.com/moonlight-stream/moonlight-android).
+## Status
 
-Check out [the Moonlight wiki](https://github.com/moonlight-stream/moonlight-docs/wiki) for more detailed project information, setup guide, or troubleshooting steps.
+| Platform | Status |
+|---|---|
+| iPhone and iPad | In development |
+| Apple TV | Planned after iPhone and iPad |
+| Mac | Planned after Apple TV |
 
-[![Moonlight for iOS and tvOS](https://moonlight-stream.org/images/App_Store_Badge_135x40.svg)](https://apps.apple.com/us/app/moonlight-game-streaming/id1000551566)
+The work is tracked in the [issues](https://github.com/Meitoncz/DELOS-apple/issues) and their milestones.
 
-## Building
-* Install Xcode from the [App Store page](https://apps.apple.com/us/app/xcode/id497799835)
-* Run `git clone --recursive https://github.com/moonlight-stream/moonlight-ios.git`
-  *  If you've already clone the repo without `--recursive`, run `git submodule update --init --recursive`
-* Open Moonlight.xcodeproj in Xcode
-* To run on a real device, you will need to locally modify the signing options:
-    * Click on "Moonlight" at the top of the left sidebar
-    * Click on the "Signing & Capabilities" tab
-    * Under "Targets", select "Moonlight" (for iOS/iPadOS) or "Moonlight TV" (for tvOS)
-    * In the "Team" dropdown, select your name. If your name doesn't appear, you may need to sign into Xcode with your Apple account.
-    * Change the "Bundle Identifier" to something different. You can add your name or some random letters to make it unique.
-    * Now you can select your Apple device in the top bar as a target and click the Play button to run.
+## Technology
+
+The new app is written in Swift 6 with SwiftUI, SwiftData, async/await and Metal. The streaming protocol comes from the C
+core [Meitoncz/Delos-common-c](https://github.com/Meitoncz/Delos-common-c), which DELOS for Android uses too. The minimum
+system versions are iOS 18, iPadOS 18, tvOS 18 and macOS 15.
+
+## Lineage
+
+DELOS for Apple is a fork of [Moonlight for iOS/tvOS](https://github.com/moonlight-stream/moonlight-ios). The `master`
+branch mirrors that project; DELOS work happens on `main`.
+
+## Contributing and security
+
+- How to take part: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Reporting a vulnerability: [SECURITY.md](SECURITY.md)
+- Third-party code and binaries: [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)
+- Changes: [CHANGELOG.md](CHANGELOG.md)
+
+## License
+
+DELOS is free software under the GNU General Public License v3.0: [LICENSE.txt](LICENSE.txt). It is free of charge.
