@@ -97,8 +97,10 @@ list on a tap, A steps it); a tap always focuses the item first.
 
 `Navigator` (DelosUI) is the screen router: an `@Observable` back stack of `Screen` values (`boot`, `createProfile`,
 `start`, `profile`, `pair`, `pairAddress`, `pin`, `home`, `stream`, `settings`), each entry with its own `FocusModel`, so
-going back returns the focus to where it was. `DelosRoot` shows the top entry with the screen transition of the
-prototype (a fade with a slight zoom), and puts the navigator and the one `HostStore` in the environment.
+going back returns the focus to where it was. `DelosRoot` uses `ScreenMotion`: the incoming screen fades in over
+280 ms and settles from scale 1.035 over 560 ms; the old screen fades and scales outward to 1.035 over 240 ms,
+matching Android's `screenTransition`. Reduced motion keeps only the asymmetric fades. `PolishMotionTests` checks
+the timing contract. The root provides the navigator and the one `HostStore` in the environment.
 
 | Call | Use |
 |---|---|
@@ -151,6 +153,12 @@ action 10 s; the gold line along its bottom edge drains with the time left. Y or
 deleting a profile) and squeezes the chip first. The motion is a function of one clock that runs only while a toast
 is shown (`TimelineView`): the spring from the right, the icon's pop, the rising text, the halo, one light sweep; with
 reduced motion only the fades remain.
+
+Each new toast posts one `AccessibilityNotification.Announcement`, using the same localized description as its
+accessibility label, including Undo when offered. `ToastAnnouncement` assigns high speech priority to errors and low
+priority to ordinary messages; animation ticks never repost it. Actual VoiceOver speech/interrupt ordering on physical
+devices is not verified. The card receives a stage zoomed by the interface scale, so its geometry, text-width cap,
+glyphs, action chip and shadows all grow together while the outer screen-edge insets stay fixed.
 
 ## Video formats
 
@@ -490,9 +498,23 @@ controls all supported apps. `LanguageSettingsTests` checks the Android label/se
 value and system-settings action, region-specific names and omission on unsupported platforms. Opening Settings and
 changing the app's language on physical devices are not verified.
 
+`SettingsSession` remembers the selected tab for this process only; it is neither a profile preference nor restored
+after relaunch. A debug launch tab overrides that session choice. The list draws one `SettingsFocusPlate` behind its
+rows, resolving row anchors in the scrolling content's coordinate space so scrolling carries the plate with the row.
+`SettingsPlateGeometry` grows the target around its center by 1.02; focus changes glide over 520 ms with Android's
+Glide curve, while reduced motion snaps. Rows using the shared plate do not draw independent plates.
+
+Focused overflowing row labels and values use `MarqueeLabel`: a 700 ms initial pause, 56 stage pixels per second,
+a 56 px repeat gap and 900 ms between laps (`SettingsReadingMotion`, from Android's `MarqueeText`). Fitting,
+unfocused and reduced-motion labels have no active marquee clock. `AutoScrollingHelp` restarts on the selected
+help's identity or viewport size, waits 3 s, travels at 20 stage pixels per second (1–120 s per leg), pauses 2.5 s
+at the bottom and returns. Reduced motion leaves help still and touch-scrollable. The reading task is cancelled
+when selection, size, motion preference or view lifetime changes. `PolishMotionTests` covers the motion arithmetic,
+plate target, session memory, and localized announcement text/priority.
+
 
 Not ported yet: the Display, Covers and Devices tabs, the rest of About, the other rows of Audio and Controls, search, the impact
-chips, the compact layout (the help dock under the list), the gliding focus plate and the auto-scrolling help, and
+chips, the compact layout (the help dock under the list), and
 Android's link guidance rows.
 
 ## Profiles and the first run

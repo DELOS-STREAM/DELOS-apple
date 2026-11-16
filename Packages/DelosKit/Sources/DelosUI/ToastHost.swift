@@ -117,12 +117,16 @@ struct ToastHost: View {
                     ToastCard(slot: slot, now: now, isLatest: slot === stage.slots.last) {
                         if slot.payload.id == toasts.current?.id, now >= slot.startMs { toasts.runAction() }
                     }
+                    .environment(\.stage, stagePx.zoomed(by: stagePx.textScale))
                 }
             }
         }
         .padding(.top, stagePx.px(112 + stagePx.safe.top))
         .padding(.trailing, stagePx.px((stagePx.compact ? 48 : 44) + stagePx.safe.trailing))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .onChange(of: toasts.current?.id, initial: true) { _, _ in
+            if let toast = toasts.current { ToastAnnouncement(toast).post() }
+        }
         .task(id: Key(id: toasts.current?.id, presses: toasts.actionPresses)) {
             if stage.pressed(toasts.actionPresses, now: toastNow()) { try? await Task.sleep(for: .milliseconds(Int(Motion.pressHold))) }
             stage.sync(toasts.current, now: toastNow())
@@ -267,7 +271,7 @@ private struct ToastCard: View {
         .overlay { if !reduced { sweep(age: age) } }
         .overlay(alignment: .bottomLeading) { timerLine(age: age, gold: gold) }
         .clipShape(shape)
-        .overlay { shape.strokeBorder(cardRing.color, lineWidth: 1) }
+        .overlay { shape.strokeBorder(cardRing.color, lineWidth: stage.px(1)) }
     }
 
     /// The light sweep: a soft band of white, tilted 12°, that crosses the card once right after it lands.

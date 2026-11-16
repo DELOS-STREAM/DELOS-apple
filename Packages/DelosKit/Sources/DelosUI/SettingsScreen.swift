@@ -45,14 +45,14 @@ struct SettingsScreen: View {
     static let initialFocus = StreamSettingsForm.resolution
 
     init(profileID: String, appearance: Binding<Appearance>, focus: FocusModel, navigator: Navigator, feedback: Feedback?, actions: ShellActions,
-         tab: SettingsTab = .stream) {
+         tab: SettingsTab? = nil) {
         self.profileID = profileID
         _appearance = appearance
         self.focus = focus
         self.navigator = navigator
         self.feedback = feedback
         self.actions = actions
-        _tab = State(initialValue: tab)
+        _tab = State(initialValue: SettingsSession.shared.opening(tab))
         _form = State(initialValue: StreamSettingsForm(settings: StreamSettingsStore().load(profile: profileID), device: .current))
     }
 
@@ -115,8 +115,11 @@ struct SettingsScreen: View {
         .onChange(of: appearance) { _, now in appearances.save(now, profile: profileID) }
         .onAppear {
             navigator.commandCapture = { command in capture(command) }
+            if focusedRow == nil { focus.focus(Self.firstRow(tab)) }
+            SettingsSession.shared.tab = tab
         }
         .onDisappear { navigator.commandCapture = nil }
+        .onChange(of: tab) { _, next in SettingsSession.shared.tab = next }
     }
 
     nonisolated static let space = "settings"
@@ -132,13 +135,21 @@ struct SettingsScreen: View {
                         FocusItem(
                             id: row.id, model: focus, action: { activate(row) }, tap: { tapped(row) }
                         ) { focused in
-                            SettingRowView(row: row, focused: focused) { value in
+                            SettingRowView(row: row, focused: focused, hostedPlate: true) { value in
                                 focus.focus(AnyHashable(row.id))
                                 slide(row.id, to: value)
                             }
                         }
                         .id(row.id)
+                        .anchorPreference(key: SettingsRowAnchors.self, value: .bounds) { [row.id: $0] }
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { rowFrames[row.id] = $0 }
+                    }
+                }
+                .backgroundPreferenceValue(SettingsRowAnchors.self) { anchors in
+                    GeometryReader { proxy in
+                        let anchor = (focus.focused as? String).flatMap { anchors[$0] }
+                        SettingsFocusPlate(target: anchor.map { SettingsPlateGeometry.target(proxy[$0]) })
+                            .id(tab)
                     }
                 }
                 // Room for the focused row's scale and glow, which the scroll view would cut
@@ -409,6 +420,7 @@ struct SettingRowView: View {
     let row: SettingRow
     let focused: Bool
     var compact = false
+    var hostedPlate = false
     /// A value set on the slider's track by touch (on release).
     var onSlide: (Int) -> Void = { _ in }
     @Environment(\.delosColors) private var colors
@@ -419,10 +431,9 @@ struct SettingRowView: View {
         HStack(spacing: stage.px(22)) {
             SymbolView(symbol: row.icon, size: 34, color: focused ? colors.accent2 : colors.accent2.opacity(0.62), filled: focused)
                 .frame(width: stage.px(compact ? 44 : 52), alignment: .leading)
-            Text(row.label)
+            MarqueeLabel(text: row.label, active: focused)
                 .font(DelosFonts.figtree(stage.tpx(26), .semibold))
                 .foregroundStyle(colors.text.color)
-                .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
             value
         }
@@ -432,15 +443,17 @@ struct SettingRowView: View {
         .padding(.vertical, stage.px(14))
         .frame(minHeight: stage.px(compact ? 80 : 92))
         .background {
-            RoundedRectangle(cornerRadius: stage.px(24))
-                .fill(colors.surface2.color)
-                .overlay(RoundedRectangle(cornerRadius: stage.px(24)).strokeBorder(colors.accent.color, lineWidth: stage.px(3)))
-                .shadow(color: colors.glow.color, radius: stage.px(25), y: stage.px(20))
-                .opacity(focused ? 1 : 0)
+            if !hostedPlate {
+                RoundedRectangle(cornerRadius: stage.px(24))
+                    .fill(colors.surface2.color)
+                    .overlay(RoundedRectangle(cornerRadius: stage.px(24)).strokeBorder(colors.accent.color, lineWidth: stage.px(3)))
+                    .shadow(color: colors.glow.color, radius: stage.px(25), y: stage.px(20))
+                    .opacity(focused ? 1 : 0)
+            }
         }
         .scaleEffect(focused ? 1.02 : 1)
         .zIndex(focused ? 1 : 0)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.28), value: focused)
+        .animation(reduceMotion ? nil : .timingCurve(0.3, 1.22, 0.42, 1, duration: SettingsPlateGeometry.duration), value: focused)
     }
 
     @ViewBuilder private var value: some View {
@@ -455,10 +468,9 @@ struct SettingRowView: View {
                     if let swatch = row.swatch {
                         Circle().fill(swatch.color).frame(width: stage.px(26), height: stage.px(26))
                     }
-                    Text(label)
+                    MarqueeLabel(text: label, active: focused)
                         .font(DelosFonts.figtree(stage.tpx(23)))
                         .foregroundStyle(colors.text2.color)
-                        .lineLimit(1)
                 }
                 .frame(maxWidth: stage.px(row.swatch == nil ? 360 : 398), alignment: .trailing)
             }
@@ -475,10 +487,9 @@ struct SettingRowView: View {
     private func labelled(_ label: String?, arrows: RGBA) -> some View {
         HStack(spacing: stage.px(12)) {
             if let label {
-                Text(label)
+                MarqueeLabel(text: label, active: focused)
                     .font(DelosFonts.figtree(stage.tpx(23)))
                     .foregroundStyle(colors.text2.color)
-                    .lineLimit(1)
                     .frame(maxWidth: stage.px(360), alignment: .trailing)
             }
             SymbolView(symbol: Symbols.chevronRight, size: 30, color: arrows)
@@ -603,7 +614,7 @@ private struct DescriptionPanel: View {
                 .font(DelosFonts.unbounded(stage.tpx(30)))
                 .foregroundStyle(colors.text.color)
                 .padding(.top, stage.px(8))
-            ScrollView(.vertical, showsIndicators: false) {
+            AutoScrollingHelp(identity: "\(row?.id ?? String(describing: tab)):\(row?.help ?? tab.help)") {
                 VStack(alignment: .leading, spacing: stage.px(18)) {
                     Text(row?.help ?? tab.help)
                         .font(DelosFonts.figtree(stage.tpx(22)))

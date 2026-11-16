@@ -1,0 +1,138 @@
+import SwiftUI
+
+/// MarqueeText.kt:29–34,66–68 and AutoScrollingHelp.kt:48–59 (seconds / stage pixels).
+enum SettingsReadingMotion {
+    static let startDelay = 0.700
+    static let loopDelay = 0.900
+    static let speed = 56.0
+    static let gap = 56.0
+    static let helpFirstPause = 3.0
+    static let helpEndPause = 2.5
+
+    static func marqueeOffset(elapsed: Double, width: Double) -> Double {
+        guard width > 0, elapsed >= startDelay else { return 0 }
+        let lap = width + gap
+        let travel = lap / speed
+        let phase = (elapsed - startDelay).truncatingRemainder(dividingBy: travel + loopDelay)
+        return phase < travel ? phase * speed : 0
+    }
+
+    static func helpDuration(overflow: Double) -> Double {
+        min(max(overflow / 20, 1), 120)
+    }
+}
+
+/// A fitting label is just text. Only a focused, overflowing label owns an active display clock.
+struct MarqueeLabel: View {
+    let text: String
+    let active: Bool
+    @Environment(\.stage) private var stage
+    @Environment(\.reducedMotion) private var reduced
+    @State private var naturalWidth = 0.0
+    @State private var started = Date.now
+
+    var body: some View {
+        Text(text)
+            .lineLimit(1)
+            .hidden()
+            .overlay(alignment: .leading) {
+                GeometryReader { proxy in
+                    let overflow = naturalWidth > proxy.size.width + 0.5
+                    let scrolling = overflow && active && !reduced
+                    TimelineView(.animation(paused: !scrolling)) { clock in
+                        let offset = scrolling ? SettingsReadingMotion.marqueeOffset(
+                            elapsed: clock.date.timeIntervalSince(started), width: naturalWidth / stage.scale) : 0
+                        let lap = naturalWidth / stage.scale + SettingsReadingMotion.gap
+                        let fade = scrolling ? min(1, min(offset, lap - offset) / 28) : 0
+                        HStack(spacing: stage.px(SettingsReadingMotion.gap)) {
+                            Text(text).fixedSize()
+                                .onGeometryChange(for: Double.self) { $0.size.width } action: { naturalWidth = $0 }
+                            if scrolling { Text(text).fixedSize() }
+                        }
+                        .offset(x: -stage.px(offset))
+                        .frame(width: proxy.size.width, alignment: .leading)
+                        .mask {
+                            HStack(spacing: 0) {
+                                LinearGradient(colors: [.clear, .white], startPoint: .leading, endPoint: .trailing)
+                                    .frame(width: stage.px(28 * fade))
+                                Color.white
+                                LinearGradient(colors: [.white, .clear], startPoint: .leading, endPoint: .trailing)
+                                    .frame(width: overflow ? min(stage.px(36), proxy.size.width) : 0)
+                            }
+                        }
+                        .clipped()
+                    }
+                    .onChange(of: active, initial: true) { _, _ in started = .now }
+                    .onChange(of: text) { _, _ in started = .now }
+                    .onChange(of: naturalWidth) { _, _ in started = .now }
+                    .onChange(of: reduced) { _, _ in started = .now }
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(text)
+    }
+}
+
+/// Passive help loops at reading speed; reduced motion leaves a still, manually scrollable panel.
+struct AutoScrollingHelp<Content: View>: View {
+    let identity: String
+    @ViewBuilder let content: () -> Content
+    @Environment(\.stage) private var stage
+    @Environment(\.reducedMotion) private var reduced
+    @State private var position = ScrollPosition(y: 0)
+    @State private var extent = Extent()
+
+    private struct Extent: Equatable, Hashable {
+        var content = 0.0
+        var viewport = 0.0
+        var overflow: Double { max(0, content - viewport) }
+    }
+
+    private struct Run: Hashable {
+        let identity: String
+        let extent: Extent
+        let scale: Double
+        let reduced: Bool
+    }
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            content()
+                .padding(.vertical, stage.px(24))
+        }
+        .scrollPosition($position)
+        .scrollDisabled(!reduced)
+        .onScrollGeometryChange(for: Extent.self) { geometry in
+            Extent(content: geometry.contentSize.height, viewport: geometry.containerSize.height)
+        } action: { _, value in extent = value }
+        .mask {
+            VStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .white], startPoint: .top, endPoint: .bottom)
+                    .frame(height: extent.overflow > 0 ? stage.px(24) : 0)
+                Color.white
+                LinearGradient(colors: [.white, .clear], startPoint: .top, endPoint: .bottom)
+                    .frame(height: extent.overflow > 0 ? stage.px(24) : 0)
+            }
+        }
+        .task(id: Run(identity: identity, extent: extent, scale: stage.scale, reduced: reduced)) {
+            var reset = Transaction(animation: nil)
+            reset.disablesAnimations = true
+            withTransaction(reset) { position.scrollTo(y: 0) }
+            guard extent.overflow > 0, !reduced else { return }
+            let duration = SettingsReadingMotion.helpDuration(overflow: extent.overflow / stage.scale)
+            do {
+                while !Task.isCancelled {
+                    try await Task.sleep(for: .seconds(SettingsReadingMotion.helpFirstPause))
+                    withAnimation(.linear(duration: duration)) { position.scrollTo(y: extent.overflow) }
+                    try await Task.sleep(for: .seconds(duration + SettingsReadingMotion.helpEndPause))
+                    withAnimation(.linear(duration: duration)) { position.scrollTo(y: 0) }
+                    try await Task.sleep(for: .seconds(duration))
+                }
+            } catch is CancellationError {
+                // A new selection, size, reduced-motion setting or disappearance cancels the reading cycle.
+            } catch {
+                assertionFailure("Unexpected help clock failure: \(error)")
+            }
+        }
+    }
+}

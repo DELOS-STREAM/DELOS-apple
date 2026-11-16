@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Settings now keeps the last tab during the session, moves one focus plate between rows, scrolls overflowing focused
+  labels and reads long help automatically. Reduced motion leaves text still and help manually scrollable.
+- Screen transitions follow the Android timing: the new screen settles while the previous one leaves faster.
+- Toasts scale their whole card with the interface scale and announce their localized message through VoiceOver,
+  with higher priority for errors. Spoken delivery on physical devices is not verified.
 - Apple TV: the Siri Remote and game controllers work on every screen through the system focus engine (Menu is back,
   Play/Pause opens context menus and the stream menu), title-safe margins, a 24-point text floor, system keyboard
   fields, and the artwork matches kept in the caches.
