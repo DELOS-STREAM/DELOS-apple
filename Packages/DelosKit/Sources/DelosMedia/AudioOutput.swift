@@ -40,21 +40,57 @@ public final class AudioOutput: AudioSampleSink, @unchecked Sendable {
         try? session.setPreferredIOBufferDuration(0.005)
         try? session.setActive(true)
         #endif
-        guard let format = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32, sampleRate: Double(opus.sampleRate),
-            channels: AVAudioChannelCount(channels), interleaved: true) else { return false }
+        // The engine's mixer takes the standard format only (non-interleaved float): an interleaved format made
+        // AVAudioEngine.connect raise an exception and the app crash at the stream start (owner's iPad, 2026-11-16).
+        // The ring stays interleaved, as the decoder writes it; the render block splits it into the channels.
+        guard let format = Self.format(sampleRate: Double(opus.sampleRate), channels: channels) else { return false }
+        let source = AVAudioSourceNode(format: format, renderBlock: Self.renderBlock(ring: ring))
         let engine = AVAudioEngine()
-        let source = AVAudioSourceNode(format: format) { _, _, frameCount, buffers -> OSStatus in
-            let list = UnsafeMutableAudioBufferListPointer(buffers)
-            guard let first = list.first, let data = first.mData else { return noErr }
-            let count = Int(frameCount) * channels
-            ring.read(into: UnsafeMutableBufferPointer(start: data.assumingMemoryBound(to: Float.self), count: count))
-            return noErr
-        }
         engine.attach(source)
         engine.connect(source, to: engine.mainMixerNode, format: format)
         self.engine = engine
         return true
+    }
+
+    /// The standard format for the stream's channels. Surround needs a channel layout: the host sends Windows' order
+    /// (front left, front right, center, LFE, then the back and side pairs), which is WAVE's.
+    static func format(sampleRate: Double, channels: Int) -> AVAudioFormat? {
+        let tag: AudioChannelLayoutTag
+        switch channels {
+        case 1, 2: return AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: AVAudioChannelCount(channels))
+        case 6: tag = kAudioChannelLayoutTag_WAVE_5_1_A
+        case 8: tag = kAudioChannelLayoutTag_WAVE_7_1
+        default: return nil
+        }
+        guard let layout = AVAudioChannelLayout(layoutTag: tag) else { return nil }
+        return AVAudioFormat(standardFormatWithSampleRate: sampleRate, channelLayout: layout)
+    }
+
+    /// The render block: reads interleaved samples from the ring into a scratch buffer made once, then writes each
+    /// channel into its own buffer of the list. No allocation on the render thread up to `maxFrames` per call.
+    static func renderBlock(ring: AudioRing, maxFrames: Int = 4096) -> AVAudioSourceNodeRenderBlock {
+        let channels = ring.channels
+        let scratch = UnsafeMutableBufferPointer<Float>.allocate(capacity: maxFrames * channels)
+        let holder = ScratchHolder(scratch)
+        return { _, _, frameCount, buffers -> OSStatus in
+            let list = UnsafeMutableAudioBufferListPointer(buffers)
+            let frames = min(Int(frameCount), maxFrames)
+            let interleaved = UnsafeMutableBufferPointer(rebasing: holder.buffer[0..<(frames * channels)])
+            ring.read(into: interleaved)
+            for (channel, buffer) in list.enumerated() where channel < channels {
+                guard let data = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
+                for frame in 0..<frames { data[frame] = interleaved[frame * channels + channel] }
+                for frame in frames..<Int(frameCount) { data[frame] = 0 }
+            }
+            return noErr
+        }
+    }
+
+    /// Owns the render block's scratch buffer and frees it with the block.
+    private final class ScratchHolder: @unchecked Sendable {
+        let buffer: UnsafeMutableBufferPointer<Float>
+        init(_ buffer: UnsafeMutableBufferPointer<Float>) { self.buffer = buffer }
+        deinit { buffer.deallocate() }
     }
 
     public func start() {
