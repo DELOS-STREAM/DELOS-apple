@@ -159,6 +159,16 @@ profile screen instead), the Rename dialog (the name is typed on the Change avat
 the welcome toast, the pairing step after the first profile, Skip to home (it needs paired PCs) and the sideways
 scrolling avatar rows of a stage 1500 to 1800 px wide.
 
+## PCs and stream plans
+
+`HostStore` (DelosData) is the app's list of PCs: discovery and typed addresses add them (`ask`), `refresh` asks a
+known PC again (over HTTPS to its pinned certificate once paired; no answer marks it offline), `pair` runs the PIN
+pairing with a four-digit PIN the app shows, and `loadApps` reads a paired PC's apps. Only paired PCs are stored
+(`UserDefaults`, JSON; a record that no longer decodes is skipped, the others are kept); they start offline until
+refreshed. `StreamPlan` makes the launch request and the stream configuration of one stream with one random remote
+input key (the IV is the key id, big-endian), the default bitrate of DELOS for Android (`getDefaultBitrate`) and
+stereo audio; `StreamSettings.forDisplay` takes the display's resolution, capped at 1080p.
+
 ## Strings
 
 User-visible text comes from DELOS for Android's string resources, so both apps say the same thing in the same ten
