@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+Keys of the app's Info.plist that build settings cannot express (arrays). Xcode merges this file with the keys it
+generates from the INFOPLIST_KEY_* settings in Shared.xcconfig (GENERATE_INFOPLIST_FILE = YES).
+-->
+<plist version="1.0">
+<dict>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_nvstream._tcp</string>
+	</array>
+</dict>
+</plist>
