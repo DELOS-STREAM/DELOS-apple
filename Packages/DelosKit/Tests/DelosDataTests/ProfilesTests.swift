@@ -105,7 +105,8 @@ private final class TestDefaults {
         #expect(store.isFirstRun)
         // Kept for Undo, then removed
         #expect(appearance.load(profile: ann.id) == light)
-        try await Task.sleep(for: .milliseconds(200))
+        // The grace is 20 ms, but a busy machine runs the timer late: wait for the effect, up to 5 s, not for a fixed time
+        for _ in 0..<500 where appearance.load(profile: ann.id) != Appearance() { try await Task.sleep(for: .milliseconds(10)) }
         #expect(appearance.load(profile: ann.id) == Appearance())
         #expect(!store.undoDelete(ann.id))
         #expect(ProfileStore(suiteName: suite.name).isFirstRun)
