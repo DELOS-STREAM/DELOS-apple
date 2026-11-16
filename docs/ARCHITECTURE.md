@@ -54,8 +54,27 @@ Moving the focus plays move, activating an item plays select.
 
 ## Backgrounds
 
-The animated backgrounds are Metal stitchable shaders in `DelosUI`, ported line by line from the AGSL sources of DELOS
-for Android (`shell/ui/BackgroundShaders.kt`). Contour exists so far.
+`Backdrop(kind:)` draws every background of DELOS for Android (`BackgroundKind`), ported from `AnimatedBackground` in
+`shell/ui/Backdrop.kt` and the AGSL sources in `shell/ui/BackgroundShaders.kt`. As there, the theme color lies at the
+bottom; over it a layer with the base gradient (`hsl(base, 40, 8)` → `hsl(base, 38, 5)` dark, `hsl(base, 45, 96)` →
+`hsl(base, 38, 90)` light) and the background, blended with "screen" in the dark theme. Everything is drawn on the
+prototype's 960 × 540 canvas, scaled uniformly and extended along the longer axis (`BackgroundParams.canvas(for:)`).
+The clock runs at 0.96 per second, 0.15 of that with reduced motion. `BackgroundParams` is Android's `BgParams`
+(hues, saturations, `s()`) with `lights()`, the three colors of the shader backgrounds.
+
+| Kind | Android | Apple |
+|---|---|---|
+| Aurora, Tide, Silk | `drawAurora`, `drawTide`, `drawSilk` on the Compose canvas | `CanvasBackgrounds` on a SwiftUI `Canvas`, same shapes, colors and alphas; plus-lighter (Android: Plus) in the dark theme |
+| Contour | AGSL `CONTOUR` and the radial glow in `drawContour` | `Contour.metal` and a `RadialGradient` |
+| Nebula, Plasma, Lava, Caustics, Bokeh, Orbit | AGSL with the shared `PRELUDE` (`hash`, `noise`, `fbm`, `tri`, `pick`, `emit`) | `Backgrounds.metal`, `[[stitchable]]` color effects; glow 0.62 dark / 0.5 light, plus-lighter dark / normal light |
+| Still | the base gradient | the base gradient |
+
+The Metal ports differ from the AGSL text only where Metal must: GLSL's `mod()` is written out (`x - y * floor(x / y)`,
+Metal's `fmod` keeps the sign of `x`), `atan` is `atan2`, the hash uses `precise::sin` (large arguments), and Orbit's
+`pow(d, 2.0)` of a negative `d` is `d * d`. The fallback of Android below version 13 (Aurora in place of a shader) is
+not needed. The focused game's colors (`clock.tints`) and the game background are not ported yet; Material You has no
+counterpart. In debug builds `-DelosBackground <kind>` and `-DelosTheme light` pick the background and the theme
+([BUILDING.md](BUILDING.md)).
 
 ## Settings
 
@@ -75,14 +94,16 @@ bundle the same ten languages; without it iOS shows the package's strings in Eng
 ## Verification
 
 - `swift test` in `Packages/DelosKit`: colors against an independent HSL implementation, focus geometry and model,
-  stage scaling, controller stick and key mapping.
+  stage scaling, controller stick and key mapping, the background lights and saturations against the Kotlin formulas,
+  and that every background shader is in the Metal library.
 - `sh tools/sim.sh iphone|ipad|tv`: the start screen in the simulators.
 - The start screen in Czech in the iPhone simulator (`-AppleLanguages (cs)`).
+- Every background in the iPhone simulator (dark theme; Contour and Nebula also light), compared with the Android code.
 - `python3 -m unittest discover -s tools/l10n`: placeholder and escape conversion, the usage check.
 
 ### Not verified
 
 - Moving the focus with a real game controller on iPhone and iPad (the simulator has no controller); the logic is
   covered by the unit tests only.
-- Performance of the Contour shader on a device.
+- GPU cost of the backgrounds (the shaders and the canvas ones) on a device.
 - How the sounds and haptics feel on a device.

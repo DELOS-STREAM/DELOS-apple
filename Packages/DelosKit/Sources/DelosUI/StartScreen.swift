@@ -1,3 +1,4 @@
+import DelosData
 import DelosInput
 import SwiftUI
 
@@ -41,13 +42,25 @@ public struct DelosRoot: View {
     @State private var input: MenuInput?
     @State private var feedback = Feedback()
     @State private var colors = DelosColors(palette: .delos, dark: true)
+    @State private var background = Appearance().background
 
-    public init() {}
+    public init() {
+        #if DEBUG
+        // Screenshots of each background and theme (docs/BUILDING.md): -DelosBackground <kind>, -DelosTheme light
+        let defaults = UserDefaults.standard
+        if let kind = defaults.string(forKey: "DelosBackground").flatMap(BackgroundKind.init(rawValue:)) {
+            _background = State(initialValue: kind)
+        }
+        if defaults.string(forKey: "DelosTheme") == "light" {
+            _colors = State(initialValue: DelosColors(palette: .delos, dark: false))
+        }
+        #endif
+    }
 
     public var body: some View {
         StageReader {
             ZStack {
-                Backdrop()
+                Backdrop(kind: background)
                 StartScreen(focus: focus)
                 TopBar()
             }
