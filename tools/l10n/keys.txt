@@ -392,6 +392,7 @@ stream_result_default_pc
 stream_result_denied
 stream_result_denied_details
 stream_result_details
+stream_result_host_closed
 stream_result_encoding
 stream_result_encoding_details
 stream_result_ended

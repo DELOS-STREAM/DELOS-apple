@@ -76,6 +76,12 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- Feedback and motion as in DELOS for Android: a tap or a click plays the same cue and squeezes the element (.97) as A
+  does, without a second sound (Cancel and Back to library are BACK only; the stream menu opens with OPEN and closes with
+  BACK; the PC ending the stream shows a toast), Apple TV plays MOVE and SELECT through the focus engine, circle rows and
+  tall menus scroll to the focused item, icons cross-fade between Regular and Fill, the focus curves are 420 ms and jump
+  with reduced motion, covers get the light sweep, a settings choice slides its value and nudges its chevron, and the
+  stream menu is Android's dock: four glass tiles, one gliding ring, the blurred stream and the staggered entrance.
 - The repository is set up for DELOS: README, contribution and security policy, third-party record, commit and branch
   hooks. CI runs only for release tags.
 - Streams no longer ask GeForce Experience to optimize the game's settings, as DELOS for Android.
