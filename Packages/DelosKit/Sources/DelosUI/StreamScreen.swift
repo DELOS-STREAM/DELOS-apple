@@ -21,7 +21,10 @@ struct StreamScreen: View {
     @Environment(Navigator.self) private var navigator
     @State private var controller: StreamController?
     @State private var renderer: DisplayLayerRenderer?
+    @State private var shutdownID: UUID?
+    #if !os(macOS)
     @Environment(\.scenePhase) private var scenePhase
+    #endif
 
     init(hostID: String, appID: Int, settings: StreamSettings) {
         self.hostID = hostID
@@ -40,6 +43,8 @@ struct StreamScreen: View {
         .onChange(of: controller?.phase) { _, phase in
             if phase == .ended { navigator.back() }
         }
+        #if !os(macOS)
+        // iOS suspends an app that goes to the background; the Mac keeps streaming behind other windows
         .onChange(of: scenePhase) { _, now in
             guard let controller else { return }
             switch now {
@@ -48,6 +53,7 @@ struct StreamScreen: View {
             default: break
             }
         }
+        #endif
         #if os(iOS)
         .persistentSystemOverlays(.hidden)
         .defersSystemGestures(on: .all)
@@ -66,11 +72,15 @@ struct StreamScreen: View {
             Self.capture(command, controller: controller, focus: navigator.focus)
         }
         IdleTimer.disabled = true
+        // Quitting the app (the Mac: Command-Q, closing the window) leaves the stream first
+        shutdownID = StreamShutdown.shared.register { await controller.leave(quit: false) }
     }
 
     private func end() {
         navigator.commandCapture = nil
         IdleTimer.disabled = false
+        if let shutdownID { StreamShutdown.shared.unregister(shutdownID) }
+        shutdownID = nil
         // Leaving the screen any other way than through the menu disconnects (the app keeps running on the PC)
         if let controller { Task { await controller.leave(quit: false) } }
     }
@@ -119,7 +129,8 @@ struct StreamContent: View {
                 onTouch: { id, phase, point, width, time in
                     controller.touch(id, phase, at: point, width: width, time: time)
                 },
-                ignoresPointer: { controller.hasMouse }
+                ignoresPointer: { controller.hasMouse },
+                capturesPointer: controller.phase == .streaming && !controller.menuOpen
             )
             .ignoresSafeArea()
             .opacity(controller.phase == .streaming ? 1 : 0)
@@ -321,13 +332,20 @@ private struct StreamResultLayer: View {
     }
 }
 
-/// Keeps the screen on during a stream (`UIApplication.isIdleTimerDisabled`).
+/// Keeps the screen on during a stream (`UIApplication.isIdleTimerDisabled`). On the Mac it is a process activity: the
+/// display stays awake, and App Nap does not slow the stream down while another window covers the video.
 @MainActor
 private enum IdleTimer {
+    #if os(macOS)
+    private static var activity: (any NSObjectProtocol)?
+    #endif
+
     static var disabled: Bool {
         get {
             #if os(iOS) || os(tvOS)
             UIApplication.shared.isIdleTimerDisabled
+            #elseif os(macOS)
+            activity != nil
             #else
             false
             #endif
@@ -335,6 +353,15 @@ private enum IdleTimer {
         set {
             #if os(iOS) || os(tvOS)
             UIApplication.shared.isIdleTimerDisabled = newValue
+            #elseif os(macOS)
+            if newValue {
+                guard activity == nil else { return }
+                activity = ProcessInfo.processInfo.beginActivity(
+                    options: [.idleDisplaySleepDisabled, .userInitiated], reason: "Streaming from a PC")
+            } else if let activity {
+                ProcessInfo.processInfo.endActivity(activity)
+                self.activity = nil
+            }
             #endif
         }
     }

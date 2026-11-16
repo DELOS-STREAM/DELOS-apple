@@ -10,7 +10,9 @@ public protocol SecretStorage: Sendable {
 }
 
 /// Generic-password items of the data protection keychain, readable after the first unlock, never synchronized and
-/// never restored to another device (`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`).
+/// never restored to another device (`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`). On the Mac they are items of
+/// the user's login keychain: the data protection keychain there needs an application identifier from a provisioning
+/// profile, which the ad-hoc signed local build (`tools/mac.sh`) does not have (error -34018).
 public struct KeychainStorage: SecretStorage {
     public let service: String
 
@@ -19,12 +21,15 @@ public struct KeychainStorage: SecretStorage {
     }
 
     private func query(_ account: String) -> [String: Any] {
-        [
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-            kSecUseDataProtectionKeychain as String: true,
         ]
+        #if !os(macOS)
+        query[kSecUseDataProtectionKeychain as String] = true
+        #endif
+        return query
     }
 
     public func read(account: String) throws -> Data? {

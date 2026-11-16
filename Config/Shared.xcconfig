@@ -7,13 +7,14 @@ MARKETING_VERSION = 0.1.0
 CURRENT_PROJECT_VERSION = 1
 
 SDKROOT = auto
-SUPPORTED_PLATFORMS = iphoneos iphonesimulator appletvos appletvsimulator
+SUPPORTED_PLATFORMS = iphoneos iphonesimulator appletvos appletvsimulator macosx
 ALWAYS_SEARCH_USER_PATHS = NO
 SUPPORTS_MACCATALYST = NO
 SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO
 TARGETED_DEVICE_FAMILY = 1,2,3
 IPHONEOS_DEPLOYMENT_TARGET = 18.0
 TVOS_DEPLOYMENT_TARGET = 18.0
+MACOSX_DEPLOYMENT_TARGET = 15.0
 
 SWIFT_VERSION = 6.0
 SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
@@ -21,6 +22,8 @@ SWIFT_EMIT_LOC_STRINGS = YES
 ENABLE_USER_SCRIPT_SANDBOXING = YES
 // The package's OpenSSL is a dynamic framework embedded in the app: the app must find it in its Frameworks folder
 LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks
+// A macOS bundle keeps its frameworks in Contents/Frameworks, next to Contents/MacOS
+LD_RUNPATH_SEARCH_PATHS[sdk=macosx*] = $(inherited) @executable_path/../Frameworks
 CODE_SIGN_STYLE = Automatic
 
 GENERATE_INFOPLIST_FILE = YES
@@ -37,5 +40,17 @@ INFOPLIST_KEY_UIStatusBarHidden = YES
 INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
 INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
 INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES
+
+// macOS: App Sandbox (network client and server for Bonjour and the stream, see Config/DELOS-macOS.entitlements) and
+// the hardened runtime. A build without a team is signed ad hoc (tools/mac.sh), which the data protection keychain
+// does not accept: the Mac keeps its secrets in the login keychain (KeychainStorage).
+// tools/mac.sh signs ad hoc with DELOS_ENTITLEMENTS=DELOS-macOS-adhoc.entitlements (library validation off)
+DELOS_ENTITLEMENTS = DELOS-macOS.entitlements
+CODE_SIGN_ENTITLEMENTS[sdk=macosx*] = Config/$(DELOS_ENTITLEMENTS)
+ENABLE_HARDENED_RUNTIME[sdk=macosx*] = YES
+// The scene manifest and the launch screen of UIKit mean nothing on the Mac
+INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=macosx*] = NO
+INFOPLIST_KEY_UILaunchScreen_Generation[sdk=macosx*] = NO
+INFOPLIST_KEY_NSHumanReadableCopyright[sdk=macosx*] = DELOS for Apple is free software under the GNU General Public License, version 3.
 
 #include? "Local.xcconfig"

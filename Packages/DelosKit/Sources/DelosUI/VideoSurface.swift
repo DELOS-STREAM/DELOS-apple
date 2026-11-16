@@ -10,6 +10,9 @@ struct VideoSurface {
     /// Whether a touch of the system pointer (a mouse or trackpad) is ignored: the mouse's own input already moves the
     /// PC's pointer.
     var ignoresPointer: @MainActor () -> Bool = { false }
+    /// Whether the stream wants the system pointer locked to it (the Mac): hidden and detached from the mouse, whose
+    /// motion the PC gets as relative movement.
+    var capturesPointer = false
 }
 
 #if canImport(UIKit)
@@ -105,23 +108,41 @@ final class VideoHostView: UIView {
 }
 #elseif canImport(AppKit)
 import AppKit
+import DelosInput
 
 extension VideoSurface: NSViewRepresentable {
     func makeNSView(context: Context) -> VideoHostView {
         let view = VideoHostView(video: layer)
-        view.onDisplay = onDisplay
+        update(view)
         return view
     }
 
     func updateNSView(_ view: VideoHostView, context: Context) {
+        update(view)
+    }
+
+    static func dismantleNSView(_ view: VideoHostView, coordinator: ()) {
+        view.releasePointer()
+    }
+
+    @MainActor private func update(_ view: VideoHostView) {
         view.onDisplay = onDisplay
+        view.capturesPointer = capturesPointer
     }
 }
 
-/// The AppKit host of the video layer on the Mac.
+/// The AppKit host of the video layer on the Mac. It reports the screen the window is on, keeps that screen at its
+/// highest refresh rate, and locks the system pointer to the stream while the stream wants the mouse (``PointerLock``).
 final class VideoHostView: NSView {
     private let video: AVSampleBufferDisplayLayer
     var onDisplay: @MainActor (DisplayInfo) -> Void = { _ in }
+    /// A stream wants the mouse: it runs and its menu is closed.
+    var capturesPointer = false {
+        didSet { pointer.setWanted(capturesPointer) }
+    }
+    private lazy var pointer = PointerLock(backend: AppKitPointerBackend { [weak self] in self?.parkingPoint() })
+    private var refreshLink: CADisplayLink?
+    private var observers: [NSObjectProtocol] = []
 
     init(video: AVSampleBufferDisplayLayer) {
         self.video = video
@@ -143,12 +164,62 @@ final class VideoHostView: NSView {
         CATransaction.commit()
     }
 
+    /// Gives the pointer back (the stream screen is gone).
+    func releasePointer() {
+        pointer.release()
+    }
+
+    /// Where the pointer is parked while locked: the middle of the video, in Core Graphics' display coordinates.
+    private func parkingPoint() -> CGPoint? {
+        guard let window, let main = NSScreen.screens.first else { return nil }
+        let onScreen = window.convertToScreen(convert(bounds, to: nil))
+        return PointerLockGeometry.parkingPoint(windowFrame: onScreen, mainScreenHeight: main.frame.height)
+    }
+
+    private func updateEligibility() {
+        pointer.setEligible(NSApp.isActive && window?.isKeyWindow == true)
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard let screen = window?.screen else { return }
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers.removeAll()
+        refreshLink?.invalidate()
+        refreshLink = nil
+        guard let window, let screen = window.screen else {
+            pointer.setEligible(false)
+            return
+        }
+        // The pointer is the stream's only while the app is active and this window is the key window: another app, the
+        // menu bar and other windows can be clicked otherwise
+        let center = NotificationCenter.default
+        let names: [(Notification.Name, AnyObject?)] = [
+            (NSApplication.didBecomeActiveNotification, nil), (NSApplication.didResignActiveNotification, nil),
+            (NSWindow.didBecomeKeyNotification, window), (NSWindow.didResignKeyNotification, window),
+        ]
+        for (name, object) in names {
+            observers.append(center.addObserver(forName: name, object: object, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateEligibility() }
+            })
+        }
+        observers.append(center.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pointer.release() }
+        })
+        updateEligibility()
+
+        // Keeps the screen at its highest refresh rate: a ProMotion display slows down when nothing asks for more
+        let fastest = Float(screen.maximumFramesPerSecond)
+        let link = displayLink(target: self, selector: #selector(refreshTick))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: fastest, maximum: fastest, preferred: fastest)
+        link.add(to: .main, forMode: .common)
+        refreshLink = link
+
         let size = screen.convertRectToBacking(screen.frame).size
         let info = DisplayInfo(pixelWidth: Int(size.width), pixelHeight: Int(size.height), maxFramesPerSecond: screen.maximumFramesPerSecond)
+        // Not inside the view update that added this view
         Task { @MainActor [onDisplay] in onDisplay(info) }
     }
+
+    @objc private func refreshTick(_ link: CADisplayLink) {}
 }
 #endif

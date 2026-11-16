@@ -14,7 +14,7 @@ the website is [delos-stream.com](https://delos-stream.com).
 |---|---|
 | iPhone and iPad | In development |
 | Apple TV | Planned after iPhone and iPad |
-| Mac | Planned after Apple TV |
+| Mac | In development |
 
 The work is tracked in the [issues](https://github.com/Meitoncz/DELOS-apple/issues) and their milestones.
 

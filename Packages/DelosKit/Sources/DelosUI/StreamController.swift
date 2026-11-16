@@ -83,6 +83,8 @@ final class StreamController {
     @ObservationIgnored private var swipe = MenuSwipe()
     /// The app went to the background during the stream: the connection was closed and is opened again on return.
     @ObservationIgnored private(set) var suspended = false
+    /// The leaving that runs (``leave(quit:)``).
+    @ObservationIgnored private var leaving: Task<Void, Never>?
 
     init(makeSteps: @escaping @MainActor () -> any StreamSteps) {
         self.makeSteps = makeSteps
@@ -285,10 +287,15 @@ final class StreamController {
 
     // MARK: Leaving
 
-    /// Leaves the stream: Disconnect (`quit` false) keeps the app running on the PC, Quit app ends it there too.
+    /// Leaves the stream: Disconnect (`quit` false) keeps the app running on the PC, Quit app ends it there too. A
+    /// call while the stream is already leaving returns when that leaving is over (the app waits for it before it
+    /// quits).
     func leave(quit: Bool) async {
         switch phase {
-        case .leaving, .ended: return
+        case .leaving:
+            await leaving?.value
+            return
+        case .ended: return
         case .failed:
             phase = .ended
             return
@@ -302,12 +309,17 @@ final class StreamController {
         let steps = self.steps
         phase = .leaving(quit ? L("stream_exit_quitting", steps.appName) : L("stream_exit_disconnecting"))
         stopInput()
-        await endAttempt().value
-        if quit, await !steps.quitApp() {
-            phase = .failed(StreamText.quitFailure(appName: steps.appName))
-            return
+        let stopped = endAttempt()
+        let task = Task { @MainActor [weak self] in
+            await stopped.value
+            if quit, await !steps.quitApp() {
+                self?.phase = .failed(StreamText.quitFailure(appName: steps.appName))
+                return
+            }
+            self?.phase = .ended
         }
-        phase = .ended
+        leaving = task
+        await task.value
     }
 
     /// Back to library on the result overlay.

@@ -148,6 +148,10 @@ struct TextPill: View {
             .submitLabel(.done)
             .autocorrectionDisabled()
             .onSubmit(onSubmit)
+            #if os(macOS)
+            // The pill has its own focus ring; AppKit would draw its blue one around the field as well
+            .focusEffectDisabled()
+            #endif
     }
 }
 

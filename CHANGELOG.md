@@ -63,6 +63,13 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - The Devices screen, the third button of the top navigation (Settings, Profile, Devices): the paired PCs with their
   status, and a menu per PC to connect, make it the default, rename it, wake it, unpair it or remove it; the last
   circle pairs a new PC.
+- DELOS for Mac (macOS 15 or later, native SwiftUI, App Sandbox, hardened runtime): one resizable window that opens at
+  1920 × 1080 points and goes full screen, the same screens and settings as on the other platforms, a Mac's battery in
+  the status bar and a back button for the mouse. During a stream the keyboard, the mouse (the pointer is hidden and
+  locked to the stream, its motion sent as relative movement) and game controllers go to the PC; Control + Option +
+  Shift + M, or holding Escape for a second, opens the stream menu and frees the pointer, as does L3 + R3. Command-Q,
+  Quit and closing the window disconnect the stream first. `sh tools/mac.sh` builds an ad-hoc signed copy, starts it
+  and takes a screenshot of its window. Not yet tried with a real stream.
 
 ### Changed
 
