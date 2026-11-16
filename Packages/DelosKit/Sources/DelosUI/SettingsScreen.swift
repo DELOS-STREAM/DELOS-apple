@@ -10,8 +10,9 @@ import AppKit
 
 /// Settings (`SettingsScreen` of DELOS for Android) on a stage that is not compact: the title, the tabs between their
 /// L1 and R1 badges, the rows of the selected tab and, on the right, the description panel with the focused row's help.
-/// The tabs ported so far are Stream and Audio (``SettingsTab``); search, the impact chips and the compact layout with
-/// the help dock under the list are not ported yet.
+/// The tabs ported so far are Stream, Audio, Controls and Appearance (``SettingsTab``); search, the impact chips and the
+/// compact layout with the help dock under the list are not ported yet. The appearance rows change the current
+/// profile's ``Appearance``, which the whole interface shows at once, and store it.
 ///
 /// Controller: up and down move between the rows (a held Up stops at the first row; a new press there goes on to the
 /// top navigation), left and right change the focused row's value (a held direction speeds a slider up), A changes it
@@ -24,27 +25,44 @@ struct SettingsScreen: View {
     let focus: FocusModel
     let navigator: Navigator
     let feedback: Feedback?
+    /// The current profile's appearance, owned by ``DelosRoot``.
+    @Binding var appearance: Appearance
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @State private var form: StreamSettingsForm
-    @State private var tab = SettingsTab.stream
+    @State private var tab: SettingsTab
     /// The row whose list of values is open, and the focus inside the list.
     @State private var picker: (id: String, focus: FocusModel)?
     @State private var rowFrames: [String: CGRect] = [:]
     private let store = StreamSettingsStore()
+    private let appearances = AppearanceStore()
 
     /// The row the screen opens with.
     static let initialFocus = StreamSettingsForm.resolution
 
-    init(profileID: String, focus: FocusModel, navigator: Navigator, feedback: Feedback?) {
+    init(profileID: String, appearance: Binding<Appearance>, focus: FocusModel, navigator: Navigator, feedback: Feedback?, tab: SettingsTab = .stream) {
         self.profileID = profileID
+        _appearance = appearance
         self.focus = focus
         self.navigator = navigator
         self.feedback = feedback
+        _tab = State(initialValue: tab)
         _form = State(initialValue: StreamSettingsForm(settings: StreamSettingsStore().load(profile: profileID), device: .current))
     }
 
-    private var rows: [SettingRow] { form.rows(tab) }
+    /// The first row of [tab], which the screen opens with on that tab.
+    static func firstRow(_ tab: SettingsTab) -> String {
+        switch tab {
+        case .stream: StreamSettingsForm.resolution
+        case .audio: StreamSettingsForm.hostAudio
+        case .controls: AppearanceForm.haptics
+        case .appearance: AppearanceForm.theme
+        }
+    }
+
+    private var appearanceForm: AppearanceForm { AppearanceForm(appearance: appearance) }
+
+    private var rows: [SettingRow] { form.rows(tab) + appearanceForm.rows(tab) }
     private var focusedRow: SettingRow? { rows.first { focus.focused == AnyHashable($0.id) } }
 
     var body: some View {
@@ -78,6 +96,7 @@ struct SettingsScreen: View {
         .coordinateSpace(.named(Self.space))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onChange(of: form.settings) { _, now in store.save(now, profile: profileID) }
+        .onChange(of: appearance) { _, now in appearances.save(now, profile: profileID) }
         .onAppear {
             navigator.commandCapture = { command in capture(command) }
         }
@@ -137,7 +156,7 @@ struct SettingsScreen: View {
                 direction *= StreamSettingsForm.sliderAcceleration(steps: (range.upperBound - range.lowerBound) / step, repeatCount: navigator.commandRepeat)
             }
             if case .toggle = row.value { return true }
-            if form.step(row.id, by: direction) { feedback?.play(.move) }
+            if step(row.id, by: direction) { feedback?.play(.move) }
             return true
         case .up:
             // A held Up stops at the first row; only a new press there goes on to the top navigation
@@ -165,7 +184,17 @@ struct SettingsScreen: View {
 
     /// A on a row: a toggle flips, a choice or a slider steps forward (`SettingRow.activate` of DELOS for Android).
     private func activate(_ row: SettingRow) {
-        form.step(row.id, by: 1)
+        step(row.id, by: 1)
+    }
+
+    /// Steps row [id] of the stream settings or of the appearance, which changes live.
+    @discardableResult
+    private func step(_ id: String, by direction: Int) -> Bool {
+        guard AppearanceForm.ids.contains(id) else { return form.step(id, by: direction) }
+        var next = appearanceForm
+        guard next.step(id, by: direction) else { return false }
+        appearance = next.appearance
+        return true
     }
 
     /// A tap on a row (it is focused already): a toggle flips, a choice opens its list, a slider waits for its track.
@@ -173,7 +202,7 @@ struct SettingsScreen: View {
         switch row.value {
         case .toggle:
             feedback?.play(.select)
-            form.step(row.id, by: 1)
+            step(row.id, by: 1)
         case .choice(_, _, let selected):
             feedback?.play(.open)
             picker = (row.id, FocusModel(initial: ChoicePicker.optionID(selected ?? 0)))
@@ -184,7 +213,13 @@ struct SettingsScreen: View {
 
     private func pick(_ id: String, _ index: Int) {
         feedback?.play(.select)
-        form.pick(id, option: index)
+        if AppearanceForm.ids.contains(id) {
+            var next = appearanceForm
+            next.pick(id, option: index)
+            appearance = next.appearance
+        } else {
+            form.pick(id, option: index)
+        }
         closePicker()
     }
 
@@ -196,7 +231,7 @@ struct SettingsScreen: View {
         guard next != tab else { return }
         feedback?.play(sound)
         tab = next
-        if let first = form.rows(next).first { focus.focus(AnyHashable(first.id)) }
+        if let first = rows.first { focus.focus(AnyHashable(first.id)) }
     }
 }
 
@@ -241,7 +276,7 @@ private struct SettingsTabs: View {
     let onSelect: (SettingsTab) -> Void
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.reducedMotion) private var reduceMotion
     @Namespace private var pill
 
     var body: some View {
@@ -298,7 +333,7 @@ struct SettingRowView: View {
     var onSlide: (Int) -> Void = { _ in }
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.reducedMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: stage.px(22)) {
@@ -334,11 +369,17 @@ struct SettingRowView: View {
         case .choice(let label, _, _):
             HStack(spacing: stage.px(12)) {
                 SymbolView(symbol: Symbols.chevronLeft, size: 30, color: arrows)
-                Text(label)
-                    .font(DelosFonts.figtree(stage.px(23)))
-                    .foregroundStyle(colors.text2.color)
-                    .lineLimit(1)
-                    .frame(maxWidth: stage.px(360), alignment: .trailing)
+                // The dot stays beside the value, as on Android
+                HStack(spacing: stage.px(12)) {
+                    if let swatch = row.swatch {
+                        Circle().fill(swatch.color).frame(width: stage.px(26), height: stage.px(26))
+                    }
+                    Text(label)
+                        .font(DelosFonts.figtree(stage.px(23)))
+                        .foregroundStyle(colors.text2.color)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: stage.px(row.swatch == nil ? 360 : 398), alignment: .trailing)
                 SymbolView(symbol: Symbols.chevronRight, size: 30, color: arrows)
                     .offset(x: stage.px(9))
             }
@@ -356,7 +397,7 @@ private struct SettingSwitch: View {
     let on: Bool
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.reducedMotion) private var reduceMotion
 
     var body: some View {
         let width = 74.0, height = 42.0, knob = height - 12
@@ -388,7 +429,7 @@ private struct SettingSlider: View {
     let onChange: (Int) -> Void
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.reducedMotion) private var reduceMotion
     @State private var dragging: Int?
 
     var body: some View {
@@ -467,11 +508,14 @@ private struct DescriptionPanel: View {
                 .foregroundStyle(colors.text.color)
                 .padding(.top, stage.px(8))
             ScrollView(.vertical, showsIndicators: false) {
-                Text(row?.help ?? tab.help)
-                    .font(DelosFonts.figtree(stage.px(22)))
-                    .lineSpacing(stage.px(22 * 0.45))
-                    .foregroundStyle(colors.text2.color)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: stage.px(18)) {
+                    Text(row?.help ?? tab.help)
+                        .font(DelosFonts.figtree(stage.px(22)))
+                        .lineSpacing(stage.px(22 * 0.45))
+                        .foregroundStyle(colors.text2.color)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if row?.id == AppearanceForm.palette { swatches }
+                }
             }
         }
         .padding(stage.px(44))
@@ -479,6 +523,23 @@ private struct DescriptionPanel: View {
         .background {
             RoundedRectangle(cornerRadius: stage.px(34)).fill(colors.surface.color)
                 .overlay(RoundedRectangle(cornerRadius: stage.px(34)).strokeBorder(colors.line.color, lineWidth: stage.px(1)))
+        }
+    }
+
+    /// The palette's three colors, only for the palette row: main, secondary and accent.
+    private var swatches: some View {
+        HStack(spacing: stage.px(16)) {
+            ForEach([(colors.accent, L("settings_screen_palette_main")), (colors.accent2, L("settings_screen_palette_secondary")),
+                     (colors.accent3, L("settings_screen_palette_accent"))], id: \.1) { color, name in
+                VStack(spacing: stage.px(8)) {
+                    RoundedRectangle(cornerRadius: stage.px(18)).fill(color.color)
+                        .overlay(RoundedRectangle(cornerRadius: stage.px(18)).strokeBorder(colors.line.color, lineWidth: stage.px(1)))
+                        .frame(width: stage.px(120), height: stage.px(72))
+                    Text(name)
+                        .font(DelosFonts.figtree(stage.px(18)))
+                        .foregroundStyle(colors.text2.color)
+                }
+            }
         }
     }
 }

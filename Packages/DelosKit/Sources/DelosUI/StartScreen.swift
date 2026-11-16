@@ -90,24 +90,39 @@ public struct DelosRoot: View {
     @State private var sideMenu: FocusModel?
     private let appearances = AppearanceStore()
     private let streamSettings = StreamSettingsStore()
+    /// The tab Settings opens with (debug builds: `-DelosSettings <tab>`).
+    private let settingsTab: SettingsTab
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 
     public init() {
         let profiles = ProfileStore()
         let hosts = HostStore()
         _profiles = State(initialValue: profiles)
         _hosts = State(initialValue: hosts)
-        _navigator = State(initialValue: profiles.isFirstRun
-            ? Navigator(root: .boot, focus: "begin") : Navigator(root: .start, focus: Self.startFocus(hosts)))
+        let navigator = profiles.isFirstRun
+            ? Navigator(root: .boot, focus: "begin") : Navigator(root: .start, focus: Self.startFocus(hosts))
         var appearance = profiles.current.map { AppearanceStore().load(profile: $0.id) } ?? Appearance()
+        var settingsTab = SettingsTab.stream
         #if DEBUG
-        // Screenshots of each background and theme (docs/BUILDING.md): -DelosBackground <kind>, -DelosTheme light
+        // Screenshots (docs/BUILDING.md): -DelosBackground <kind>, -DelosTheme light, -DelosPalette <name>, and
+        // -DelosSettings <tab> opens Settings on that tab, focused on its first row or on -DelosFocus <row id>
         let defaults = UserDefaults.standard
         if let kind = defaults.string(forKey: "DelosBackground").flatMap(BackgroundKind.init(rawValue:)) {
             appearance.background = kind
         }
         if defaults.string(forKey: "DelosTheme") == "light" { appearance.dark = false }
+        if let palette = defaults.string(forKey: "DelosPalette").flatMap(PaletteName.init(rawValue:)) {
+            appearance.palette = palette
+        }
+        if let name = defaults.string(forKey: "DelosSettings"), let tab = SettingsTab.allCases.first(where: { "\($0)" == name }),
+           !profiles.isFirstRun {
+            settingsTab = tab
+            navigator.openFromNavigation(.settings, focus: defaults.string(forKey: "DelosFocus") ?? SettingsScreen.firstRow(tab))
+        }
         #endif
+        _navigator = State(initialValue: navigator)
         _appearance = State(initialValue: appearance)
+        self.settingsTab = settingsTab
     }
 
     private var colors: DelosColors {
@@ -121,7 +136,7 @@ public struct DelosRoot: View {
                 let entry = navigator.stack[navigator.stack.count - 1]
                 screen(entry)
                     .id(ObjectIdentifier(entry.focus))
-                    .transition(.asymmetric(
+                    .transition(systemReduceMotion || appearance.reducedMotion ? .opacity : .asymmetric(
                         insertion: .opacity.combined(with: .scale(scale: 1.035)),
                         removal: .opacity.combined(with: .scale(scale: 0.96))
                     ))
@@ -147,6 +162,7 @@ public struct DelosRoot: View {
         .environment(hosts)
         .environment(navigator)
         .environment(\.delosColors, colors)
+        .environment(\.reducedMotion, systemReduceMotion || appearance.reducedMotion)
         .preferredColorScheme(colors.dark ? .dark : .light)
         .onChange(of: profiles.current?.id) { _, id in
             appearance = id.map { appearances.load(profile: $0) } ?? Appearance()
@@ -268,7 +284,9 @@ public struct DelosRoot: View {
         case .stream(let hostID, let appID):
             StreamScreen(hostID: hostID, appID: appID, settings: streamSettings.load(profile: profiles.current?.id ?? ""))
         case .settings:
-            SettingsScreen(profileID: profiles.current?.id ?? "", focus: entry.focus, navigator: navigator, feedback: feedback)
+            SettingsScreen(
+                profileID: profiles.current?.id ?? "", appearance: $appearance, focus: entry.focus, navigator: navigator,
+                feedback: feedback, tab: settingsTab)
         }
     }
 

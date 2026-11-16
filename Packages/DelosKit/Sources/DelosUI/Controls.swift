@@ -10,7 +10,7 @@ struct PillButton: View {
     let focused: Bool
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.reducedMotion) private var reduceMotion
     @State private var sweep = 0.0
 
     var body: some View {
@@ -155,7 +155,7 @@ private struct FocusLook: ViewModifier {
     let anchor: UnitPoint
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.reducedMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content

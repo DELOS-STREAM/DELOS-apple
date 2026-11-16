@@ -20,7 +20,7 @@ struct TopNav: View {
     let focus: FocusModel
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.reducedMotion) private var reduceMotion
 
     static func buttons(current: Screen, onSettings: @escaping @MainActor () -> Void, onProfile: @escaping @MainActor () -> Void) -> [NavButton] {
         [

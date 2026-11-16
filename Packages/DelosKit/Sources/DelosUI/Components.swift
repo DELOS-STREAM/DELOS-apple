@@ -79,7 +79,7 @@ struct CircleItem: View {
     let focused: Bool
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.reducedMotion) private var reduceMotion
 
     var body: some View {
         let side = diameter ?? (big ? 220.0 : 176.0)

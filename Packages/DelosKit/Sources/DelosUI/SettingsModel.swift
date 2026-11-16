@@ -2,15 +2,18 @@ import DelosCore
 import DelosData
 import Foundation
 
-/// A tab of Settings (`SettingsTab` of DELOS for Android), as far as its rows are ported: Stream (resolution, frame rate,
-/// bitrate, codec) and Audio (playing audio on the PC, which Android files under Audio).
+/// A tab of Settings (`SettingsTab` of DELOS for Android), as far as its rows are ported, in Android's order: Stream
+/// (resolution, frame rate, bitrate, codec), Audio (playing audio on the PC, interface sounds), Controls (interface
+/// haptics) and Appearance (``AppearanceForm``).
 enum SettingsTab: CaseIterable, Hashable, Sendable {
-    case stream, audio
+    case stream, audio, controls, appearance
 
     var label: String {
         switch self {
         case .stream: L("settings_tab_stream")
         case .audio: L("settings_tab_audio")
+        case .controls: L("settings_tab_controls")
+        case .appearance: L("settings_tab_appearance")
         }
     }
 
@@ -18,6 +21,8 @@ enum SettingsTab: CaseIterable, Hashable, Sendable {
         switch self {
         case .stream: Symbols.cast
         case .audio: Symbols.graphicEq
+        case .controls: Symbols.sportsEsports
+        case .appearance: Symbols.appearance
         }
     }
 
@@ -26,6 +31,8 @@ enum SettingsTab: CaseIterable, Hashable, Sendable {
         switch self {
         case .stream: L("settings_tab_stream_description")
         case .audio: L("settings_tab_audio_description")
+        case .controls: L("settings_tab_controls_description")
+        case .appearance: L("settings_tab_appearance_description")
         }
     }
 
@@ -59,6 +66,8 @@ struct SettingRow: Identifiable, Equatable {
     /// The description panel's text: the chosen value and what it means, then what the setting does
     /// (`SettingsHelp.details`).
     let help: String
+    /// A color dot before a choice's value (`RowValue.Choice.swatch` of DELOS for Android: the palette's main hue).
+    var swatch: RGBA? = nil
 }
 
 /// What this device offers Settings → Stream (`SettingsCapabilities` of DELOS for Android).
@@ -98,6 +107,7 @@ struct StreamSettingsForm: Equatable {
         switch tab {
         case .stream: [resolutionRow, frameRateRow, bitrateRow, codecRow]
         case .audio: [hostAudioRow]
+        case .controls, .appearance: []
         }
     }
 

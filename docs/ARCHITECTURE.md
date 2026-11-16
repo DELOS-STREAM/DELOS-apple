@@ -209,7 +209,8 @@ Not glass: primary buttons (solid main color, as on Android), focus rings, progr
 bottom; over it a layer with the base gradient (`hsl(base, 40, 8)` → `hsl(base, 38, 5)` dark, `hsl(base, 45, 96)` →
 `hsl(base, 38, 90)` light) and the background, blended with "screen" in the dark theme. Everything is drawn on the
 prototype's 960 × 540 canvas, scaled uniformly and extended along the longer axis (`BackgroundParams.canvas(for:)`).
-The clock runs at 0.96 per second, 0.15 of that with reduced motion. `BackgroundParams` is Android's `BgParams`
+The clock runs at 0.96 per second, 0.15 of that with the system's Reduce Motion (the profile's Animations setting
+leaves the background's pace alone, as on Android). `BackgroundParams` is Android's `BgParams`
 (hues, saturations, `s()`) with `lights()`, the three colors of the shader backgrounds.
 
 | Kind | Android | Apple |
@@ -225,8 +226,8 @@ Metal's `fmod` keeps the sign of `x`), `atan` is `atan2`, the hash uses `precise
 last multiple of 12 pixels, which is the edge only at 16:9, and on a wider screen the waves would slope down to the
 corner. The fallback of Android below version 13 (Aurora in place of a shader) is not needed. The focused game's colors
 (`clock.tints`) and the game background are not ported yet; Material You has no
-counterpart. In debug builds `-DelosBackground <kind>` and `-DelosTheme light` pick the background and the theme
-([BUILDING.md](BUILDING.md)).
+counterpart. In debug builds `-DelosBackground <kind>`, `-DelosTheme light` and `-DelosPalette <name>` pick the
+background, the theme and the palette ([BUILDING.md](BUILDING.md)).
 
 ## Settings
 
@@ -268,8 +269,24 @@ menu's bitrate), the summary of the catalog or no value line is used instead.
 | L1, R1 | The previous or next tab (the tabs are never focused, as on Android) |
 | Tap | Focuses the row, so the panel shows its help; a switch also flips, a choice opens the list of its values (`ChoicePicker`: a glass card at the row's right end, the current value checked; a tap picks, a tap beside it closes it; up, down, A and B work in it too), a slider waits for its track (a tap or a drag sets the value when the finger lifts). A tab is tapped to select it |
 
-Not ported yet: the other tabs, search, the impact chips, the compact layout (the help dock under the list), the
-gliding focus plate and the auto-scrolling help, and Android's link guidance rows.
+**Appearance** (`AppearanceForm`, the native rows of Android's `nativeSettings`): the Appearance tab has Theme (Dark,
+Light), Color palette (all eight; the value shows a dot of the palette's main hue, `hsl(accent, 90, 60)`, and the panel
+the main, secondary and accent colors as 120 × 72 swatches), Animated background (all eleven) and Animations (Full,
+Reduced); Interface sounds sits in the Audio tab and Interface haptics in the Controls tab, all under the Interface
+section, as on Android. A change goes into `DelosRoot`'s appearance through a binding, so the colors, the backdrop behind
+Settings, the sounds and the haptics change at once, and `SettingsScreen` stores it for the profile. The help is
+`NativeSettingsHelp.details` (the value with its line, then the row's description); the background row shows only the
+chosen background's line, because Android's description names its Android version. Reduced animations set the
+`reducedMotion` environment value (`LocalReducedMotion`; also on with the system's Reduce Motion), which the focus
+springs, the tabs, the switches and the screen transition (a plain fade) follow.
+
+Not in the Appearance tab: Material You (no counterpart), the game colors, the game background with its blur and
+opacity (no game background yet), the clock format (the status bar has no clock yet) and the interface scale (Android's
+`uiScale` scales the text and zooms the bars of every screen through the stage; the stage has no text scale yet).
+
+Not ported yet: the Display, Covers, Devices and About tabs, the other rows of Audio and Controls, search, the impact
+chips, the compact layout (the help dock under the list), the gliding focus plate and the auto-scrolling help, and
+Android's link guidance rows.
 
 ## Profiles and the first run
 
@@ -473,6 +490,8 @@ has no such setting; both are in `Config/Info.plist`, which Xcode merges with th
   rate and codec lists for several displays and decoders, the formats each codec offers, the replacement of values a
   device lacks; the stream plan with stored settings (display default, chosen resolution, bitrate, codec, audio on the
   PC, `sops` off); the rows' order, labels and help, stepping and wrapping, picking, the slider's grid and speed-up; the
+  appearance rows (their tabs, every theme, palette, background and animation option with Android's labels, the palette
+  dot, stepping, picking and storing per profile); the
   navigation between Settings and Profile, which screens have the navigation and the side menu, which commands repeat.
 - A throwaway debug harness in the iPhone 18 Pro Max simulator (iOS 27.2, 2026-11-16), removed afterwards: the loader
   with a fake stage, the result overlay of a timed-out RTSP handshake, the stream menu, and the two H.264 test-pattern
