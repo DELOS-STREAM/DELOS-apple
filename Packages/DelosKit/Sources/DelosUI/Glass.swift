@@ -6,8 +6,8 @@ enum GlassRole {
     /// Something to press or to focus: circles, chips, secondary pills, the back button, text fields. Regular glass
     /// that reacts to touch (`interactive`), tinted with the surface token.
     case control
-    /// The app's own bars: the top navigation. Clear glass, the most transparent and refractive kind, with almost no
-    /// tint, so the background shows strongly through it (owner's choice: very transparent, a strong effect).
+    /// The app's own bars: the top navigation. Regular glass with almost no tint: see-through with a strong refraction,
+    /// and it adapts to the background behind it (clear glass would not, and its icons vanished over a bright hero).
     case chrome
     /// Something to read: cards, panels, toasts, the PIN digits. Regular glass, not interactive, a little more tint
     /// so text on it keeps its contrast.
@@ -57,8 +57,10 @@ struct GlassShape<S: Shape>: View {
             base = .clear
             share = 0.85
         } else if role == .chrome {
-            base = .clear
-            share = 0.12
+            // Regular glass adapts its shade to what is behind it (clear glass does not), so the icons stay legible
+            // over a bright game background; the tint is almost nothing, so it stays see-through
+            base = .regular
+            share = 0.1
         } else {
             base = .regular
             share = role == .panel ? 0.6 : 0.45

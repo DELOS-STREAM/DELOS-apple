@@ -308,7 +308,7 @@ one role, so the same kind of element looks the same everywhere:
 | Role | Elements | Glass |
 |---|---|---|
 | `control` | Circles, chips, secondary pills, the back button, text fields: what can be pressed or focused | Regular, tinted with the surface token at 45 % of its alpha, interactive on iPhone and iPad (it reacts to touch) |
-| `chrome` | The top navigation: the app's own bar | Clear (the most transparent and refractive kind), tinted at 12 %, interactive on iPhone and iPad; the owner asked for a very transparent, strong effect |
+| `chrome` | The top navigation: the app's own bar | Regular, tinted at only 10 %, interactive on iPhone and iPad: see-through and strongly refracting, and it adapts to the background (clear glass does not, and the icons vanished over a bright game background) |
 | `panel` | Cards, panels, the context menu and the dialog, the PIN digits: what is read | Regular, tinted at 60 %, not interactive, for text contrast |
 | over the video (`glassOverMedia`) | The stream menu and anything shown over the stream | Clear (the picture shows through), tinted with the scrim token for contrast |
 
