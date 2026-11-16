@@ -448,9 +448,8 @@ struct SettingRowView: View {
         switch row.value {
         case .toggle(let on):
             SettingSwitch(on: on)
-        case .choice(let label, _, _):
-            HStack(spacing: stage.px(12)) {
-                SymbolView(symbol: Symbols.chevronLeft, size: 30, color: arrows)
+        case .choice(let label, let options, let selected):
+            ChoiceValue(index: selected ?? 0, count: options.count, arrows: arrows) {
                 // The dot stays beside the value, as on Android
                 HStack(spacing: stage.px(12)) {
                     if let swatch = row.swatch {
@@ -462,8 +461,6 @@ struct SettingRowView: View {
                         .lineLimit(1)
                 }
                 .frame(maxWidth: stage.px(row.swatch == nil ? 360 : 398), alignment: .trailing)
-                SymbolView(symbol: Symbols.chevronRight, size: 30, color: arrows)
-                    .offset(x: stage.px(9))
             }
         case let .slider(value, range, step, divisor, unit):
             SettingSlider(value: value, range: range, step: step, divisor: divisor, unit: unit, focused: focused, onChange: onSlide)

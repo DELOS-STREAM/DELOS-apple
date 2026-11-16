@@ -198,6 +198,7 @@ public struct DelosRoot: View {
         .environment(homeArt)
         .environment(navigator)
         .environment(layers)
+        .environment(toasts)
         .environment(\.modalFocus, sideMenu ?? (layers.isOpen ? layers.focus : nil))
         #if os(tvOS)
         // The focus engine keeps its focus on an item that can no longer take it until the next press: when the focus
@@ -281,7 +282,8 @@ public struct DelosRoot: View {
             // The side menu takes every command while it is open
             switch command {
             case .back, .menu: closeSideMenu(sound: .back)
-            case .up, .down, .accept: if sideMenu.handle(command) { feedback.play(command == .accept ? .select : .move) }
+            case .accept: feedback.activate(sideMenu.acceptCue) { sideMenu.handle(.accept) }
+            case .up, .down: if sideMenu.handle(command) { feedback.play(.move) }
             case .left, .right, .previousTab, .nextTab, .options, .toastAction: break
             }
             return
@@ -326,8 +328,13 @@ public struct DelosRoot: View {
             }
             return
         }
+        if command == .accept {
+            // The item's own cue (a Cancel or Back goes BACK), unless its action played one
+            feedback.activate(navigator.focus.acceptCue) { navigator.focus.handle(.accept) }
+            return
+        }
         guard navigator.focus.handle(command) else { return }
-        feedback.play(command == .accept ? .select : .move)
+        feedback.play(.move)
     }
 
     @ViewBuilder private func screen(_ entry: Navigator.Entry) -> some View {

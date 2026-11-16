@@ -61,7 +61,7 @@ struct DialogLayer: View {
                 FocusItem(id: Self.confirmID, model: layers.focus, action: confirm) { focused in
                     PillButton(label: spec.confirm, icon: Symbols.check, primary: true, focused: focused)
                 }
-                FocusItem(id: Self.cancelID, model: layers.focus, action: layers.back) { focused in
+                FocusItem(id: Self.cancelID, model: layers.focus, clickCue: .back, action: layers.back) { focused in
                     PillButton(label: L("common_cancel"), focused: focused)
                 }
             }

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// A CSS `cubic-bezier` timing curve (`CubicBezierEasing` of Compose): the time is solved for x, the progress is y.
 struct CubicBezier: Sendable {
@@ -43,6 +44,18 @@ enum Motion {
     static let ease = CubicBezier(0.25, 0.1, 0.25, 1)
 
     static let exit = 240.0
+    /// Focus: the spring of a scale, a ring, a lifted element (`Motion.FOCUS`).
+    static let focus = 420.0
+    /// The focus ring's alpha arriving and leaving.
+    static let ringIn = 140.0
+    static let ringOut = 110.0
+    /// Regular and Fill glyphs of an icon cross-fade this long.
+    static let iconFill = 350.0
+    /// A choice value slides out of the way of the next one, and the chevron on that side nudges.
+    static let valueSlide = 300.0
+    static let chevronBump = 320.0
+    static let valueSlideDistance = 22.0
+    static let chevronBumpDistance = 7.0
     static let press = 120.0
     static let pressHold = 130.0
     static let fade = 280.0
@@ -69,6 +82,11 @@ enum Motion {
     static func progress(_ time: Double, delay: Double, duration: Double, _ easing: CubicBezier) -> Double {
         easing(min(max((time - delay) / duration, 0), 1))
     }
+
+    /// The prototype's `--ease-spring` over [ms] milliseconds, as a SwiftUI animation (overshoots a little).
+    static func spring(_ ms: Double) -> Animation { .timingCurve(0.34, 1.56, 0.64, 1, duration: ms / 1000) }
+    /// The prototype's `--ease-out` over [ms] milliseconds.
+    static func out(_ ms: Double) -> Animation { .timingCurve(0.16, 1, 0.3, 1, duration: ms / 1000) }
 
     static func lerp(_ from: Double, _ to: Double, _ fraction: Double) -> Double { from + (to - from) * fraction }
 }

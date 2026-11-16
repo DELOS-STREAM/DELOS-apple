@@ -42,6 +42,7 @@ public final class FocusModel {
     @ObservationIgnored private var actions: [AnyHashable: @MainActor () -> Void] = [:]
     @ObservationIgnored private var moves: [AnyHashable: [FocusDirection: AnyHashable]] = [:]
     @ObservationIgnored private var menus: [AnyHashable: @MainActor () -> ContextMenu?] = [:]
+    @ObservationIgnored private var cues: [AnyHashable: Cue?] = [:]
 
     public init(initial: AnyHashable? = nil) {
         focused = initial
@@ -57,10 +58,11 @@ public final class FocusModel {
     ///   - menu: the item's context menu, built when it opens.
     func register(
         _ id: AnyHashable, frame: CGRect, moves: [FocusDirection: AnyHashable] = [:], menu: (@MainActor () -> ContextMenu?)? = nil,
-        action: @escaping @MainActor () -> Void
+        cue: Cue? = .select, action: @escaping @MainActor () -> Void
     ) {
         frames[id] = frame
         actions[id] = action
+        cues[id] = cue
         self.moves[id] = moves
         menus[id] = menu
         if focused == nil { focused = id }
@@ -71,6 +73,7 @@ public final class FocusModel {
         actions[id] = nil
         moves[id] = nil
         menus[id] = nil
+        cues[id] = nil
         guard focused == id else { return }
         // A screen that leaves unregisters all its items one after the other: its focus must stay on the item it had, for
         // the way back. So the focus moves on only if other items are still there once the layout has settled.
@@ -78,6 +81,13 @@ public final class FocusModel {
             guard let self, focused == id, frames[id] == nil, let next = frames.keys.first else { return }
             focused = next
         }
+    }
+
+    /// The cue of A on the focused item (``FocusItem/init(id:model:moves:clickCue:action:tap:content:)``): SELECT unless
+    /// the item names another or none. Whoever routes A plays it with ``Feedback/activate(_:_:)``.
+    var acceptCue: Cue? {
+        guard let focused, let cue = cues[focused] else { return .select }
+        return cue
     }
 
     /// The focused item's context menu and its frame (global points); nil when it has none.
@@ -119,6 +129,59 @@ public final class FocusModel {
 }
 
 extension EnvironmentValues {
+    /// True for a moment after the item was activated (``Motion/pressHold``): it squeezes to ``Motion/pressScale``.
+    @Entry var pressed = false
+}
+
+/// What a scroll view that follows the focus gives its items: ``FocusItem`` asks for itself to be brought into view when
+/// it gains the focus (a controller or the Siri Remote moves the focus; a custom focus does not scroll on its own).
+@MainActor
+final class FocusReveal {
+    var scrollTo: ((AnyHashable, Bool) -> Void)?
+    private var pending: AnyHashable?
+
+    func reveal(_ id: AnyHashable, animated: Bool) {
+        if let scrollTo { scrollTo(id, animated) } else { pending = id }
+    }
+
+    func attach(_ scroll: @escaping (AnyHashable, Bool) -> Void) {
+        scrollTo = scroll
+        guard let id = pending else { return }
+        pending = nil
+        scroll(id, false)
+    }
+}
+
+extension EnvironmentValues {
+    @Entry var focusReveal: FocusReveal?
+}
+
+/// A scroll view whose focused item stays in view: the item is centered, so the next one always peeks in at the edge
+/// (Android's focus margin). Not animated for reduced motion.
+struct FocusScroll<Content: View>: View {
+    var axis: Axis.Set = .horizontal
+    @ViewBuilder let content: () -> Content
+    @State private var reveal = FocusReveal()
+    @Environment(\.reducedMotion) private var reducedMotion
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView(axis, showsIndicators: false) { content() }
+                .environment(\.focusReveal, reveal)
+                .onAppear {
+                    reveal.attach { id, animated in
+                        if animated && !reducedMotion {
+                            withAnimation(Motion.out(Motion.rowFocus)) { proxy.scrollTo(id, anchor: .center) }
+                        } else {
+                            proxy.scrollTo(id, anchor: .center)
+                        }
+                    }
+                }
+        }
+    }
+}
+
+extension EnvironmentValues {
     /// The focus of the layer or the side menu that is open (tvOS): the items of every other focus cannot take the
     /// system focus meanwhile. Nil: nothing is open.
     @Entry var modalFocus: FocusModel?
@@ -152,26 +215,33 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
     let menu: (@MainActor () -> ContextMenu?)?
     let action: @MainActor () -> Void
     let tap: (@MainActor () -> Void)?
+    let clickCue: Cue?
     let content: (Bool) -> Content
     @Environment(Layers.self) private var layers: Layers?
+    @Environment(\.focusReveal) private var reveal
+    @State private var pressed = false
+    @State private var release: Task<Void, Never>?
 
     /// - Parameters:
     ///   - moves: where a direction leads from this item instead of the nearest item that way (iPhone, iPad and Mac;
     ///     on tvOS the system focus engine decides).
     ///   - tap: what a tap does after focusing the item, when it is not [action] (A): a settings row's choice opens its
     ///     list on a tap, A steps it.
+    ///   - clickCue: the cue of an activation (A or a tap), the same for both: SELECT, another for an item that goes
+    ///     back or opens something, nil for one that is silent (or whose action plays its own: a cue played by the action
+    ///     replaces this one, see ``Feedback/activate(_:_:)``).
     public init(
-        id: ID, model: FocusModel, moves: [FocusDirection: AnyHashable] = [:], action: @escaping @MainActor () -> Void,
-        tap: (@MainActor () -> Void)? = nil, @ViewBuilder content: @escaping (Bool) -> Content
+        id: ID, model: FocusModel, moves: [FocusDirection: AnyHashable] = [:], clickCue: Cue? = .select,
+        action: @escaping @MainActor () -> Void, tap: (@MainActor () -> Void)? = nil, @ViewBuilder content: @escaping (Bool) -> Content
     ) {
-        self.init(id: id, model: model, moves: moves, menu: nil, action: action, tap: tap, content: content)
+        self.init(id: id, model: model, moves: moves, menu: nil, clickCue: clickCue, action: action, tap: tap, content: content)
     }
 
     /// - Parameter menu: the item's context menu (the right menu button, X, or a long press on touch), built when it
     ///   opens so it shows what is true then.
     init(
         id: ID, model: FocusModel, moves: [FocusDirection: AnyHashable] = [:], menu: (@MainActor () -> ContextMenu?)?,
-        action: @escaping @MainActor () -> Void, tap: (@MainActor () -> Void)? = nil, @ViewBuilder content: @escaping (Bool) -> Content
+        clickCue: Cue? = .select, action: @escaping @MainActor () -> Void, tap: (@MainActor () -> Void)? = nil, @ViewBuilder content: @escaping (Bool) -> Content
     ) {
         self.id = id
         self.model = model
@@ -179,7 +249,39 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
         self.menu = menu
         self.action = action
         self.tap = tap
+        self.clickCue = clickCue
         self.content = content
+    }
+
+    /// The squeeze of an activation: held ``Motion/pressHold`` ms, a new activation restarts it.
+    private func pulse() {
+        release?.cancel()
+        pressed = true
+        release = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(Int(Motion.pressHold)))
+            guard !Task.isCancelled else { return }
+            pressed = false
+        }
+    }
+
+    /// What A does (the model's accept): the squeeze and the action; the cue is the router's (``FocusModel/acceptCue``).
+    private var pressAction: @MainActor () -> Void {
+        { pulse(); action() }
+    }
+
+    /// A tap or a click: the squeeze, the action, the same cue as A.
+    private func activate(_ run: @MainActor () -> Void) {
+        pulse()
+        if let feedback = layers?.feedback {
+            feedback.activate(clickCue) { run(); return true }
+        } else {
+            run()
+        }
+    }
+
+    /// The item gained the focus: its scroll view brings it into view.
+    private func revealed(_ now: AnyHashable?, animated: Bool = true) {
+        if now == AnyHashable(id) { reveal?.reveal(AnyHashable(id), animated: animated) }
     }
 
     #if os(tvOS)
@@ -208,21 +310,34 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
             // The frames and actions are registered as on the other platforms: a context menu is placed beside its
             // item, and the root's commands (Play/Pause, a controller's X) open the focused item's menu
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
-                model.register(AnyHashable(id), frame: frame, moves: moves, menu: menu, action: action)
+                model.register(AnyHashable(id), frame: frame, moves: moves, menu: menu, cue: clickCue, action: pressAction)
             }
             .onDisappear { model.unregister(AnyHashable(id)) }
             .focusable(!blocked)
             .focusEffectDisabled()
             .focused($systemFocused)
             .modifier(PreferredFocus(preferred: model.focused == AnyHashable(id) && !blocked, namespace: scope))
-            .onChange(of: systemFocused) { _, now in if now { model.focus(AnyHashable(id)) } }
+            .onChange(of: systemFocused) { _, now in
+                guard now else { return }
+                // The focus engine moved the focus (the model did not ask for it): the move cue
+                if model.focused != AnyHashable(id) { layers?.feedback?.play(.move) }
+                model.focus(AnyHashable(id))
+            }
             // The model moves the focus too (to the next step of a form, or the first item of a screen)
-            .onChange(of: model.focused) { _, now in if now == AnyHashable(id) { systemFocused = true } }
+            .onChange(of: model.focused) { _, now in
+                if now == AnyHashable(id) { systemFocused = true }
+                revealed(now)
+            }
             // When the layer closes, the item that had the focus gets it back
             .onChange(of: blocked) { _, now in if !now { requestFocus() } }
-            .onAppear { requestFocus() }
+            .onAppear {
+                requestFocus()
+                revealed(model.focused, animated: false)
+            }
             // The Siri Remote's select is A, not a touch
-            .onTapGesture(perform: action)
+            .onTapGesture { activate(action) }
+            .environment(\.pressed, pressed)
+            .id(id)
         if menu != nil {
             // A long press on the Siri Remote's touch surface opens the context menu, as Play/Pause does at the root
             item.onLongPressGesture(minimumDuration: 0.6) {
@@ -237,14 +352,18 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
     public var body: some View {
         let item = content(model.focused == AnyHashable(id))
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
-                model.register(AnyHashable(id), frame: frame, moves: moves, menu: menu, action: action)
+                model.register(AnyHashable(id), frame: frame, moves: moves, menu: menu, cue: clickCue, action: pressAction)
             }
             .onDisappear { model.unregister(AnyHashable(id)) }
             .contentShape(Rectangle())
+            .onChange(of: model.focused) { _, now in revealed(now) }
+            .onAppear { revealed(model.focused, animated: false) }
             .onTapGesture {
                 model.focus(AnyHashable(id))
-                (tap ?? action)()
+                activate(tap ?? action)
             }
+            .environment(\.pressed, pressed)
+            .id(id)
         if menu != nil {
             // A long press is the touch way to the context menu; simultaneous, so a scroll view around still scrolls
             item.simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in

@@ -35,7 +35,9 @@ public enum DelosFonts {
     }
 }
 
-/// A Phosphor icon from ``Symbols`` at a size in stage pixels.
+/// A Phosphor icon from ``Symbols`` at a size in stage pixels. [filled] cross-fades from Regular to Fill over
+/// ``Motion/iconFill`` (the Regular and the Fill glyph are both drawn, `Symbol` of DELOS for Android); the filled check is
+/// the tick in a circle.
 struct SymbolView: View {
     let symbol: String
     let size: Double
@@ -44,8 +46,16 @@ struct SymbolView: View {
     @Environment(\.stage) private var stage
 
     var body: some View {
-        Text(symbol)
-            .font(DelosFonts.symbol(stage.tpx(size), filled: filled))
-            .foregroundStyle(color.color)
+        ZStack {
+            Text(symbol)
+                .font(DelosFonts.symbol(stage.tpx(size), filled: false))
+                .opacity(filled ? 0 : 1)
+            Text(symbol == Symbols.check ? Symbols.checkCircle : symbol)
+                .font(DelosFonts.symbol(stage.tpx(size), filled: true))
+                .opacity(filled ? 1 : 0)
+                .accessibilityHidden(true)
+        }
+        .foregroundStyle(color.color)
+        .animation(Motion.out(Motion.iconFill), value: filled)
     }
 }

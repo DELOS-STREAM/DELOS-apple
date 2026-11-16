@@ -95,7 +95,7 @@ struct CircleRow<Content: View>: View {
         let row = HStack(alignment: .top, spacing: stage.px(56)) { content() }.padding(stage.px(40))
         ViewThatFits(in: .horizontal) {
             row
-            ScrollView(.horizontal, showsIndicators: false) { row }.scrollClipDisabled().focusable(false)
+            FocusScroll(axis: .horizontal) { row }.scrollClipDisabled().focusable(false)
         }
     }
 }

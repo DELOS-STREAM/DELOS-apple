@@ -19,6 +19,8 @@ struct StreamScreen: View {
     let settings: StreamSettings
     @Environment(HostStore.self) private var hosts
     @Environment(Navigator.self) private var navigator
+    @Environment(Layers.self) private var layers: Layers?
+    @Environment(Toasts.self) private var toasts: Toasts?
     @State private var controller: StreamController?
     @State private var renderer: DisplayLayerRenderer?
     @State private var shutdownID: UUID?
@@ -40,8 +42,18 @@ struct StreamScreen: View {
         }
         .onAppear(perform: begin)
         .onDisappear(perform: end)
-        .onChange(of: controller?.phase) { _, phase in
-            if phase == .ended { navigator.back() }
+        .onChange(of: controller?.phase) { old, phase in
+            if phase == .ended {
+                // The PC ended the session on its own (a stream that was leaving or failed is not "closed by the PC")
+                if old == .streaming || old == .connecting { toasts?.show(L("stream_result_host_closed"), icon: Symbols.info) }
+                navigator.back()
+            }
+            // The result overlay shows: OPEN
+            if case .failed = phase { layers?.feedback?.play(.open) }
+        }
+        // The stream menu opens (the shortcut, a swipe, the remote): OPEN; it closes with BACK, played where it is closed
+        .onChange(of: controller?.menuOpen) { _, open in
+            if open == true { layers?.feedback?.play(.open) }
         }
         #if !os(macOS)
         // iOS suspends an app that goes to the background; the Mac keeps streaming behind other windows
@@ -69,7 +81,7 @@ struct StreamScreen: View {
         self.renderer = renderer
         self.controller = controller
         navigator.commandCapture = { [navigator] command in
-            Self.capture(command, controller: controller, focus: navigator.focus, fromRemote: navigator.commandFromRemote)
+            Self.capture(command, controller: controller, focus: navigator.focus, fromRemote: navigator.commandFromRemote, feedback: layers?.feedback)
         }
         IdleTimer.disabled = true
         // Quitting the app (the Mac: Command-Q, closing the window) leaves the stream first
@@ -94,6 +106,7 @@ struct StreamScreen: View {
     /// system also reports it as Menu). Either closes the open menu.
     static func capture(
         _ command: MenuCommand, controller: StreamController, focus: FocusModel, fromRemote: Bool = false,
+        feedback: Feedback? = nil,
         hasGamepad: @autoclosure () -> Bool = ConnectedControllers.hasGamepad
     ) -> Bool {
         switch controller.phase {
@@ -104,18 +117,23 @@ struct StreamScreen: View {
                 return true
             }
             if command == .back || remoteMenu {
+                feedback?.play(.back)
                 controller.closeMenu()
                 return true
             }
             return false
         case .failed:
             if command == .back {
+                feedback?.play(.back)
                 controller.dismiss()
                 return true
             }
             return false
         case .connecting:
-            if command == .back { Task { await controller.leave(quit: false) } }
+            if command == .back {
+                feedback?.play(.back)
+                Task { await controller.leave(quit: false) }
+            }
             return true
         case .leaving, .ended:
             return true
@@ -128,6 +146,10 @@ struct StreamContent: View {
     let controller: StreamController
     let renderer: DisplayLayerRenderer
     let focus: FocusModel
+    @Environment(\.stage) private var stage
+    /// The dock is mounted while the menu is open and for its exit after it closed.
+    @State private var dockShown = false
+    @State private var unmount: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -145,6 +167,11 @@ struct StreamContent: View {
             )
             .ignoresSafeArea()
             .opacity(controller.phase == .streaming ? 1 : 0)
+            // The stream behind the menu is blurred (it follows the gradient behind the tiles)
+            .blur(radius: controller.menuOpen ? stage.px(StreamDockLayout.videoBlur) : 0)
+            .animation(
+                .timingCurve(0.25, 0.1, 0.25, 1, duration: (controller.menuOpen ? StreamDockLayout.gradientIn : StreamDockLayout.gradientOut) / 1000),
+                value: controller.menuOpen)
             switch controller.phase {
             case .connecting:
                 StreamLoader(greeting: controller.greeting, line: controller.line, progress: controller.progress)
@@ -152,8 +179,8 @@ struct StreamContent: View {
                 if controller.statisticsEnabled, let statistics = controller.statistics {
                     StreamStatsOverlay(statistics: statistics)
                 }
-                if controller.menuOpen {
-                    StreamMenu(focus: focus, controller: controller)
+                if dockShown {
+                    StreamMenu(focus: focus, controller: controller, open: controller.menuOpen)
                         .environment(\.glassOverMedia, true)
                 }
             case .leaving(let text):
@@ -175,6 +202,19 @@ struct StreamContent: View {
             }
             #endif
         }
+        .onChange(of: controller.menuOpen) { _, open in
+            unmount?.cancel()
+            if open {
+                dockShown = true
+            } else {
+                unmount = Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(Int(StreamDockLayout.closeTotal(count: 4))))
+                    guard !Task.isCancelled else { return }
+                    dockShown = false
+                }
+            }
+        }
+        .onChange(of: controller.phase) { _, _ in dockShown = controller.menuOpen }
     }
 
     static let sinkID = "stream-sink"
@@ -243,44 +283,6 @@ private struct StreamLoader: View {
     }
 }
 
-/// The stream menu, minimal: Resume, Disconnect and Quit app as circles on a dark band at the bottom (the dock of
-/// DELOS for Android's stream menu; its other tiles are not ported yet). The focus starts on Resume.
-private struct StreamMenu: View {
-    let focus: FocusModel
-    let controller: StreamController
-    @Environment(\.delosColors) private var colors
-    @Environment(\.stage) private var stage
-
-    var body: some View {
-        ZStack(alignment: .bottom) {
-            LinearGradient(colors: [.clear, colors.scrim.color, colors.scrim.color], startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
-                .contentShape(Rectangle())
-                .onTapGesture { controller.closeMenu() }
-            HStack(alignment: .top, spacing: stage.px(64)) {
-                FocusItem(id: "stream-resume", model: focus, action: { controller.closeMenu() }) { focused in
-                    CircleItem(icon: Symbols.resume, label: L("stream_menu_tile_resume"), big: false, focused: focused)
-                }
-                FocusItem(id: "stream-statistics", model: focus, action: { controller.toggleStatistics() }) { focused in
-                    CircleItem(
-                        icon: Symbols.overlay, label: L("stream_menu_tile_overlay"),
-                        meta: controller.statisticsEnabled ? L("common_on") : L("common_off"),
-                        big: false, selected: controller.statisticsEnabled, focused: focused)
-                }
-                FocusItem(id: "stream-disconnect", model: focus, action: { Task { await controller.leave(quit: false) } }) { focused in
-                    CircleItem(icon: Symbols.logout, label: L("stream_menu_tile_disconnect"), big: false, focused: focused)
-                }
-                FocusItem(id: "stream-quit", model: focus, action: { Task { await controller.leave(quit: true) } }) { focused in
-                    CircleItem(icon: Symbols.powerSettingsNew, label: L("stream_menu_tile_quit"), big: false, focused: focused)
-                }
-            }
-            .padding(.bottom, stage.px(72) + stage.safe.bottom)
-        }
-        .onAppear { focus.focus("stream-resume") }
-        .transition(.opacity)
-    }
-}
-
 /// The result overlay (`StreamResultLayer` of DELOS for Android): a sad face, the title, one sentence, Try again
 /// (focused first) and Back to library, and the technical details behind Details, never open at first. B is Back
 /// to library.
@@ -320,7 +322,7 @@ private struct StreamResultLayer: View {
                     FocusItem(id: "result-retry", model: focus, action: onRetry) { focused in
                         PillButton(label: L("stream_result_try_again"), icon: Symbols.refresh, primary: true, focused: focused)
                     }
-                    FocusItem(id: "result-back", model: focus, action: onBack) { focused in
+                    FocusItem(id: "result-back", model: focus, clickCue: .back, action: onBack) { focused in
                         PillButton(label: L("stream_result_back_to_library"), icon: Symbols.library, focused: focused)
                     }
                 }

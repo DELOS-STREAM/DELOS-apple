@@ -149,7 +149,7 @@ final class Layers {
             // The button that opened the menu closes it, submenus and all
             if case .context = layer { dismiss() }
         case .accept:
-            if focus.handle(.accept) { feedback?.play(.select) }
+            if let feedback { feedback.activate(focus.acceptCue) { focus.handle(.accept) } } else { focus.handle(.accept) }
         case .up, .down:
             if focus.handle(command) { feedback?.play(.move) }
         case .left, .right:

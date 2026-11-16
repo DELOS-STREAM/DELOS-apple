@@ -256,6 +256,13 @@ Live stream values and presentation-delay behavior on physical Apple devices are
 
 ### The stream menu
 
+The dock (`StreamMenu`, `StreamDockLayout`) is Android's: 150 px glass tiles with a 42 px radius, 40 px apart, the
+tiles' top 452 stage px above the bottom edge, one 186 px ring that glides (560 ms) and breathes (2.6 s), a dark ramp
+over the stream, which is blurred by 50 px. Its tiles rise 90 px from .8 one after the other (100 ms + 42 ms each, 620 ms,
+the spring) and leave the last first (46 px, .92, 240 ms); one clock drives them all, and reduced motion keeps the fades
+only. Left on the first tile goes to the last and back. Only the four actions exist; the name, hints and captions wait
+for the other tiles.
+
 It opens as in DELOS for Android by default: L3 + R3 held together (`MenuShortcut`, Android's `ButtonShortcut`: the
 button that completes the shortcut is kept from the PC, the menu opens when both are let go), or a swipe from the
 left edge of the touch screen (`MenuSwipe`: a touch starting in the left 4 % belongs to the swipe and does not reach
