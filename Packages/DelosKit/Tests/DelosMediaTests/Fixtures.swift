@@ -15,8 +15,8 @@ enum Fixtures {
         var pictures: [Data] = []
         var current = Data()
         var sawSlice = false
-        for unit in AnnexB.units(try data(name)) {
-            let type = AnnexB.type(of: unit, codec: codec) ?? 0
+        for unit in units(try data(name)) {
+            let type = AnnexB.type(unit.first ?? 0, codec: codec)
             let slice = codec == .h264 ? (type == 1 || type == 5) : type < 32
             if slice, sawSlice {
                 pictures.append(current)
@@ -28,5 +28,14 @@ enum Fixtures {
         }
         pictures.append(current)
         return pictures
+    }
+
+    /// The NAL units of an Annex B stream, without their start codes.
+    static func units(_ data: Data) -> [Data] {
+        data.withUnsafeBytes { bytes in
+            var units: [Data] = []
+            AnnexB.forEachUnit(in: bytes) { units.append(Data(bytes[$0])) }
+            return units
+        }
     }
 }

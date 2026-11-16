@@ -14,59 +14,32 @@ public enum VideoFormat {
         case coreMedia(OSStatus)
     }
 
-    /// The format description for a frame that starts a stream (an IDR frame, or an AV1 key frame with its sequence
-    /// header).
-    public static func description(codec: VideoCodec, frame: Data) throws -> CMVideoFormatDescription {
-        switch codec {
-        case .h264: return try h264(AnnexB.units(frame))
-        case .hevc: return try hevc(AnnexB.units(frame))
-        case .av1: return try av1(frame)
+    /// The format description from the parameter sets of a key frame, in the order `AnnexB.parameterSets` finds them:
+    /// SPS and PPS for H.264, VPS, SPS and PPS for HEVC.
+    static func description(codec: VideoCodec, parameterSets sets: [[UInt8]]) throws -> CMVideoFormatDescription {
+        var format: CMVideoFormatDescription?
+        let status = withParameterSets(sets) { pointers, sizes in
+            switch codec {
+            case .h264:
+                CMVideoFormatDescriptionCreateFromH264ParameterSets(
+                    allocator: kCFAllocatorDefault, parameterSetCount: sets.count, parameterSetPointers: pointers,
+                    parameterSetSizes: sizes, nalUnitHeaderLength: 4, formatDescriptionOut: &format)
+            case .hevc:
+                CMVideoFormatDescriptionCreateFromHEVCParameterSets(
+                    allocator: kCFAllocatorDefault, parameterSetCount: sets.count, parameterSetPointers: pointers,
+                    parameterSetSizes: sizes, nalUnitHeaderLength: 4, extensions: nil, formatDescriptionOut: &format)
+            case .av1:
+                kCMFormatDescriptionError_InvalidParameter
+            }
         }
-    }
-
-    /// The frame as VideoToolbox decodes it: length-prefixed NAL units for H.264 and HEVC, the OBUs unchanged for AV1.
-    public static func sampleData(codec: VideoCodec, frame: Data) -> Data {
-        codec == .av1 ? frame : AnnexB.lengthPrefixed(frame, codec: codec)
-    }
-
-    private static func firstUnit(_ units: [Data], codec: VideoCodec, type: UInt8) -> Data? {
-        units.first { AnnexB.type(of: $0, codec: codec) == type }
-    }
-
-    private static func h264(_ units: [Data]) throws -> CMVideoFormatDescription {
-        guard let sps = firstUnit(units, codec: .h264, type: 7), let pps = firstUnit(units, codec: .h264, type: 8) else {
-            throw Failure.missingParameterSets
-        }
-        return try withParameterSets([sps, pps]) { pointers, sizes in
-            var format: CMVideoFormatDescription?
-            let status = CMVideoFormatDescriptionCreateFromH264ParameterSets(
-                allocator: kCFAllocatorDefault, parameterSetCount: 2, parameterSetPointers: pointers,
-                parameterSetSizes: sizes, nalUnitHeaderLength: 4, formatDescriptionOut: &format)
-            guard status == noErr, let format else { throw Failure.coreMedia(status) }
-            return format
-        }
-    }
-
-    private static func hevc(_ units: [Data]) throws -> CMVideoFormatDescription {
-        guard let vps = firstUnit(units, codec: .hevc, type: 32), let sps = firstUnit(units, codec: .hevc, type: 33),
-              let pps = firstUnit(units, codec: .hevc, type: 34) else {
-            throw Failure.missingParameterSets
-        }
-        return try withParameterSets([vps, sps, pps]) { pointers, sizes in
-            var format: CMVideoFormatDescription?
-            let status = CMVideoFormatDescriptionCreateFromHEVCParameterSets(
-                allocator: kCFAllocatorDefault, parameterSetCount: 3, parameterSetPointers: pointers,
-                parameterSetSizes: sizes, nalUnitHeaderLength: 4, extensions: nil, formatDescriptionOut: &format)
-            guard status == noErr, let format else { throw Failure.coreMedia(status) }
-            return format
-        }
+        guard status == noErr, let format else { throw Failure.coreMedia(status) }
+        return format
     }
 
     /// Calls `body` with C pointers to the parameter sets, which stay valid during the call.
     private static func withParameterSets<T>(
-        _ sets: [Data],
-        _ body: (UnsafePointer<UnsafePointer<UInt8>>, UnsafePointer<Int>) throws -> T
-    ) throws -> T {
+        _ sets: [[UInt8]], _ body: (UnsafePointer<UnsafePointer<UInt8>>, UnsafePointer<Int>) -> T
+    ) -> T {
         let copies = sets.map { set -> UnsafeMutableBufferPointer<UInt8> in
             let buffer = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: set.count)
             _ = buffer.initialize(from: set)
@@ -75,12 +48,13 @@ public enum VideoFormat {
         defer { copies.forEach { $0.deallocate() } }
         let pointers = copies.map { UnsafePointer($0.baseAddress!) }
         let sizes = sets.map(\.count)
-        return try pointers.withUnsafeBufferPointer { p in
-            try sizes.withUnsafeBufferPointer { s in try body(p.baseAddress!, s.baseAddress!) }
+        return pointers.withUnsafeBufferPointer { p in
+            sizes.withUnsafeBufferPointer { s in body(p.baseAddress!, s.baseAddress!) }
         }
     }
 
-    private static func av1(_ frame: Data) throws -> CMVideoFormatDescription {
+    /// The format description from an AV1 temporal unit with a sequence header (or that OBU alone).
+    static func av1(_ frame: Data) throws -> CMVideoFormatDescription {
         guard let obu = try AV1.obus(frame).first(where: { $0.type == AV1.sequenceHeaderType }) else {
             throw Failure.missingParameterSets
         }

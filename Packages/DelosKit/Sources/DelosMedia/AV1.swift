@@ -20,8 +20,29 @@ public enum AV1 {
 
     /// The OBUs of a temporal unit. Every OBU must carry its size field, as the low-overhead format requires.
     public static func obus(_ data: Data) throws -> [OBU] {
-        let bytes = [UInt8](data)
-        var result: [OBU] = []
+        try data.withUnsafeBytes { bytes in
+            var result: [OBU] = []
+            try forEachOBU(in: bytes) { type, whole, payload in
+                result.append(OBU(type: type, bytes: Data(bytes[whole]), payload: Data(bytes[payload])))
+            }
+            return result
+        }
+    }
+
+    /// Where the sequence header OBU of a temporal unit is (header, size field and payload); nil without one. Nothing
+    /// is copied.
+    static func sequenceHeader(in bytes: UnsafeRawBufferPointer) throws -> Range<Int>? {
+        var found: Range<Int>?
+        try forEachOBU(in: bytes) { type, whole, _ in
+            if found == nil, type == sequenceHeaderType { found = whole }
+        }
+        return found
+    }
+
+    /// Calls `body` with the type of each OBU, where the whole OBU is and where its payload is.
+    static func forEachOBU(
+        in bytes: UnsafeRawBufferPointer, _ body: (_ type: UInt8, _ whole: Range<Int>, _ payload: Range<Int>) throws -> Void
+    ) throws {
         var i = 0
         while i < bytes.count {
             let start = i
@@ -41,11 +62,10 @@ public enum AV1 {
                 shift += 7
                 if byte & 0x80 == 0 { break }
             }
-            guard i + size <= bytes.count else { throw Failure.truncated }
-            result.append(OBU(type: type, bytes: Data(bytes[start..<(i + size)]), payload: Data(bytes[i..<(i + size)])))
+            guard size <= bytes.count - i else { throw Failure.truncated }
+            try body(type, start..<(i + size), i..<(i + size))
             i += size
         }
-        return result
     }
 
     /// The fields of a sequence header that the configuration record and the format description need.

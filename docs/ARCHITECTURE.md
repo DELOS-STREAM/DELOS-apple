@@ -166,9 +166,12 @@ reduced motion only the fades remain.
 `AV1.parseSequenceHeader` reads the sequence header (AV1 specification, section 5.5) with `BitReader`.
 
 `VideoSamples` keeps the format description of the running stream (replaced when a key frame brings different
-parameter sets) and wraps each frame in a sample buffer marked "display immediately", since the host paces the stream;
-a frame before the first key frame fails with `needsKeyFrame`, the signal to ask the host for one. `VideoRenderer` is the
-renderer interface; `DisplayLayerRenderer` shows the samples through `AVSampleBufferDisplayLayer` (decision L4).
+parameter sets; the same ones keep it without building it again) and wraps each frame in a sample buffer marked
+"display immediately", since the host paces the stream; a frame before the first key frame fails with `needsKeyFrame`,
+the signal to ask the host for one. It reads a frame once, in place (`AnnexB.forEachUnit` finds the units as ranges
+of the frame, `AV1.sequenceHeader` the sequence header), and writes it once, into the sample's own block.
+`VideoRenderer` is the renderer interface; `DisplayLayerRenderer` shows the samples through
+`AVSampleBufferDisplayLayer` (decision L4).
 
 ## Frame pacing
 
@@ -184,12 +187,14 @@ V-Sync are not offered).
 
 ## Stream output
 
-`VideoOutput` and `AudioOutput` (DelosMedia) are the sinks the stream session hands the core. `VideoOutput` joins each
-decode unit's buffers into one Annex B or OBU frame, wraps it with `VideoSamples` and gives it to the renderer; a frame
-that cannot be shown answers `needIDRFrame`, so the core asks the host for a key frame. `AudioOutput` decodes the Opus
-packets on the core's audio thread into an `AudioRing` and plays them through an `AVAudioEngine` source node in the
-playback audio session; the ring keeps at most 60 ms and skips the oldest samples beyond that, so a network burst does
-not add lasting delay. The core calls each sink from one thread at a time, so their decoding state has no lock.
+`VideoOutput` and `AudioOutput` (DelosMedia) are the sinks the stream session hands the core. `VideoOutput` runs on the
+core's receive thread (direct submit): it copies each decode unit's buffers, which are valid only during the call, into
+one Annex B or OBU frame in storage it keeps from frame to frame, wraps it with `VideoSamples` and gives it to the
+renderer; a frame that cannot be shown answers `needIDRFrame`, so the core asks the host for a key frame. `AudioOutput`
+decodes the Opus packets on the core's audio thread into an `AudioRing` and plays them through an `AVAudioEngine`
+source node in the playback audio session; the ring keeps at most 60 ms and skips the oldest samples beyond that, so a
+network burst does not add lasting delay. The core calls each sink from one thread at a time, so their decoding state
+has no lock.
 `VideoStatistics` has a separate mutex for scalar frame/byte/host-time counters read by the statistics sampler. The
 audio ring has no lock, so the audio render thread never waits for the decoder: one writer and one reader share
 preallocated storage, each moving its own atomic position (acquire/release), and the reader skips what is older than
