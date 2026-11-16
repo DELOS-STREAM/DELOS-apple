@@ -114,9 +114,9 @@ the field instead of the focus; B or Escape stops typing. The Return that ends t
 press, so an accept within 0.3 s after it is ignored (`swallowsAccept`). While `commandCapture` is set (the stream
 screen, the settings), every command goes there first.
 
-The screens of Android's top navigation (`Screen.main`: the library, Settings and Profile; `showsNavigation`) show
-`TopNav` in the middle of the status bar: Settings and Profile as round buttons in a glass capsule (Android's Devices
-waits for its screen); the buttons are items of the shown screen's focus, so Up from the library or the first settings
+The screens of Android's top navigation (`Screen.main`: the library, Settings, Profile and Devices; `showsNavigation`) show
+`TopNav` in the middle of the status bar: Settings, Profile and Devices (Android's order) as round buttons in a glass
+capsule; Settings, Profile and Devices take each other's place on the stack; the buttons are items of the shown screen's focus, so Up from the library or the first settings
 row reaches them. On those screens and on the start screen (`hasSideMenu`), the left menu button opens the side menu
 (`SideMenu`, Android's `SideMenuLayer`): the profile and the connected PC at the top and All settings; it takes every
 command while it is open, and B, the menu button or a tap beside it closes it. Android's quick settings in the side
@@ -510,8 +510,23 @@ The screens (DelosUI, as DELOS for Android's `DeviceScreens.kt`, `PairScreens.kt
   (the tile in the main color, Running or App, another game that runs) and Start, or Resume and Quit for the running
   game, or Quit … and start and Resume … when another one runs (the stream quits it first).
 
-Not ported yet: the default PC's Skip the start screen, the PCs' Devices screen menu (connect, unpair, remove, pair
-with a one-time code), waking an asleep PC on A, the companion screen; in the library the compact layout, recording
+### Devices
+
+`DevicesScreen` (`DevicesScreen` of Android's DeviceScreens.kt, the third top-navigation item) lists the paired PCs in
+circles, by name, each with its status line (`DevicesLogic.status`: Connected while its library is open, Online, Asleep
+when it is offline but its MAC address is known, Offline; the default PC adds "Default") and the check badge on the
+connected one; the last circle opens the pairing screen (the PCs found, an address, the PIN). A, a tap, X or a long press
+opens the PC's menu (`ShellActions.devicesMenu`, rows from `DevicesLogic.actions`): Connect (Open its apps for the
+connected PC), Start DELOS with this PC or not (Android's Devices menu has no such row; its start screen's has),
+Rename, Wake the PC (an offline PC that can be woken), Unpair (an online PC) and Remove from DELOS (red). Choosing Remove
+or Unpair is the confirmation. `HostStore.unpairOnPC` asks the PC to forget this client and keeps the pairing when it
+cannot (offline, not paired, no answer, still paired: `UnpairResult`, one toast sentence each); `HostStore.remove`
+forgets the PC and its pairing here only. A PC that is removed or unpaired leaves the list, stops being the default PC
+and its library is dropped from the stack (`Navigator.dropLibrary`). Connect does not wake and wait in a portal as
+Android does; waking has its own row.
+
+Not ported yet: the default PC's Skip the start screen, pairing with a one-time code, the Devices screen's link test,
+the connect portal that wakes and waits, waking an asleep PC on A, the companion screen; in the library the compact layout, recording
 the streaming time (the stream screen does not add to `PlaytimeStore` yet), game metadata (IGDB genres and themes,
 HowLongToBeat, HDR chips through the metadata Worker), the game menu's Artwork, Metadata, App settings and Hide, the
 game's colors in its menu tile, hidden games, wrap-around in the row and per-game settings.

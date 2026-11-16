@@ -60,6 +60,9 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   badge and chip, a Last played badge, and covers with placeholder art. Artwork from SteamGridDB (covers, wide covers,
   backgrounds, logos) with your own API key under Settings → Covers, kept in a size-limited cache; the PC's box art
   is cached too. Settings → Appearance gains Match the app's colors, App background and its blur and opacity.
+- The Devices screen, the third button of the top navigation (Settings, Profile, Devices): the paired PCs with their
+  status, and a menu per PC to connect, make it the default, rename it, wake it, unpair it or remove it; the last
+  circle pairs a new PC.
 
 ### Changed
 

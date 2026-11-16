@@ -14,8 +14,7 @@ struct NavButton: Identifiable {
 /// The top navigation in the middle of the status bar (`TopNav` of DELOS for Android): round buttons [buttonSize] wide
 /// (64 px; 56 on a compact stage) and [gap] apart (14 px, 6 when the compact bar is tight), in a glass capsule. The
 /// focused button lies on the main color, grows by 12 % and shows its name under it; the current screen's button has its
-/// icon in the main color and a small dot. Android's buttons are Settings, Profile and Devices; Devices waits for its
-/// screen.
+/// icon in the main color and a small dot. The buttons are Settings, Profile and Devices, in Android's order.
 struct TopNav: View {
     let buttons: [NavButton]
     let focus: FocusModel
@@ -25,10 +24,13 @@ struct TopNav: View {
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
 
-    static func buttons(current: Screen, onSettings: @escaping @MainActor () -> Void, onProfile: @escaping @MainActor () -> Void) -> [NavButton] {
+    static func buttons(current: Screen, onSettings: @escaping @MainActor () -> Void, onProfile: @escaping @MainActor () -> Void,
+        onDevices: @escaping @MainActor () -> Void
+    ) -> [NavButton] {
         [
             NavButton(id: "nav-settings", icon: Symbols.settings, label: L("shell_nav_settings"), current: current == .settings, action: onSettings),
             NavButton(id: "nav-profile", icon: Symbols.accountCircle, label: L("shell_nav_profile"), current: current == .profile, action: onProfile),
+            NavButton(id: "nav-devices", icon: Symbols.devices, label: L("shell_nav_devices"), current: current == .devices, action: onDevices),
         ]
     }
 

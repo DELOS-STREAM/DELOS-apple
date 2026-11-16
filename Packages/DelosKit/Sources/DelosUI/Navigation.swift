@@ -24,15 +24,20 @@ public enum Screen: Hashable, Sendable {
     case stream(hostID: String, appID: Int)
     /// Settings: the tabs, the rows of the selected one and the help of the focused row.
     case settings
+    /// The paired PCs and what can be done with each (Android's `Screen.Devices`).
+    case devices
 
-    /// The screens of the top navigation (Android's `Screen.main`, as far as they exist here): the library, Settings and
-    /// Profile. They show the navigation in the status bar.
+    /// The screens of the top navigation (Android's `Screen.main`): the library, Settings, Profile and Devices. They show
+    /// the navigation in the status bar.
     var showsNavigation: Bool {
         switch self {
-        case .home, .settings, .profile: true
+        case .home, .settings, .profile, .devices: true
         default: false
         }
     }
+
+    /// Settings, Profile and Devices take each other's place on the stack ([Navigator.openFromNavigation]).
+    var replacesOnNavigation: Bool { self == .settings || self == .profile || self == .devices }
 
     /// Whether the left menu button opens the side menu here (Android's `Screen.sideMenu`: the main screens and the start
     /// screen).
@@ -102,12 +107,25 @@ public final class Navigator {
         push(.home(hostID: hostID), focus: HomeScreen.initialFocus)
     }
 
-    /// Opens a screen of the top navigation ([Screen.showsNavigation]). Settings and Profile take each other's place, so
-    /// B returns to the screen below them (Android: their `back` is the library); the current one stays.
+    /// Opens a screen of the top navigation ([Screen.showsNavigation]). Settings, Profile and Devices take each other's
+    /// place, so B returns to the screen below them (Android: their `back` is the library); the current one stays.
     public func openFromNavigation(_ screen: Screen, focus: AnyHashable? = nil) {
         guard current != screen else { return }
-        if current == .settings || current == .profile, canGoBack { stack.removeLast() }
+        if current.replacesOnNavigation, canGoBack { stack.removeLast() }
         push(screen, focus: focus)
+    }
+
+    /// Drops the libraries of the PC [hostID] from the stack (the PC was removed or unpaired): what is below the screen
+    /// shown must not lead back into a PC that is gone. The screen shown stays.
+    public func dropLibrary(of hostID: String) {
+        let top = stack.count - 1
+        var index = 0
+        stack.removeAll { entry in
+            defer { index += 1 }
+            if index == top { return false }
+            if case .home(let id) = entry.screen { return id == hostID }
+            return false
+        }
     }
 
     /// Starts streaming the app [appID] of the PC [hostID].
