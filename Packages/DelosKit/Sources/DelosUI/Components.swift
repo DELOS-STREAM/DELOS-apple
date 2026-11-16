@@ -8,16 +8,20 @@ struct LogoMark: View {
     @Environment(\.stage) private var stage
 
     var body: some View {
-        Canvas { context, canvas in
-            let k = canvas.width / size
-            let stroke = 3 * k
-            let ring = CGRect(origin: .zero, size: canvas).insetBy(dx: stroke / 2, dy: stroke / 2)
-            context.stroke(Path(ellipseIn: ring), with: .color(colors.accent.color), lineWidth: stroke)
-            let moon = CGPoint(x: canvas.width - 1.5 * k, y: 7.5 * k)
-            context.fill(Path(ellipseIn: CGRect(x: moon.x - 9 * k, y: moon.y - 9 * k, width: 18 * k, height: 18 * k)), with: .color(colors.accent2.opacity(0.35).color))
-            context.fill(Path(ellipseIn: CGRect(x: moon.x - 5.5 * k, y: moon.y - 5.5 * k, width: 11 * k, height: 11 * k)), with: .color(colors.accent2.color))
-        }
-        .frame(width: stage.px(size), height: stage.px(size))
+        let k = stage.px(size) / 40
+        // The moon's center sits on the ring's top right and reaches past the mark's box: drawn as views, not in a
+        // Canvas, so nothing clips it (in a Canvas half of the moon was cut off)
+        let moon = CGPoint(x: stage.px(size) - 1.5 * k, y: 7.5 * k)
+        Circle()
+            .strokeBorder(colors.accent.color, lineWidth: 3 * k)
+            .frame(width: stage.px(size), height: stage.px(size))
+            .overlay(alignment: .topLeading) {
+                ZStack {
+                    Circle().fill(colors.accent2.opacity(0.35).color).frame(width: 18 * k, height: 18 * k)
+                    Circle().fill(colors.accent2.color).frame(width: 11 * k, height: 11 * k)
+                }
+                .position(moon)
+            }
     }
 }
 
