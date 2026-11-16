@@ -524,6 +524,10 @@ covers end 110 px above the bottom as on 16:9. The room above the row grows (the
 tall shape keeps the row at 430 from the top instead; the owner wants the bottom anchoring everywhere (issue in
 Meitoncz/DELOS).
 
+The game background's hero is fitted to the width at the top and fades into a blurred extension; on a stage taller than
+16:9 that band would fill only a third of the screen, so it is scaled up to at least half of the hero area (its sides
+cropped equally). On 16:9 a SteamGridDB hero already fills more than half, so nothing changes there.
+
 ## Strings
 
 User-visible text comes from DELOS for Android's string resources, so both apps say the same thing in the same ten
