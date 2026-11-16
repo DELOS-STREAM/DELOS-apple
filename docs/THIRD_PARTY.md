@@ -11,6 +11,19 @@ for binaries, checksum (rule of [ENGINEERING_RULES.md](ENGINEERING_RULES.md)).
 | moonlight-common-c (submodule, to be replaced by the DELOS core) | `moonlight-common/moonlight-common-c` | [moonlight-stream/moonlight-common-c](https://github.com/moonlight-stream/moonlight-common-c) | `f900dd47` | GPL-3.0 |
 | X1Kit (submodule, to be removed) | `X1Kit` | [cgutman/X1Kit](https://github.com/cgutman/X1Kit) | `6e842ae9` | MIT |
 
+## Fonts
+
+Copied byte for byte from DELOS for Android (`app/src/main/res/font/`), where `tools/fonts/subset_fonts.py` makes them
+from verified sources; the licence files are next to them in `Packages/DelosKit/Sources/DelosUI/Resources/Licenses/`.
+`tools/fonts/sync_symbols.py` generates `Symbols.swift` from the same Android build.
+
+| File (in `Packages/DelosKit/Sources/DelosUI/Resources/Fonts/`) | Source | Version | License | SHA-256 |
+|---|---|---|---|---|
+| `unbounded.ttf` | [google/fonts](https://github.com/google/fonts) `ofl/unbounded` | commit `e7db6ca603fd4862010383ff17ffd6cc4ffac1c0` | OFL-1.1 | `af82d541d5007a370b0fd6e05d573ae7214fb0b5c1ece3327c17ebd971bf19d1` |
+| `figtree.ttf` | google/fonts `ofl/figtree` | same commit | OFL-1.1 | `723c2843a782299a5473cbbe9ad44b685fe0994d17a4b7dc75e4644ae695e962` |
+| `phosphor_regular.ttf` (subset) | [phosphor-icons/web](https://github.com/phosphor-icons/web) | `v2.1.2` | MIT | `8bd032eee68c9fba5e822d613d26d874ad3bf2f4866d1182b349995dc31faf63` |
+| `phosphor_fill.ttf` (subset) | phosphor-icons/web | `v2.1.2` | MIT | `79723fd6a2025abee9e17ef6d06c46afc31542f7282a390afd3fbce07db4c3fa` |
+
 ## Swift packages
 
 | Package | Origin | Version | Pin |

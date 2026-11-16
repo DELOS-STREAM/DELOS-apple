@@ -1,0 +1,46 @@
+# Building DELOS for Apple
+
+## Requirements
+
+| What | Version |
+|---|---|
+| macOS | 26 or newer, on Apple silicon |
+| Xcode | 27.2 or newer, with the iOS and tvOS simulators and the Metal toolchain (`xcodebuild -downloadComponent MetalToolchain`) |
+| Python | 3, for the repository tools |
+
+The repository path must not contain spaces.
+
+## First setup
+
+```sh
+git clone --recurse-submodules https://github.com/Meitoncz/DELOS-apple.git
+cd DELOS-apple
+git config core.hooksPath tools/hooks
+cp Config/Local.example.xcconfig Config/Local.xcconfig   # only for a real device: put your team id there
+```
+
+## Building and running
+
+| Command | What it does |
+|---|---|
+| `open DELOS.xcodeproj` | Opens the app in Xcode; the scheme `DELOS` runs on iPhone, iPad and Apple TV |
+| `sh tools/sim.sh iphone /tmp/shot.png` | Builds, installs and starts DELOS in the iPhone 18 Pro Max simulator and saves a screenshot (`ipad`, `tv` or a simulator UDID work too) |
+| `sh tools/test.sh` | The package tests, the app build for the iOS and tvOS simulators and the repository checks |
+| `cd Packages/DelosKit && swift test` | Only the package tests, on the Mac |
+
+## Project layout
+
+The app target is thin: `App/` holds the entry point and is a folder-synchronized group, so a new file there needs no
+change of `DELOS.xcodeproj`. Everything else lives in the Swift package `Packages/DelosKit`; see
+[ARCHITECTURE.md](ARCHITECTURE.md). Build settings are in `Config/*.xcconfig`, not in the project file.
+
+## A real device
+
+A free Apple ID is enough: sign in to Xcode (Settings → Accounts), turn on Developer Mode on the device, put the team
+id into `Config/Local.xcconfig` and run the `DELOS` scheme on the device. An app signed this way stops starting after
+seven days and has to be installed again.
+
+## The Moonlight reference app
+
+`Moonlight.xcodeproj` is the Moonlight for iOS/tvOS app this repository was forked from. It is kept as a reference
+until DELOS streams on a device, then it is deleted. It is not part of `tools/test.sh`.

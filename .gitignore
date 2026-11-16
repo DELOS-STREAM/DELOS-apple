@@ -4,3 +4,8 @@
 .DS_Store
 Build
 DerivedData
+
+# DELOS
+Config/Local.xcconfig
+Packages/*/.build/
+Packages/*/.swiftpm/

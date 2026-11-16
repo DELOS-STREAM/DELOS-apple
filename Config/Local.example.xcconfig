@@ -1,0 +1,4 @@
+// Copy to Config/Local.xcconfig (not tracked) and fill in your own values.
+// The team id is shown in Xcode → Settings → Accounts, or by: security find-identity -v -p codesigning
+
+DEVELOPMENT_TEAM = ABCDE12345

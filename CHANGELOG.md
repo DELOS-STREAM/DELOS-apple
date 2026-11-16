@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Added
+
+- A new Swift app, DELOS, for iPhone, iPad and Apple TV next to the Moonlight reference app. So far it shows the
+  start screen: the greeting, the Contour background, the DELOS palette, fonts and icons, and a focus that a game
+  controller or the arrow keys move between two circles (iOS and iPadOS) or the Apple TV remote moves (tvOS).
+
 ### Changed
 
 - The repository is set up for DELOS: README, contribution and security policy, third-party record, commit and branch

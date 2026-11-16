@@ -1,0 +1,206 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		D00000000000000000042001 /* DelosUI in Frameworks */ = {isa = PBXBuildFile; productRef = D00000000000000000043001 /* DelosUI */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		D00000000000000000041001 /* DELOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DELOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D00000000000000000041002 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		D00000000000000000041003 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		D00000000000000000041004 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		D00000000000000000045001 /* App */ = {isa = PBXFileSystemSynchronizedRootGroup; path = App; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D00000000000000000046001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D00000000000000000042001 /* DelosUI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		D00000000000000000047001 = {
+			isa = PBXGroup;
+			children = (
+				D00000000000000000045001 /* App */,
+				D00000000000000000047002 /* Config */,
+				D00000000000000000047003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D00000000000000000047002 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				D00000000000000000041004 /* Shared.xcconfig */,
+				D00000000000000000041002 /* Debug.xcconfig */,
+				D00000000000000000041003 /* Release.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		D00000000000000000047003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D00000000000000000041001 /* DELOS.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		D00000000000000000048001 /* DELOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D0000000000000000004C002 /* Build configuration list for PBXNativeTarget "DELOS" */;
+			buildPhases = (
+				D00000000000000000053001 /* Sources */,
+				D00000000000000000046001 /* Frameworks */,
+				D00000000000000000052001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				D00000000000000000045001 /* App */,
+			);
+			name = DELOS;
+			packageProductDependencies = (
+				D00000000000000000043001 /* DelosUI */,
+			);
+			productName = DELOS;
+			productReference = D00000000000000000041001 /* DELOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		D00000000000000000050001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2720;
+				LastUpgradeCheck = 2720;
+			};
+			buildConfigurationList = D0000000000000000004C001 /* Build configuration list for PBXProject "DELOS" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = D00000000000000000047001;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D0000000000000000004B001 /* XCLocalSwiftPackageReference "Packages/DelosKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = D00000000000000000047003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D00000000000000000048001 /* DELOS */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D00000000000000000052001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D00000000000000000053001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		D00000000000000000058001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		D00000000000000000058002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Release;
+		};
+		D00000000000000000058003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = D00000000000000000041002 /* Debug.xcconfig */;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		D00000000000000000058004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = D00000000000000000041003 /* Release.xcconfig */;
+			buildSettings = {
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		D0000000000000000004C001 /* Build configuration list for PBXProject "DELOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D00000000000000000058001 /* Debug */,
+				D00000000000000000058002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D0000000000000000004C002 /* Build configuration list for PBXNativeTarget "DELOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D00000000000000000058003 /* Debug */,
+				D00000000000000000058004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		D0000000000000000004B001 /* XCLocalSwiftPackageReference "Packages/DelosKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/DelosKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D00000000000000000043001 /* DelosUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DelosUI;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = D00000000000000000050001 /* Project object */;
+}

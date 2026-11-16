@@ -1,0 +1,35 @@
+// Build settings shared by every configuration of the DELOS app target. The personal values (the signing team) are
+// in Config/Local.xcconfig, which is not tracked: copy Config/Local.example.xcconfig to create it.
+
+PRODUCT_NAME = DELOS
+PRODUCT_BUNDLE_IDENTIFIER = io.github.meitoncz.delos
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
+
+SDKROOT = auto
+SUPPORTED_PLATFORMS = iphoneos iphonesimulator appletvos appletvsimulator
+ALWAYS_SEARCH_USER_PATHS = NO
+SUPPORTS_MACCATALYST = NO
+SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO
+TARGETED_DEVICE_FAMILY = 1,2,3
+IPHONEOS_DEPLOYMENT_TARGET = 18.0
+TVOS_DEPLOYMENT_TARGET = 18.0
+
+SWIFT_VERSION = 6.0
+SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+SWIFT_EMIT_LOC_STRINGS = YES
+ENABLE_USER_SCRIPT_SANDBOXING = YES
+CODE_SIGN_STYLE = Automatic
+
+GENERATE_INFOPLIST_FILE = YES
+INFOPLIST_KEY_CFBundleDisplayName = DELOS
+INFOPLIST_KEY_LSApplicationCategoryType = public.app-category.games
+INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES
+INFOPLIST_KEY_UILaunchScreen_Generation = YES
+INFOPLIST_KEY_UIRequiresFullScreen = YES
+INFOPLIST_KEY_UIStatusBarHidden = YES
+INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES
+
+#include? "Local.xcconfig"
