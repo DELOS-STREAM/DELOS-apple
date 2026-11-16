@@ -191,6 +191,27 @@ final class ShellActions {
         go { navigator.openStream(hostID: hostID, appID: app.id) }
     }
 
+    /// A (or a tap) on [app]'s cover (`GameTile`'s `activate`): starts or resumes it; while another game runs on the PC
+    /// it opens the game's menu instead, whose choices (quit that game and start this one, go back to the running one)
+    /// are the confirmation, so a stray press never quits the running game. [focus] is the library's, with [app] focused.
+    func activate(hostID: String, app: HostApp, focus: FocusModel) {
+        let running = hosts.host(hostID).flatMap { $0.runningAppID == 0 ? nil : $0.runningAppID }
+        let known = running.flatMap { id in hosts.apps[hostID]?.first { $0.id == id }?.id }
+        switch GameActivation.of(app: app.id, running: known) {
+        case .start: play(hostID: hostID, app: app)
+        case .offerChoices: layers.openContextMenu(of: focus)
+        }
+    }
+
+    /// The game that has the focus in a PC's library, kept when the library is left (Settings, Profile, Devices or a
+    /// stream open above it) and for its next opening (`ShellState.homeGame`): the cover's own registration goes away
+    /// with its screen, this does not.
+    private var homeGames: [String: Int] = [:]
+
+    func homeGame(hostID: String) -> Int? { homeGames[hostID] }
+
+    func rememberHomeGame(hostID: String, appID: Int) { homeGames[hostID] = appID }
+
     /// [apps] in the library's order (`PcRepository.order`): the running game, the played ones from the most recent,
     /// then the others in the PC's order.
     func libraryOrder(hostID: String, apps: [HostApp]) -> [HostApp] {

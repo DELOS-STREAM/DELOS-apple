@@ -395,7 +395,7 @@ public struct DelosRoot: View {
                 }
             )
         case .home(let hostID):
-            HomeScreen(hostID: hostID, focus: entry.focus, actions: actions) { app in actions.play(hostID: hostID, app: app) }
+            HomeScreen(hostID: hostID, focus: entry.focus, actions: actions)
         case .stream(let hostID, let appID):
             StreamScreen(hostID: hostID, appID: appID, settings: streamSettings.load(profile: profiles.current?.id ?? ""))
         case .settings:
