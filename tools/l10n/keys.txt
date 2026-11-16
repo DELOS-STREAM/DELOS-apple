@@ -152,3 +152,6 @@ stream_result_timeout_details
 stream_result_try_again
 stream_result_unpaired
 stream_result_unpaired_details
+
+# Navigation (touch)
+shell_hint_back

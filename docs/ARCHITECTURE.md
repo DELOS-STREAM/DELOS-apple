@@ -50,6 +50,10 @@ to an edge keeps clear of the safe area itself. Views read the stage from the en
 
 ## Focus
 
+On iPhone and iPad every screen that can go back shows a back button at the top left: a touch user has no B button,
+and iOS has no system back (Android's system back covers this there).
+
+
 On tvOS the system focus engine moves the focus. On iPhone, iPad and Mac a game controller does not drive SwiftUI's
 focus, so `MenuInput` (DelosInput) turns the D-pad, the left stick, A, B and the arrow, Return and Escape keys into
 commands, and `FocusModel` (DelosUI) moves the focus to the nearest item in the pressed direction (`FocusGeometry`).

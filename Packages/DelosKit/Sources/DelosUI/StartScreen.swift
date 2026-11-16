@@ -122,7 +122,9 @@ public struct DelosRoot: View {
                         insertion: .opacity.combined(with: .scale(scale: 1.035)),
                         removal: .opacity.combined(with: .scale(scale: 0.96))
                     ))
-                if case .stream = navigator.current {} else { TopBar(brand: navigator.current != .start) }
+                if case .stream = navigator.current {} else {
+                    TopBar(brand: navigator.current != .start, onBack: navigator.canGoBack ? { go { navigator.back() } } : nil)
+                }
                 ToastOverlay(toasts: toasts)
             }
         }
@@ -308,11 +310,27 @@ public struct DelosRoot: View {
 /// leaves the brand out: the profile chip is at the top there.
 struct TopBar: View {
     var brand = true
+    /// Shown on iPhone and iPad when the screen can go back: a touch user has no B button and the system has no back
+    /// gesture of its own (on Android the system's back does it, so DELOS for Android has no such button).
+    var onBack: (() -> Void)?
     @Environment(\.stage) private var stage
+    @Environment(\.delosColors) private var colors
 
     var body: some View {
         VStack {
-            HStack {
+            HStack(spacing: stage.px(24)) {
+                #if os(iOS)
+                if let onBack {
+                    Button(action: onBack) {
+                        SymbolView(symbol: Symbols.arrowBack, size: 34, color: colors.text)
+                            .frame(width: stage.px(68), height: stage.px(68))
+                            .background(Circle().fill(colors.surface.color))
+                            .overlay(Circle().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(L("shell_hint_back"))
+                }
+                #endif
                 if brand { Brand() }
                 Spacer()
             }
