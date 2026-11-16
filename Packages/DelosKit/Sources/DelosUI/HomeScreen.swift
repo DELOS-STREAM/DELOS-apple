@@ -33,7 +33,11 @@ struct HomeLayout: Equatable {
     let infoHeight: Double
     let coverTop: Double
 
+    /// Where the row starts on a 1080 px high stage, and so how far its covers end above the stage's bottom: the row
+    /// keeps that distance from the bottom edge on every stage height (owner: the row is always at the bottom, with the
+    /// same margin; room above it grows on a taller stage, and the space below is kept for what a down arrow will show).
     static let rowTop = 430.0
+    static let designHeight = 1080.0
     static let rowPad = 90.0
     static let rowShift = 92.0
     static let titleBoxMax = 200.0
@@ -45,8 +49,8 @@ struct HomeLayout: Equatable {
     static func ringReach(_ height: Double) -> Double { height * (focusScale - 1) / 2 + ring * focusScale }
 
     /// The layout at the interface scale [scale]; [safeTop] is the display cutout.
-    init(scale: Double, safeTop: Double = 0) {
-        let rowTop = Self.rowTop - (scale - 1) * Self.rowShift
+    init(scale: Double, safeTop: Double = 0, stageHeight: Double = HomeLayout.designHeight) {
+        let rowTop = Self.rowTop + (stageHeight - Self.designHeight) - (scale - 1) * Self.rowShift
         let ringTop = rowTop + Self.rowPad - Self.ringReach(Self.coverHeight)
         let infoHeight = Self.infoRowHeight * scale
         let infoTop = ringTop - Self.infoRingGap - infoHeight
@@ -137,7 +141,7 @@ private struct GameLibrary: View {
     var body: some View {
         let focusedIndex = apps.firstIndex { focus.focused == AnyHashable(Self.id($0)) }
         let focused = apps[focusedIndex ?? 0]
-        let layout = HomeLayout(scale: stage.textScale, safeTop: stage.safe.top)
+        let layout = HomeLayout(scale: stage.textScale, safeTop: stage.safe.top, stageHeight: stage.height)
         let host = hosts.host(hostID)
         let running = host.flatMap { $0.runningAppID == 0 ? nil : $0.runningAppID }
         let last = actions.lastPlayed(hostID: hostID)

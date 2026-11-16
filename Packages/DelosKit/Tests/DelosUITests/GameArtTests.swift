@@ -252,6 +252,16 @@ import Testing
         #expect(large.titleBox < 200 && large.titleTop > 20 + 104 * 1.3)
     }
 
+    @Test func theRowKeepsItsDistanceFromTheBottomOnATallerStage() {
+        // iPad Pro 13" in landscape is a 1920 × 1440 stage: the row moves down by the extra 360 px, so the covers end
+        // 110 px above the bottom there too, as on 16:9
+        let wide = HomeLayout(scale: 1), tall = HomeLayout(scale: 1, stageHeight: 1440)
+        #expect(tall.coverTop - wide.coverTop == 360)
+        #expect(1440 - (tall.coverTop + HomeLayout.coverHeight) == 1080 - (wide.coverTop + HomeLayout.coverHeight))
+        // The title box moves with it and keeps its size
+        #expect(tall.titleBox == 200 && tall.titleTop > wide.titleTop)
+    }
+
     @Test func thePlaceholderHuesFollowJavasStringHash() {
         #expect(GameArt.javaHash("hello") == 99_162_322)
         #expect(GameArt.javaHash("") == 0)

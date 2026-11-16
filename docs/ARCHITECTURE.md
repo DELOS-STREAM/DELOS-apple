@@ -516,6 +516,14 @@ the streaming time (the stream screen does not add to `PlaytimeStore` yet), game
 HowLongToBeat, HDR chips through the metadata Worker), the game menu's Artwork, Metadata, App settings and Hide, the
 game's colors in its menu tile, hidden games, wrap-around in the row and per-game settings.
 
+## The library row
+
+The row of covers keeps its distance from the stage's bottom edge: its top is 430 stage pixels on a 1080 px high stage
+(Android's `HomeStandard.ROW_TOP`) and moves down by the extra height on a taller one, so on an iPad (1920 × 1440) the
+covers end 110 px above the bottom as on 16:9. The room above the row grows (the title is centred in it). Android's
+tall shape keeps the row at 430 from the top instead; the owner wants the bottom anchoring everywhere (issue in
+Meitoncz/DELOS).
+
 ## Strings
 
 User-visible text comes from DELOS for Android's string resources, so both apps say the same thing in the same ten
