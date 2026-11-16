@@ -51,6 +51,18 @@ focus, so `MenuInput` (DelosInput) turns the D-pad, the left stick, A, B and the
 commands, and `FocusModel` (DelosUI) moves the focus to the nearest item in the pressed direction (`FocusGeometry`).
 `FocusItem` wraps a view for both engines.
 
+## Video formats
+
+`DelosMedia` turns what the host sends into what VideoToolbox decodes, without FFmpeg:
+
+| Codec | Stream from the host | Format description | Sample data |
+|---|---|---|---|
+| H.264 | Annex B NAL units | from SPS and PPS | length-prefixed NAL units without parameter sets |
+| HEVC | Annex B NAL units | from VPS, SPS and PPS | the same |
+| AV1 | low-overhead OBUs | from the sequence header: `av1C` record, bit depth, range and color (BT.709, BT.2020 with PQ or HLG) | the OBUs unchanged |
+
+`AV1.parseSequenceHeader` reads the sequence header (AV1 specification, section 5.5) with `BitReader`.
+
 ## Sounds and haptics
 
 `Feedback` plays the five interface sounds of DELOS for Android (move, select, back, open, error) as system sounds, so
@@ -104,6 +116,8 @@ bundle the same ten languages; without it iOS shows the package's strings in Eng
   stage scaling, controller stick and key mapping, the background lights and saturations against the Kotlin formulas,
   and that every background shader is in the Metal library.
 - `sh tools/sim.sh iphone|ipad|tv`: the start screen in the simulators.
+- DelosMediaTests decode the first frame of an H.264, an HEVC and an 8-bit and a 10-bit AV1 stream with VideoToolbox on
+  the Mac (AV1 is skipped where the Mac has no hardware AV1 decoder; the M6 used on 2026-11-16 has one).
 - The start screen in Czech in the iPhone simulator (`-AppleLanguages (cs)`).
 - Every background in the iPhone simulator (dark theme; Contour, Nebula and Aurora also light), compared with the
   Android code; Nebula, Lava and Orbit also against a NumPy reimplementation of their AGSL at the same clock.

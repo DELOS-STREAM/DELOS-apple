@@ -38,6 +38,19 @@ library. Original to DELOS, project license.
 | `ui_open.wav` | `6aaa9375991c24123c5f582bd3431acba8a6e0d691bb2aae2bf363641e2c769e` |
 | `ui_select.wav` | `c896cdcc6cf480adb352d6db7680b1f2068fd0eff364904b0db44c46baf7cc47` |
 
+## Test fixtures
+
+Made by `tools/media/make_fixtures.sh` with FFmpeg 9.0.2 (libx264, libx265, SVT-AV1 4.3.0) from FFmpeg's built-in
+`testsrc2` pattern: two frames of 64 × 64 per codec. The encoders are not bit-exact across versions, so the files are
+kept with their checksums. Original to DELOS, project license.
+
+| File (in `Packages/DelosKit/Tests/DelosMediaTests/Fixtures/`) | SHA-256 |
+|---|---|
+| `frames.h264` | `5ce19cb9470c4b3b04eac095b076b0d6432a441be45fefc785f6e78407550e56` |
+| `frames.hevc` | `5dec7f31032adf7be32d92ae91615ca25900db8ecfc22f921558c1970c6dd6a1` |
+| `frames.obu` | `af07a43a263e20c5514a74e2a66886b233eea5468bb9752df6cf22a2c654ec40` |
+| `frames-10bit.obu` | `0601e1db7791b230c89745325a100dd4392c8645ccf99478c2e5acfd41d5f2ac` |
+
 ## Swift packages
 
 | Package | Origin | Version | Pin |
