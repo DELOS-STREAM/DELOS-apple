@@ -16,6 +16,9 @@ public final class HostStore {
     @ObservationIgnored private let identities: ClientIdentityStore
     @ObservationIgnored private var cachedIdentity: ClientIdentity?
     @ObservationIgnored private var discovery: Task<Void, Never>?
+    /// Counts each change of trust in a PC (pairing, unpairing). A request that waited across such a change is
+    /// dropped: its answer was asked for under the old trust.
+    @ObservationIgnored private var trustGenerations: [String: Int] = [:]
     @ObservationIgnored private let deviceName: String
     private static let key = "hosts"
 
@@ -77,14 +80,17 @@ public final class HostStore {
     }
 
     /// Asks a known PC again (over HTTPS to its pinned certificate once paired) and stores the answer; a PC that does
-    /// not answer is marked offline.
+    /// not answer is marked offline. The answer goes onto the record as it is when it arrives (a rename made meanwhile
+    /// stays), and nothing is stored when the PC was paired or unpaired meanwhile.
     public func refresh(_ id: String) async {
         guard let record = host(id), let address = record.activeAddress ?? record.manualAddress ?? record.localAddress else { return }
-        do {
-            let reply = try await client(address).serverInfo(pin: record.pin)
-            store(try record.updated(with: reply))
-        } catch {
-            store(record.markedOffline())
+        let generation = trustGeneration(id)
+        let reply = try? await client(address).serverInfo(pin: record.pin)
+        guard trustGeneration(id) == generation, let current = host(id) else { return }
+        if let reply, let updated = try? current.updated(with: reply) {
+            store(updated)
+        } else {
+            store(current.markedOffline())
         }
     }
 
@@ -96,28 +102,38 @@ public final class HostStore {
     }
 
     /// Pairs with a PC: the user types `pin` on the PC while this waits. A successful pairing pins the PC's
-    /// certificate.
+    /// certificate on the record as it is then; a pairing during which the PC was unpaired or paired again is
+    /// `.failed` and pins nothing.
     public func pair(_ id: String, pin: String, passphrase: String? = nil) async throws -> PairingOutcome {
         guard let record = host(id), let address = record.activeAddress ?? record.manualAddress ?? record.localAddress else {
             throw HostError.unreachable(id)
         }
+        let generation = trustGeneration(id)
         let client = try client(address)
         let info = try await client.serverInfo(pin: nil).info
         let outcome = try await client.pair(pin: pin, passphrase: passphrase, serverInfo: info)
         if case let .paired(hostPin) = outcome {
-            store(record.paired(with: hostPin))
+            guard trustGeneration(id) == generation, let current = host(id) else { return .failed }
+            trustChanged(id)
+            store(current.paired(with: hostPin))
             await refresh(id)
         }
         return outcome
     }
 
-    /// Forgets the pairing on both sides (the PC is asked to unpair; locally the pin is removed either way).
+    /// Forgets the pairing on both sides: locally at once, so no answer still on its way brings the pin back, then the
+    /// PC is asked to unpair (the pin stays removed whatever it answers).
     public func unpair(_ id: String) async {
         guard let record = host(id) else { return }
-        if let address = record.activeAddress ?? record.localAddress { try? await client(address).unpair() }
+        trustChanged(id)
         store(record.unpaired())
         apps[id] = nil
+        if let address = record.activeAddress ?? record.localAddress { try? await client(address).unpair() }
     }
+
+    private func trustGeneration(_ id: String) -> Int { trustGenerations[id, default: 0] }
+
+    private func trustChanged(_ id: String) { trustGenerations[id, default: 0] += 1 }
 
     // MARK: Managing PCs
 
@@ -167,8 +183,10 @@ public final class HostStore {
     @discardableResult
     public func loadApps(_ id: String) async throws -> [HostApp] {
         guard let record = host(id), let pin = record.pin, let address = record.activeAddress ?? record.localAddress else { return [] }
+        let generation = trustGeneration(id)
         let list = try await client(address).appList(pin: pin)
-        apps[id] = list
+        // The apps of a PC that was unpaired meanwhile are not kept
+        if trustGeneration(id) == generation { apps[id] = list }
         return list
     }
 

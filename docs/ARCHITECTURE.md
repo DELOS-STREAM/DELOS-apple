@@ -444,6 +444,11 @@ bitrate of DELOS for Android (`getDefaultBitrate`) and stereo audio. `rename` gi
 device (`HostRecord.customName`; blank returns to the PC's `serverName`), `wake` sends Wake-on-LAN to its known
 addresses, `quitApp` quits the app that runs on it.
 
+A request to a PC can take long (pairing waits for the user), and the record can change meanwhile. So an answer goes
+onto the record as it is when the answer arrives (a rename made meanwhile stays), and an answer to a request made
+before the PC was paired or unpaired is dropped: a refresh still on its way never brings back a removed pin. `unpair`
+removes the pin locally before it asks the PC to unpair.
+
 The screens (DelosUI, as DELOS for Android's `DeviceScreens.kt`, `PairScreens.kt` and `HomeScreen.kt`):
 
 - The start screen shows every paired PC (online, asleep and wakeable when its MAC address is known, offline; the
