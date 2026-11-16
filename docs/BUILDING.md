@@ -19,6 +19,19 @@ git config core.hooksPath tools/hooks
 cp Config/Local.example.xcconfig Config/Local.xcconfig   # only for a real device: put your team id there
 ```
 
+## Optional game metadata
+
+Set `DELOS_METADATA_URL` only in the untracked `Config/Local.xcconfig`. Leave it empty to disable every metadata
+request, including direct HowLongToBeat access. `Config/Shared.xcconfig` defaults it to empty, and `Config/Info.plist`
+expands it as `DelosMetadataURL`; `MetadataConfiguration.bundled()` reads that key. No endpoint or provider credential
+is in tracked configuration. An xcconfig treats `//` as a comment: write the URL as `https:/$()/host/path`, as shown in
+`Config/Local.example.xcconfig`. HTTPS is required except for localhost, 127.0.0.1 and Android's 10.0.2.2 development
+bridge. The endpoint must implement the DELOS metadata Worker's `/v1/igdb/games`, `/v1/pcgw/*` and `/v1/steam/tags`
+routes. Provider credentials stay at the Worker; no new Apple Keychain item is needed.
+
+This is a data-layer port only. No library screen starts metadata lookups yet. Its fixture tests use injected fake
+transports/providers, never the configured endpoint or the owner's paired PC.
+
 ## Building and running
 
 | Command | What it does |

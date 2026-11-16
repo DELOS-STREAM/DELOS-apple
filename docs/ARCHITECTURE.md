@@ -12,7 +12,7 @@ The app target (`App/`) only starts the interface. All code is in the Swift pack
 | Module | Contents | May import SwiftUI |
 |---|---|---|
 | `DelosUI` | Design tokens, fonts, icons, shaders, components, the focus engine, the screens | Yes |
-| `DelosData` | Stored data: hosts, profiles, settings, playtime, artwork | No |
+| `DelosData` | Stored data: hosts, profiles, settings, playtime, artwork, game metadata | No |
 | `DelosHost` | Discovery, pairing, the HTTP(S) client of the host, the client identity, Wake-on-LAN | No |
 | `DelosCore` | The C streaming core `delos-common-c` (C target `CDelosCommon`) and its Swift wrapper | No |
 | `DelosMedia` | Video decoding and rendering, audio; Opus decoding (C target `COpus`) | No |
@@ -552,6 +552,40 @@ dropped first; file names are SHA-256 of the key); the match and each kind's cho
 under Application Support/artwork, so an image the cache dropped is downloaded again without a new search. The PC's
 box art is cached the same way. With the key set and Download automatically on, the library downloads the artwork of
 games never looked up when it loads; a cover waits for the lookup (up to 20 s) before falling back to the box art.
+
+## Game metadata
+
+`MetadataStore` is a standalone actor in DelosData, not yet wired into the library. `lookup(title:force:builtIn:)`
+returns a `GameMetadataState`; `state(for:)` reads its cached state without fetching. `search`, `select` and `reset`
+support later manual matching. Lookup by normalized literal host title coalesces concurrent work; manual operations
+queue behind it. Cancellation cancels a shared lookup. At most two title resolutions run concurrently. Known built-in
+titles are skipped; the future UI must pass `builtIn: true` for renamed built-in applications identified by their UUID.
+
+Models and matching port Android's `GameMetadata.kt` and `MetadataPolicy.kt`: accent/article/edition normalization,
+Roman numerals, then literal title, parenthesized year, Steam ID, PC, newest year and a clearly dominant rating count.
+Ambiguity remains unmatched. A unique PC/Steam subtitle extension is the final fallback, not general fuzzy matching.
+Records are fresh for seven days, successful unmatched results for six hours, provider failures back off independently
+for thirty minutes. A failed provider preserves evidence only for the same IGDB identity. Selecting another game
+persists the new manual identity before fetching its evidence and never reuses the old game's HDR or completion time.
+An IGDB error is `updateFailed`, PCGW/HLTB failures are `partial`; Steam-only failures retain Android's silent genre
+fallback. There are no immediate HTTP retries: metadata follows the Android store's persisted provider backoff, not
+SteamGridDB's unrelated short retry loop. Force refresh bypasses the metadata retry window.
+
+Schema-6 JSON records use the existing atomic `DiskCache` API under Application Support/game-metadata (32 MB total,
+1 MB per record), with hashed title keys and no raw host titles in filenames. Missing optional fields are defaulted;
+malformed identities or other schema versions are ignored. As with other file caches, tvOS may purge them.
+`HTTPMetadataProviders` uses the configured metadata Worker for IGDB, PCGamingWiki and Steam tags; HLTB is direct.
+Every request is paced (IGDB 260 ms, PCGW 1050 ms, Steam 650 ms, HLTB 500 ms), using monotonic reservations that remain
+spaced under actor reentrancy. An empty or invalid `DelosMetadataURL` prevents *all* provider requests, including HLTB.
+Provider credentials remain on the Worker; existing artwork Keychain storage is unchanged. Errors contain no
+configured URLs, query strings or response bodies.
+
+PCGW reads only the Video template, preserves nested wiki syntax while locating its fields, and does not equate
+modded/retrofit, console-only or broken HDR with native PC HDR. HLTB discovers the current website search path,
+initializes its authorization, limits search to two pages and detail checks to five, verifies Steam aliases where
+available, and reports only `comp_all` seconds with a positive sample count. A missing value is not a fabricated
+Main Story time. Parsing, pacing, matching, provider backoff and persistence have offline fixture tests; live provider
+access and physical-device integration are not verified.
 
 ## PCs and stream plans
 
