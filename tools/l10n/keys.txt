@@ -197,6 +197,15 @@ settings_native_sounds_title
 settings_native_sounds_description
 settings_native_haptics_title
 settings_native_haptics_description
+settings_native_clock_title
+settings_native_clock_description
+settings_option_clock_system
+settings_option_clock_12
+settings_option_clock_24
+settings_native_help_clock_12
+settings_native_help_clock_24
+settings_native_scale_title
+settings_native_scale_description
 
 # Stream: loader, menu, exit and result overlay
 conn_app_minimized

@@ -40,10 +40,14 @@ public struct Stage: Equatable, Sendable {
     public let shape: StageShape
     /// The safe area (notch, Dynamic Island, home indicator, TV overscan) in stage pixels on each edge.
     public let safe: EdgeInsets
+    /// The interface scale (Settings → Appearance, 1.0 to 1.3) that text and icons are drawn at (``tpx(_:)``): Android's
+    /// `StageMetrics.textScale`. Inside a ``ZoomedBar`` it is 1, because the whole bar is zoomed instead.
+    public let textScale: Double
 
-    public init(size: CGSize, safeArea: EdgeInsets = EdgeInsets()) {
+    /// - Parameter textScale: the interface scale, `Appearance.uiScale / 100`.
+    public init(size: CGSize, safeArea: EdgeInsets = EdgeInsets(), textScale: Double = 1) {
         guard size.width > 0, size.height > 0 else {
-            self.init(scale: 1, width: Self.designWidth, height: Self.designHeight, safe: EdgeInsets())
+            self.init(scale: 1, width: Self.designWidth, height: Self.designHeight, safe: EdgeInsets(), textScale: textScale)
             return
         }
         let unit = max(min(size.width / Self.designWidth, size.height / Self.designHeight), Self.minPointsPerPixel)
@@ -52,16 +56,18 @@ public struct Stage: Equatable, Sendable {
             width: Self.snap(size.width / unit, Self.designWidth),
             height: Self.snap(size.height / unit, Self.designHeight),
             safe: EdgeInsets(top: safeArea.top / unit, leading: safeArea.leading / unit,
-                             bottom: safeArea.bottom / unit, trailing: safeArea.trailing / unit)
+                             bottom: safeArea.bottom / unit, trailing: safeArea.trailing / unit),
+            textScale: textScale
         )
     }
 
-    private init(scale: Double, width: Double, height: Double, safe: EdgeInsets) {
+    private init(scale: Double, width: Double, height: Double, shape: StageShape? = nil, safe: EdgeInsets, textScale: Double) {
         self.scale = scale
         self.width = width
         self.height = height
-        self.shape = Self.classify(width: width, height: height)
+        self.shape = shape ?? Self.classify(width: width, height: height)
         self.safe = safe
+        self.textScale = textScale
     }
 
     /// The limiting axis is exactly 1920 or 1080, not w / (w / 1920) with its rounding error.
@@ -81,6 +87,20 @@ public struct Stage: Equatable, Sendable {
 
     /// A size in stage pixels, in points.
     public func px(_ value: Double) -> CGFloat { CGFloat(value * scale) }
+
+    /// A text or icon size in stage pixels, in points, at the interface scale (Android's `tpx`).
+    public func tpx(_ value: Double) -> CGFloat { CGFloat(value * scale * textScale) }
+
+    /// The stage of a bar zoomed as a whole by [uiScale] (Android's `ZoomedBar`, the prototype's CSS zoom): a stage pixel
+    /// is [uiScale] times larger, so the bar has as many stage pixels across as the zoomed bar really has room for; text
+    /// inside keeps its size relative to the bar (``textScale`` 1). The layout family stays the window's.
+    public func zoomed(by uiScale: Double) -> Stage {
+        Stage(
+            scale: scale * uiScale, width: width / uiScale, height: height / uiScale, shape: shape,
+            safe: EdgeInsets(top: safe.top / uiScale, leading: safe.leading / uiScale,
+                             bottom: safe.bottom / uiScale, trailing: safe.trailing / uiScale),
+            textScale: 1)
+    }
 }
 
 extension EnvironmentValues {
@@ -91,9 +111,12 @@ extension EnvironmentValues {
 /// window (edge-anchored content keeps clear of ``Stage/safe`` itself, as on Android).
 public struct StageReader<Content: View>: View {
     private let content: Content
+    private let textScale: Double
     @State private var safeArea = EdgeInsets()
 
-    public init(@ViewBuilder content: () -> Content) {
+    /// - Parameter textScale: the interface scale, `Appearance.uiScale / 100`.
+    public init(textScale: Double = 1, @ViewBuilder content: () -> Content) {
+        self.textScale = textScale
         self.content = content()
     }
 
@@ -105,9 +128,19 @@ public struct StageReader<Content: View>: View {
             GeometryReader { proxy in
                 content
                     .frame(width: proxy.size.width, height: proxy.size.height)
-                    .environment(\.stage, Stage(size: proxy.size, safeArea: safeArea))
+                    .environment(\.stage, Stage(size: proxy.size, safeArea: safeArea, textScale: textScale))
             }
             .ignoresSafeArea()
         }
+    }
+}
+
+/// The status bar and the hint bars are zoomed as a whole by the interface scale (Android's `ZoomedBar`): the content
+/// gets ``Stage/zoomed(by:)`` of the stage's ``Stage/textScale``. Applied twice it changes nothing more.
+struct ZoomedBar: ViewModifier {
+    @Environment(\.stage) private var stage
+
+    func body(content: Content) -> some View {
+        content.environment(\.stage, stage.zoomed(by: stage.textScale))
     }
 }

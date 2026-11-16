@@ -6,7 +6,7 @@ import Testing
 @MainActor @Suite struct AppearanceSettingsTests {
     @Test func theRowsSitInAndroidsTabsAndOrder() {
         let form = AppearanceForm(appearance: Appearance())
-        #expect(form.rows(.appearance).map(\.id) == ["ui_dark", "ui_palette", "ui_background", "ui_reduced_motion"])
+        #expect(form.rows(.appearance).map(\.id) == ["ui_dark", "ui_palette", "ui_clock", "ui_background", "ui_scale", "ui_reduced_motion"])
         #expect(form.rows(.audio).map(\.id) == ["ui_sounds"])
         #expect(form.rows(.controls).map(\.id) == ["ui_haptics"])
         #expect(form.rows(.stream).isEmpty)
@@ -25,11 +25,52 @@ import Testing
         guard case let .choice(palette, palettes, selectedPalette) = rows[1].value else { Issue.record("palette"); return }
         #expect(palette == "Delos" && selectedPalette == 0)
         #expect(palettes == ["Delos", "Cinder", "Peony", "Nebula", "Twilight", "Cobalt", "Glacier", "Seafoam"])
-        guard case let .choice(background, backgrounds, selectedBackground) = rows[2].value else { Issue.record("background"); return }
+        guard case let .choice(clock, clocks, selectedClock) = rows[2].value else { Issue.record("clock"); return }
+        #expect(clock == "System" && clocks == ["System", "12-hour", "24-hour"] && selectedClock == 0)
+        guard case let .choice(background, backgrounds, selectedBackground) = rows[3].value else { Issue.record("background"); return }
         #expect(background == "Contour" && selectedBackground == 3)
         #expect(backgrounds == ["Aurora", "Tide", "Silk", "Contour", "Nebula", "Plasma", "Lava", "Caustics", "Bokeh", "Orbit", "Still"])
-        guard case let .choice(motion, motions, selectedMotion) = rows[3].value else { Issue.record("motion"); return }
+        #expect(rows[4].value == .slider(value: 100, range: 100...130, step: 5, divisor: 1, unit: " %"))
+        guard case let .choice(motion, motions, selectedMotion) = rows[5].value else { Issue.record("motion"); return }
         #expect(motion == "Full" && motions == ["Full", "Reduced"] && selectedMotion == 0)
+    }
+
+    @Test func theClockAndScaleRowsHaveAndroidsHelp() {
+        var appearance = Appearance()
+        #expect(AppearanceForm(appearance: appearance).rows(.appearance)[2].help == "System\n\nTime format in the status bar.")
+        appearance.clock = .h12
+        let rows = AppearanceForm(appearance: appearance).rows(.appearance)
+        #expect(rows[2].help == "12-hour\n12-hour clock with AM or PM.\n\nTime format in the status bar.")
+        #expect(rows[4].label == "Interface scale")
+        #expect(rows[4].help == "Size of text, status bar and button hints.")
+    }
+
+    @Test func theScaleStepsOnItsGridAndStopsAtItsEnds() {
+        var form = AppearanceForm(appearance: Appearance())
+        let atStart = form.step("ui_scale", by: -1)
+        #expect(!atStart && form.appearance.uiScale == 100)
+        form.step("ui_scale", by: 1)
+        #expect(form.appearance.uiScale == 105)
+        form.step("ui_scale", by: 9)
+        #expect(form.appearance.uiScale == 130)
+        let atEnd = form.step("ui_scale", by: 1)
+        #expect(!atEnd)
+        form.slide("ui_scale", to: 112)
+        #expect(form.appearance.uiScale == 110)
+        form.slide("ui_scale", to: 113)
+        #expect(form.appearance.uiScale == 115)
+        form.slide("ui_scale", to: 90)
+        #expect(form.appearance.uiScale == 100)
+        form.slide("ui_dark", to: 130)
+        #expect(form.appearance.uiScale == 100 && form.appearance.dark)
+        form.step("ui_clock", by: -1)
+        #expect(form.appearance.clock == .h24)
+        form.step("ui_clock", by: 1)
+        #expect(form.appearance.clock == .system)
+        form.pick("ui_clock", option: 1)
+        #expect(form.appearance.clock == .h12)
+        form.pick("ui_clock", option: 3)
+        #expect(form.appearance.clock == .h12)
     }
 
     @Test func thePaletteRowShowsItsHueAndTheHelpExplainsTheChoice() {
@@ -40,7 +81,7 @@ import Testing
         #expect(rows[0].swatch == nil)
         #expect(rows[0].help == "Dark\nDark surfaces with light text.\n\nDark or light interface.")
         #expect(rows[1].help == "Seafoam\n\nColors of the interface and animated backgrounds.")
-        #expect(rows[2].help == "Contour\nSmooth moving contour lines in the selected colors.")
+        #expect(rows[3].help == "Contour\nSmooth moving contour lines in the selected colors.")
         #expect(AppearanceForm(appearance: appearance).rows(.audio)[0].value == .toggle(true))
     }
 

@@ -211,7 +211,7 @@ struct PinScreen: View {
             HStack(spacing: stage.px(16)) {
                 if !accepted { Spinner() }
                 Text(accepted ? L("pairing_pin_accepted") : L("pairing_pin_waiting"))
-                    .font(DelosFonts.figtree(stage.px(26)))
+                    .font(DelosFonts.figtree(stage.tpx(26)))
                     .foregroundStyle(accepted ? RGBA.onlineGreen.color : colors.text2.color)
             }
             FocusItem(id: "cancel", model: focus, action: onCancel) { focused in
@@ -262,7 +262,7 @@ private struct PinDigits: View {
         HStack(spacing: stage.px(26)) {
             ForEach(Array(pin.enumerated()), id: \.offset) { index, digit in
                 Text(String(digit))
-                    .font(DelosFonts.unbounded(stage.px(92)))
+                    .font(DelosFonts.unbounded(stage.tpx(92)))
                     .foregroundStyle(colors.text.color)
                     .frame(width: stage.px(148), height: stage.px(176))
                     .background {

@@ -27,12 +27,12 @@ struct ProfileScreen: View {
                 AvatarBadge(avatar: .of(profile.avatar), size: 240, iconSize: 120)
                     .shadow(color: colors.glow.color, radius: stage.px(40), y: stage.px(30))
                 Text(profile.name)
-                    .font(DelosFonts.unbounded(stage.px(stage.compact ? 48 : 64)))
-                    .tracking(-stage.px(stage.compact ? 48 : 64) * 0.01)
+                    .font(DelosFonts.unbounded(stage.tpx(stage.compact ? 48 : 64)))
+                    .tracking(-stage.tpx(stage.compact ? 48 : 64) * 0.01)
                     .foregroundStyle(colors.text.color)
                     .lineLimit(1)
                 Text(L("profile_signed_in", DeviceModel.name, count))
-                    .font(DelosFonts.figtree(stage.px(26)))
+                    .font(DelosFonts.figtree(stage.tpx(26)))
                     .foregroundStyle(colors.text2.color)
             }
             HStack(alignment: .top, spacing: stage.px(56)) {
@@ -62,7 +62,7 @@ struct ProfileChip: View {
         HStack(spacing: stage.px(14)) {
             AvatarBadge(avatar: .of(profile.avatar), size: 56, iconSize: 30)
             Text(profile.name)
-                .font(DelosFonts.figtree(stage.px(24), .semibold))
+                .font(DelosFonts.figtree(stage.tpx(24), .semibold))
                 .foregroundStyle(colors.text.color)
                 .lineLimit(1)
             SymbolView(symbol: Symbols.expandMore, size: 28, color: focused ? colors.accent : colors.text3)

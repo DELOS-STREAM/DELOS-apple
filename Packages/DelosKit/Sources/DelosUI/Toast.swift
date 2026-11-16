@@ -40,7 +40,7 @@ struct ToastOverlay: View {
                 HStack(spacing: stage.px(14)) {
                     SymbolView(symbol: toast.icon, size: 32, color: colors.accent, filled: true)
                     Text(toast.text)
-                        .font(DelosFonts.figtree(stage.px(24), .semibold))
+                        .font(DelosFonts.figtree(stage.tpx(24), .semibold))
                         .foregroundStyle(colors.text.color)
                         .lineLimit(2)
                 }

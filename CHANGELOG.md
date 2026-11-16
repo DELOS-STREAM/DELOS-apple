@@ -37,6 +37,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - Settings → Appearance of DELOS for Android: the theme (dark or light), the eight color palettes with their colors,
   the eleven animated backgrounds and reduced animations; interface sounds under Audio and interface haptics under
   Controls. Each change shows at once and is kept per profile.
+- The status bar of DELOS for Android: Wi-Fi, the battery with its percentage (red when low, a bolt while charging)
+  and the clock at the right, and the connected PC beside the brand on the library, Settings and Profile. Settings →
+  Appearance has the Clock (System, 12-hour, 24-hour) and the Interface scale (100 to 130 %), which enlarges text and
+  icons and zooms the status bar.
 
 ### Changed
 
