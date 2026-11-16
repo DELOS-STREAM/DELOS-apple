@@ -12,8 +12,9 @@ import Testing
         #expect(form.rows(.stream).isEmpty)
         #expect(Set(SettingsTab.allCases.flatMap { form.rows($0) }.map(\.section)) == ["Interface"])
         #expect(Set(SettingsTab.allCases.flatMap { form.rows($0) }.map(\.id)) == AppearanceForm.ids)
-        for tab in SettingsTab.allCases {
-            let all = StreamSettingsForm(settings: StreamSettings(), device: device).rows(tab) + form.rows(tab)
+        for tab in SettingsTab.availableCases {
+            let all = StreamSettingsForm(settings: StreamSettings(), device: device).rows(tab)
+                + form.rows(tab) + AppLanguageSetting.rows(tab)
             #expect(all.first?.id == SettingsScreen.firstRow(tab))
         }
     }

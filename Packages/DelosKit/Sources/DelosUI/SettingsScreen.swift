@@ -10,8 +10,8 @@ import AppKit
 
 /// Settings (`SettingsScreen` of DELOS for Android) on a stage that is not compact: the title, the tabs between their
 /// L1 and R1 badges, the rows of the selected tab and, on the right, the description panel with the focused row's help.
-/// The tabs ported so far are Stream, Audio, Controls and Appearance (``SettingsTab``); search, the impact chips and the
-/// compact layout with the help dock under the list are not ported yet. The appearance rows change the current
+/// Search, the impact chips and the compact layout with the help dock under the list are not ported yet.
+/// About contains only the system app-language action on iPhone and iPad. The appearance rows change the current
 /// profile's ``Appearance``, which the whole interface shows at once, and store it.
 ///
 /// Controller: up and down move between the rows (a held Up stops at the first row; a new press there goes on to the
@@ -29,6 +29,7 @@ struct SettingsScreen: View {
     @Binding var appearance: Appearance
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
+    @Environment(\.openURL) private var openURL
     @State private var form: StreamSettingsForm
     @State private var tab: SettingsTab
     /// The row whose list of values is open, and the focus inside the list.
@@ -57,12 +58,13 @@ struct SettingsScreen: View {
         case .audio: StreamSettingsForm.hostAudio
         case .controls: AppearanceForm.haptics
         case .appearance: AppearanceForm.theme
+        case .about: AppLanguageSetting.id
         }
     }
 
     private var appearanceForm: AppearanceForm { AppearanceForm(appearance: appearance) }
 
-    private var rows: [SettingRow] { form.rows(tab) + appearanceForm.rows(tab) }
+    private var rows: [SettingRow] { form.rows(tab) + appearanceForm.rows(tab) + AppLanguageSetting.rows(tab) }
     private var focusedRow: SettingRow? { rows.first { focus.focused == AnyHashable($0.id) } }
 
     var body: some View {
@@ -184,6 +186,12 @@ struct SettingsScreen: View {
 
     /// A on a row: a toggle flips, a choice or a slider steps forward (`SettingRow.activate` of DELOS for Android).
     private func activate(_ row: SettingRow) {
+        if case .appSettings = row.value {
+            #if os(iOS)
+            if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+            #endif
+            return
+        }
         step(row.id, by: 1)
     }
 
@@ -217,6 +225,9 @@ struct SettingsScreen: View {
         case .choice(_, _, let selected):
             feedback?.play(.open)
             picker = (row.id, FocusModel(initial: ChoicePicker.optionID(selected ?? 0)))
+        case .appSettings:
+            feedback?.play(.open)
+            activate(row)
         case .slider, .action:
             break
         }
@@ -293,7 +304,7 @@ private struct SettingsTabs: View {
     var body: some View {
         HStack(spacing: 0) {
             ShoulderLabel(label: "L1")
-            ForEach(SettingsTab.allCases, id: \.self) { tab in
+            ForEach(SettingsTab.availableCases, id: \.self) { tab in
                 let on = tab == selected
                 HStack(spacing: stage.px(12)) {
                     SymbolView(symbol: tab.icon, size: 30, color: on ? colors.onAccent : colors.text2, filled: on)
@@ -398,6 +409,16 @@ struct SettingRowView: View {
             SettingSlider(value: value, range: range, step: step, divisor: divisor, unit: unit, focused: focused, onChange: onSlide)
         case .action:
             SymbolView(symbol: Symbols.chevronRight, size: 30, color: arrows)
+        case .appSettings(let language):
+            HStack(spacing: stage.px(12)) {
+                Text(language)
+                    .font(DelosFonts.figtree(stage.tpx(23)))
+                    .foregroundStyle(colors.text2.color)
+                    .lineLimit(1)
+                    .frame(maxWidth: stage.px(360), alignment: .trailing)
+                SymbolView(symbol: Symbols.chevronRight, size: 30, color: arrows)
+                    .offset(x: stage.px(9))
+            }
         }
     }
 }

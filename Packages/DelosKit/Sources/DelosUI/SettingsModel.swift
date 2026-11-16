@@ -5,9 +5,13 @@ import Foundation
 
 /// A tab of Settings (`SettingsTab` of DELOS for Android), as far as its rows are ported, in Android's order: Stream
 /// (resolution, frame rate, bitrate, codec), Audio (playing audio on the PC, interface sounds), Controls (interface
-/// haptics) and Appearance (``AppearanceForm``).
+/// haptics), Appearance (``AppearanceForm``), and About (the system app-language action on iPhone/iPad).
 enum SettingsTab: CaseIterable, Hashable, Sendable {
-    case stream, audio, controls, appearance
+    case stream, audio, controls, appearance, about
+
+    /// About has only the app-language action so far; do not expose an empty tab on unsupported platforms.
+    static let availableCases: [SettingsTab] = AppLanguageSetting.supportsAppSettings
+        ? allCases : allCases.filter { $0 != .about }
 
     var label: String {
         switch self {
@@ -15,6 +19,7 @@ enum SettingsTab: CaseIterable, Hashable, Sendable {
         case .audio: L("settings_tab_audio")
         case .controls: L("settings_tab_controls")
         case .appearance: L("settings_tab_appearance")
+        case .about: L("settings_tab_about")
         }
     }
 
@@ -24,6 +29,7 @@ enum SettingsTab: CaseIterable, Hashable, Sendable {
         case .audio: Symbols.graphicEq
         case .controls: Symbols.sportsEsports
         case .appearance: Symbols.appearance
+        case .about: Symbols.info
         }
     }
 
@@ -34,13 +40,14 @@ enum SettingsTab: CaseIterable, Hashable, Sendable {
         case .audio: L("settings_tab_audio_description")
         case .controls: L("settings_tab_controls_description")
         case .appearance: L("settings_tab_appearance_description")
+        case .about: L("settings_tab_about_description")
         }
     }
 
     /// The tab [direction] steps away (L1 / R1), wrapping around.
     func step(_ direction: Int) -> SettingsTab {
-        let all = Self.allCases
-        let index = all.firstIndex(of: self)!
+        let all = Self.availableCases
+        guard let index = all.firstIndex(of: self) else { return all[0] }
         return all[((index + direction) % all.count + all.count) % all.count]
     }
 }
@@ -54,6 +61,8 @@ enum SettingValue: Equatable {
     case slider(value: Int, range: ClosedRange<Int>, step: Int, divisor: Int, unit: String)
     /// Opens something (a screen).
     case action
+    /// Shows the effective app language and opens its system Settings page, not an in-app picker.
+    case appSettings(language: String)
 }
 
 /// One row of Settings: the key of the same setting in DELOS for Android, where it is, what it shows and its help.
@@ -109,7 +118,7 @@ struct StreamSettingsForm: Equatable {
         switch tab {
         case .stream: [resolutionRow, frameRateRow, bitrateRow, codecRow, framePacingRow]
         case .audio: [hostAudioRow]
-        case .controls, .appearance: []
+        case .controls, .appearance, .about: []
         }
     }
 
@@ -330,5 +339,35 @@ struct StreamSettingsForm: Equatable {
         default: 50
         }
         return min(wanted, max(1, steps / 40))
+    }
+}
+
+/// Android's About → MISC language row; the OS owns the app language, never a profile preference.
+enum AppLanguageSetting {
+    static let id = "list_languages"
+
+    static var supportsAppSettings: Bool {
+        #if os(iOS)
+        true
+        #else
+        false
+        #endif
+    }
+
+    static func rows(
+        _ tab: SettingsTab, supported: Bool = supportsAppSettings,
+        preferredLocalization: String = Bundle.module.preferredLocalizations.first
+            ?? Bundle.module.developmentLocalization ?? "en",
+        displayLocale: Locale = .current
+    ) -> [SettingRow] {
+        guard supported, tab == .about else { return [] }
+        // The catalog's preferred localization is the actual app language; Locale.current can describe
+        // the user's regional formats instead. Preserve regional/script distinctions such as pt-BR/zh-Hans.
+        let language = displayLocale.localizedString(forIdentifier: preferredLocalization)
+            ?? displayLocale.localizedString(forLanguageCode: preferredLocalization) ?? preferredLocalization
+        return [SettingRow(
+            id: id, tab: .about, section: L("title_settings_misc"), icon: Symbols.language,
+            label: L("title_language_list"), value: .appSettings(language: language),
+            help: L("help_list_languages"))]
     }
 }

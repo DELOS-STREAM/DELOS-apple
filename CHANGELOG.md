@@ -45,6 +45,9 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   and the clock at the right, and the connected PC beside the brand on the library, Settings and Profile. Settings →
   Appearance has the Clock (System, 12-hour, 24-hour) and the Interface scale (100 to 130 %), which enlarges text and
   icons and zooms the status bar.
+- Settings → About → MISC → Language on iPhone and iPad: the current app language, with an action that opens the
+  app's page in system Settings. Language selection stays with iOS; the row and otherwise empty About tab are omitted
+  on tvOS. Changing the language through Settings on physical devices is not verified.
 
 ### Changed
 

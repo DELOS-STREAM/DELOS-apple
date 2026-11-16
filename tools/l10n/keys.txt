@@ -139,6 +139,13 @@ help_checkbox_host_audio
 help_dynamic_resolution
 help_note_unavailable
 
+# Settings: About, system app-language action
+settings_tab_about
+settings_tab_about_description
+title_settings_misc
+title_language_list
+help_list_languages
+
 # Settings: Appearance, Controls, interface sounds
 settings_tab_controls
 settings_tab_controls_description

@@ -357,7 +357,22 @@ springs, the tabs, the switches and the screen transition (a plain fade) follow.
 Not in the Appearance tab: Material You (no counterpart), the game colors and the game background with its blur and
 opacity (no game background yet).
 
-Not ported yet: the Display, Covers, Devices and About tabs, the other rows of Audio and Controls, search, the impact
+**About → MISC → Language** (`AppLanguageSetting`) on iPhone and iPad shows the resource bundle's preferred
+localization, named by Foundation in the current locale (including region/script distinctions such as pt-BR and
+zh-Hans). It reads the app's effective language, not the region's language or a profile setting. A or a tap opens the
+app's system Settings page through SwiftUI `openURL` and `UIApplication.openSettingsURLString`; left/right does not
+change the language. iOS owns the language choice and its application to system-provided UI. No in-app language
+override or new preference is stored.
+
+The About tab currently contains only this action. `SettingsTab.availableCases` omits it on platforms without this
+per-app route, including tvOS; the tab and L1/R1 wrapping use the same available list. Apple TV's language remains in
+[General → Apple TV Languages](https://support.apple.com/guide/tv/change-language-or-region-atvbc08190a2/tvos), where it
+controls all supported apps. `LanguageSettingsTests` checks the Android label/section/icon, the effective language
+value and system-settings action, region-specific names and omission on unsupported platforms. Opening Settings and
+changing the app's language on physical devices are not verified.
+
+
+Not ported yet: the Display, Covers and Devices tabs, the rest of About, the other rows of Audio and Controls, search, the impact
 chips, the compact layout (the help dock under the list), the gliding focus plate and the auto-scrolling help, and
 Android's link guidance rows.
 
