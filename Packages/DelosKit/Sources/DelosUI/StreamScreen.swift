@@ -175,12 +175,12 @@ private struct StreamLoader: View {
     var body: some View {
         VStack(spacing: stage.px(28)) {
             Text(greeting)
-                .font(DelosFonts.unbounded(stage.px(stage.compact ? 42 : 52)))
+                .font(DelosFonts.unbounded(stage.tpx(stage.compact ? 42 : 52)))
                 .foregroundStyle(colors.text.color)
                 .multilineTextAlignment(.center)
             if !line.isEmpty {
                 Text(line)
-                    .font(DelosFonts.figtree(stage.px(28)))
+                    .font(DelosFonts.figtree(stage.tpx(28)))
                     .foregroundStyle(colors.text2.color)
                     .multilineTextAlignment(.center)
                     .contentTransition(.opacity)
@@ -263,13 +263,13 @@ private struct StreamResultLayer: View {
                 }
                 .frame(width: stage.px(220), height: stage.px(220))
                 Text(text.title)
-                    .font(DelosFonts.unbounded(stage.px(stage.compact ? 42 : 52)))
+                    .font(DelosFonts.unbounded(stage.tpx(stage.compact ? 42 : 52)))
                     .foregroundStyle(colors.text.color)
                     .multilineTextAlignment(.center)
                     .padding(.top, stage.px(8))
                 if !text.sentence.isEmpty {
                     Text(text.sentence)
-                        .font(DelosFonts.figtree(stage.px(28)))
+                        .font(DelosFonts.figtree(stage.tpx(28)))
                         .foregroundStyle(colors.text2.color)
                         .multilineTextAlignment(.center)
                         .lineSpacing(stage.px(28) * 0.4)
@@ -288,7 +288,7 @@ private struct StreamResultLayer: View {
                     FocusItem(id: "result-details", model: focus, action: { expanded.toggle() }) { focused in
                         HStack(spacing: stage.px(8)) {
                             Text(L("stream_result_details"))
-                                .font(DelosFonts.figtree(stage.px(22), .semibold))
+                                .font(DelosFonts.figtree(stage.tpx(22), .semibold))
                                 .foregroundStyle(colors.text2.color)
                             SymbolView(symbol: expanded ? Symbols.expandLess : Symbols.expandMore, size: 26, color: colors.text2)
                         }
@@ -299,7 +299,7 @@ private struct StreamResultLayer: View {
                     if expanded {
                         ScrollView {
                             Text(details)
-                                .font(DelosFonts.figtree(stage.px(22)))
+                                .font(DelosFonts.figtree(stage.tpx(22)))
                                 .foregroundStyle(colors.text2.color)
                                 .lineSpacing(stage.px(22) * 0.4)
                                 .frame(maxWidth: .infinity, alignment: .leading)

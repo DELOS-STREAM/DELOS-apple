@@ -17,7 +17,7 @@ struct StreamStatsOverlay: View {
                     .foregroundStyle(colors.accent2.color)
                 Text(verbatim: " · \(statistics.codec)\(statistics.hdr ? " HDR" : "")")
             }
-            .font(DelosFonts.figtree(stage.px(20), .semibold))
+            .font(DelosFonts.figtree(stage.tpx(20), .semibold))
             Grid(alignment: .leading, horizontalSpacing: stage.px(24), verticalSpacing: 0) {
                 ForEach(readings.indices, id: \.self) { index in
                     GridRow {
@@ -27,7 +27,7 @@ struct StreamStatsOverlay: View {
                     .frame(minHeight: stage.px(25.5), alignment: .leading)
                 }
             }
-            .font(DelosFonts.figtree(stage.px(17)))
+            .font(DelosFonts.figtree(stage.tpx(17)))
         }
         .monospacedDigit()
         .foregroundStyle(colors.text.color)
