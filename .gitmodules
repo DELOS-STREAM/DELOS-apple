@@ -4,3 +4,9 @@
 [submodule "X1Kit"]
 	path = X1Kit
 	url = https://github.com/cgutman/X1Kit.git
+[submodule "ThirdParty/opus"]
+	path = ThirdParty/opus
+	url = https://github.com/xiph/opus.git
+[submodule "ThirdParty/delos-common-c"]
+	path = ThirdParty/delos-common-c
+	url = https://github.com/Meitoncz/Delos-common-c.git

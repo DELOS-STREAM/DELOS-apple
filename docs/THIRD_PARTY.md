@@ -10,6 +10,10 @@ for binaries, checksum (rule of [ENGINEERING_RULES.md](ENGINEERING_RULES.md)).
 | Moonlight for iOS/tvOS (reference app, to be removed) | `Limelight/`, `Moonlight TV/`, `Moonlight.xcodeproj`, storyboards | [moonlight-stream/moonlight-ios](https://github.com/moonlight-stream/moonlight-ios) | fork point `02dc978` | GPL-3.0 |
 | moonlight-common-c (submodule, to be replaced by the DELOS core) | `moonlight-common/moonlight-common-c` | [moonlight-stream/moonlight-common-c](https://github.com/moonlight-stream/moonlight-common-c) | `f900dd47` | GPL-3.0 |
 | X1Kit (submodule, to be removed) | `X1Kit` | [cgutman/X1Kit](https://github.com/cgutman/X1Kit) | `6e842ae9` | MIT |
+| delos-common-c, the DELOS streaming core (submodule; built as `CDelosCommon`) | `ThirdParty/delos-common-c` | [Meitoncz/Delos-common-c](https://github.com/Meitoncz/Delos-common-c) | `8c208139e841c9f5fffe6e4f1606bfdf922c9707` (`master`) | GPL-3.0 |
+| ENet, fork for moonlight-common-c (submodule of delos-common-c) | `ThirdParty/delos-common-c/enet` | [cgutman/enet](https://github.com/cgutman/enet) | `98dbb897ac4a7208038e0782cddedf89dcf0723a` | MIT |
+| nanors, Reed-Solomon FEC (submodule of delos-common-c) | `ThirdParty/delos-common-c/nanors` | [sleepybishop/nanors](https://github.com/sleepybishop/nanors) | `a9b1636f9c98dbfdd0daeaf6982ccd24d1c30f29` | MIT |
+| libopus (submodule; built as `COpus`) | `ThirdParty/opus` | [xiph/opus](https://github.com/xiph/opus) | `v1.6.1`, `22244de5a79bd1d6d623c32e72bf1954b56235be` | BSD-3-Clause |
 
 ## Fonts
 
@@ -28,7 +32,7 @@ from verified sources; the licence files are next to them in `Packages/DelosKit/
 
 | Package | Origin | Version | Pin |
 |---|---|---|---|
-| OpenSSL-Package (binary OpenSSL for the C core) | [krzyzanowskim/OpenSSL-Package](https://github.com/krzyzanowskim/OpenSSL-Package) | 3.6.3000 | revision `a3809db22a45e3ff658377a24da252982a306b9b` |
+| OpenSSL-Package (binary OpenSSL for the C core) | [krzyzanowskim/OpenSSL-Package](https://github.com/krzyzanowskim/OpenSSL-Package) | 3.6.3000 (exact, `Packages/DelosKit/Package.swift`) | revision `a3809db22a45e3ff658377a24da252982a306b9b`; its binary target `OpenSSL.xcframework.zip` (from [krzyzanowskim/OpenSSL](https://github.com/krzyzanowskim/OpenSSL/releases/tag/3.6.3000)) has SHA-256 `6c4b064d12b8de2ae77ac59fbcbbd1c20b4fecfb7fc50b8ab326347c52ecbf0c`, which SwiftPM verifies |
 
 ## Prebuilt binaries (inherited, to be removed)
 
