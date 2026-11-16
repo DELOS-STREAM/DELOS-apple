@@ -2,26 +2,29 @@ import AVFoundation
 import CoreMedia
 
 /// Shows decoded video. The first renderer is `AVSampleBufferDisplayLayer`, where the system decodes, paces and
-/// handles HDR (decision L4); a Metal renderer follows when upscalers or PyroWave need it.
-@MainActor
-public protocol VideoRenderer: AnyObject {
+/// handles HDR (decision L4); a Metal renderer follows when upscalers or PyroWave need it. Called on the core's video
+/// thread.
+public protocol VideoRenderer: Sendable {
     /// Shows a frame; returns false when the renderer failed and needs a key frame to start over.
     func enqueue(_ sample: CMSampleBuffer) -> Bool
     /// Drops the frames waiting to be shown (before a new stream or after an error).
     func flush()
 }
 
-/// Renders through an `AVSampleBufferDisplayLayer`; the view layer hosts ``layer``.
-@MainActor
+/// Renders through an `AVSampleBufferDisplayLayer`; a view hosts ``layer`` (on the main actor), while frames go to its
+/// `sampleBufferRenderer`, which accepts them from any thread.
 public final class DisplayLayerRenderer: VideoRenderer {
-    public let layer = AVSampleBufferDisplayLayer()
+    public nonisolated(unsafe) let layer: AVSampleBufferDisplayLayer
+    private nonisolated(unsafe) let renderer: AVSampleBufferVideoRenderer
 
+    @MainActor
     public init() {
+        layer = AVSampleBufferDisplayLayer()
         layer.videoGravity = .resizeAspect
+        renderer = layer.sampleBufferRenderer
     }
 
     public func enqueue(_ sample: CMSampleBuffer) -> Bool {
-        let renderer = layer.sampleBufferRenderer
         if renderer.status == .failed {
             renderer.flush()
             return false
@@ -31,6 +34,6 @@ public final class DisplayLayerRenderer: VideoRenderer {
     }
 
     public func flush() {
-        layer.sampleBufferRenderer.flush()
+        renderer.flush()
     }
 }

@@ -71,6 +71,16 @@ parameter sets) and wraps each frame in a sample buffer marked "display immediat
 a frame before the first key frame fails with `needsKeyFrame`, the signal to ask the host for one. `VideoRenderer` is the
 renderer interface; `DisplayLayerRenderer` shows the samples through `AVSampleBufferDisplayLayer` (decision L4).
 
+## Stream output
+
+`VideoOutput` and `AudioOutput` (DelosMedia) are the sinks the stream session hands the core. `VideoOutput` joins each
+decode unit's buffers into one Annex B or OBU frame, wraps it with `VideoSamples` and gives it to the renderer; a frame
+that cannot be shown answers `needIDRFrame`, so the core asks the host for a key frame. `AudioOutput` decodes the Opus
+packets on the core's audio thread into an `AudioRing` and plays them through an `AVAudioEngine` source node in the
+playback audio session; the ring keeps at most 60 ms and drops the oldest samples beyond that, so a network burst does
+not add lasting delay. The core calls each sink from one thread at a time, which is why their state has no lock; only the
+ring, read by the render thread, has one.
+
 ## Sounds and haptics
 
 `Feedback` plays the five interface sounds of DELOS for Android (move, select, back, open, error) as system sounds, so
