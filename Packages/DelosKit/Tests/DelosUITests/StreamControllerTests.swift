@@ -216,8 +216,8 @@ private let iPhone = DisplayInfo(pixelWidth: 1290, pixelHeight: 2796, maxFramesP
     @Test func touchesAreIgnoredOutsideTheRunningStream() {
         let controller = StreamController { FakeSteps() }
         // No crash and no effect while connecting
-        controller.touch(1, .began, at: .zero, height: 1000, time: 0)
-        controller.touch(1, .ended, at: .zero, height: 1000, time: 0.1)
+        controller.touch(1, .began, at: .zero, width: 1000, time: 0)
+        controller.touch(1, .ended, at: .zero, width: 1000, time: 0.1)
         #expect(controller.phase == .connecting)
     }
 }

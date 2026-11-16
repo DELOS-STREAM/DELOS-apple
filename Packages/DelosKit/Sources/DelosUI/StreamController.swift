@@ -208,16 +208,16 @@ final class StreamController {
 
     enum TouchPhase { case began, moved, ended, cancelled }
 
-    /// A touch on the stream, in pixels of a screen `height` pixels tall: the bottom-edge swipe opens the menu, the
-    /// other touches are the PC's trackpad.
-    func touch(_ id: Int, _ touchPhase: TouchPhase, at point: CGPoint, height: CGFloat, time: TimeInterval) {
+    /// A touch on the stream, in pixels of a screen `width` pixels wide: the left-edge swipe opens the menu, the other
+    /// touches are the PC's trackpad.
+    func touch(_ id: Int, _ touchPhase: TouchPhase, at point: CGPoint, width: CGFloat, time: TimeInterval) {
         guard phase == .streaming, !menuOpen else { return }
         switch touchPhase {
         case .began:
-            if swipe.began(id, y: point.y, height: height) { return }
+            if swipe.began(id, x: point.x, width: width) { return }
             trackpad.began(id, at: point, time: time)
         case .moved:
-            let (owned, open) = swipe.moved(id, y: point.y, height: height)
+            let (owned, open) = swipe.moved(id, x: point.x, width: width)
             if open { openMenu() }
             if owned { return }
             trackpad.moved(id, to: point).forEach { input?.send($0) }

@@ -175,13 +175,13 @@ import Testing
         #expect(ends == [])
     }
 
-    @Test func theBottomEdgeSwipeOwnsItsTouchAndOpensOnce() {
+    @Test func theLeftEdgeSwipeOwnsItsTouchAndOpensOnce() {
         var swipe = MenuSwipe()
-        // Outside the bottom 6 %: not the swipe's
-        let outside = swipe.began(1, y: 900, height: 1000)
-        let inside = swipe.began(2, y: 950, height: 1000)
+        // Outside the left 4 %: not the swipe's
+        let outside = swipe.began(1, x: 100, width: 2000)
+        let inside = swipe.began(2, x: 30, width: 2000)
         #expect(!outside && inside)
-        let moves = [900.0, 830, 700].map { swipe.moved(2, y: $0, height: 1000) }
+        let moves = [100.0, 280, 400].map { swipe.moved(2, x: $0, width: 2000) }
         #expect(moves.map(\.owned) == [true, true, true])
         #expect(moves.map(\.open) == [false, true, false])
         let ended = (swipe.ended(2), swipe.ended(1))

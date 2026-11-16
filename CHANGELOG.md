@@ -24,7 +24,7 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   with their box art.
 - The stream screen: it launches or resumes the app on the PC, tells DELOS for Android's loading lines while it
   connects, shows the video full screen at up to 120 Hz and sends game controllers (with rumble), a keyboard, a mouse
-  and touch as a trackpad to the PC. L3 + R3 or a swipe up from the bottom edge opens a small stream menu (Resume,
+  and touch as a trackpad to the PC. L3 + R3 or a swipe from the left edge opens a small stream menu (Resume,
   Disconnect, Quit app); a stream that fails shows Android's result screen with Try again. Not yet tried with a real
   stream.
 - Settings, with the Stream and Audio tabs of DELOS for Android: the video resolution (the presets and the display's

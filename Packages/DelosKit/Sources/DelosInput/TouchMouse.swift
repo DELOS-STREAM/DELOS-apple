@@ -89,11 +89,12 @@ public struct TouchTrackpad: Sendable {
     }
 }
 
-/// The swipe up from the bottom edge that opens the stream menu (`StreamMenu` of DELOS for Android, on by default): a
-/// touch starting in the bottom 6 % of the screen belongs to the swipe and does not reach the PC; once it has gone
-/// up 12 % of the height, the menu opens.
+/// The swipe that opens the stream menu: a touch starting in the left 4 % of the screen belongs to the swipe and does
+/// not reach the PC; once it has gone right 12 % of the width, the menu opens. DELOS for Android swipes up from the
+/// bottom edge, but on iPhone and iPad the bottom edge belongs to the system's home gesture (the owner's first test on
+/// the iPad went to the home screen), and the left edge has no system gesture.
 public struct MenuSwipe: Sendable {
-    public static let edge = 0.06
+    public static let edge = 0.04
     public static let distance = 0.12
 
     private var tracking: [Int: CGFloat] = [:]
@@ -101,17 +102,17 @@ public struct MenuSwipe: Sendable {
 
     public init() {}
 
-    /// Whether the touch starting at `y` (of `height`) belongs to the swipe.
-    public mutating func began(_ id: Int, y: CGFloat, height: CGFloat) -> Bool {
-        guard y >= height * (1 - Self.edge) else { return false }
-        tracking[id] = y
+    /// Whether the touch starting at `x` (of `width`) belongs to the swipe.
+    public mutating func began(_ id: Int, x: CGFloat, width: CGFloat) -> Bool {
+        guard x <= width * Self.edge else { return false }
+        tracking[id] = x
         return true
     }
 
-    /// Whether the touch belongs to the swipe; `open` once, when it went far enough up.
-    public mutating func moved(_ id: Int, y: CGFloat, height: CGFloat) -> (owned: Bool, open: Bool) {
+    /// Whether the touch belongs to the swipe; `open` once, when it went far enough right.
+    public mutating func moved(_ id: Int, x: CGFloat, width: CGFloat) -> (owned: Bool, open: Bool) {
         guard let start = tracking[id] else { return (false, false) }
-        if start - y >= height * Self.distance, !fired.contains(id) {
+        if x - start >= width * Self.distance, !fired.contains(id) {
             fired.insert(id)
             return (true, true)
         }

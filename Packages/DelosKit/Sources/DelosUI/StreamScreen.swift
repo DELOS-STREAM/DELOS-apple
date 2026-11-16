@@ -12,7 +12,7 @@ import UIKit
 /// ported yet.
 ///
 /// The stream menu opens like on Android by default: L3 + R3 held together on a controller (``MenuShortcut``), or a
-/// swipe up from the bottom edge of the touch screen (``MenuSwipe``).
+/// swipe from the left edge of the touch screen (``MenuSwipe``).
 struct StreamScreen: View {
     let hostID: String
     let appID: Int
@@ -107,8 +107,8 @@ struct StreamContent: View {
             VideoSurface(
                 layer: renderer.layer,
                 onDisplay: { controller.start(display: $0) },
-                onTouch: { id, phase, point, height, time in
-                    controller.touch(id, phase, at: point, height: height, time: time)
+                onTouch: { id, phase, point, width, time in
+                    controller.touch(id, phase, at: point, width: width, time: time)
                 },
                 ignoresPointer: { controller.hasMouse }
             )

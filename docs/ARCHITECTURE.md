@@ -152,9 +152,10 @@ closes the menu, and B while connecting leaves. The statistics overlay is not po
 ### The stream menu
 
 It opens as in DELOS for Android by default: L3 + R3 held together (`MenuShortcut`, Android's `ButtonShortcut`: the
-button that completes the shortcut is kept from the PC, the menu opens when both are let go), or a swipe up from the
-bottom edge of the touch screen (`MenuSwipe`: a touch starting in the bottom 6 % belongs to the swipe and does not reach
-the PC; 12 % of the height up opens the menu). The menu is minimal: Resume, Disconnect and Quit app from Android's dock.
+button that completes the shortcut is kept from the PC, the menu opens when both are let go), or a swipe from the
+left edge of the touch screen (`MenuSwipe`: a touch starting in the left 4 % belongs to the swipe and does not reach
+the PC; 12 % of the width to the right opens the menu). Android swipes up from the bottom edge, but on iPhone and iPad
+that edge belongs to the system's home gesture. The menu is minimal: Resume, Disconnect and Quit app from Android's dock.
 While it is open, `GameInput` sends nothing and releases every held button, key and mouse button at the PC.
 
 ### Input during a stream
@@ -463,7 +464,7 @@ has no such setting; both are in `Config/Info.plist`, which Xcode merges with th
   the running stream, a launch failure, a failed stage, Try again, a lost connection and a graceful end, Disconnect,
   Quit app and a refused quit, leaving while connecting, who gets the controller commands), the failure texts against
   Android's rules, the PC's launch answers (470, 525, 599), the controller button flags, stick and trigger scaling,
-  controller numbers, the menu shortcut, the keyboard table, the trackpad and the bottom-edge swipe, the decoder formats.
+  controller numbers, the menu shortcut, the keyboard table, the trackpad and the left-edge swipe, the decoder formats.
 - Settings without a screen (`swift test`): `StreamSettings` read leniently and clamped, stored per profile, copied to
   a new profile and removed with it; the bitrate default following the resolution and frame rate; the resolution, frame
   rate and codec lists for several displays and decoders, the formats each codec offers, the replacement of values a

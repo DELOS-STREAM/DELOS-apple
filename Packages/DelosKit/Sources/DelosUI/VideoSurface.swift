@@ -6,7 +6,7 @@ import SwiftUI
 struct VideoSurface {
     let layer: AVSampleBufferDisplayLayer
     let onDisplay: @MainActor (DisplayInfo) -> Void
-    var onTouch: @MainActor (_ id: Int, _ phase: StreamController.TouchPhase, _ point: CGPoint, _ height: CGFloat, _ time: TimeInterval) -> Void = { _, _, _, _, _ in }
+    var onTouch: @MainActor (_ id: Int, _ phase: StreamController.TouchPhase, _ point: CGPoint, _ width: CGFloat, _ time: TimeInterval) -> Void = { _, _, _, _, _ in }
     /// Whether a touch of the system pointer (a mouse or trackpad) is ignored: the mouse's own input already moves the
     /// PC's pointer.
     var ignoresPointer: @MainActor () -> Bool = { false }
@@ -85,7 +85,7 @@ final class VideoHostView: UIView {
             let point = touch.location(in: self)
             onTouch(
                 ObjectIdentifier(touch).hashValue, phase, CGPoint(x: point.x * scale, y: point.y * scale),
-                bounds.height * scale, touch.timestamp)
+                bounds.width * scale, touch.timestamp)
         }
     }
 }
