@@ -130,7 +130,7 @@ private struct DialogFieldView: View {
         FocusItem(id: DialogLayer.fieldID(index), model: focus, action: { typing = index }) { focused in
             TextPill(
                 label: nil, icon: field.icon, placeholder: field.placeholder, text: $value, editing: $editing, focused: focused,
-                width: width, onSubmit: onSubmit
+                secret: field.secret, width: width, onSubmit: onSubmit
             )
             // The note above is centered; the value reads from the start of the field
             .multilineTextAlignment(.leading)

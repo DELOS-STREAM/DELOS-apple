@@ -6,7 +6,10 @@ import Testing
 @MainActor @Suite struct AppearanceSettingsTests {
     @Test func theRowsSitInAndroidsTabsAndOrder() {
         let form = AppearanceForm(appearance: Appearance())
-        #expect(form.rows(.appearance).map(\.id) == ["ui_dark", "ui_palette", "ui_clock", "ui_background", "ui_scale", "ui_reduced_motion"])
+        #expect(form.rows(.appearance).map(\.id) == [
+            "ui_dark", "ui_palette", "ui_match_game_colors", "ui_clock", "ui_background", "ui_hero_background", "ui_hero_blur",
+            "ui_hero_opacity", "ui_scale", "ui_reduced_motion",
+        ])
         #expect(form.rows(.audio).map(\.id) == ["ui_sounds"])
         #expect(form.rows(.controls).map(\.id) == ["ui_haptics"])
         #expect(form.rows(.stream).isEmpty)
@@ -14,7 +17,7 @@ import Testing
         #expect(Set(SettingsTab.allCases.flatMap { form.rows($0) }.map(\.id)) == AppearanceForm.ids)
         for tab in SettingsTab.availableCases {
             let all = StreamSettingsForm(settings: StreamSettings(), device: device).rows(tab)
-                + form.rows(tab) + AppLanguageSetting.rows(tab)
+                + form.rows(tab) + CoversForm(enabled: false, automatic: true, pcName: nil).rows(tab) + AppLanguageSetting.rows(tab)
             #expect(all.first?.id == SettingsScreen.firstRow(tab))
         }
     }
@@ -26,24 +29,24 @@ import Testing
         guard case let .choice(palette, palettes, selectedPalette) = rows[1].value else { Issue.record("palette"); return }
         #expect(palette == "Delos" && selectedPalette == 0)
         #expect(palettes == ["Delos", "Cinder", "Peony", "Nebula", "Twilight", "Cobalt", "Glacier", "Seafoam"])
-        guard case let .choice(clock, clocks, selectedClock) = rows[2].value else { Issue.record("clock"); return }
+        guard case let .choice(clock, clocks, selectedClock) = rows[3].value else { Issue.record("clock"); return }
         #expect(clock == "System" && clocks == ["System", "12-hour", "24-hour"] && selectedClock == 0)
-        guard case let .choice(background, backgrounds, selectedBackground) = rows[3].value else { Issue.record("background"); return }
+        guard case let .choice(background, backgrounds, selectedBackground) = rows[4].value else { Issue.record("background"); return }
         #expect(background == "Contour" && selectedBackground == 3)
         #expect(backgrounds == ["Aurora", "Tide", "Silk", "Contour", "Nebula", "Plasma", "Lava", "Caustics", "Bokeh", "Orbit", "Still"])
-        #expect(rows[4].value == .slider(value: 100, range: 100...130, step: 5, divisor: 1, unit: " %"))
-        guard case let .choice(motion, motions, selectedMotion) = rows[5].value else { Issue.record("motion"); return }
+        #expect(rows[8].value == .slider(value: 100, range: 100...130, step: 5, divisor: 1, unit: " %"))
+        guard case let .choice(motion, motions, selectedMotion) = rows[9].value else { Issue.record("motion"); return }
         #expect(motion == "Full" && motions == ["Full", "Reduced"] && selectedMotion == 0)
     }
 
     @Test func theClockAndScaleRowsHaveAndroidsHelp() {
         var appearance = Appearance()
-        #expect(AppearanceForm(appearance: appearance).rows(.appearance)[2].help == "System\n\nTime format in the status bar.")
+        #expect(AppearanceForm(appearance: appearance).rows(.appearance)[3].help == "System\n\nTime format in the status bar.")
         appearance.clock = .h12
         let rows = AppearanceForm(appearance: appearance).rows(.appearance)
-        #expect(rows[2].help == "12-hour\n12-hour clock with AM or PM.\n\nTime format in the status bar.")
-        #expect(rows[4].label == "Interface scale")
-        #expect(rows[4].help == "Size of text, status bar and button hints.")
+        #expect(rows[3].help == "12-hour\n12-hour clock with AM or PM.\n\nTime format in the status bar.")
+        #expect(rows[8].label == "Interface scale")
+        #expect(rows[8].help == "Size of text, status bar and button hints.")
     }
 
     @Test func theScaleStepsOnItsGridAndStopsAtItsEnds() {
@@ -82,8 +85,52 @@ import Testing
         #expect(rows[0].swatch == nil)
         #expect(rows[0].help == "Dark\nDark surfaces with light text.\n\nDark or light interface.")
         #expect(rows[1].help == "Seafoam\n\nColors of the interface and animated backgrounds.")
-        #expect(rows[3].help == "Contour\nSmooth moving contour lines in the selected colors.")
+        #expect(rows[4].help == "Contour\nSmooth moving contour lines in the selected colors.")
         #expect(AppearanceForm(appearance: appearance).rows(.audio)[0].value == .toggle(true))
+    }
+
+    @Test func theGameColorAndAppBackgroundRowsAreAndroids() {
+        var appearance = Appearance()
+        var rows = AppearanceForm(appearance: appearance).rows(.appearance)
+        #expect(rows[2].label == "Match the app's colors" && rows[2].value == .toggle(true))
+        #expect(rows[2].help == "The animated background takes the main color of the selected app's background image.")
+        #expect(rows[5].label == "App background" && rows[5].value == .toggle(true))
+        #expect(rows[6].label == "App background blur")
+        #expect(rows[6].value == .slider(value: 5, range: 0...40, step: 5, divisor: 1, unit: " px"))
+        #expect(rows[7].label == "App background opacity")
+        #expect(rows[7].value == .slider(value: 80, range: 0...100, step: 5, divisor: 1, unit: " %"))
+        #expect(rows[6].enabled && rows[7].enabled)
+        // Without the app background its blur and opacity are unavailable and keep their values
+        appearance.heroBackground = false
+        var form = AppearanceForm(appearance: appearance)
+        rows = form.rows(.appearance)
+        #expect(!rows[6].enabled && !rows[7].enabled && rows[5].enabled)
+        let unavailable = form.step("ui_hero_blur", by: 1)
+        #expect(!unavailable)
+        form.slide("ui_hero_opacity", to: 20)
+        #expect(form.appearance.heroBlur == 5 && form.appearance.heroOpacity == 80)
+    }
+
+    @Test func theAppBackgroundSlidersStepOnTheirGridsAndStoreTogglesFlip() {
+        var form = AppearanceForm(appearance: Appearance())
+        form.step("ui_hero_blur", by: -1)
+        #expect(form.appearance.heroBlur == 0)
+        let atStart = form.step("ui_hero_blur", by: -1)
+        #expect(!atStart)
+        form.slide("ui_hero_blur", to: 38)
+        #expect(form.appearance.heroBlur == 40)
+        form.step("ui_hero_opacity", by: 4)
+        #expect(form.appearance.heroOpacity == 100)
+        form.slide("ui_hero_opacity", to: 12)
+        #expect(form.appearance.heroOpacity == 10)
+        form.step("ui_match_game_colors", by: 1)
+        form.step("ui_hero_background", by: -1)
+        #expect(!form.appearance.matchGameColors && !form.appearance.heroBackground)
+        let suite = "delos.tests.\(UUID().uuidString)"
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        let store = AppearanceStore(suiteName: suite)
+        store.save(form.appearance, profile: "a")
+        #expect(store.load(profile: "a") == form.appearance)
     }
 
     @Test func leftAndRightStepAndWrapTogglesFlip() {

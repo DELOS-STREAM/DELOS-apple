@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Checks that every string the Swift code reads with L("name") is in the String Catalog with all ten languages.
+"""Checks that every string the Swift code reads with L("name") or LPlural("name", count) is in the String Catalog with
+all ten languages.
 
     python3 tools/l10n/check_usage.py
 
@@ -16,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCES = ROOT / "Packages/DelosKit/Sources"
 CATALOG = ROOT / "Packages/DelosKit/Sources/DelosUI/Resources/Localizable.xcstrings"
 LANGUAGES = {"en", "cs", "de", "es", "fr", "ja", "ko", "pt-BR", "uk", "zh-Hans"}
-USE = re.compile(r'\bL\("([a-z0-9_]+)"')
+USE = re.compile(r'\bL(?:Plural)?\("([a-z0-9_]+)"')
 
 
 def used_names(sources: Path) -> dict[str, str]:

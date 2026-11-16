@@ -12,7 +12,7 @@ struct BackgroundParams: Equatable {
     var h: Double
     var t: Double
     var dark: Bool
-    /// The secondary color: the palette's, or (later) the focused game's.
+    /// The secondary color: the palette's, or the focused game's.
     var tint: Double
     var base: Double
     var acc: Double
@@ -34,6 +34,19 @@ struct BackgroundParams: Equatable {
         acc = colors.accentHue
         acc2 = colors.accent2Hue
         acc3 = colors.accent3Hue
+    }
+
+    /// The focused game's three colors in place of the palette's main, secondary and accent ones, on every background
+    /// (Android's `game` branch of `AnimatedBackground`).
+    init(colors: DelosColors, canvas: CGSize, t: Double, game: BackdropTints.Game) {
+        self.init(colors: colors, canvas: canvas, t: t)
+        acc = game.hues[0]
+        tint = game.hues[1]
+        acc2 = game.hues[1]
+        acc3 = game.hues[2]
+        sat1 = game.saturations[0]
+        sat2 = game.saturations[1]
+        sat3 = game.saturations[2]
     }
 
     /// The saturation factor of hue `hue` when it is one of the three colors, else 1 (the first match wins, as

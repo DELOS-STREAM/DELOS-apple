@@ -81,6 +81,8 @@ struct TextPill: View {
     let focused: Bool
     /// The field takes an address: no capitals, the URL keyboard.
     var address = false
+    /// The field takes a secret (an API key): the value is hidden, nothing is corrected or capitalized.
+    var secret = false
     var width = 520.0
     var onSubmit: () -> Void = {}
     @Environment(\.delosColors) private var colors
@@ -100,7 +102,7 @@ struct TextPill: View {
                 #if os(tvOS)
                 // tvOS draws its own plate around a text field: the value is drawn here, and the field lies over the
                 // whole pill, almost transparent, only to take the focus and open the keyboard
-                Text(text.isEmpty ? placeholder : text)
+                Text(text.isEmpty ? placeholder : secret ? String(repeating: "•", count: text.count) : text)
                     .font(DelosFonts.figtree(stage.tpx(30), .semibold))
                     .foregroundStyle((text.isEmpty ? colors.text3 : colors.text).color)
                     .lineLimit(1)
@@ -121,8 +123,23 @@ struct TextPill: View {
         .focusLook(focused || editing.wrappedValue, scale: 1.05, ring: 4, glowBlur: 0, glowY: 0)
     }
 
-    private var field: some View {
-        TextField(text: $text, prompt: Text(placeholder).foregroundStyle(colors.text3.color)) { Text(label ?? placeholder) }
+    @ViewBuilder private var field: some View {
+        if secret {
+            style(SecureField(text: $text, prompt: Text(placeholder).foregroundStyle(colors.text3.color)) { Text(label ?? placeholder) })
+                #if !os(macOS)
+                .textInputAutocapitalization(.never)
+                #endif
+        } else {
+            style(TextField(text: $text, prompt: Text(placeholder).foregroundStyle(colors.text3.color)) { Text(label ?? placeholder) })
+                #if !os(macOS)
+                .textInputAutocapitalization(address ? .never : .words)
+                .keyboardType(address ? .URL : .default)
+                #endif
+        }
+    }
+
+    private func style(_ field: some View) -> some View {
+        field
             .textFieldStyle(.plain)
             .font(DelosFonts.figtree(stage.tpx(30), .semibold))
             .foregroundStyle(colors.text.color)
@@ -130,10 +147,6 @@ struct TextPill: View {
             .focused(editing)
             .submitLabel(.done)
             .autocorrectionDisabled()
-            #if !os(macOS)
-            .textInputAutocapitalization(address ? .never : .words)
-            .keyboardType(address ? .URL : .default)
-            #endif
             .onSubmit(onSubmit)
     }
 }

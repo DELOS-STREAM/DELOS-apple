@@ -110,7 +110,7 @@ struct SideMenu: View {
                     SettingRowView(
                         row: SettingRow(
                             id: Self.settingsID, tab: .stream, section: "", icon: Symbols.settings, label: L("shell_side_all_settings"),
-                            value: .action, help: ""),
+                            value: .action(label: nil), help: ""),
                         focused: focused, compact: true)
                 }
                 Spacer()

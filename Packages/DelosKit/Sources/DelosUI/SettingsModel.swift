@@ -5,9 +5,10 @@ import Foundation
 
 /// A tab of Settings (`SettingsTab` of DELOS for Android), as far as its rows are ported, in Android's order: Stream
 /// (resolution, frame rate, bitrate, codec), Audio (playing audio on the PC, interface sounds), Controls (interface
-/// haptics), Appearance (``AppearanceForm``), and About (the system app-language action on iPhone/iPad).
+/// haptics), Appearance (``AppearanceForm``), Covers (``CoversForm``: SteamGridDB) and About (the system app-language
+/// action on iPhone/iPad).
 enum SettingsTab: CaseIterable, Hashable, Sendable {
-    case stream, audio, controls, appearance, about
+    case stream, audio, controls, appearance, covers, about
 
     /// About has only the app-language action so far; do not expose an empty tab on unsupported platforms.
     static let availableCases: [SettingsTab] = AppLanguageSetting.supportsAppSettings
@@ -19,6 +20,7 @@ enum SettingsTab: CaseIterable, Hashable, Sendable {
         case .audio: L("settings_tab_audio")
         case .controls: L("settings_tab_controls")
         case .appearance: L("settings_tab_appearance")
+        case .covers: L("settings_tab_covers")
         case .about: L("settings_tab_about")
         }
     }
@@ -29,6 +31,7 @@ enum SettingsTab: CaseIterable, Hashable, Sendable {
         case .audio: Symbols.graphicEq
         case .controls: Symbols.sportsEsports
         case .appearance: Symbols.appearance
+        case .covers: Symbols.photoLibrary
         case .about: Symbols.info
         }
     }
@@ -40,6 +43,7 @@ enum SettingsTab: CaseIterable, Hashable, Sendable {
         case .audio: L("settings_tab_audio_description")
         case .controls: L("settings_tab_controls_description")
         case .appearance: L("settings_tab_appearance_description")
+        case .covers: L("settings_tab_covers_description")
         case .about: L("settings_tab_about_description")
         }
     }
@@ -59,8 +63,8 @@ enum SettingValue: Equatable {
     /// stored value is not offered on this device).
     case choice(label: String, options: [String], selected: Int?)
     case slider(value: Int, range: ClosedRange<Int>, step: Int, divisor: Int, unit: String)
-    /// Opens something (a screen).
-    case action
+    /// Opens something (a screen, a dialog) or runs it; [label] is shown before the chevron (the API key's "Added").
+    case action(label: String?)
     /// Shows the effective app language and opens its system Settings page, not an in-app picker.
     case appSettings(language: String)
 }
@@ -78,6 +82,8 @@ struct SettingRow: Identifiable, Equatable {
     let help: String
     /// A color dot before a choice's value (`RowValue.Choice.swatch` of DELOS for Android: the palette's main hue).
     var swatch: RGBA? = nil
+    /// False: the row is dimmed, its value cannot change and the panel says it is unavailable (`SettingsItem.enabled`).
+    var enabled = true
 }
 
 /// What this device offers Settings → Stream (`SettingsCapabilities` of DELOS for Android).
@@ -118,7 +124,7 @@ struct StreamSettingsForm: Equatable {
         switch tab {
         case .stream: [resolutionRow, frameRateRow, bitrateRow, codecRow, framePacingRow]
         case .audio: [hostAudioRow]
-        case .controls, .appearance, .about: []
+        case .controls, .appearance, .covers, .about: []
         }
     }
 

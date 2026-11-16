@@ -11,3 +11,9 @@ func L(_ name: String) -> String {
 func L(_ name: String, _ arguments: any CVarArg...) -> String {
     String(format: L(name), locale: .current, arguments: arguments)
 }
+
+/// A catalog plural whose forms carry no number (Android's `getQuantityString` of "hour" / "hours"): the form for
+/// [count] in the current language.
+func LPlural(_ name: String, _ count: Int) -> String {
+    String.localizedStringWithFormat(Bundle.module.localizedString(forKey: name, value: nil, table: nil), count)
+}
