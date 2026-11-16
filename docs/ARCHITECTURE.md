@@ -188,10 +188,12 @@ V-Sync are not offered).
 decode unit's buffers into one Annex B or OBU frame, wraps it with `VideoSamples` and gives it to the renderer; a frame
 that cannot be shown answers `needIDRFrame`, so the core asks the host for a key frame. `AudioOutput` decodes the Opus
 packets on the core's audio thread into an `AudioRing` and plays them through an `AVAudioEngine` source node in the
-playback audio session; the ring keeps at most 60 ms and drops the oldest samples beyond that, so a network burst does
+playback audio session; the ring keeps at most 60 ms and skips the oldest samples beyond that, so a network burst does
 not add lasting delay. The core calls each sink from one thread at a time, so their decoding state has no lock.
-`VideoStatistics` has a separate mutex for scalar frame/byte/host-time counters read by the statistics sampler; the
-audio ring, read by the audio render thread, has its own lock.
+`VideoStatistics` has a separate mutex for scalar frame/byte/host-time counters read by the statistics sampler. The
+audio ring has no lock, so the audio render thread never waits for the decoder: one writer and one reader share
+preallocated storage, each moving its own atomic position (acquire/release), and the reader skips what is older than
+60 ms; a full ring (nothing reads) drops what does not fit.
 
 ## The stream screen
 

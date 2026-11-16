@@ -33,6 +33,59 @@ import Testing
         _ = out.withUnsafeMutableBufferPointer { ring.read(into: $0) }
         #expect(out == [4, 5, 6])
     }
+
+    @Test func aFullRingKeepsTheFramesThatFitWhileNothingReads() {
+        let ring = AudioRing(channels: 1, capacityFrames: 4, maxFrames: 2)
+        [1, 2, 3].map(Float.init).withUnsafeBufferPointer { ring.write($0) }
+        [4, 5, 6].map(Float.init).withUnsafeBufferPointer { ring.write($0) }
+        var out = [Float](repeating: 9, count: 4)
+        let real = out.withUnsafeMutableBufferPointer { ring.read(into: $0) }
+        // The ring held 1…4; the reader keeps the newest two
+        #expect(real == 2)
+        #expect(out == [3, 4, 0, 0])
+    }
+
+    /// The decoder's thread writes while the render thread reads, without a lock: every frame arrives once, in order,
+    /// with its channels together.
+    @Test func aWriterAndAReaderOnTwoThreadsSeeEveryFrameInOrder() async {
+        let ring = AudioRing(channels: 2, capacityFrames: 64, maxFrames: 64)
+        let frames = 200_000
+        let writer = Task.detached {
+            var block = [Float](repeating: 0, count: 2 * 5)
+            var next = 1
+            while next <= frames {
+                let count = min(5, frames - next + 1)
+                // Wait for room: nothing is dropped, so the reader must see every frame
+                while ring.queuedFrames + count > ring.maxFrames { await Task.yield() }
+                for i in 0..<count {
+                    block[2 * i] = Float(next + i)
+                    block[2 * i + 1] = Float(next + i)
+                }
+                block.withUnsafeBufferPointer { ring.write(UnsafeBufferPointer(rebasing: $0.prefix(count * 2))) }
+                next += count
+            }
+        }
+        let reader = Task.detached { () -> (next: Int, torn: Int) in
+            var out = [Float](repeating: 0, count: 2 * 7)
+            var next = 1
+            var torn = 0
+            let deadline = ContinuousClock.now + .seconds(20)
+            while next <= frames, ContinuousClock.now < deadline {
+                let real = out.withUnsafeMutableBufferPointer { ring.read(into: $0) }
+                if real == 0 { await Task.yield() }
+                for frame in 0..<(real / 2) {
+                    if out[2 * frame] != Float(next) || out[2 * frame + 1] != Float(next) { torn += 1 }
+                    next += 1
+                }
+            }
+            return (next, torn)
+        }
+        await writer.value
+        let result = await reader.value
+
+        #expect(result.next == frames + 1)
+        #expect(result.torn == 0)
+    }
 }
 
 @Suite struct VideoOutputTests {

@@ -7,7 +7,8 @@ import DelosCore
 ///
 /// The core calls `setup`, `start`, `decodeAndPlay`, `stop` and `cleanup` one after another, never at the same time
 /// (its audio thread, after the start on another thread has finished `setup`); the state they share is therefore
-/// unsynchronized, and only the ring, which the render thread reads, has a lock.
+/// unsynchronized. The ring, which the render thread reads, has no lock either: one writer and one reader share it
+/// through atomic positions, so the render thread never waits for the decoder.
 public final class AudioOutput: AudioSampleSink, @unchecked Sendable {
     public var capabilities: AudioRendererCapabilities { [] }
 
