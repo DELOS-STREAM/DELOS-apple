@@ -35,9 +35,14 @@ Every module is compiled in the Swift 6 language mode with warnings as errors.
 
 ## The stage
 
-Sizes in the specification of DELOS for Android are pixels of a 1920 × 1080 stage. `Stage` scales them to the screen
-by the axis with less room; the other axis gets the extra space. Views read the stage from the environment and write
-sizes as `stage.px(26)`.
+Sizes in the specification of DELOS for Android are pixels of a 1920 × 1080 stage. `Stage` is the port of Android's
+`StagePlanner`: it scales the stage to the window by the axis with less room (the other axis gets more stage pixels),
+but one stage pixel is never smaller than 0.43 points, the size it has on the AYN Odin 2 Portal where DELOS was
+designed. An iPhone in landscape (932 × 430 points) is therefore a 2167 × 1000 stage at the floor, not a smaller copy
+of 1920 × 1080; an iPad is a taller stage (1920 × 1440 at 4:3). `StageShape` (wide, standard, tall, compact) names the
+layout family, and `Stage.safe` holds the safe area in stage pixels: the window fills the screen, and content anchored
+to an edge keeps clear of the safe area itself. Views read the stage from the environment and write sizes as
+`stage.px(26)`.
 
 ## Focus
 
@@ -48,8 +53,8 @@ commands, and `FocusModel` (DelosUI) moves the focus to the nearest item in the 
 
 ## Sounds and haptics
 
-`Feedback` plays the five interface sounds of DELOS for Android (move, select, back, open, error) in the ambient audio
-session, so they mix with other audio and follow the silent switch, and on iPhone and iPad a matching system haptic.
+`Feedback` plays the five interface sounds of DELOS for Android (move, select, back, open, error) as system sounds, so
+they mix with other audio and follow the silent switch, and on iPhone and iPad a matching system haptic.
 Moving the focus plays move, activating an item plays select.
 
 ## Backgrounds

@@ -1,4 +1,4 @@
-import AVFAudio
+import AudioToolbox
 import Foundation
 #if os(iOS)
 import UIKit
@@ -10,13 +10,14 @@ public enum Cue: String, CaseIterable, Sendable {
 }
 
 /// UI sounds (the five blips of DELOS for Android, made by its tools/sounds/make_ui_sounds.py) and haptics on iPhone
-/// and iPad. The sounds play in the ambient audio session: they mix with other audio and follow the silent switch.
+/// and iPad. The sounds are system sounds: they mix with other audio, follow the silent switch and never block the main
+/// thread (an `AVAudioPlayer` created at launch waited for the audio server and froze the first frame).
 @MainActor
 public final class Feedback {
     public var soundsEnabled = true
     public var hapticsEnabled = true
 
-    private var players: [Cue: AVAudioPlayer] = [:]
+    private var sounds: [Cue: SystemSoundID] = [:]
     private var focusSilenced = true
     #if os(iOS)
     private let selection = UISelectionFeedbackGenerator()
@@ -25,14 +26,10 @@ public final class Feedback {
     #endif
 
     public init() {
-        #if !os(macOS)
-        try? AVAudioSession.sharedInstance().setCategory(.ambient)
-        #endif
         for cue in Cue.allCases {
-            guard let url = Bundle.module.url(forResource: "ui_\(cue.rawValue)", withExtension: "wav"),
-                  let player = try? AVAudioPlayer(contentsOf: url) else { continue }
-            player.prepareToPlay()
-            players[cue] = player
+            guard let url = Bundle.module.url(forResource: "ui_\(cue.rawValue)", withExtension: "wav") else { continue }
+            var id: SystemSoundID = 0
+            if AudioServicesCreateSystemSoundID(url as CFURL, &id) == kAudioServicesNoError { sounds[cue] = id }
         }
     }
 
@@ -47,10 +44,7 @@ public final class Feedback {
     }
 
     public func play(_ cue: Cue) {
-        if soundsEnabled, let player = players[cue] {
-            player.currentTime = 0
-            player.play()
-        }
+        if soundsEnabled, let id = sounds[cue] { AudioServicesPlaySystemSound(id) }
         #if os(iOS)
         guard hapticsEnabled else { return }
         switch cue {
@@ -62,5 +56,5 @@ public final class Feedback {
     }
 
     /// Whether every cue's sound was loaded (false when a file is missing from the bundle).
-    var allSoundsLoaded: Bool { players.count == Cue.allCases.count }
+    var allSoundsLoaded: Bool { sounds.count == Cue.allCases.count }
 }

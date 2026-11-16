@@ -39,7 +39,7 @@ struct StartScreen: View {
 public struct DelosRoot: View {
     @State private var focus = FocusModel(initial: AnyHashable("pair"))
     @State private var input: MenuInput?
-    @State private var feedback = Feedback()
+    @State private var feedback: Feedback?
     @State private var colors = DelosColors(palette: .delos, dark: true)
 
     public init() {}
@@ -60,6 +60,8 @@ public struct DelosRoot: View {
         #endif
         #if !os(tvOS)
         .onAppear {
+            let feedback = Feedback()
+            self.feedback = feedback
             let input = MenuInput { [focus, feedback] command in
                 guard focus.handle(command) else { return }
                 feedback.play(command == .accept ? .select : .move)
@@ -82,7 +84,9 @@ struct TopBar: View {
                 Spacer()
             }
             .frame(height: stage.px(104))
-            .padding(.horizontal, stage.px(72))
+            .padding(.top, stage.px(stage.safe.top))
+            .padding(.leading, stage.px(72 + stage.safe.leading))
+            .padding(.trailing, stage.px(72 + stage.safe.trailing))
             Spacer()
         }
     }
