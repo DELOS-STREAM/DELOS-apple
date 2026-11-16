@@ -159,6 +159,67 @@ import Testing
         #expect(run.host.requests.allSatisfy { !$0.rawQuery.contains("horse") })
     }
 
+    @Test func aHostThatKnowsThePassphrasePairsWithTheCorrectOne() async throws {
+        let run = try await pair(.init(pin: Self.pin, passphrase: "correct horse"), passphrase: "correct horse")
+
+        #expect(run.outcome == .paired(HostPin(certificate: TestIdentities.host.certificate, httpsPort: run.host.httpsPort)))
+        #expect(run.pairing.observed.clientProved)
+        #expect(run.pairing.observed.unpairCount == 0)
+    }
+
+    @Test func aWrongPassphraseIsRefusedAtTheFirstStepWithoutUnpairing() async throws {
+        let run = try await pair(.init(pin: Self.pin, passphrase: "correct horse"), passphrase: "battery staple")
+
+        #expect(run.outcome == .failed)
+        #expect(run.pairing.observed.pairRequests.count == 1)
+        #expect(!run.pairing.observed.clientProved)
+        #expect(run.pairing.observed.unpairCount == 0)
+    }
+
+    @Test func aMissingPassphraseIsRefusedByAHostThatAsksForOne() async throws {
+        let run = try await pair(.init(pin: Self.pin, passphrase: "correct horse"))
+
+        #expect(run.outcome == .failed)
+        #expect(run.pairing.observed.pairRequests.count == 1)
+    }
+
+    @Test func aWrongPinWithTheRightPassphraseIsRefusedAtTheFirstStep() async throws {
+        // The one-time hash covers the PIN too, so the host refuses before any proof
+        let run = try await pair(.init(pin: "0000", passphrase: "correct horse"), passphrase: "correct horse")
+
+        #expect(run.outcome == .failed)
+        #expect(run.pairing.observed.pairRequests.count == 1)
+        #expect(run.pairing.observed.unpairCount == 0)
+    }
+
+    @Test(arguments: [1, 2, 3, 4])
+    func aRefusalWithAPassphraseFailsAsWithout(step: Int) async throws {
+        let run = try await pair(
+            .init(pin: Self.pin, refuseAtStep: step, passphrase: "correct horse"), passphrase: "correct horse")
+
+        #expect(run.outcome == .failed)
+        #expect(run.pairing.observed.unpairCount == (step == 1 ? 0 : 1))
+        #expect(run.pairing.observed.pairRequests.count == step)
+    }
+
+    @Test func leavingWhileTheHostChecksThePassphraseAsksItToUnpair() async throws {
+        let host = try await FakeHost(identity: TestIdentities.host) { request in
+            request.path.hasSuffix("unpair") ? .xml("<root status_code=\"200\"/>") : .init(body: Data(), silent: true)
+        }
+        let info = try ServerInfo.parse(Data(Documents.serverInfo(httpsPort: host.httpsPort, appVersion: "7.1.431.-1").utf8))
+        let client = HostClient(address: host.httpAddress, identity: TestIdentities.client)
+        let task = Task { try await client.pair(pin: Self.pin, passphrase: "correct horse", serverInfo: info) }
+        try await Task.sleep(for: .milliseconds(200))
+
+        task.cancel()
+
+        await #expect(throws: CancellationError.self) { try await task.value }
+        for _ in 0..<50 where !host.requests.contains(where: { $0.path.hasSuffix("unpair") }) {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(host.requests.contains { $0.path.hasSuffix("unpair") })
+    }
+
     @Test func withoutAPassphraseNoOtpFieldIsSent() async throws {
         let run = try await pair()
 

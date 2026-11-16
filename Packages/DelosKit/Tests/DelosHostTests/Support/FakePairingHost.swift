@@ -21,6 +21,9 @@ final class FakePairingHost: Sendable {
         /// 1-based index of the pairing command answered with paired=0; 0 = never.
         var refuseAtStep = 0
         var refusePairChallenge = false
+        /// The one-time passphrase the host's user made (Apollo): a first request whose `otpauth` is not the salted hash
+        /// of PIN and this passphrase is refused with paired=0. nil: the host asks for no passphrase.
+        var passphrase: String?
     }
 
     struct Observed: Sendable {
@@ -78,6 +81,11 @@ final class FakePairingHost: Sendable {
         }
         let refused = #"<root status_code="200"><paired>0</paired></root>"#
         if step == settings.refuseAtStep { return refused }
+        if let passphrase = settings.passphrase, args["phrase"] == "getservercert" {
+            let expected = SHA256.hash(data: Data((settings.pin + (args["salt"] ?? "") + passphrase).utf8))
+                .map { String(format: "%02X", $0) }.joined()
+            if args["otpauth"] != expected { return refused }
+        }
 
         if args["phrase"] == "getservercert" {
             let salt = unhex(args["salt"]!)

@@ -580,7 +580,14 @@ The screens (DelosUI, as DELOS for Android's `DeviceScreens.kt`, `PairScreens.kt
   text field; `HostAddress.parse`, default port 47989) and "Search again" (discovery restarts). Choosing an unpaired PC
   opens the PIN screen, which runs `HostStore.pair` while it shows; leaving it cancels the task, and `HostClient.pair`
   then asks the PC to unpair (from a task of its own), as after any failure. Pairing results map to Android's messages
-  (`PairFailure`); a paired PC opens its library.
+  (`PairFailure`); a paired PC opens its library. A PC that is not paired has a context menu (below it): "Pair with a PIN"
+  (the same as A) and "Pair with a one-time code", which opens a dialog (`ShellActions.pairWithCode`) for the PIN
+  (four digits) and the passphrase (at least four characters) made in the PC's web UI; what is wrong is said in a toast
+  (`OneTimeCode.Entry`). A valid code opens `Screen.pairCode`, the same `PinScreen` without PIN digits, which sends both to
+  `HostStore.pair(passphrase:)` (`otpauth`, a salted SHA-256, never the passphrase itself). A refused proof then says
+  "The code or passphrase was wrong" (`PairFailure.codeWrong`); a PC that refuses the first step says the generic failure,
+  as Android does. Leaving the screen cancels as with a PIN. The Devices screen lists paired PCs only, so, as in Android,
+  the menu entry lives on the pairing screen.
 - The library loads the apps when it shows and lays them out as Android's home (`HomeLayout`, `HomeStandard`): the
   focused game's SteamGridDB logo or its name in a gradient into the game background's color, the info row with the
   streaming-time block (`PlaytimeStore`, `PlaytimeTexts`: total and last streamed, per profile) and a Running on chip,
@@ -605,7 +612,7 @@ forgets the PC and its pairing here only. A PC that is removed or unpaired leave
 and its library is dropped from the stack (`Navigator.dropLibrary`). Connect does not wake and wait in a portal as
 Android does; waking has its own row.
 
-Not ported yet: the default PC's Skip the start screen, pairing with a one-time code, the Devices screen's link test,
+Not ported yet: the default PC's Skip the start screen, the Devices screen's link test,
 the connect portal that wakes and waits, waking an asleep PC on A, the companion screen; in the library the compact layout, recording
 the streaming time (the stream screen does not add to `PlaytimeStore` yet), game metadata (IGDB genres and themes,
 HowLongToBeat, HDR chips through the metadata Worker), the game menu's Artwork, Metadata, App settings and Hide, the
