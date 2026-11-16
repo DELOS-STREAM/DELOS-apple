@@ -196,8 +196,9 @@ public actor StreamStatisticsSource {
         let presentation = await renderer?.presentationCounters()
         guard !Task.isCancelled else { return nil }
         let packets = session.videoStatistics()
+        // Nil once the session stops; the session orders this read before the core's teardown.
+        let roundTrip = await session.estimatedRoundTrip()
         return video.sample(
-            renderer: presentation, roundTrip: session.estimatedRoundTrip(),
-            videoPackets: packets.packets, fecPackets: packets.fecPackets)
+            renderer: presentation, roundTrip: roundTrip, videoPackets: packets.packets, fecPackets: packets.fecPackets)
     }
 }

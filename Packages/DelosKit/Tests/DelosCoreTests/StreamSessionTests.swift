@@ -88,6 +88,74 @@ import Testing
         #expect(CoreBridge.current == nil)
     }
 
+    /// A task cancelled before the core's thread runs. `LiStartConnection` clears an interruption made before it, so
+    /// the start went through the stages and the 10-second RTSP retry before it saw the cancellation.
+    @Test func aStartCancelledBeforeTheCoreRunsEndsAtOnce() async throws {
+        let port = try closedLocalPort()
+        let server = ServerInformation(
+            address: "127.0.0.1", appVersion: "7.1.431.-1", rtspSessionURL: "rtsp://127.0.0.1:\(port)",
+            codecModeSupport: .h264)
+        let session = StreamSession()
+        let clock = ContinuousClock()
+        let started = clock.now
+        let start = Task { () -> StreamError? in
+            withUnsafeCurrentTask { $0?.cancel() }
+            do throws(StreamError) {
+                try await session.start(server: server, configuration: configuration)
+                return nil
+            } catch {
+                return error
+            }
+        }
+
+        #expect(await start.value == .cancelled)
+        #expect(clock.now - started < .seconds(2))
+        #expect(CoreBridge.current == nil)
+    }
+
+    /// `stop` during the start returns once the attempt has unwound and released the core, so the next session can
+    /// start at once; meanwhile no round trip is read from the core.
+    @Test func stopDuringTheStartReturnsOnceTheCoreIsReleased() async throws {
+        let port = try closedLocalPort()
+        let server = ServerInformation(
+            address: "127.0.0.1", appVersion: "7.1.431.-1", rtspSessionURL: "rtsp://127.0.0.1:\(port)",
+            codecModeSupport: .h264)
+        let reads = RoundTripReads()
+        let session = StreamSession(videoSink: nil, audioSink: nil, roundTrip: reads.reader)
+        let start = Task { () -> StreamError? in
+            do throws(StreamError) {
+                try await session.start(server: server, configuration: configuration)
+                return nil
+            } catch {
+                return error
+            }
+        }
+        for await event in session.events where event == .stageStarting(.rtspHandshake) { break }
+        #expect(await session.estimatedRoundTrip() == nil)
+
+        await session.stop()
+
+        #expect(CoreBridge.current == nil)
+        #expect(await start.value == .cancelled)
+        #expect(reads.count.load(ordering: .relaxed) == 0)
+    }
+
+    /// The core's round-trip read is valid only while a stream runs (its mutex is destroyed by the stop).
+    @Test func theRoundTripIsNotReadWithoutARunningStream() async {
+        let reads = RoundTripReads()
+        let never = StreamSession(videoSink: nil, audioSink: nil, roundTrip: reads.reader)
+        #expect(await never.estimatedRoundTrip() == nil)
+        await never.stop()
+        #expect(await never.estimatedRoundTrip() == nil)
+
+        let server = ServerInformation(address: "127.0.0.1", appVersion: "7.1.431.-1", codecModeSupport: .h264)
+        let failed = StreamSession(videoSink: nil, audioSink: nil, roundTrip: reads.reader)
+        _ = try? await failed.start(server: server, configuration: tooSmallPackets)
+        #expect(await failed.estimatedRoundTrip() == nil)
+
+        #expect(reads.count.load(ordering: .relaxed) == 0)
+    }
+
     /// A configuration the core refuses before the first stage: packets smaller than one 16-byte FEC block.
     private var tooSmallPackets: StreamConfiguration {
         var configuration = configuration
@@ -342,5 +410,17 @@ private final class RecordingAudioSink: AudioSampleSink {
     func decodeAndPlay(_ packet: UnsafeRawBufferPointer?) {
         let bytes = packet.map { Array($0) }
         recorded.withLock { $0.packets.append(bytes) }
+    }
+}
+
+/// Counts the reads of the core's round trip; each read answers 20 ms.
+private final class RoundTripReads: Sendable {
+    let count = Atomic<Int>(0)
+
+    var reader: @Sendable () -> (rtt: UInt32, variance: UInt32)? {
+        { [self] in
+            _ = count.add(1, ordering: .relaxed)
+            return (20, 2)
+        }
     }
 }

@@ -1,5 +1,6 @@
-// Input sent to the host and statistics read from the core. The core queues input on its own thread, so these
-// calls are cheap and safe from any thread.
+// Input sent to the host and packet counters read from the core. The core queues input on its own thread and keeps
+// the counters in atomics, so these calls are cheap and safe from any thread. The round-trip estimate is not: it is
+// read through the session (`StreamSession.estimatedRoundTrip`).
 import CDelosCommon
 
 /// Why the core did not send an input event.
@@ -250,14 +251,5 @@ extension StreamSession {
             fecRecovered: stats.packetCountFecRecovered, fecFailed: stats.packetCountFecFailed,
             outOfSequence: stats.packetCountOOS, invalid: stats.packetCountInvalid,
             fecInvalid: stats.packetCountFecInvalid)
-    }
-
-    /// The round-trip time to the host and its variance as the control stream measures them; nil before the
-    /// first measurement.
-    public nonisolated func estimatedRoundTrip() -> (rtt: Duration, variance: Duration)? {
-        var rtt: UInt32 = 0
-        var variance: UInt32 = 0
-        guard LiGetEstimatedRttInfo(&rtt, &variance) else { return nil }
-        return (.milliseconds(rtt), .milliseconds(variance))
     }
 }
