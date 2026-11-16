@@ -38,7 +38,7 @@ public final class VideoOutput: VideoDecodeUnitSink, @unchecked Sendable {
         case .hevc: name = "HEVC"
         case .av1: name = "AV1"
         }
-        statistics.configure(width: width, height: height, codec: name)
+        statistics.configure(width: width, height: height, codec: name, renderer: renderer.name)
         renderer.flush()
         return true
     }

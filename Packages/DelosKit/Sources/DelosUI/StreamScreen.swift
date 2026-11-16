@@ -22,7 +22,7 @@ struct StreamScreen: View {
     @Environment(Layers.self) private var layers: Layers?
     @Environment(Toasts.self) private var toasts: Toasts?
     @State private var controller: StreamController?
-    @State private var renderer: DisplayLayerRenderer?
+    @State private var renderer: (any VideoRenderer)?
     @State private var shutdownID: UUID?
     #if !os(macOS)
     @Environment(\.scenePhase) private var scenePhase
@@ -74,7 +74,8 @@ struct StreamScreen: View {
 
     private func begin() {
         guard controller == nil else { return }
-        let renderer = DisplayLayerRenderer(pacing: settings.framePacing, fps: settings.fps)
+        // The display layer unless the debug switch asks for the Metal renderer (RendererChoice)
+        let renderer = RendererChoice.current.makeRenderer(pacing: settings.framePacing, fps: settings.fps)
         let controller = StreamController { [hosts, hostID, appID, settings] in
             LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer)
         }
@@ -144,7 +145,7 @@ struct StreamScreen: View {
 /// What the stream screen shows in each phase.
 struct StreamContent: View {
     let controller: StreamController
-    let renderer: DisplayLayerRenderer
+    let renderer: any VideoRenderer
     let focus: FocusModel
     @Environment(\.stage) private var stage
     /// The dock is mounted while the menu is open and for its exit after it closed.
@@ -157,7 +158,7 @@ struct StreamContent: View {
             Color.black.ignoresSafeArea().opacity(showsBlack ? 1 : 0)
                 .preference(key: VideoCoversBackdrop.self, value: showsBlack)
             VideoSurface(
-                layer: renderer.layer,
+                renderer: renderer,
                 onDisplay: { controller.start(display: $0) },
                 onTouch: { id, phase, point, width, time in
                     controller.touch(id, phase, at: point, width: width, time: time)

@@ -405,6 +405,8 @@ stream_stats_incoming
 stream_stats_rendering
 stream_stats_network
 stream_stats_pc_processing
+stream_stats_decoding
+stream_stats_frame_queue
 stream_stats_render_latency
 stream_stats_bandwidth
 stream_stats_lost_frames

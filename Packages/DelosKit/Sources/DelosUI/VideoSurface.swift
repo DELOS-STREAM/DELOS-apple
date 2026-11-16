@@ -1,10 +1,10 @@
-import AVFoundation
+import DelosMedia
 import SwiftUI
 
-/// The video of a stream: hosts the renderer's `AVSampleBufferDisplayLayer` full size, aspect fit on black. Reports
-/// the display it is shown on (once it is in a window) and, on iPhone and iPad, the touches on it in pixels.
+/// The video of a stream: hosts the renderer's layer (the display layer or the Metal layer) full size, aspect fit on
+/// black. Reports the display it is shown on (once it is in a window) and, on iPhone and iPad, the touches on it in pixels.
 struct VideoSurface {
-    let layer: AVSampleBufferDisplayLayer
+    let renderer: any VideoRenderer
     let onDisplay: @MainActor (DisplayInfo) -> Void
     var onTouch: @MainActor (_ id: Int, _ phase: StreamController.TouchPhase, _ point: CGPoint, _ width: CGFloat, _ time: TimeInterval) -> Void = { _, _, _, _, _ in }
     /// Whether a touch of the system pointer (a mouse or trackpad) is ignored: the mouse's own input already moves the
@@ -20,7 +20,7 @@ import UIKit
 
 extension VideoSurface: UIViewRepresentable {
     func makeUIView(context: Context) -> VideoHostView {
-        let view = VideoHostView(video: layer)
+        let view = VideoHostView(renderer: renderer)
         update(view)
         return view
     }
@@ -38,20 +38,19 @@ extension VideoSurface: UIViewRepresentable {
 
 /// The thin UIKit host of the video layer (the one UIKit view of the app, docs/ENGINEERING_RULES.md).
 final class VideoHostView: UIView {
-    private let video: AVSampleBufferDisplayLayer
+    private let renderer: any VideoRenderer
     var onDisplay: @MainActor (DisplayInfo) -> Void = { _ in }
     var onTouch: @MainActor (Int, StreamController.TouchPhase, CGPoint, CGFloat, TimeInterval) -> Void = { _, _, _, _, _ in }
     var ignoresPointer: @MainActor () -> Bool = { false }
 
-    init(video: AVSampleBufferDisplayLayer) {
-        self.video = video
+    init(renderer: any VideoRenderer) {
+        self.renderer = renderer
         super.init(frame: .zero)
         backgroundColor = .black
         #if os(iOS)
         isMultipleTouchEnabled = true
         #endif
-        video.videoGravity = .resizeAspect
-        layer.addSublayer(video)
+        layer.addSublayer(renderer.hostLayer)
     }
 
     @available(*, unavailable)
@@ -59,10 +58,7 @@ final class VideoHostView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        video.frame = bounds
-        CATransaction.commit()
+        renderer.resize(to: bounds, scale: window?.windowScene?.screen.nativeScale ?? contentScaleFactor)
     }
 
     /// Keeps the display at its highest refresh rate while the video is shown. ProMotion screens slow down to save power
@@ -76,12 +72,18 @@ final class VideoHostView: UIView {
         super.didMoveToWindow()
         refreshLink?.invalidate()
         refreshLink = nil
-        guard let screen = window?.windowScene?.screen else { return }
+        guard let screen = window?.windowScene?.screen else {
+            renderer.detached()
+            return
+        }
         let fastest = Float(screen.maximumFramesPerSecond)
         let link = CADisplayLink(target: self, selector: #selector(refreshTick))
         link.preferredFrameRateRange = CAFrameRateRange(minimum: fastest, maximum: fastest, preferred: fastest)
         link.add(to: .main, forMode: .common)
         refreshLink = link
+        renderer.attached(maxFramesPerSecond: screen.maximumFramesPerSecond)
+        // The window's scale is known now
+        setNeedsLayout()
         let size = screen.nativeBounds.size
         let info = DisplayInfo(pixelWidth: Int(size.width), pixelHeight: Int(size.height), maxFramesPerSecond: screen.maximumFramesPerSecond)
         // Not inside the view update that added this view
@@ -112,7 +114,7 @@ import DelosInput
 
 extension VideoSurface: NSViewRepresentable {
     func makeNSView(context: Context) -> VideoHostView {
-        let view = VideoHostView(video: layer)
+        let view = VideoHostView(renderer: renderer)
         update(view)
         return view
     }
@@ -134,7 +136,7 @@ extension VideoSurface: NSViewRepresentable {
 /// The AppKit host of the video layer on the Mac. It reports the screen the window is on, keeps that screen at its
 /// highest refresh rate, and locks the system pointer to the stream while the stream wants the mouse (``PointerLock``).
 final class VideoHostView: NSView {
-    private let video: AVSampleBufferDisplayLayer
+    private let renderer: any VideoRenderer
     var onDisplay: @MainActor (DisplayInfo) -> Void = { _ in }
     /// A stream wants the mouse: it runs and its menu is closed.
     var capturesPointer = false {
@@ -144,13 +146,12 @@ final class VideoHostView: NSView {
     private var refreshLink: CADisplayLink?
     private var observers: [NSObjectProtocol] = []
 
-    init(video: AVSampleBufferDisplayLayer) {
-        self.video = video
+    init(renderer: any VideoRenderer) {
+        self.renderer = renderer
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
-        video.videoGravity = .resizeAspect
-        layer?.addSublayer(video)
+        layer?.addSublayer(renderer.hostLayer)
     }
 
     @available(*, unavailable)
@@ -158,10 +159,12 @@ final class VideoHostView: NSView {
 
     override func layout() {
         super.layout()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        video.frame = bounds
-        CATransaction.commit()
+        renderer.resize(to: bounds, scale: window?.backingScaleFactor ?? 2)
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        needsLayout = true
     }
 
     /// Gives the pointer back (the stream screen is gone).
@@ -188,6 +191,7 @@ final class VideoHostView: NSView {
         refreshLink = nil
         guard let window, let screen = window.screen else {
             pointer.setEligible(false)
+            renderer.detached()
             return
         }
         // The pointer is the stream's only while the app is active and this window is the key window: another app, the
@@ -213,6 +217,8 @@ final class VideoHostView: NSView {
         link.preferredFrameRateRange = CAFrameRateRange(minimum: fastest, maximum: fastest, preferred: fastest)
         link.add(to: .main, forMode: .common)
         refreshLink = link
+        renderer.attached(maxFramesPerSecond: screen.maximumFramesPerSecond)
+        needsLayout = true
 
         let size = screen.convertRectToBacking(screen.frame).size
         let info = DisplayInfo(pixelWidth: Int(size.width), pixelHeight: Int(size.height), maxFramesPerSecond: screen.maximumFramesPerSecond)
