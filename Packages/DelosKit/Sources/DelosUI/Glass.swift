@@ -6,6 +6,9 @@ enum GlassRole {
     /// Something to press or to focus: circles, chips, secondary pills, the back button, text fields. Regular glass
     /// that reacts to touch (`interactive`), tinted with the surface token.
     case control
+    /// The app's own bars: the top navigation. Clear glass, the most transparent and refractive kind, with almost no
+    /// tint, so the background shows strongly through it (owner's choice: very transparent, a strong effect).
+    case chrome
     /// Something to read: cards, panels, toasts, the PIN digits. Regular glass, not interactive, a little more tint
     /// so text on it keeps its contrast.
     case panel
@@ -53,13 +56,16 @@ struct GlassShape<S: Shape>: View {
         if overMedia {
             base = .clear
             share = 0.85
+        } else if role == .chrome {
+            base = .clear
+            share = 0.12
         } else {
             base = .regular
             share = role == .panel ? 0.6 : 0.45
         }
         let tinted = base.tint((overMedia ? colors.scrim : tint).opacity(tint.alpha * share).color)
         #if os(iOS)
-        return role == .control ? tinted.interactive() : tinted
+        return role == .panel ? tinted : tinted.interactive()
         #else
         return tinted
         #endif

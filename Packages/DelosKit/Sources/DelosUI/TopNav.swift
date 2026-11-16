@@ -42,8 +42,7 @@ struct TopNav: View {
         }
         .padding(stage.px(StatusBarLayout.navPadding))
         .background {
-            Capsule().fill(colors.surface.color)
-                .overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
+            GlassShape(Capsule(), tint: colors.surface, role: .chrome)
         }
     }
 
