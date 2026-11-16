@@ -63,6 +63,11 @@ commands, and `FocusModel` (DelosUI) moves the focus to the nearest item in the 
 
 `AV1.parseSequenceHeader` reads the sequence header (AV1 specification, section 5.5) with `BitReader`.
 
+`VideoSamples` keeps the format description of the running stream (replaced when a key frame brings different
+parameter sets) and wraps each frame in a sample buffer marked "display immediately", since the host paces the stream;
+a frame before the first key frame fails with `needsKeyFrame`, the signal to ask the host for one. `VideoRenderer` is the
+renderer interface; `DisplayLayerRenderer` shows the samples through `AVSampleBufferDisplayLayer` (decision L4).
+
 ## Sounds and haptics
 
 `Feedback` plays the five interface sounds of DELOS for Android (move, select, back, open, error) as system sounds, so

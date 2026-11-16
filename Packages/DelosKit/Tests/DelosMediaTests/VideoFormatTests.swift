@@ -4,12 +4,6 @@ import Testing
 import VideoToolbox
 @testable import DelosMedia
 
-/// Fixtures: two frames of 64 x 64 test pattern per codec, made by tools/media/make_fixtures.sh.
-private func fixture(_ name: String) throws -> Data {
-    let url = try #require(Bundle.module.url(forResource: name, withExtension: nil, subdirectory: "Fixtures"))
-    return try Data(contentsOf: url)
-}
-
 @Suite struct AnnexBTests {
     @Test func splitsOnThreeAndFourByteStartCodes() {
         let data = Data([0, 0, 0, 1, 0x67, 1, 2, 0, 0, 1, 0x68, 3, 0, 0, 0, 1, 0x65, 4, 5])
@@ -24,7 +18,7 @@ private func fixture(_ name: String) throws -> Data {
 
 @Suite struct AV1Tests {
     @Test func readsTheSequenceHeaderOfAn8BitStream() throws {
-        let obu = try #require(try AV1.obus(fixture("frames.obu")).first { $0.type == AV1.sequenceHeaderType })
+        let obu = try #require(try AV1.obus(Fixtures.data("frames.obu")).first { $0.type == AV1.sequenceHeaderType })
         let header = try AV1.parseSequenceHeader(obu.payload)
         #expect(header.profile == 0)
         #expect(header.bitDepth == 8)
@@ -34,7 +28,7 @@ private func fixture(_ name: String) throws -> Data {
     }
 
     @Test func readsTheBitDepthOfA10BitStream() throws {
-        let obu = try #require(try AV1.obus(fixture("frames-10bit.obu")).first { $0.type == AV1.sequenceHeaderType })
+        let obu = try #require(try AV1.obus(Fixtures.data("frames-10bit.obu")).first { $0.type == AV1.sequenceHeaderType })
         #expect(try AV1.parseSequenceHeader(obu.payload).bitDepth == 10)
     }
 
@@ -58,27 +52,11 @@ private func fixture(_ name: String) throws -> Data {
     @Test(arguments: [("frames.h264", VideoCodec.h264), ("frames.hevc", .hevc), ("frames.obu", .av1), ("frames-10bit.obu", .av1)])
     func theFirstFrameDecodes(name: String, codec: VideoCodec) throws {
         if codec == .av1, !VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1) { return }
-        let data = try fixture(name)
-        let frame = codec == .av1 ? data : firstAccessUnit(data, codec: codec)
+        let frame = codec == .av1 ? try Fixtures.data(name) : try Fixtures.pictures(name, codec: codec)[0]
         let format = try VideoFormat.description(codec: codec, frame: frame)
         let dimensions = CMVideoFormatDescriptionGetDimensions(format)
         #expect(dimensions.width == 64 && dimensions.height == 64)
         #expect(try decodedWidth(format: format, sample: VideoFormat.sampleData(codec: codec, frame: frame)) == 64)
-    }
-
-    /// The parameter sets and the first picture of an Annex B stream (up to the second picture's first slice).
-    private func firstAccessUnit(_ data: Data, codec: VideoCodec) -> Data {
-        var out = Data()
-        var pictures = 0
-        for unit in AnnexB.units(data) {
-            let type = AnnexB.type(of: unit, codec: codec) ?? 0
-            let isSlice = codec == .h264 ? (type == 1 || type == 5) : type < 32
-            if isSlice { pictures += 1 }
-            if pictures > 1 { break }
-            out.append(contentsOf: [0, 0, 0, 1])
-            out.append(unit)
-        }
-        return out
     }
 
     private func decodedWidth(format: CMVideoFormatDescription, sample: Data) throws -> Int {
