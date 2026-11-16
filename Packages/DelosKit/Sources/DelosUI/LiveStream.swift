@@ -20,11 +20,14 @@ final class LiveStream: StreamSteps {
     private let appID: Int
     private let session: StreamSession
     private let formats: VideoFormats
+    private let settings: StreamSettings
     private var client: (HostClient, HostPin)?
     private var plan: (server: ServerInformation, configuration: StreamConfiguration)?
 
-    init(hosts: HostStore, hostID: String, appID: Int, renderer: any VideoRenderer) {
+    /// - Parameter settings: the current profile's stream settings (Settings → Stream).
+    init(hosts: HostStore, hostID: String, appID: Int, settings: StreamSettings, renderer: any VideoRenderer) {
         self.hosts = hosts
+        self.settings = settings
         self.hostID = hostID
         self.appID = appID
         pcName = hosts.host(hostID)?.name ?? L("stream_result_default_pc")
@@ -50,8 +53,9 @@ final class LiveStream: StreamSteps {
         guard let app else { throw .appNotFound }
         appName = app.title
 
-        let settings = StreamSettings.forDisplay(pixelWidth: display.pixelWidth, pixelHeight: display.pixelHeight)
-        let plan = StreamPlan(app: app, settings: settings, formats: formats, refreshRate: display.maxFramesPerSecond)
+        let plan = StreamPlan(
+            app: app, settings: settings, display: StreamResolution(width: display.pixelWidth, height: display.pixelHeight),
+            decodable: formats, refreshRate: display.maxFramesPerSecond)
         let nvidia = record.isNvidiaServer
         let sessionURL: String?
         if record.runningAppID == appID {

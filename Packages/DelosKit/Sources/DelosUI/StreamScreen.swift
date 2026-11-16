@@ -16,14 +16,17 @@ import UIKit
 struct StreamScreen: View {
     let hostID: String
     let appID: Int
+    /// The current profile's stream settings.
+    let settings: StreamSettings
     @Environment(HostStore.self) private var hosts
     @Environment(Navigator.self) private var navigator
     @State private var controller: StreamController?
     @State private var renderer: DisplayLayerRenderer?
 
-    init(hostID: String, appID: Int) {
+    init(hostID: String, appID: Int, settings: StreamSettings) {
         self.hostID = hostID
         self.appID = appID
+        self.settings = settings
     }
 
     var body: some View {
@@ -46,8 +49,8 @@ struct StreamScreen: View {
     private func begin() {
         guard controller == nil else { return }
         let renderer = DisplayLayerRenderer()
-        let controller = StreamController { [hosts, hostID, appID] in
-            LiveStream(hosts: hosts, hostID: hostID, appID: appID, renderer: renderer)
+        let controller = StreamController { [hosts, hostID, appID, settings] in
+            LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer)
         }
         self.renderer = renderer
         self.controller = controller

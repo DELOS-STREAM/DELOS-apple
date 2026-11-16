@@ -22,6 +22,21 @@ public enum Screen: Hashable, Sendable {
     case home(hostID: String)
     /// A stream of the app [appID] of the PC [hostID].
     case stream(hostID: String, appID: Int)
+    /// Settings: the tabs, the rows of the selected one and the help of the focused row.
+    case settings
+
+    /// The screens of the top navigation (Android's `Screen.main`, as far as they exist here): the library, Settings and
+    /// Profile. They show the navigation in the status bar.
+    var showsNavigation: Bool {
+        switch self {
+        case .home, .settings, .profile: true
+        default: false
+        }
+    }
+
+    /// Whether the left menu button opens the side menu here (Android's `Screen.sideMenu`: the main screens and the start
+    /// screen).
+    var hasSideMenu: Bool { showsNavigation || self == .start }
 }
 
 /// Where the interface is: a back stack of screens, each with its own ``FocusModel``, so going back returns to the item
@@ -46,6 +61,8 @@ public final class Navigator {
     /// While set, every controller and keyboard command goes here first; true: consumed (the stream screen owns the
     /// controller).
     @ObservationIgnored public var commandCapture: (@MainActor (MenuCommand) -> Bool)?
+    /// How often the command being handled has repeated while its direction is held (0: a new press).
+    @ObservationIgnored public internal(set) var commandRepeat = 0
 
     public init(root: Screen, focus: AnyHashable? = nil) {
         stack = [Entry(screen: root, focus: FocusModel(initial: focus))]
@@ -83,6 +100,14 @@ public final class Navigator {
             stack = [Entry(screen: .start, focus: FocusModel(initial: StartScreen.pcID(hostID)))]
         }
         push(.home(hostID: hostID), focus: HomeScreen.initialFocus)
+    }
+
+    /// Opens a screen of the top navigation ([Screen.showsNavigation]). Settings and Profile take each other's place, so
+    /// B returns to the screen below them (Android: their `back` is the library); the current one stays.
+    public func openFromNavigation(_ screen: Screen, focus: AnyHashable? = nil) {
+        guard current != screen else { return }
+        if current == .settings || current == .profile, canGoBack { stack.removeLast() }
+        push(screen, focus: focus)
     }
 
     /// Starts streaming the app [appID] of the PC [hostID].

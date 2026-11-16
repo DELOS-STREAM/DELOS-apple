@@ -61,7 +61,7 @@ import Testing
 
     @Test func theDisplayResolutionIsCappedAt1080p() {
         // iPhone 14 Pro Max: 2796 × 1290 pixels
-        let settings = StreamSettings.forDisplay(pixelWidth: 1290, pixelHeight: 2796)
+        let settings = StreamResolution.forDisplay(pixelWidth: 1290, pixelHeight: 2796)
         #expect(settings.height <= 1080 && settings.width <= 1920)
         #expect(settings.width % 2 == 0 && settings.height % 2 == 0)
         #expect(abs(Double(settings.width) / Double(settings.height) - 2796.0 / 1290.0) < 0.01)
@@ -70,8 +70,8 @@ import Testing
     @Test func theLaunchRequestAndTheStreamShareTheInputKey() {
         var counter: UInt8 = 0
         let plan = StreamPlan(
-            app: HostApp(id: 7, title: "Desktop"), settings: StreamSettings(width: 1920, height: 1080), formats: .h264,
-            refreshRate: 120, randomBytes: { n in (0..<n).map { _ in counter &+= 1; return counter } })
+            app: HostApp(id: 7, title: "Desktop"), settings: StreamSettings(resolution: StreamResolution(width: 1920, height: 1080)),
+            display: StreamResolution(width: 2796, height: 1290), decodable: .h264, refreshRate: 120, randomBytes: { n in (0..<n).map { _ in counter &+= 1; return counter } })
         #expect(plan.request.remoteInputKey == Data(plan.configuration.remoteInputKey.key))
         // The IV starts with the key id, big-endian
         let id = plan.request.remoteInputKeyID

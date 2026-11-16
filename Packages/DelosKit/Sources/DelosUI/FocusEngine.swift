@@ -79,7 +79,7 @@ public final class FocusModel {
             guard let focused, let action = actions[focused] else { return false }
             action()
             return true
-        case .back:
+        case .back, .previousTab, .nextTab, .menu:
             return false
         }
         guard let focused, let current = frames[focused] else {
@@ -105,18 +105,23 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
     let model: FocusModel
     let moves: [FocusDirection: AnyHashable]
     let action: @MainActor () -> Void
+    let tap: (@MainActor () -> Void)?
     let content: (Bool) -> Content
 
-    /// - Parameter moves: where a direction leads from this item instead of the nearest item that way (iPhone, iPad
-    ///   and Mac; on tvOS the system focus engine decides).
+    /// - Parameters:
+    ///   - moves: where a direction leads from this item instead of the nearest item that way (iPhone, iPad and Mac;
+    ///     on tvOS the system focus engine decides).
+    ///   - tap: what a tap does after focusing the item, when it is not [action] (A): a settings row's choice opens its
+    ///     list on a tap, A steps it.
     public init(
         id: ID, model: FocusModel, moves: [FocusDirection: AnyHashable] = [:], action: @escaping @MainActor () -> Void,
-        @ViewBuilder content: @escaping (Bool) -> Content
+        tap: (@MainActor () -> Void)? = nil, @ViewBuilder content: @escaping (Bool) -> Content
     ) {
         self.id = id
         self.model = model
         self.moves = moves
         self.action = action
+        self.tap = tap
         self.content = content
     }
 
@@ -130,6 +135,7 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
             // The model moves the focus too (to the next step of a form, or the first item of a screen)
             .onChange(of: model.focused) { _, now in if now == AnyHashable(id) { systemFocused = true } }
             .onAppear { if model.focused == AnyHashable(id) { systemFocused = true } }
+            // The Siri Remote's select is A, not a touch
             .onTapGesture(perform: action)
     }
     #else
@@ -142,7 +148,7 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
             .contentShape(Rectangle())
             .onTapGesture {
                 model.focus(AnyHashable(id))
-                action()
+                (tap ?? action)()
             }
     }
     #endif

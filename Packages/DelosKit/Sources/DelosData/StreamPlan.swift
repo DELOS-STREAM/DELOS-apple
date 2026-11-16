@@ -3,58 +3,36 @@ import DelosHost
 import Foundation
 import Security
 
-/// What the user chose for a stream (Settings → Stream). Defaults: the device's display resolution capped at 1080p,
-/// 60 fps, the bitrate from ``StreamPlan/defaultBitrateKbps(width:height:fps:)``.
-public struct StreamSettings: Codable, Equatable, Sendable {
-    public var width: Int
-    public var height: Int
-    public var fps: Int
-    /// Nil: the default for the resolution and frame rate.
-    public var bitrateKbps: Int?
-    public var playAudioOnHost = false
-    public var optimizeGameSettings = true
-
-    public init(width: Int, height: Int, fps: Int = 60, bitrateKbps: Int? = nil) {
-        self.width = width
-        self.height = height
-        self.fps = fps
-        self.bitrateKbps = bitrateKbps
-    }
-
-    /// The resolution of a display of `pixelWidth` × `pixelHeight` (landscape), scaled down to fit in 1920 × 1080 with
-    /// even dimensions.
-    public static func forDisplay(pixelWidth: Int, pixelHeight: Int) -> StreamSettings {
-        let w = max(pixelWidth, pixelHeight), h = min(pixelWidth, pixelHeight)
-        let scale = min(1, 1920 / Double(w), 1080 / Double(h))
-        return StreamSettings(width: Int(Double(w) * scale) & ~1, height: Int(Double(h) * scale) & ~1)
-    }
-}
-
 /// The launch request and the stream configuration for one stream: the same remote input key goes into both.
 public struct StreamPlan: Sendable {
     public let request: LaunchRequest
     public let configuration: StreamConfiguration
 
     /// - Parameters:
-    ///   - formats: the video formats this device decodes (the host picks one of them).
-    ///   - resume: the host already runs this app (resume instead of launch).
-    public init(app: HostApp, settings: StreamSettings, formats: VideoFormats, refreshRate: Int, randomBytes: (Int) -> [UInt8] = StreamPlan.secureRandom) {
+    ///   - display: the display's size in pixels: the resolution while the settings have none.
+    ///   - decodable: the video formats this device decodes; the settings' codec chooses which are offered (the host
+    ///     picks one of them).
+    public init(
+        app: HostApp, settings: StreamSettings, display: StreamResolution, decodable: VideoFormats, refreshRate: Int,
+        randomBytes: (Int) -> [UInt8] = StreamPlan.secureRandom
+    ) {
         let key = randomBytes(RemoteInputKey.length)
         let keyID = randomBytes(4).reduce(Int32(0)) { $0 << 8 | Int32($1) }
         // The IV is the key id, big-endian, followed by zeros (as Moonlight and DELOS for Android send it)
         var iv = [UInt8](repeating: 0, count: RemoteInputKey.length)
         withUnsafeBytes(of: keyID.bigEndian) { for (i, byte) in $0.enumerated() { iv[i] = byte } }
         let audio = AudioConfiguration.stereo
-        let bitrate = settings.bitrateKbps ?? Self.defaultBitrateKbps(width: settings.width, height: settings.height, fps: settings.fps)
+        let size = settings.resolution(displayWidth: display.width, displayHeight: display.height)
         request = LaunchRequest(
-            appID: app.id, appUUID: app.uuid, width: settings.width, height: settings.height,
-            frameRate: Double(settings.fps), resolutionScaleFactor: 100, optimizeGameSettings: settings.optimizeGameSettings,
+            appID: app.id, appUUID: app.uuid, width: size.width, height: size.height,
+            // Optimize game settings is GeForce Experience's; DELOS for Android always sends it off
+            frameRate: Double(settings.fps), resolutionScaleFactor: 100, optimizeGameSettings: false,
             remoteInputKey: Data(key), remoteInputKeyID: keyID, hdr: false, virtualDisplay: false,
             playAudioOnHost: settings.playAudioOnHost, surroundAudioInfo: audio.channelMask << 16 | audio.channelCount,
             gamepadMask: 1, persistGamepadsAfterDisconnect: false, coreParameters: CoreInfo.launchQueryParameters)
         configuration = StreamConfiguration(
-            width: settings.width, height: settings.height, fps: settings.fps, bitrateKbps: bitrate,
-            audio: audio, supportedVideoFormats: formats, clientRefreshRateX100: refreshRate * 100,
+            width: size.width, height: size.height, fps: settings.fps, bitrateKbps: settings.bitrate(at: size),
+            audio: audio, supportedVideoFormats: settings.codec.formats(decodable: decodable), clientRefreshRateX100: refreshRate * 100,
             encryption: .audio, remoteInputKey: RemoteInputKey(key: key, iv: iv)!)
     }
 

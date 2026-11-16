@@ -86,8 +86,58 @@ home_loading
 home_offline_title
 home_empty_title
 home_empty_note
-# Status bar and navigation
+# Status bar, navigation and side menu
 shell_nav_settings
+shell_nav_profile
+shell_side_not_connected
+shell_side_connected
+shell_side_offline
+shell_side_all_settings
+
+# Settings: frame, Stream and Audio tabs
+settings_screen_title
+settings_screen_dot_join
+settings_tab_stream
+settings_tab_stream_description
+settings_tab_audio
+settings_tab_audio_description
+settings_choice_unavailable
+settings_resolution_native
+settings_resolution_native_portrait
+settings_fps_native
+category_video_settings
+category_host_settings
+title_resolution_list
+resolution_360p
+resolution_480p
+resolution_720p
+resolution_1080p
+resolution_1440p
+resolution_4k
+title_fps_list
+fps_30
+fps_60
+fps_90
+fps_120
+title_seekbar_bitrate
+summary_seekbar_bitrate
+suffix_seekbar_bitrate_mbps
+title_video_format
+videoformat_auto
+videoformat_av1always
+videoformat_hevcalways
+videoformat_h264always
+title_checkbox_host_audio
+help_list_resolution
+help_list_fps
+help_video_format
+help_video_format_auto
+help_video_format_forceav1
+help_video_format_forceh265
+help_video_format_neverh265
+help_checkbox_host_audio
+help_dynamic_resolution
+help_note_unavailable
 
 # Stream: loader, menu, exit and result overlay
 conn_app_minimized
