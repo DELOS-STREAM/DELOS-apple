@@ -40,6 +40,9 @@ public final class GameInput {
     private var mouseRemainder = (x: 0.0, y: 0.0)
     private var scrollRemainder = (x: 0.0, y: 0.0)
     private var running = false
+    /// Counts down while Escape is held (``MenuKeyShortcut``).
+    private var escapeHold: Task<Void, Never>?
+    private let escapeHoldDuration: Duration
 
     /// Moonlight's divisor of GameController's mouse motion.
     nonisolated static let mouseSpeedDivisor = 1.25
@@ -61,10 +64,16 @@ public final class GameInput {
         }
     }
 
-    /// - Parameter onMenu: the menu shortcut was pressed.
-    public init(sink: any StreamInputSink, onMenu: @escaping @MainActor () -> Void) {
+    /// - Parameters:
+    ///   - onMenu: the menu shortcut was pressed (L3 + R3 on a controller, ``MenuKeyShortcut`` on a keyboard).
+    ///   - escapeHold: how long Escape is held to open the menu.
+    public init(
+        sink: any StreamInputSink, escapeHold: Duration = MenuKeyShortcut.holdDuration,
+        onMenu: @escaping @MainActor () -> Void
+    ) {
         self.sink = sink
         self.onMenu = onMenu
+        escapeHoldDuration = escapeHold
     }
 
     /// While true (the stream menu is open) no input reaches the host.
@@ -264,12 +273,19 @@ public final class GameInput {
         }
     }
 
-    private func key(_ usage: Int, pressed: Bool) {
+    func key(_ usage: Int, pressed: Bool) {
         guard let vk = KeyboardMapping.virtualKey(hidUsage: usage) else { return }
         if pressed {
             guard !paused else { return }
+            if MenuKeyShortcut.completesChord(usage: usage, held: heldKeys) {
+                // The menu pauses the input, which lets go of the modifiers at the PC; the M never reached it
+                onMenu()
+                return
+            }
+            if usage == MenuKeyShortcut.escape { startEscapeHold() }
             heldKeys.insert(usage)
         } else {
+            if usage == MenuKeyShortcut.escape { cancelEscapeHold() }
             // A key pressed while paused never reached the host
             guard heldKeys.remove(usage) != nil else { return }
         }
@@ -304,6 +320,21 @@ public final class GameInput {
         for button in [input.leftButton] + [input.rightButton, input.middleButton].compactMap({ $0 }) + (input.auxiliaryButtons ?? []) {
             button.pressedChangedHandler = nil
         }
+    }
+
+    private func startEscapeHold() {
+        escapeHold?.cancel()
+        let duration = escapeHoldDuration
+        escapeHold = Task { [weak self] in
+            do { try await Task.sleep(for: duration) } catch { return }
+            self?.escapeHold = nil
+            self?.onMenu()
+        }
+    }
+
+    private func cancelEscapeHold() {
+        escapeHold?.cancel()
+        escapeHold = nil
     }
 
     private func mouseMoved(dx: Double, dy: Double) {
@@ -358,6 +389,7 @@ public final class GameInput {
     /// Releases at the host every button, key and stick held, so nothing stays pressed while the menu is open or
     /// after the stream.
     private func releaseAll() {
+        cancelEscapeHold()
         for pad in pads.values {
             try? sink.sendController(number: pad.number, activeGamepadMask: slots.mask, state: ControllerState())
         }
