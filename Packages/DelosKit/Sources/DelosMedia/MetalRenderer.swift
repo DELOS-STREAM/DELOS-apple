@@ -1,0 +1,166 @@
+import CoreMedia
+import Foundation
+import Metal
+import QuartzCore
+import Synchronization
+
+/// Decodes with VideoToolbox and presents from the display's own clock: the decoded pictures wait in a small queue
+/// (``FrameQueue``, timed by the same ``FramePacing`` modes as the display layer), and a `CAMetalDisplayLink` calls
+/// back at every refresh with the drawable for it; the frame that is due at that refresh is drawn into the drawable
+/// through a Metal texture cache and presented at the refresh's time. Nothing is shown between refreshes and no frame
+/// is shown twice by the system's own pacing, so the interval between shown frames is decided here, not by
+/// `AVSampleBufferDisplayLayer`'s internals.
+///
+/// The second path of decision L4. It is not the default: ``RendererChoice`` picks it for the debug switch until a stream
+/// on the iPad shows it is steadier (issue #9, #12). It also is where upscalers (SGSR, MetalFX), HDR tone mapping
+/// (issue #11) and PyroWave (issue #13) draw.
+///
+/// `CAMetalDisplayLink` exists on iOS and tvOS 17, and on macOS 14 (the app's minimum is 15), so the Mac needs no second
+/// display-link kind.
+public final class MetalRenderer: VideoRenderer {
+    public var name: String { "VideoToolbox + Metal" }
+
+    private nonisolated(unsafe) let layer: CAMetalLayer
+    private let pipeline: MetalPipeline
+    private let fps: Int
+    /// Created and stopped on the main actor.
+    private nonisolated(unsafe) var ticker: MetalDisplayLinkTicker?
+
+    @MainActor public var hostLayer: CALayer { layer }
+
+    /// Nil when the device has no Metal GPU or the shader library is missing.
+    @MainActor
+    public init?(pacing: FramePacing, fps: Int) {
+        guard let pipeline = MetalPipeline(pacing: pacing, fps: fps) else { return nil }
+        self.pipeline = pipeline
+        self.fps = fps
+        layer = CAMetalLayer()
+        layer.device = pipeline.drawer.device
+        layer.pixelFormat = .bgra8Unorm
+        layer.framebufferOnly = true
+        layer.isOpaque = true
+        layer.maximumDrawableCount = 3
+        layer.presentsWithTransaction = false
+        layer.backgroundColor = CGColor(gray: 0, alpha: 1)
+        layer.colorspace = CGColorSpace(name: ColorConversion().layerColorSpaceName)
+        // A stream whose colours differ from the default (BT.2020, HDR) retags the layer at its first picture
+        let retag = LayerRetagger(layer)
+        pipeline.observeConversion { conversion in retag.apply(conversion) }
+    }
+
+    deinit {
+        ticker?.stop()
+        pipeline.invalidate()
+    }
+
+    public func enqueue(_ sample: CMSampleBuffer) -> Bool {
+        pipeline.enqueue(sample)
+    }
+
+    public func flush() {
+        pipeline.flush()
+    }
+
+    public func presentationCounters() async -> VideoPresentationCounters? {
+        pipeline.counters()
+    }
+
+    @MainActor public func resize(to bounds: CGRect, scale: CGFloat) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.frame = bounds
+        layer.contentsScale = scale
+        let size = CGSize(width: (bounds.width * scale).rounded(), height: (bounds.height * scale).rounded())
+        if size.width > 0, size.height > 0 { layer.drawableSize = size }
+        CATransaction.commit()
+    }
+
+    /// Starts the display link at the display's highest refresh rate: ProMotion screens slow down when nothing asks
+    /// for more.
+    @MainActor public func attached(maxFramesPerSecond: Int) {
+        ticker?.stop()
+        let ticker = MetalDisplayLinkTicker(layer: layer, maxFramesPerSecond: maxFramesPerSecond) { [pipeline] tick in
+            pipeline.tick(tick)
+        }
+        ticker.start()
+        self.ticker = ticker
+    }
+
+    @MainActor public func detached() {
+        ticker?.stop()
+        ticker = nil
+    }
+}
+
+/// Calls back at every refresh of the display, from a thread of its own (the main thread is busy with the interface and
+/// would add its jitter to the pictures).
+final class MetalDisplayLinkTicker: NSObject, CAMetalDisplayLinkDelegate, @unchecked Sendable {
+    private let handler: @Sendable (RefreshTick) -> Void
+    private let nominal: Double
+    private let maxFramesPerSecond: Float
+    private nonisolated(unsafe) let layer: CAMetalLayer
+    private let running = Mutex(false)
+    private var lastPresentation: Double?
+    private var refresh: Double
+
+    init(layer: CAMetalLayer, maxFramesPerSecond: Int, handler: @escaping @Sendable (RefreshTick) -> Void) {
+        self.layer = layer
+        self.handler = handler
+        self.maxFramesPerSecond = Float(max(maxFramesPerSecond, 1))
+        nominal = 1 / Double(max(maxFramesPerSecond, 1))
+        refresh = nominal
+    }
+
+    func start() {
+        guard running.withLock({ state in
+            defer { state = true }
+            return !state
+        }) else { return }
+        let thread = Thread { [self] in
+            let link = CAMetalDisplayLink(metalLayer: layer)
+            link.delegate = self
+            link.preferredFrameRateRange = CAFrameRateRange(
+                minimum: maxFramesPerSecond, maximum: maxFramesPerSecond, preferred: maxFramesPerSecond)
+            link.preferredFrameLatency = 2
+            let runLoop = RunLoop.current
+            // Keeps the run loop alive between callbacks
+            runLoop.add(Port(), forMode: .default)
+            link.add(to: runLoop, forMode: .default)
+            while running.withLock({ $0 }) {
+                runLoop.run(mode: .default, before: Date(timeIntervalSinceNow: 0.25))
+            }
+            link.invalidate()
+        }
+        thread.name = "DELOS display link"
+        thread.qualityOfService = .userInteractive
+        thread.start()
+    }
+
+    func stop() {
+        running.withLock { $0 = false }
+    }
+
+    func metalDisplayLink(_ link: CAMetalDisplayLink, needsUpdate update: CAMetalDisplayLink.Update) {
+        let presentation = update.targetPresentationTimestamp
+        if let last = lastPresentation {
+            let delta = presentation - last
+            // A refresh the system skipped doubles the delta; the nominal rate is the better guess then
+            if delta > 0.5 * nominal, delta < 1.5 * nominal { refresh = delta }
+        }
+        lastPresentation = presentation
+        handler(RefreshTick(presentation: presentation, refresh: refresh, drawable: update.drawable))
+    }
+}
+
+/// Retags the layer's colour space from the render thread: the layer is touched on the main queue only.
+private final class LayerRetagger: @unchecked Sendable {
+    private weak var layer: CAMetalLayer?
+
+    init(_ layer: CAMetalLayer) {
+        self.layer = layer
+    }
+
+    func apply(_ conversion: ColorConversion) {
+        DispatchQueue.main.async { [self] in layer?.colorspace = CGColorSpace(name: conversion.layerColorSpaceName) }
+    }
+}

@@ -1,6 +1,7 @@
 import CDelosCommon
 import CoreMedia
 import Foundation
+import QuartzCore
 import Synchronization
 import Testing
 @testable import DelosCore
@@ -108,6 +109,11 @@ private final class RecordingRenderer: VideoRenderer {
     }
 
     func flush() {}
+
+    var name: String { "Recording" }
+    func presentationCounters() async -> VideoPresentationCounters? { nil }
+    @MainActor var hostLayer: CALayer { CALayer() }
+    @MainActor func resize(to bounds: CGRect, scale: CGFloat) {}
 }
 
 private func sampleBytes(_ sample: CMSampleBuffer) -> [UInt8] {

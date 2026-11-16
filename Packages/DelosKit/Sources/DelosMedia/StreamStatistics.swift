@@ -3,16 +3,46 @@ import DelosCore
 import Foundation
 import Synchronization
 
-/// A cumulative snapshot from the system video renderer, not a count of enqueue calls.
+/// A cumulative snapshot from a video renderer, not a count of enqueue calls. The three first counters both renderers
+/// report; the rest only a renderer that decodes and presents itself (``MetalRenderer``) knows, and stay nil for the display
+/// layer, whose system renderer does not expose them.
 public struct VideoPresentationCounters: Sendable, Equatable {
+    /// Frames the renderer accounted for: shown and dropped.
     public var totalFrames: Int
+    /// Frames that were never shown.
     public var droppedFrames: Int
+    /// Seconds the shown frames were late against the time they were due, summed.
     public var accumulatedDelaySeconds: Double
+    /// Pictures decoded.
+    public var decodedFrames: Int?
+    /// Seconds the decoding of those pictures took, summed.
+    public var accumulatedDecodeSeconds: Double?
+    /// Display refreshes the renderer was asked for a picture at.
+    public var refreshes: Int?
+    /// Refreshes that showed the previous picture again, after the first picture was shown.
+    public var repeatedRefreshes: Int?
+    /// Frames waiting in the queue, summed over the refreshes.
+    public var waitingSum: Int?
+    /// Most frames that waited at a refresh since the previous reading.
+    public var peakWaiting: Int?
+    /// Frames whose drawing the GPU finished after the time of the refresh they were drawn for.
+    public var lateRefreshes: Int?
 
-    public init(totalFrames: Int, droppedFrames: Int, accumulatedDelaySeconds: Double) {
+    public init(
+        totalFrames: Int, droppedFrames: Int, accumulatedDelaySeconds: Double, decodedFrames: Int? = nil,
+        accumulatedDecodeSeconds: Double? = nil, refreshes: Int? = nil, repeatedRefreshes: Int? = nil,
+        waitingSum: Int? = nil, peakWaiting: Int? = nil, lateRefreshes: Int? = nil
+    ) {
         self.totalFrames = totalFrames
         self.droppedFrames = droppedFrames
         self.accumulatedDelaySeconds = accumulatedDelaySeconds
+        self.decodedFrames = decodedFrames
+        self.accumulatedDecodeSeconds = accumulatedDecodeSeconds
+        self.refreshes = refreshes
+        self.repeatedRefreshes = repeatedRefreshes
+        self.waitingSum = waitingSum
+        self.peakWaiting = peakWaiting
+        self.lateRefreshes = lateRefreshes
     }
 }
 
@@ -23,6 +53,7 @@ public struct StreamStatistics: Sendable, Equatable {
     public var codec: String
     public var hdr: Bool
     public var incomingFPS: Double
+    /// Pictures shown per second.
     public var renderingFPS: Double?
     public var bandwidthKiBPerSecond: Double
     /// Missing reassembled video frames, not RTP packet loss or renderer drops.
@@ -36,6 +67,22 @@ public struct StreamStatistics: Sendable, Equatable {
     public var presentationDelayMilliseconds: Double?
     public var videoPackets: UInt32
     public var fecPackets: UInt32
+    /// The renderer's name for the Decoder row.
+    public var renderer = ""
+    /// Pictures per second the renderer decoded; for the display layer the frames it handled (shown and dropped), as it
+    /// reports no decoding.
+    public var decodedFPS: Double?
+    /// Average time VideoToolbox took per picture; nil for the display layer.
+    public var decodeMilliseconds: Double?
+    /// Frames per second that were decoded but not shown.
+    public var droppedFramesPerSecond: Double?
+    /// Average and peak number of frames that waited in the queue at a refresh; nil for the display layer.
+    public var queueWaitingAverage: Double?
+    public var queueWaitingPeak: Int?
+    /// Refreshes per second that showed the previous picture again.
+    public var repeatedRefreshesPerSecond: Double?
+    /// Frames per second the GPU finished drawing after the time of their refresh.
+    public var lateRefreshesPerSecond: Double?
 }
 
 /// Scalar-only frame accounting on the core's video thread, sampled from a background actor.
@@ -57,15 +104,18 @@ public final class VideoStatistics: Sendable {
         var hostMaximum = 0.0
         var renderer: VideoPresentationCounters?
         var rendererSampledAt: UInt64 = 0
+        var rendererName = ""
     }
 
     private let state = Mutex(State())
 
     public init() {}
 
-    func configure(width: Int, height: Int, codec: String, now: UInt64 = DispatchTime.now().uptimeNanoseconds) {
+    func configure(
+        width: Int, height: Int, codec: String, renderer: String = "", now: UInt64 = DispatchTime.now().uptimeNanoseconds
+    ) {
         state.withLock {
-            $0 = State(width: width, height: height, codec: codec, sampledAt: now)
+            $0 = State(width: width, height: height, codec: codec, sampledAt: now, rendererName: renderer)
         }
     }
 
@@ -106,6 +156,7 @@ public final class VideoStatistics: Sendable {
             let seconds = Double(now - s.sampledAt) / 1_000_000_000
             var renderingFPS: Double?
             var presentationDelay: Double?
+            var extra = RendererWindow()
             if let renderer {
                 if let previous = s.renderer, now > s.rendererSampledAt,
                    renderer.totalFrames >= previous.totalFrames,
@@ -121,6 +172,7 @@ public final class VideoStatistics: Sendable {
                             presentationDelay = (renderer.accumulatedDelaySeconds - previous.accumulatedDelaySeconds)
                                 * 1000 / Double(displayed)
                         }
+                        extra = RendererWindow(renderer, since: previous, total: total, dropped: dropped, seconds: rendererSeconds)
                     }
                 }
                 // First reading, reset/flush or missing readings: establish a fresh cumulative baseline.
@@ -139,7 +191,11 @@ public final class VideoStatistics: Sendable {
                 hostMaximumMilliseconds: s.hostCount > 0 ? s.hostMaximum : nil,
                 hostAverageMilliseconds: s.hostCount > 0 ? s.hostSum / Double(s.hostCount) : nil,
                 presentationDelayMilliseconds: presentationDelay,
-                videoPackets: videoPackets, fecPackets: fecPackets)
+                videoPackets: videoPackets, fecPackets: fecPackets, renderer: s.rendererName,
+                decodedFPS: extra.decodedFPS, decodeMilliseconds: extra.decodeMilliseconds,
+                droppedFramesPerSecond: extra.droppedFramesPerSecond, queueWaitingAverage: extra.queueWaitingAverage,
+                queueWaitingPeak: extra.queueWaitingPeak, repeatedRefreshesPerSecond: extra.repeatedRefreshesPerSecond,
+                lateRefreshesPerSecond: extra.lateRefreshesPerSecond)
             s.sampledAt = now
             s.frames = 0; s.bytes = 0; s.received = 0; s.lost = 0
             s.hostCount = 0; s.hostSum = 0; s.hostMinimum = .greatestFiniteMagnitude; s.hostMaximum = 0
@@ -153,24 +209,41 @@ public final class VideoStatistics: Sendable {
     }
 }
 
-/// Capture the layer's main-actor getter once; query its thread-safe renderer off the main thread.
-private final class VideoPresentationReader: Sendable {
-    private nonisolated(unsafe) let renderer: AVSampleBufferVideoRenderer
+/// What the renderer's counters say about one sampling window (the difference of two cumulative readings).
+struct RendererWindow {
+    var decodedFPS: Double?
+    var decodeMilliseconds: Double?
+    var droppedFramesPerSecond: Double?
+    var queueWaitingAverage: Double?
+    var queueWaitingPeak: Int?
+    var repeatedRefreshesPerSecond: Double?
+    var lateRefreshesPerSecond: Double?
 
-    @MainActor
-    init(_ display: DisplayLayerRenderer) {
-        renderer = display.layer.sampleBufferRenderer
-    }
+    init() {}
 
-    func presentationCounters() async -> VideoPresentationCounters? {
-        await withCheckedContinuation { continuation in
-            renderer.loadVideoPerformanceMetrics { metrics in
-                continuation.resume(returning: metrics.map {
-                    VideoPresentationCounters(
-                        totalFrames: $0.totalNumberOfFrames, droppedFrames: $0.numberOfDroppedFrames,
-                        accumulatedDelaySeconds: $0.totalAccumulatedFrameDelay)
-                })
+    init(_ now: VideoPresentationCounters, since before: VideoPresentationCounters, total: Int, dropped: Int, seconds: Double) {
+        droppedFramesPerSecond = Double(dropped) / seconds
+        if let decoded = now.decodedFrames, let earlier = before.decodedFrames, decoded >= earlier {
+            decodedFPS = Double(decoded - earlier) / seconds
+            if let time = now.accumulatedDecodeSeconds, let earlierTime = before.accumulatedDecodeSeconds,
+               decoded > earlier, time >= earlierTime {
+                decodeMilliseconds = (time - earlierTime) * 1000 / Double(decoded - earlier)
             }
+        } else if now.decodedFrames == nil {
+            // The display layer reports no decoding: the frames it handled, shown and dropped
+            decodedFPS = Double(total) / seconds
+        }
+        if let refreshes = now.refreshes, let earlier = before.refreshes, refreshes > earlier {
+            if let sum = now.waitingSum, let earlierSum = before.waitingSum, sum >= earlierSum {
+                queueWaitingAverage = Double(sum - earlierSum) / Double(refreshes - earlier)
+                queueWaitingPeak = now.peakWaiting
+            }
+        }
+        if let repeated = now.repeatedRefreshes, let earlier = before.repeatedRefreshes, repeated >= earlier {
+            repeatedRefreshesPerSecond = Double(repeated - earlier) / seconds
+        }
+        if let late = now.lateRefreshes, let earlier = before.lateRefreshes, late >= earlier {
+            lateRefreshesPerSecond = Double(late - earlier) / seconds
         }
     }
 }
@@ -178,22 +251,17 @@ private final class VideoPresentationReader: Sendable {
 /// Core/renderer reads run off the main actor; only the immutable result crosses into the interface.
 public actor StreamStatisticsSource {
     private let video: VideoStatistics
-    private let renderer: VideoPresentationReader?
+    private let renderer: any VideoRenderer
     private let session: StreamSession
 
-    @MainActor
     public init(video: VideoStatistics, renderer: any VideoRenderer, session: StreamSession) {
         self.video = video
-        if let display = renderer as? DisplayLayerRenderer {
-            self.renderer = VideoPresentationReader(display)
-        } else {
-            self.renderer = nil
-        }
+        self.renderer = renderer
         self.session = session
     }
 
     public func sample() async -> StreamStatistics? {
-        let presentation = await renderer?.presentationCounters()
+        let presentation = await renderer.presentationCounters()
         guard !Task.isCancelled else { return nil }
         let packets = session.videoStatistics()
         // Nil once the session stops; the session orders this read before the core's teardown.

@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- A second video renderer next to the display layer: it decodes with VideoToolbox, keeps the pictures in a small queue
+  timed by the frame pacing modes and presents them from a `CAMetalDisplayLink` through Metal (BT.601, BT.709 and
+  BT.2020 matrices, full and limited range, 8 and 10 bits). The display layer stays the default; the debug switch
+  `-DelosRenderer metal` selects the new one. The statistics panel names the renderer and adds the Decoding and
+  Frame queue rows (frames waiting, skipped, repeated and late). Against a model of the display layer on a virtual
+  120 Hz display the queue drops far fewer frames; whether the real stream on the iPad is steadier is not verified.
 - Settings now keeps the last tab during the session, moves one focus plate between rows, scrolls overflowing focused
   labels and reads long help automatically. Reduced motion leaves text still and help manually scrollable.
 - Screen transitions follow the Android timing: the new screen settles while the previous one leaves faster.

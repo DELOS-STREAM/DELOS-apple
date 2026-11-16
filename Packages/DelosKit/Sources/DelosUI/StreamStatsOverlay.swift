@@ -50,7 +50,7 @@ struct StreamStatsOverlay: View {
     }
 
     private var rows: [(label: String, value: String)] {
-        var result = [(L("stream_stats_decoder"), "AVSampleBufferDisplayLayer")]
+        var result = [(L("stream_stats_decoder"), statistics.renderer)]
         result.append((L("stream_stats_incoming"), "\(number(statistics.incomingFPS)) FPS"))
         if let fps = statistics.renderingFPS {
             result.append((L("stream_stats_rendering"), "\(number(fps)) FPS"))
@@ -62,6 +62,12 @@ struct StreamStatsOverlay: View {
            let minimum = statistics.hostMinimumMilliseconds, let maximum = statistics.hostMaximumMilliseconds {
             result.append((L("stream_stats_pc_processing"), "\(number(average)) ms (\(number(minimum))–\(number(maximum)))"))
         }
+        if let decoding = statistics.decodingText {
+            result.append((L("stream_stats_decoding"), decoding))
+        }
+        if let queue = statistics.frameQueueText {
+            result.append((L("stream_stats_frame_queue"), queue))
+        }
         if let delay = statistics.presentationDelayMilliseconds {
             result.append((L("stream_stats_render_latency"), "\(number(delay, places: 2)) ms"))
         }
@@ -72,8 +78,8 @@ struct StreamStatsOverlay: View {
         if let loss = statistics.lostFramesPercent {
             result.append((L("stream_stats_lost_frames"), "\(number(loss, places: 2)) %"))
         }
-        // AVSampleBufferVideoRenderer does not expose decoding time. Omit that line and total latency;
-        // enqueue CPU duration and presentation lateness are not substitutes for decoder latency.
+        // Total latency is left out: neither renderer reports it. The renderer's own readings (decode time per picture,
+        // queue, skipped, repeated and late frames) are only what the Metal renderer measures itself.
         return result
     }
 

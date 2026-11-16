@@ -178,7 +178,8 @@ parameter sets; the same ones keep it without building it again) and wraps each 
 the signal to ask the host for one. It reads a frame once, in place (`AnnexB.forEachUnit` finds the units as ranges
 of the frame, `AV1.sequenceHeader` the sequence header), and writes it once, into the sample's own block.
 `VideoRenderer` is the renderer interface; `DisplayLayerRenderer` shows the samples through
-`AVSampleBufferDisplayLayer` (decision L4).
+`AVSampleBufferDisplayLayer` (decision L4, the default) and `MetalRenderer` decodes them itself (see
+[The Metal renderer](#the-metal-renderer)).
 
 ## Frame pacing
 
@@ -191,6 +192,78 @@ buffer starts the schedule again instead of carrying delay. `DisplayLayerRendere
 timebase that follows the host clock; the layer shows it at the first refresh at or after it. Settings → Stream →
 Video frame pacing offers the three modes with Android's labels and help lines (Android's Warp modes, FPS limit and Fast
 V-Sync are not offered).
+
+## The Metal renderer
+
+The second path of decision L4 (issues #9 and #12; it also prepares #11 HDR and #13 PyroWave, which need to draw
+themselves). `MetalRenderer` is a `VideoRenderer` that takes the same compressed `CMSampleBuffer`s as the display layer,
+so `VideoOutput` and `VideoSamples` are unchanged:
+
+| Part | What it does |
+|---|---|
+| `VideoDecoder` | A `VTDecompressionSession`: hardware decoding where the device has it (not required, so the simulator falls back to software), `RealTime`, asynchronous, one frame at a time in arrival order (no B-frames). It outputs Metal-compatible, IOSurface-backed two-plane 4:2:0 buffers, 8 or 10 bits, video or full range, and measures the time from submit to output. A new format description (new parameter sets, another resolution) builds a new session; an error or an invalidated session (the app was in the background) makes the renderer refuse non-key frames until the next key frame, which `VideoOutput` turns into an IDR request |
+| `FrameQueue` | The decoded pictures wait here (at most four; a newer one pushes the oldest out). Each gets the time `FramePacer` gives it, the same three modes as the display layer. At each refresh the queue hands out the oldest frame that is due (a frame is due within half a refresh before its time, so it is shown at the refresh nearest to it); when more than one frame would stay due behind it, it skips ahead and the skipped frames count as dropped. In Lowest latency no frame may stay behind, so the newest due frame wins. A struct that takes times as arguments: a fake clock tests it |
+| `CAMetalDisplayLink` | Calls back once per refresh with the drawable and the time its picture appears (`targetPresentationTimestamp`), from a thread of its own (the main thread is busy with the interface), at the screen's highest refresh rate. It exists on iOS and tvOS 17 and on macOS 14, so the Mac needs no `CADisplayLink` variant. A refresh without a frame draws nothing and the layer keeps the last picture; the last picture is drawn again when the layer's size changed |
+| `MetalFrameDrawer` | The pixel buffer's planes become textures through a `CVMetalTextureCache` (no copy), `VideoShaders.metal` converts Y'CbCr to RGB and the picture is fitted into the drawable on black. `ColorConversion` reads range and bit depth from the pixel format and the matrix and transfer function from the buffer's attachments; BT.601, BT.709 and BT.2020 matrices, limited and full range, 8 and 10 bits. The transfer function stays as encoded and the layer is tagged with the matching colour space (BT.709, BT.2020, PQ, HLG): tone mapping and linearising for HDR start in the shader, where `VideoUniforms.transfer` is already passed |
+| `MetalPipeline` | The three of them without the layer and the display link: the core's thread enqueues, VideoToolbox's delivers pictures, the display link's thread draws, behind one short lock. The replay tests drive it with a virtual clock and virtual refreshes |
+
+`RendererChoice` picks the renderer. The display layer stays the default. The debug switch `-DelosRenderer metal` (a
+launch argument or a `defaults` value; `layer` names the default; release builds ignore it) selects the Metal renderer,
+with the profile's frame pacing mode and frame rate:
+
+    xcrun devicectl device process launch --device <id> --console io.github.meitoncz.delos.debug -DelosRenderer metal
+
+There is no Settings row. Android's row for the same idea, Fast V-Sync (Nano Pacer), says in its help line "MediaCodec
+only", which is not true here, and the Android help text cannot be changed on this side. The row follows when the owner
+has compared the renderers on the iPad and decided; it would then reuse `pacing_fast_vsync`.
+
+What a stuck-renderer watchdog can sample from either renderer is `VideoRenderer.presentationCounters()`
+(`VideoPresentationCounters`: `totalFrames` shown plus dropped, `droppedFrames`, `accumulatedDelaySeconds`). For
+`MetalRenderer` the total grows only while the display link runs (the view is in a window and the app is active), so a
+watchdog compares it with the frames it submitted over a window of a second or more.
+
+### What was measured without a stream
+
+The replay harness (`MetalReplayTests`) feeds the fixtures' H.264, HEVC and AV1 frames at 120 fps with seeded, jittered
+arrival times into `MetalPipeline`: VideoToolbox decodes every frame and Metal draws every refresh's picture (into an
+offscreen texture); only the clock and the display's refreshes are virtual, so the result does not depend on the load
+of the machine. It shows that the pipeline gives the same frames at the same refreshes as the queue alone, that every
+frame is decoded and accounted for as shown or dropped, and that a picture appears.
+
+The display layer's own presentation cannot be observed without a display (a headless layer takes every frame and
+reports zero lateness), so the comparison uses `DisplayLayerModel`, the layer as `AVSampleBufferDisplayLayer` documents
+it: each frame gets the `FramePacer` time, the layer shows it at the first refresh at or after it, and of several frames
+whose times have passed it shows the newest. It is a model, not a measurement of the layer. Over eight phases of the
+stream's clock against a 120 Hz display (1200 frames each, 9600 refreshes), 120 fps:
+
+| Jitter, mode | Metal queue: dropped / judder | Layer model: dropped / judder | Delay past its time, Metal / model |
+|---|---|---|---|
+| ±1 ms, Balanced | 0 / 1 | 288 / 288 | 4.6 / 4.0 ms |
+| ±3 ms, Balanced | 0 / 4 | 550 / 552 | 5.9 / 3.9 ms |
+| ±4 ms, Balanced | 0 / 5 | 610 / 612 | 6.4 / 3.9 ms |
+| ±3 ms, Smoothest | 0 / 4 | 550 / 552 | 2.2 / 3.9 ms |
+| ±3 ms, Lowest latency | 1116 / 1115 | 1116 / 1115 | 12.2 / 12.2 ms |
+| bursts every 40 frames, Balanced | 248 / 233 | 599 / 367 | 9.5 / 3.9 ms |
+
+Judder is an interval a refresh or more away from the cadence the stream and the display allow. In Lowest latency both
+drop a frame whenever the next one is due in the same refresh, which jitter makes frequent: that mode is steady only
+on a network without jitter. In the other modes the model drops frames in some phases of the two clocks (a frame whose
+time falls on a refresh's edge goes to either side), and because the host's and the display's clocks drift, every
+phase comes round: a possible cause of the uneven 120 fps of issue #9, to be tested with a stream, since the layer's real
+behaviour is not known. The queue keeps those frames and shows them one refresh apart; the price is up to one refresh of
+delay at the unlucky phases (about 2 ms on average in Balanced).
+
+`SyntheticStreamTests` encodes full-size H.264 and HEVC streams with the Mac's hardware encoder (VideoToolbox has no AV1
+encoder) and runs them through `VideoDecoder` and `MetalFrameDrawer`. On the development Mac (the M-series chip of
+`Mac18,5`, 2026-11-17) the decoder returned 1,500 to 1,600 pictures a second at 1080p and 370 to 390 at 4K when fed as
+fast as it takes them, and the GPU drew a picture in 0.07 ms median at 1080p and 0.6 to 0.7 ms at 4K (p95 under 4 ms).
+Those are throughput figures of the Mac, far above 120; per-picture times in a burst include waiting behind earlier
+pictures and the first 4K pictures include the session's warm-up, so they are not the latency of a live stream. The
+iPad's decoder and GPU were not measured.
+
+`MetalFrameDrawer` is tested against a CPU reference of the conversion with buffers in each range and depth, `FrameQueue`
+with a fake clock (order, tolerance, backlog, capacity, flush, lateness, peak, a stall that catches up, a stream
+faster or slower than the display), `VideoDecoder` with the three fixtures, `RendererChoice` and the layer's size in pixels.
 
 ## Stream output
 
@@ -216,7 +289,7 @@ that talk to the PC and the core are behind the `StreamSteps` protocol, so the t
 
 | Step | What happens |
 |---|---|
-| Display | `VideoSurface` (a thin `UIView` host of the `AVSampleBufferDisplayLayer`, full screen, aspect fit, black) reports the screen's pixel size and highest refresh rate once it is in a window; the stream starts then. While it is shown, a display link asks for the screen's highest refresh rate (ProMotion screens otherwise slow down to 60 Hz), and the animated background is not drawn behind the video |
+| Display | `VideoSurface` (a thin `UIView` host of the renderer's layer: the `AVSampleBufferDisplayLayer` or the `CAMetalLayer`, full screen, aspect fit, black) reports the screen's pixel size and highest refresh rate once it is in a window; the stream starts then. While it is shown, a display link asks for the screen's highest refresh rate (ProMotion screens otherwise slow down to 60 Hz), and the animated background is not drawn behind the video |
 | Launch | `HostStore.refresh` asks the PC again over its pinned connection: offline and "not paired" end here. The app is found in the loaded app list (else it is loaded). `StreamPlan` with the current profile's `StreamSettings` and the formats VideoToolbox decodes in hardware (`DecoderSupport`: H.264 always, HEVC and AV1 8-bit where supported; 10-bit waits for HDR), of which the chosen codec offers some. The app is resumed when the PC runs it, another running app is quit first, else it is launched (`NvConnection.startApp` of DELOS for Android) |
 | Connect | `StreamSession.start` with `VideoOutput(DisplayLayerRenderer)` and `AudioOutput`, the server information of the launch's session URL. Each `stageStarting` event tells a line of the stage (Android's `stream_loader_lines_*`) and adds 8 % to the progress, up to 92 % |
 | Stream | `connectionStarted`: the video shows, `GameInput` starts; rumble events go to the controllers. A termination shows the result overlay (`StreamText.termination`, Android's `describeStreamFailure`); a graceful end goes back (without Android's toast "The PC ended the stream" yet) |
@@ -251,11 +324,13 @@ failure, termination and background suspension cancel sampling before the core s
 | Rendering FPS | Deltas of the renderer's `totalNumberOfFrames` minus `numberOfDroppedFrames`, obtained with `videoPerformanceMetrics`; the first reading establishes a baseline |
 | Network | The running core's `estimatedRoundTrip` and variance |
 | PC processing | Nonzero decode-unit host latency, converted from tenths of a millisecond; minimum, maximum and average |
-| Render latency | The renderer's accumulated presentation lateness divided by displayed frames; not decoding time or button-to-screen latency |
+| Render latency | The renderer's accumulated presentation lateness divided by displayed frames: how long after its time (arrival plus the pacing buffer) a shown frame was shown, for the Metal renderer against the refresh's presentation time; not decoding time or button-to-screen latency |
+| Decoding | Metal renderer only: VideoToolbox's time from submit to output per picture, and the pictures decoded per second |
+| Frame queue | Frames waiting at a refresh (average and most), frames skipped per second (decoded or handed over but never shown; the display layer reports this one too, from `numberOfDroppedFrames`), refreshes per second that had no new frame, and frames per second the GPU finished drawing after the time of their refresh (Metal renderer only; the system's presented time is not in the iOS SDK) |
 | Lost frames | Gaps in decode-unit frame numbers, including UInt32 rollover, divided by expected frames in the window; not packet loss or renderer drops |
 
 Missing readings are omitted (the header uses a dash before measured rendering FPS). The display-layer API does not
-expose actual decode duration, so decoding time and total latency are not shown. Current common-c RTP video loss
+expose actual decode duration, so with it decoding time and total latency are not shown. Current common-c RTP video loss
 counters are not populated; its packet totals are sampled but are not used to manufacture a packet-loss percentage.
 Counter resets establish a new renderer baseline, and gaps between renderer readings use their own elapsed interval.
 `StreamStatisticsTests` covers FPS/bitrate windows, loss/wrap/reordering, host timing, missing readings and resets.
@@ -777,6 +852,16 @@ has no such setting; both are in `Config/Info.plist`, which Xcode merges with th
 - Every background in the iPhone simulator (dark theme; Contour, Nebula and Aurora also light), compared with the
   Android code; Nebula, Lava and Orbit also against a NumPy reimplementation of their AGSL at the same clock.
 - `python3 -m unittest discover -s tools/l10n`: placeholder and escape conversion, string arrays, the usage check.
+- The Metal renderer without a display (`swift test`, `MetalReplayTests`, `MetalRenderingTests`, `FrameQueueTests`,
+  `ColorConversionTests`, `RendererStatisticsTests`): the replay of the H.264, HEVC and AV1 fixtures at 120 fps with
+  jitter through VideoToolbox and Metal on the Mac (AV1 where the Mac has hardware AV1), the queue against a virtual
+  clock, the shader against the CPU conversion, and the comparison with the modelled display layer above.
+- A throwaway harness in a fresh iPad Pro 13-inch (M5) simulator (iOS 27.2, 2026-11-17), removed with the simulator
+  afterwards: the H.264 fixture's two pictures at 60 fps with `Task.sleep` jitter into `MetalRenderer` hosted by
+  `VideoSurface`. The test pattern appeared aspect-fit on black (screenshot looked at), so the `CAMetalLayer`,
+  `CAMetalDisplayLink` and the drawing work in a real window; the counters came back as designed (decoded = submitted,
+  no late refreshes). The simulator's link ran at about 40 refreshes a second, below the stream's 60 fps, so its
+  dropped frames and delay say nothing about a device.
 - The stream screen without a PC (`swift test`): `StreamController` with a fake `StreamSteps` (stage lines and progress,
   the running stream, a launch failure, a failed stage, Try again, a lost connection and a graceful end, Disconnect,
   Quit app and a refused quit, leaving while connecting, who gets the controller commands), the failure texts against
@@ -809,6 +894,13 @@ has no such setting; both are in `Config/Info.plist`, which Xcode merges with th
 
 - Moving the focus with a real game controller on iPhone and iPad (the simulator has no controller); the logic is
   covered by the unit tests only.
+- The Metal renderer on a real display (`-DelosRenderer metal`): `CAMetalDisplayLink` callbacks, the GPU end times against
+  the refresh times (`lateRefreshes`), whether it makes the 120 fps stream on the iPad Pro M5 steadier than the
+  display layer (issue #9: the replay is a model of the layer), the delay of the extra frame in Balanced, how the colours
+  compare with the display layer's (the Metal layer is tagged BT.709; the chroma is sampled with bilinear filtering,
+  without the chroma siting the display layer applies), the decode time and GPU cost of the Metal path at 4K 120 fps,
+  `preferredFrameLatency` 2, the Metal renderer on the Apple TV and the Mac, the decoder's recovery after the app
+  returns from the background.
 - GPU cost of the backgrounds (the shaders and the canvas ones) on a device.
 - How the sounds and haptics feel on a device.
 - A real stream: launch, resume and quit against a PC, start, video and audio with real data, input, rumble on a
