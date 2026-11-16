@@ -10,13 +10,17 @@ final class ShellActions {
     let profiles: ProfileStore
     let toasts: Toasts
     let layers: Layers
+    let artwork: ArtworkStore
+    private let playtimes = PlaytimeStore()
+    private let played = PlayedGames()
 
-    init(navigator: Navigator, hosts: HostStore, profiles: ProfileStore, toasts: Toasts, layers: Layers) {
+    init(navigator: Navigator, hosts: HostStore, profiles: ProfileStore, toasts: Toasts, layers: Layers, artwork: ArtworkStore) {
         self.navigator = navigator
         self.hosts = hosts
         self.profiles = profiles
         self.toasts = toasts
         self.layers = layers
+        self.artwork = artwork
     }
 
     private var feedback: Feedback? { layers.feedback }
@@ -88,7 +92,7 @@ final class ShellActions {
     func gameMenu(hostID: String, app: HostApp) -> ContextMenu? {
         guard let host = hosts.host(hostID) else { return nil }
         let running = host.runningAppID == 0 ? nil : hosts.apps[hostID]?.first { $0.id == host.runningAppID }
-        let start = { [self] (app: HostApp) in go { navigator.openStream(hostID: hostID, appID: app.id) } }
+        let start = { [self] (app: HostApp) in play(hostID: hostID, app: app) }
         var items: [MenuItem]
         if running?.id == app.id {
             items = [
@@ -126,6 +130,86 @@ final class ShellActions {
                 }
                 toasts.show(text, icon: Symbols.error)
             }
+        }
+    }
+
+    /// Starts (or resumes) [app]'s stream and remembers when it was started, for the library's order.
+    func play(hostID: String, app: HostApp) {
+        if let profile = profiles.current?.id { played.markStarted(profile: profile, hostID: hostID, appID: app.id) }
+        go { navigator.openStream(hostID: hostID, appID: app.id) }
+    }
+
+    /// [apps] in the library's order (`PcRepository.order`): the running game, the played ones from the most recent,
+    /// then the others in the PC's order.
+    func libraryOrder(hostID: String, apps: [HostApp]) -> [HostApp] {
+        let running = hosts.host(hostID).flatMap { $0.runningAppID == 0 ? nil : $0.runningAppID }
+        let times = profiles.current.map { played.times(profile: $0.id, hostID: hostID) } ?? [:]
+        let byID = Dictionary(apps.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return PlayedGames.order(apps.map(\.id), played: times, running: running).compactMap { byID[$0] }
+    }
+
+    /// The game last started on the PC in the current profile.
+    func lastPlayed(hostID: String) -> Int? {
+        profiles.current.flatMap { played.last(profile: $0.id, hostID: hostID) }
+    }
+
+    /// The streaming time of an app in the current profile.
+    func playtime(hostID: String, appID: Int) -> Playtime {
+        profiles.current.map { playtimes.playtime(profile: $0.id, hostID: hostID, appID: appID) } ?? .none
+    }
+
+    // MARK: Artwork
+
+    /// The SteamGridDB API key row's dialog (`covers_sgdb_key`): the key is kept in the Keychain; an empty one turns
+    /// SteamGridDB off.
+    func openSteamGridDBKeyDialog() {
+        layers.openDialog(DialogSpec(
+            title: L("settings_native_sgdb_key_title"), note: L("settings_native_sgdb_key_note"),
+            fields: [DialogField(icon: Symbols.key, initial: artwork.apiKey, placeholder: L("settings_native_sgdb_key_placeholder"),
+                                 maxLength: 64, secret: true)],
+            confirm: L("settings_native_sgdb_key_save")
+        ) { [self] values in
+            do {
+                try artwork.setAPIKey(values[0])
+            } catch {
+                feedback?.play(.error)
+                toasts.show(L("artwork_error_save_failed"), icon: Symbols.error)
+                return false
+            }
+            toasts.show(artwork.enabled ? L("settings_native_sgdb_key_saved_toast") : L("settings_native_sgdb_off_toast"), icon: Symbols.checkCircle)
+            return true
+        })
+    }
+
+    /// The PC whose library is open below the current screen.
+    var libraryHostID: String? {
+        for entry in navigator.stack.reversed() {
+            if case .home(let hostID) = entry.screen { return hostID }
+        }
+        return nil
+    }
+
+    /// Downloads the best-rated artwork of the open library's games (`downloadAll`): the games never looked up, or all
+    /// of them again with [refresh]. [quiet]: the library's own background download, which reports only failures.
+    func downloadArtwork(hostID: String?, refresh: Bool, quiet: Bool = false) async {
+        guard let hostID, let apps = hosts.apps[hostID] else {
+            if !quiet { toasts.show(L("settings_native_connect_first_toast"), icon: Symbols.error) }
+            return
+        }
+        if quiet, !artwork.lookupExpected { return }
+        let name = hosts.host(hostID)?.name ?? ""
+        if !quiet { toasts.show(L("settings_native_downloading_toast", name), icon: Symbols.download) }
+        do {
+            let found = try await artwork.downloadAll(hostID: hostID, apps: apps.map { ($0.id, $0.title) }, refresh: refresh)
+            guard !quiet else { return }
+            toasts.show(found == 0 && !refresh ? L("settings_native_artwork_complete_toast") : LPlural("settings_native_artwork_ready_toast", found),
+                        icon: Symbols.checkCircle)
+        } catch let error as SteamGridDBError {
+            feedback?.play(.error)
+            toasts.show(error.text, icon: Symbols.error)
+        } catch {
+            feedback?.play(.error)
+            toasts.show(L("artwork_unreachable"), icon: Symbols.error)
         }
     }
 

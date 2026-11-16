@@ -91,6 +91,8 @@ public struct DelosRoot: View {
     @State private var layers: Layers
     /// What the context menus and dialogs do.
     @State private var actions: ShellActions
+    /// The library's artwork and the focused game's background.
+    @State private var homeArt: HomeArt
     @State private var appearance: Appearance
     @State private var input: MenuInput?
     @State private var feedback: Feedback?
@@ -115,7 +117,9 @@ public struct DelosRoot: View {
         _toasts = State(initialValue: toasts)
         _layers = State(initialValue: layers)
         let navigator = Navigator(root: .boot, focus: "begin")
-        let actions = ShellActions(navigator: navigator, hosts: hosts, profiles: profiles, toasts: toasts, layers: layers)
+        let homeArt = HomeArt(artwork: ArtworkStore())
+        _homeArt = State(initialValue: homeArt)
+        let actions = ShellActions(navigator: navigator, hosts: hosts, profiles: profiles, toasts: toasts, layers: layers, artwork: homeArt.artwork)
         _actions = State(initialValue: actions)
         if !profiles.isFirstRun { navigator.reset(to: .start, focus: actions.startFocus()) }
         var appearance = profiles.current.map { AppearanceStore().load(profile: $0.id) } ?? Appearance()
@@ -152,7 +156,8 @@ public struct DelosRoot: View {
     public var body: some View {
         StageReader(textScale: Double(appearance.uiScale) / 100) {
             ZStack {
-                if !videoCoversBackdrop { Backdrop(kind: appearance.background) }
+                // The game background shows only behind the library (`ShellBackdrop`'s heroShown)
+                if !videoCoversBackdrop { Backdrop(appearance: appearance, hero: showsLibrary ? homeArt.hero : nil) }
                 let entry = navigator.stack[navigator.stack.count - 1]
                 screen(entry)
                     .id(ObjectIdentifier(entry.focus))
@@ -185,6 +190,7 @@ public struct DelosRoot: View {
         }
         .onPreferenceChange(VideoCoversBackdrop.self) { videoCoversBackdrop = $0 }
         .environment(hosts)
+        .environment(homeArt)
         .environment(navigator)
         .environment(layers)
         .environment(\.delosColors, colors)
@@ -321,16 +327,18 @@ public struct DelosRoot: View {
                 }
             )
         case .home(let hostID):
-            HomeScreen(hostID: hostID, focus: entry.focus, actions: actions) { app in
-                go { navigator.openStream(hostID: hostID, appID: app.id) }
-            }
+            HomeScreen(hostID: hostID, focus: entry.focus, actions: actions) { app in actions.play(hostID: hostID, app: app) }
         case .stream(let hostID, let appID):
             StreamScreen(hostID: hostID, appID: appID, settings: streamSettings.load(profile: profiles.current?.id ?? ""))
         case .settings:
             SettingsScreen(
                 profileID: profiles.current?.id ?? "", appearance: $appearance, focus: entry.focus, navigator: navigator,
-                feedback: feedback, tab: settingsTab)
+                feedback: feedback, actions: actions, tab: settingsTab)
         }
+    }
+
+    private var showsLibrary: Bool {
+        if case .home = navigator.current { true } else { false }
     }
 
     /// The top navigation of the screen [entry] shows, if it has one.

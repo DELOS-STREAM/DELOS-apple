@@ -35,6 +35,19 @@ class ReadElementsTest(unittest.TestCase):
         self.assertEqual(import_android.read_elements(root, translated=True), {})
 
 
+class PluralTest(unittest.TestCase):
+    def test_a_plural_with_its_number_is_a_variation(self):
+        entry = import_android.plural({"one": "%d day ago", "other": "%d days ago"})
+        self.assertEqual(entry["variations"]["plural"]["other"]["stringUnit"]["value"], "%d days ago")
+
+    def test_a_plural_without_its_number_picks_its_form_by_a_substitution(self):
+        entry = import_android.plural({"one": "hour", "other": "hours"})
+        self.assertEqual(entry["stringUnit"]["value"], "%#@count@")
+        substitution = entry["substitutions"]["count"]
+        self.assertEqual((substitution["argNum"], substitution["formatSpecifier"]), (1, "d"))
+        self.assertEqual(substitution["variations"]["plural"]["one"]["stringUnit"]["value"], "hour")
+
+
 class CheckUsageTest(unittest.TestCase):
     catalog = {"strings": {
         "full": {"localizations": {language: {} for language in check_usage.LANGUAGES}},
@@ -49,6 +62,9 @@ class CheckUsageTest(unittest.TestCase):
         self.assertEqual(len(found), 2)
         self.assertIn("'absent' is not in the catalog", found[0])
         self.assertIn("'partial' has no", found[1])
+
+    def test_plurals_read_with_lplural_count_as_used(self):
+        self.assertEqual(check_usage.USE.findall('LPlural("a", 1) + L("b") + XL("c")'), ["a", "b"])
 
 
 if __name__ == "__main__":

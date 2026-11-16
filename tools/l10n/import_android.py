@@ -6,9 +6,10 @@
 
 The names listed in tools/l10n/keys.txt are looked up in app/src/main/res/values*/strings*.xml (strings, plurals and
 string arrays) of the Android checkout. The catalog keys are the Android names; item i of a string array is the name
-`<array>_<i>`. Swift code reads them with `L("name")` (DelosUI).
+`<array>_<i>`. Swift code reads them with `L("name")`, plurals with `LPlural("name", count)` (DelosUI).
 Placeholders are converted to Apple's format (`%1$s` -> `%1$@`, `%s` -> `%@`; numbers stay), Android escapes are
-resolved (`\\'`, `\\"`, `\\n`, `\\@`, `\\?`), and a plural becomes a variation by plural category. Every name must have an
+resolved (`\\'`, `\\"`, `\\n`, `\\@`, `\\?`), and a plural becomes a variation by plural category (a substitution
+when its forms do not show the number, which Apple's variations must). Every name must have an
 English text; a missing translation is left out (the app shows English) and listed on standard error.
 Standard library only. Tests: python3 -m unittest discover -s tools/l10n
 """
@@ -98,6 +99,17 @@ def unit(text: str) -> dict:
     return {"stringUnit": {"state": "translated", "value": text}}
 
 
+def plural(forms: dict[str, str]) -> dict:
+    """A plural as a variation by plural category. Apple requires a plural variation to show its number; forms without
+    one ("hour" / "hours", Android's getQuantityString for a unit beside a number) become a substitution that picks
+    the form from the first argument and shows only the form."""
+    variations = {"plural": {q: unit(t) for q, t in forms.items()}}
+    if any(PLACEHOLDER.search(t) for t in forms.values()):
+        return {"variations": variations}
+    return {"stringUnit": {"state": "translated", "value": "%#@count@"},
+            "substitutions": {"count": {"argNum": 1, "formatSpecifier": "d", "variations": variations}}}
+
+
 def build(android: Path, keys: list[str]) -> tuple[dict, list[str]]:
     resources = read_resources(android)
     strings: dict[str, dict] = {}
@@ -112,7 +124,7 @@ def build(android: Path, keys: list[str]) -> tuple[dict, list[str]]:
                 problems.append(f"{key}: no {language} translation")
                 continue
             if isinstance(value, dict):
-                localizations[language] = {"variations": {"plural": {q: unit(t) for q, t in value.items()}}}
+                localizations[language] = plural(value)
             else:
                 localizations[language] = unit(value)
         strings[key] = {"extractionState": "manual", "localizations": localizations}

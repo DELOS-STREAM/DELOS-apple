@@ -55,6 +55,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - The default PC: marked and focused first on the start screen, chosen per profile.
 - Toasts of DELOS for Android at the top right, colored by kind (information, done, warning, error, undo), with a
   timer line. Deleting a profile can be undone for 10 seconds with Y or a tap on its toast.
+- The library of DELOS for Android: the focused game's background behind it (blurred, slowly tilting, its colors
+  tinting the animated background), its logo or name, the streaming time and when it was last streamed, a Running
+  badge and chip, a Last played badge, and covers with placeholder art. Artwork from SteamGridDB (covers, wide covers,
+  backgrounds, logos) with your own API key under Settings → Covers, kept in a size-limited cache; the PC's box art
+  is cached too. Settings → Appearance gains Match the app's colors, App background and its blur and opacity.
 
 ### Changed
 

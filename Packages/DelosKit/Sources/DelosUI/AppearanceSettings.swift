@@ -2,37 +2,48 @@ import DelosData
 import Foundation
 
 /// The rows of the current profile's ``Appearance`` in Settings (the native rows of `nativeSettings` in DELOS for
-/// Android): Appearance → theme, palette, clock, animated background, interface scale and animations; the interface
-/// sounds under Audio and the interface haptics under Controls, where Android has them. Each change applies at once.
+/// Android): Appearance → theme, palette, matching the app's colors, clock, animated background, the app background
+/// with its blur and opacity, interface scale and animations; the interface sounds under Audio and the interface
+/// haptics under Controls, where Android has them. Each change applies at once.
 ///
-/// Not ported: Material You (no counterpart on Apple platforms), the game colors and the game background with its blur
-/// and opacity (no game background yet).
+/// Not ported: Material You (no counterpart on Apple platforms).
 struct AppearanceForm: Equatable {
     var appearance: Appearance
 
     static let theme = "ui_dark"
     static let palette = "ui_palette"
+    static let matchColors = "ui_match_game_colors"
     static let clock = "ui_clock"
     static let background = "ui_background"
+    static let heroBackground = "ui_hero_background"
+    static let heroBlur = "ui_hero_blur"
+    static let heroOpacity = "ui_hero_opacity"
     static let scale = "ui_scale"
     static let motion = "ui_reduced_motion"
     static let sounds = "ui_sounds"
     static let haptics = "ui_haptics"
 
     /// The ids of every row this form owns.
-    static let ids: Set<String> = [theme, palette, clock, background, scale, motion, sounds, haptics]
+    static let ids: Set<String> = [
+        theme, palette, matchColors, clock, background, heroBackground, heroBlur, heroOpacity, scale, motion, sounds, haptics,
+    ]
 
     /// The interface scale's slider, in percent.
     static let scaleRange = 100...130
     static let scaleStep = 5
+    /// The app background's blur (stage pixels) and opacity (percent) sliders.
+    static let blurRange = 0...40
+    static let opacityRange = 0...100
+    static let heroStep = 5
 
     /// The rows of [tab] in Android's order.
     func rows(_ tab: SettingsTab) -> [SettingRow] {
         switch tab {
-        case .stream, .about: []
+        case .stream, .covers, .about: []
         case .audio: [soundsRow]
         case .controls: [hapticsRow]
-        case .appearance: [themeRow, paletteRow, clockRow, backgroundRow, scaleRow, motionRow]
+        case .appearance:
+            [themeRow, paletteRow, matchColorsRow, clockRow, backgroundRow, heroBackgroundRow, heroBlurRow, heroOpacityRow, scaleRow, motionRow]
         }
     }
 
@@ -177,6 +188,35 @@ struct AppearanceForm: Equatable {
             help: L("settings_native_scale_description"))
     }
 
+    private var matchColorsRow: SettingRow {
+        // Android's longer help names Material You, which has no counterpart here: the row's description stands alone
+        SettingRow(
+            id: Self.matchColors, tab: .appearance, section: interface, icon: Symbols.matchColors,
+            label: L("settings_native_match_colors_title"),
+            value: .toggle(appearance.matchGameColors), help: L("settings_native_match_colors_description"))
+    }
+
+    private var heroBackgroundRow: SettingRow {
+        SettingRow(
+            id: Self.heroBackground, tab: .appearance, section: interface, icon: Symbols.wallpaper,
+            label: L("settings_native_hero_background_title"),
+            value: .toggle(appearance.heroBackground), help: L("settings_native_hero_background_description"))
+    }
+
+    private var heroBlurRow: SettingRow {
+        SettingRow(
+            id: Self.heroBlur, tab: .appearance, section: interface, icon: Symbols.blurOn, label: L("settings_native_hero_blur_title"),
+            value: .slider(value: appearance.heroBlur, range: Self.blurRange, step: Self.heroStep, divisor: 1, unit: " px"),
+            help: L("settings_native_hero_blur_description"), enabled: appearance.heroBackground)
+    }
+
+    private var heroOpacityRow: SettingRow {
+        SettingRow(
+            id: Self.heroOpacity, tab: .appearance, section: interface, icon: Symbols.opacity, label: L("settings_native_hero_opacity_title"),
+            value: .slider(value: appearance.heroOpacity, range: Self.opacityRange, step: Self.heroStep, divisor: 1, unit: " %"),
+            help: L("settings_native_hero_opacity_description"), enabled: appearance.heroBackground)
+    }
+
     private var soundsRow: SettingRow {
         SettingRow(
             id: Self.sounds, tab: .audio, section: interface, icon: Symbols.musicNote, label: L("settings_native_sounds_title"),
@@ -204,8 +244,12 @@ struct AppearanceForm: Equatable {
         switch id {
         case Self.theme: appearance.dark = Self.next(appearance.dark, in: Self.themes, direction)
         case Self.palette: appearance.palette = Self.next(appearance.palette, in: PaletteName.allCases, direction)
+        case Self.matchColors: appearance.matchGameColors.toggle()
         case Self.clock: appearance.clock = Self.next(appearance.clock, in: ClockFormat.allCases, direction)
         case Self.background: appearance.background = Self.next(appearance.background, in: BackgroundKind.allCases, direction)
+        case Self.heroBackground: appearance.heroBackground.toggle()
+        case Self.heroBlur: slide(Self.heroBlur, to: appearance.heroBlur + direction * Self.heroStep)
+        case Self.heroOpacity: slide(Self.heroOpacity, to: appearance.heroOpacity + direction * Self.heroStep)
         case Self.scale: slide(Self.scale, to: appearance.uiScale + direction * Self.scaleStep)
         case Self.motion: appearance.reducedMotion = Self.next(appearance.reducedMotion, in: Self.motions, direction)
         case Self.sounds: appearance.sounds.toggle()
@@ -229,11 +273,18 @@ struct AppearanceForm: Equatable {
 
     /// A slider's value (a step, or set on its track by touch), snapped to its grid within its range (Android's
     /// `RowValue.Slider` adjust).
+    /// The blur and the opacity need the app background (Android disables their rows without it).
     mutating func slide(_ id: String, to value: Int) {
-        guard id == Self.scale else { return }
-        let low = Self.scaleRange.lowerBound
-        let snapped = low + Int((Double(value - low) / Double(Self.scaleStep)).rounded()) * Self.scaleStep
-        appearance.uiScale = min(max(snapped, low), Self.scaleRange.upperBound)
+        func snapped(_ range: ClosedRange<Int>, _ step: Int) -> Int {
+            let low = range.lowerBound
+            return min(max(low + Int((Double(value - low) / Double(step)).rounded()) * step, low), range.upperBound)
+        }
+        switch id {
+        case Self.scale: appearance.uiScale = snapped(Self.scaleRange, Self.scaleStep)
+        case Self.heroBlur where appearance.heroBackground: appearance.heroBlur = snapped(Self.blurRange, Self.heroStep)
+        case Self.heroOpacity where appearance.heroBackground: appearance.heroOpacity = snapped(Self.opacityRange, Self.heroStep)
+        default: break
+        }
     }
 
     private static func next<T: Equatable>(_ value: T, in list: [T], _ direction: Int) -> T {

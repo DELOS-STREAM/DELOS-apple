@@ -47,6 +47,8 @@ struct DialogField {
     var initial = ""
     var placeholder = ""
     var maxLength = 24
+    /// A secret (Android's `password`): the value is hidden.
+    var secret = false
 }
 
 /// A small dialog (`DialogSpec`): title, note, fields and a confirm button. [onConfirm] gets the values and returns

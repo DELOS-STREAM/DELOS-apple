@@ -325,10 +325,24 @@ The Metal ports differ from the AGSL text only where Metal must: GLSL's `mod()` 
 Metal's `fmod` keeps the sign of `x`), `atan` is `atan2`, the hash uses `precise::sin` (large arguments), and Orbit's
 `pow(d, 2.0)` of a negative `d` is `d * d`. Tide always samples its waves at the right edge too: Android stops at the
 last multiple of 12 pixels, which is the edge only at 16:9, and on a wider screen the waves would slope down to the
-corner. The fallback of Android below version 13 (Aurora in place of a shader) is not needed. The focused game's colors
-(`clock.tints`) and the game background are not ported yet; Material You has no
+corner. The fallback of Android below version 13 (Aurora in place of a shader) is not needed. Material You has no
 counterpart. In debug builds `-DelosBackground <kind>`, `-DelosTheme light` and `-DelosPalette <name>` pick the
 background, the theme and the palette ([BUILDING.md](BUILDING.md)).
+
+### The game background
+
+Behind the library the backdrop shows the focused game's background (Android's `HeroArt`, still path): its
+SteamGridDB hero, else its cover, else the PC's box art, else its placeholder art (`PlaceholderArt`, hues from Java's
+`String.hashCode` of the name, as Android's `appArt`). `HeroRender` composes it over the hero area (`HeroGeometry`:
+the stage plus 90 px per side; a wide hero fitted to the width over a blurred, darkened extension, any other image
+cropped), saturates it by 1.15, blurs it by Settings → Appearance → App background blur (three box blurs, vImage) at
+420 px wide (1600 unblurred) and fades it diagonally; `HomeArt` keeps the renders and decoded images in memory. It
+shows at the App background opacity, fades into the theme color at the bottom and the left, cross-fades in 900 ms
+and tilts on Android's 25 s orbit (`HeroMotion`, 15°, overscan 1.02; still with reduced motion). Over it the animated
+background's base gradient fades to 12 % and repaints at 30 Hz. With Match the app's colors the animated background
+takes the game's three colors (`GameColors.dominant`, Android's `dominantHues` with a port of material-color-utilities'
+CAM16/HCT; from the cover, the game background's while the cover's are unknown), smoothed per frame
+(`BackdropTints`). Not ported: animated (WebP) heroes, the vignette, and Android's Material You path.
 
 ## Settings
 
@@ -383,8 +397,14 @@ of its own, because Android's names Android's setting. Reduced animations set th
 `reducedMotion` environment value (`LocalReducedMotion`; also on with the system's Reduce Motion), which the focus
 springs, the tabs, the switches and the screen transition (a plain fade) follow.
 
-Not in the Appearance tab: Material You (no counterpart), the game colors and the game background with its blur and
-opacity (no game background yet).
+Not in the Appearance tab: Material You (no counterpart). Match the app's colors, App background, its blur (0 to 40 px)
+and opacity (0 to 100 %) are there; blur and opacity are unavailable without the background (`SettingRow.enabled`:
+dimmed, unchanged, the panel says so).
+
+**Covers** (`CoversForm`): the SteamGridDB API key (a dialog with a hidden field; the user's own key, kept in the
+Keychain, service `io.github.meitoncz.delos.sgdb`, for every profile; empty turns SteamGridDB off), Download
+automatically, Download missing artwork and Download all artwork again for the library open below Settings. Android's
+Choose artwork row waits for the Artwork screen.
 
 **About → MISC → Language** (`AppLanguageSetting`) on iPhone and iPad shows the resource bundle's preferred
 localization, named by Foundation in the current locale (including region/script distinctions such as pt-BR and
@@ -431,6 +451,16 @@ its badge gradient. A missing image keeps the avatar's font icon.
 Not ported yet: the welcome toast, Skip to home (it needs paired PCs), the name dialog of the create-profile page (the
 name is typed into its field) and the sideways scrolling avatar rows of a stage 1500 to 1800 px wide.
 
+## Artwork
+
+`ArtworkStore` (DelosData) is Android's `ArtworkStore` and `BoxArtCache`: `SteamGridDB` (API v2, still images only,
+never NSFW or humor; the name as one path segment) matches each app by name and downloads the best-rated cover, wide
+cover, hero and logo. Images live in `DiskCache` (Caches/artwork, 256 MB, at most 32 MB per file, least recently used
+dropped first; file names are SHA-256 of the key); the match and each kind's chosen image URL are small JSON files
+under Application Support/artwork, so an image the cache dropped is downloaded again without a new search. The PC's
+box art is cached the same way. With the key set and Download automatically on, the library downloads the artwork of
+games never looked up when it loads; a cover waits for the lookup (up to 20 s) before falling back to the box art.
+
 ## PCs and stream plans
 
 `HostStore` (DelosData) is the app's list of PCs: discovery and typed addresses add them (`ask`), `refresh` asks a
@@ -454,15 +484,20 @@ The screens (DelosUI, as DELOS for Android's `DeviceScreens.kt`, `PairScreens.kt
   opens the PIN screen, which runs `HostStore.pair` while it shows; leaving it cancels the task, and `HostClient.pair`
   then asks the PC to unpair (from a task of its own), as after any failure. Pairing results map to Android's messages
   (`PairFailure`); a paired PC opens its library.
-- The library (first version) loads the apps when it shows and lays them out as Android's row of covers (300 × 450,
-  the first three covers wide, the focused one at the row's start) with the PC's box art; A opens the stream. A game's
-  context menu has a header (the tile in the main color, Running or App, another game that runs) and Start, or Resume
-  and Quit for the running game, or Quit … and start and Resume … when another one runs (the stream quits it first).
+- The library loads the apps when it shows and lays them out as Android's home (`HomeLayout`, `HomeStandard`): the
+  focused game's SteamGridDB logo or its name in a gradient into the game background's color, the info row with the
+  streaming-time block (`PlaytimeStore`, `PlaytimeTexts`: total and last streamed, per profile) and a Running on chip,
+  and the row of covers (300 × 450, the first three covers wide, the focused one at the row's start; SteamGridDB covers,
+  the PC's box art or placeholder art; Running and Last played badges). The running game comes first, then the games
+  started from DELOS from the most recent (`PlayedGames`). A opens the stream. A game's context menu has a header
+  (the tile in the main color, Running or App, another game that runs) and Start, or Resume and Quit for the running
+  game, or Quit … and start and Resume … when another one runs (the stream quits it first).
 
 Not ported yet: the default PC's Skip the start screen, the PCs' Devices screen menu (connect, unpair, remove, pair
-with a one-time code), waking an asleep PC on A, the companion screen; in the library the hero background, SteamGridDB
-artwork, game info chips, the game menu's Artwork, Metadata, App settings and Hide, the game's colors in its tile,
-hidden games, last played and per-game settings.
+with a one-time code), waking an asleep PC on A, the companion screen; in the library the compact layout, recording
+the streaming time (the stream screen does not add to `PlaytimeStore` yet), game metadata (IGDB genres and themes,
+HowLongToBeat, HDR chips through the metadata Worker), the game menu's Artwork, Metadata, App settings and Hide, the
+game's colors in its menu tile, hidden games, wrap-around in the row and per-game settings.
 
 ## Strings
 

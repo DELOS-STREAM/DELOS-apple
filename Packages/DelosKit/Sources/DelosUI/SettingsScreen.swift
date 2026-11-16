@@ -25,6 +25,8 @@ struct SettingsScreen: View {
     let focus: FocusModel
     let navigator: Navigator
     let feedback: Feedback?
+    /// What the Covers rows do (the API key dialog, the downloads).
+    let actions: ShellActions
     /// The current profile's appearance, owned by ``DelosRoot``.
     @Binding var appearance: Appearance
     @Environment(\.delosColors) private var colors
@@ -41,12 +43,14 @@ struct SettingsScreen: View {
     /// The row the screen opens with.
     static let initialFocus = StreamSettingsForm.resolution
 
-    init(profileID: String, appearance: Binding<Appearance>, focus: FocusModel, navigator: Navigator, feedback: Feedback?, tab: SettingsTab = .stream) {
+    init(profileID: String, appearance: Binding<Appearance>, focus: FocusModel, navigator: Navigator, feedback: Feedback?, actions: ShellActions,
+         tab: SettingsTab = .stream) {
         self.profileID = profileID
         _appearance = appearance
         self.focus = focus
         self.navigator = navigator
         self.feedback = feedback
+        self.actions = actions
         _tab = State(initialValue: tab)
         _form = State(initialValue: StreamSettingsForm(settings: StreamSettingsStore().load(profile: profileID), device: .current))
     }
@@ -58,13 +62,19 @@ struct SettingsScreen: View {
         case .audio: StreamSettingsForm.hostAudio
         case .controls: AppearanceForm.haptics
         case .appearance: AppearanceForm.theme
+        case .covers: CoversForm.key
         case .about: AppLanguageSetting.id
         }
     }
 
     private var appearanceForm: AppearanceForm { AppearanceForm(appearance: appearance) }
 
-    private var rows: [SettingRow] { form.rows(tab) + appearanceForm.rows(tab) + AppLanguageSetting.rows(tab) }
+    private var coversForm: CoversForm {
+        CoversForm(enabled: actions.artwork.enabled, automatic: actions.artwork.automatic,
+                   pcName: actions.libraryHostID.flatMap { actions.hosts.host($0)?.name })
+    }
+
+    private var rows: [SettingRow] { form.rows(tab) + appearanceForm.rows(tab) + coversForm.rows(tab) + AppLanguageSetting.rows(tab) }
     private var focusedRow: SettingRow? { rows.first { focus.focused == AnyHashable($0.id) } }
 
     var body: some View {
@@ -153,6 +163,8 @@ struct SettingsScreen: View {
         case .left, .right:
             // Left and right change the focused row's value and never leave the row
             guard let row = focusedRow else { return false }
+            // A row that is unavailable keeps its value
+            guard row.enabled else { return true }
             var direction = command == .right ? 1 : -1
             if case let .slider(_, range, step, _, _) = row.value {
                 direction *= StreamSettingsForm.sliderAcceleration(steps: (range.upperBound - range.lowerBound) / step, repeatCount: navigator.commandRepeat)
@@ -184,20 +196,35 @@ struct SettingsScreen: View {
         return true
     }
 
-    /// A on a row: a toggle flips, a choice or a slider steps forward (`SettingRow.activate` of DELOS for Android).
+    /// A on a row: a toggle flips, a choice or a slider steps forward, an action runs (`SettingRow.activate` of DELOS for
+    /// Android); an unavailable row only plays the error sound.
     private func activate(_ row: SettingRow) {
-        if case .appSettings = row.value {
-            #if os(iOS)
-            if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
-            #endif
+        guard row.enabled else {
+            feedback?.play(.error)
             return
         }
-        step(row.id, by: 1)
+        switch row.id {
+        case CoversForm.key: actions.openSteamGridDBKeyDialog()
+        case CoversForm.missing: Task { await actions.downloadArtwork(hostID: actions.libraryHostID, refresh: false) }
+        case CoversForm.refresh: Task { await actions.downloadArtwork(hostID: actions.libraryHostID, refresh: true) }
+        default:
+            if case .appSettings = row.value {
+                #if os(iOS)
+                if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                #endif
+                return
+            }
+            step(row.id, by: 1)
+        }
     }
 
-    /// Steps row [id] of the stream settings or of the appearance, which changes live.
+    /// Steps row [id] of the stream settings, of the appearance (which changes live) or of Covers.
     @discardableResult
     private func step(_ id: String, by direction: Int) -> Bool {
+        if id == CoversForm.automaticID {
+            actions.artwork.automatic.toggle()
+            return true
+        }
         guard AppearanceForm.ids.contains(id) else { return form.step(id, by: direction) }
         var next = appearanceForm
         guard next.step(id, by: direction) else { return false }
@@ -205,7 +232,7 @@ struct SettingsScreen: View {
         return true
     }
 
-    /// A slider's value set on its track by touch: the bitrate or the interface scale.
+    /// A slider's value set on its track by touch: the bitrate, the interface scale, the app background's blur or opacity.
     private func slide(_ id: String, to value: Int) {
         if AppearanceForm.ids.contains(id) {
             var next = appearanceForm
@@ -216,8 +243,13 @@ struct SettingsScreen: View {
         }
     }
 
-    /// A tap on a row (it is focused already): a toggle flips, a choice opens its list, a slider waits for its track.
+    /// A tap on a row (it is focused already): a toggle flips, a choice opens its list, an action runs, a slider waits
+    /// for its track.
     private func tapped(_ row: SettingRow) {
+        guard row.enabled else {
+            feedback?.play(.error)
+            return
+        }
         switch row.value {
         case .toggle:
             feedback?.play(.select)
@@ -225,10 +257,10 @@ struct SettingsScreen: View {
         case .choice(_, _, let selected):
             feedback?.play(.open)
             picker = (row.id, FocusModel(initial: ChoicePicker.optionID(selected ?? 0)))
-        case .appSettings:
+        case .appSettings, .action:
             feedback?.play(.open)
             activate(row)
-        case .slider, .action:
+        case .slider:
             break
         }
     }
@@ -368,6 +400,8 @@ struct SettingRowView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             value
         }
+        // An unavailable row is dimmed (Android's 45 %); the focus plate keeps its look
+        .opacity(row.enabled ? 1 : 0.45)
         .padding(.horizontal, stage.px(26))
         .padding(.vertical, stage.px(14))
         .frame(minHeight: stage.px(compact ? 80 : 92))
@@ -407,18 +441,25 @@ struct SettingRowView: View {
             }
         case let .slider(value, range, step, divisor, unit):
             SettingSlider(value: value, range: range, step: step, divisor: divisor, unit: unit, focused: focused, onChange: onSlide)
-        case .action:
-            SymbolView(symbol: Symbols.chevronRight, size: 30, color: arrows)
+        case .action(let label):
+            labelled(label, arrows: arrows)
         case .appSettings(let language):
-            HStack(spacing: stage.px(12)) {
-                Text(language)
+            labelled(language, arrows: arrows)
+        }
+    }
+
+    /// A value before the chevron of a row that opens something.
+    private func labelled(_ label: String?, arrows: RGBA) -> some View {
+        HStack(spacing: stage.px(12)) {
+            if let label {
+                Text(label)
                     .font(DelosFonts.figtree(stage.tpx(23)))
                     .foregroundStyle(colors.text2.color)
                     .lineLimit(1)
                     .frame(maxWidth: stage.px(360), alignment: .trailing)
-                SymbolView(symbol: Symbols.chevronRight, size: 30, color: arrows)
-                    .offset(x: stage.px(9))
             }
+            SymbolView(symbol: Symbols.chevronRight, size: 30, color: arrows)
+                .offset(x: stage.px(label == nil ? 0 : 9))
         }
     }
 }
@@ -546,6 +587,11 @@ private struct DescriptionPanel: View {
                         .lineSpacing(stage.tpx(22 * 0.45))
                         .foregroundStyle(colors.text2.color)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                    if row?.enabled == false {
+                        Text(L("settings_screen_unavailable"))
+                            .font(DelosFonts.figtree(stage.tpx(18)))
+                            .foregroundStyle(colors.text3.color)
+                    }
                     if row?.id == AppearanceForm.palette { swatches }
                 }
             }
