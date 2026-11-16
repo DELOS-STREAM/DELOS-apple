@@ -18,6 +18,8 @@ xcodebuild -quiet -project DELOS.xcodeproj -scheme DELOS -configuration Debug \
 echo "== repository tools"
 python3 tools/docs/check_links.py
 python3 -m unittest discover -s tools/docs 2>&1 | tail -n 1
+python3 -m unittest discover -s tools/l10n 2>&1 | tail -n 1
+python3 tools/l10n/check_usage.py
 sh tools/hooks/test-commit-msg.sh
 sh tools/hooks/test-check-branch-name.sh
 echo "== all checks passed"

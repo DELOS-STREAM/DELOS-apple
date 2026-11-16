@@ -11,22 +11,22 @@ struct StartScreen: View {
     var body: some View {
         VStack(spacing: stage.px(48)) {
             Heading(
-                title: String(localized: "Welcome", bundle: .module),
-                sub: String(localized: "Pair a PC to start playing.", bundle: .module)
+                title: L("devices_start_welcome"),
+                sub: L("devices_start_pair_note")
             )
             HStack(alignment: .top, spacing: stage.px(56)) {
                 FocusItem(id: "pair", model: focus, action: {}) { focused in
                     CircleItem(
                         icon: Symbols.addLink,
-                        label: String(localized: "Pair a new PC", bundle: .module),
-                        meta: String(localized: "Vibepollo, Apollo or Sunshine", bundle: .module),
+                        label: L("devices_pair_new"),
+                        meta: L("devices_pair_new_meta"),
                         focused: focused
                     )
                 }
                 FocusItem(id: "settings", model: focus, action: {}) { focused in
                     CircleItem(
                         icon: Symbols.settings,
-                        label: String(localized: "Settings", bundle: .module),
+                        label: L("shell_nav_settings"),
                         focused: focused
                     )
                 }

@@ -1,0 +1,13 @@
+# Android string resources that DELOS for Apple uses, one name per line. import_android.py copies them, with every
+# translation, into Packages/DelosKit/Sources/DelosUI/Resources/Localizable.xcstrings. Keep the list sorted by screen.
+
+# Start screen
+devices_start_welcome
+devices_start_greeting
+devices_start_pair_note
+devices_start_choose_note
+devices_pair_new
+devices_pair_new_meta
+
+# Status bar and navigation
+shell_nav_settings

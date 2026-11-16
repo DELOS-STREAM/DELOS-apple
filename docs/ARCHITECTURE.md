@@ -51,11 +51,22 @@ commands, and `FocusModel` (DelosUI) moves the focus to the nearest item in the 
 The animated backgrounds are Metal stitchable shaders in `DelosUI`, ported line by line from the AGSL sources of DELOS
 for Android (`shell/ui/BackgroundShaders.kt`). Contour exists so far.
 
+## Strings
+
+User-visible text comes from DELOS for Android's string resources, so both apps say the same thing in the same ten
+languages. `tools/l10n/keys.txt` lists the names the Apple app uses; `tools/l10n/import_android.py <Android checkout>`
+copies them with every translation into `DelosUI/Resources/Localizable.xcstrings` (placeholders converted to Apple's
+format, plurals as plural variations). Swift reads them with `L("name")`; `tools/l10n/check_usage.py` (part of
+`tools/test.sh`) fails when a used name is missing or lacks a language. `App/Shared/InfoPlist.xcstrings` gives the app
+bundle the same ten languages; without it iOS shows the package's strings in English only.
+
 ## Verification
 
 - `swift test` in `Packages/DelosKit`: colors against an independent HSL implementation, focus geometry and model,
   stage scaling, controller stick and key mapping.
 - `sh tools/sim.sh iphone|ipad|tv`: the start screen in the simulators.
+- The start screen in Czech in the iPhone simulator (`-AppleLanguages (cs)`).
+- `python3 -m unittest discover -s tools/l10n`: placeholder and escape conversion, the usage check.
 
 ### Not verified
 

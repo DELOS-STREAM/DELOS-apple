@@ -27,6 +27,7 @@ cp Config/Local.example.xcconfig Config/Local.xcconfig   # only for a real devic
 | `sh tools/sim.sh iphone /tmp/shot.png` | Builds, installs and starts DELOS in the iPhone 18 Pro Max simulator and saves a screenshot (`ipad`, `tv` or a simulator UDID work too) |
 | `sh tools/test.sh` | The package tests, the app build for the iOS and tvOS simulators and the repository checks |
 | `cd Packages/DelosKit && swift test` | Only the package tests, on the Mac |
+| `python3 tools/l10n/import_android.py ../Delos` | Regenerates the String Catalog from a DELOS for Android checkout (after editing `tools/l10n/keys.txt`) |
 
 ## Project layout
 
