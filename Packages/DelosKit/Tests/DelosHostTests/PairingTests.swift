@@ -181,4 +181,24 @@ import Testing
             #expect(pin.count == 4 && pin.allSatisfy(\.isASCII) && pin.allSatisfy(\.isNumber))
         }
     }
+
+    @Test func leavingWhileTheHostWaitsForThePinAsksItToUnpair() async throws {
+        // The host never answers getservercert: its user has not typed the PIN
+        let host = try await FakeHost(identity: TestIdentities.host) { request in
+            request.path.hasSuffix("unpair") ? .xml("<root status_code=\"200\"/>") : .init(body: Data(), silent: true)
+        }
+        let info = try ServerInfo.parse(Data(Documents.serverInfo(httpsPort: host.httpsPort, appVersion: "7.1.431.-1").utf8))
+        let client = HostClient(address: host.httpAddress, identity: TestIdentities.client)
+        let task = Task { try await client.pair(pin: Self.pin, serverInfo: info) }
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(!host.requests.contains { $0.path.hasSuffix("unpair") })
+
+        task.cancel()
+
+        await #expect(throws: CancellationError.self) { try await task.value }
+        for _ in 0..<50 where !host.requests.contains(where: { $0.path.hasSuffix("unpair") }) {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(host.requests.contains { $0.path.hasSuffix("unpair") })
+    }
 }

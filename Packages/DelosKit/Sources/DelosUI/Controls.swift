@@ -79,6 +79,8 @@ struct TextPill: View {
     @Binding var text: String
     var editing: FocusState<Bool>.Binding
     let focused: Bool
+    /// The field takes an address: no capitals, the URL keyboard.
+    var address = false
     var onSubmit: () -> Void = {}
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
@@ -126,7 +128,8 @@ struct TextPill: View {
             .submitLabel(.done)
             .autocorrectionDisabled()
             #if !os(macOS)
-            .textInputAutocapitalization(.words)
+            .textInputAutocapitalization(address ? .never : .words)
+            .keyboardType(address ? .URL : .default)
             #endif
             .onSubmit(onSubmit)
     }
@@ -134,9 +137,10 @@ struct TextPill: View {
 
 extension View {
     /// The focus look of a pill: it grows by [scale], gets a ring of [ring] stage pixels as far outside it, and a glow of
-    /// [glowBlur] (CSS box-shadow blur) moved down by [glowY]; no glow when [glowBlur] is 0.
-    func focusLook(_ focused: Bool, scale: Double, ring: Double, glowBlur: Double, glowY: Double) -> some View {
-        modifier(FocusLook(focused: focused, scale: scale, ring: ring, glowBlur: glowBlur, glowY: glowY))
+    /// [glowBlur] (CSS box-shadow blur) moved down by [glowY]; no glow when [glowBlur] is 0. [corner] makes the ring a
+    /// rounded rectangle around a shape with that corner radius (a cover) instead of a pill.
+    func focusLook(_ focused: Bool, scale: Double, ring: Double, glowBlur: Double, glowY: Double, corner: Double? = nil) -> some View {
+        modifier(FocusLook(focused: focused, scale: scale, ring: ring, glowBlur: glowBlur, glowY: glowY, corner: corner))
     }
 }
 
@@ -146,6 +150,7 @@ private struct FocusLook: ViewModifier {
     let ring: Double
     let glowBlur: Double
     let glowY: Double
+    let corner: Double?
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -153,10 +158,15 @@ private struct FocusLook: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background {
-                Capsule()
-                    .strokeBorder(colors.accent.color, lineWidth: stage.px(ring))
-                    .padding(-stage.px(2 * ring))
-                    .opacity(focused ? 1 : 0)
+                Group {
+                    if let corner {
+                        RoundedRectangle(cornerRadius: stage.px(corner + 2 * ring)).strokeBorder(colors.accent.color, lineWidth: stage.px(ring))
+                    } else {
+                        Capsule().strokeBorder(colors.accent.color, lineWidth: stage.px(ring))
+                    }
+                }
+                .padding(-stage.px(2 * ring))
+                .opacity(focused ? 1 : 0)
             }
             .shadow(color: focused && glowBlur > 0 ? colors.glow.color : .clear, radius: stage.px(glowBlur / 2), y: stage.px(glowY))
             .scaleEffect(focused ? scale : 1)

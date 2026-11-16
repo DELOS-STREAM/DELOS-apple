@@ -44,6 +44,45 @@ devices_start_pair_note
 devices_start_choose_note
 devices_pair_new
 devices_pair_new_meta
+devices_status_online
+devices_status_asleep
+devices_status_offline
 
-# Status bar and navigation
-shell_nav_settings
+# Pairing
+pairing_pc_title
+pairing_pc_searching
+pairing_pc_none
+pairing_pc_found
+pairing_pc_paired_online
+pairing_pc_paired_offline
+pairing_pc_ready
+pairing_pc_offline
+pairing_pc_address
+pairing_pc_address_hint
+pairing_pc_search_again
+pairing_pc_network
+pairing_pin_title
+pairing_pin_note
+pairing_pin_waiting
+pairing_pin_accepted
+pairing_cancel
+pairing_failed_offline
+pairing_failed_pin_wrong
+pairing_failed_busy
+pairing_failed_game_running
+pairing_failed_not_found
+pairing_failed_unsupported
+pairing_failed
+devices_address_title
+devices_address_note
+devices_address_action
+devices_address_required
+devices_address_looking
+devices_add_not_an_address
+devices_add_no_answer
+
+# Home
+home_loading
+home_offline_title
+home_empty_title
+home_empty_note

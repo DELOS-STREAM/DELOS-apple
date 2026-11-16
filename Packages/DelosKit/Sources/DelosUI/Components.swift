@@ -69,6 +69,8 @@ struct CircleItem: View {
     let icon: String
     let label: String
     var meta: String?
+    /// A dot before the status line (an online PC's green).
+    var metaDot: RGBA?
     var big = true
     var avatar: Avatar?
     var selected = false
@@ -114,11 +116,14 @@ struct CircleItem: View {
                     .offset(y: lit ? 0 : -stage.px(6))
                     .lineLimit(1)
                 if let meta {
-                    Text(meta)
-                        .font(DelosFonts.figtree(stage.px(20)))
-                        .foregroundStyle(colors.text3.color)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
+                    HStack(spacing: stage.px(8)) {
+                        if let metaDot { Circle().fill(metaDot.color).frame(width: stage.px(12), height: stage.px(12)) }
+                        Text(meta)
+                            .font(DelosFonts.figtree(stage.px(20)))
+                            .foregroundStyle(colors.text3.color)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                    }
                 }
             }
         }

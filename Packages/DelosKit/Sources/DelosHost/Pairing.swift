@@ -36,8 +36,17 @@ extension HostClient {
         if let passphrase {
             first.append(("otpauth", Hex.encode(SHA256.hash(data: Data((pin + saltHex + passphrase).utf8)))))
         }
-        // No time limit: the host answers once its user has typed the PIN.
-        let certificateAnswer = try await pairingStep(first, timeout: nil)
+        // No time limit: the host answers once its user has typed the PIN. When the wait ends otherwise (the user left
+        // the PIN screen and the task was cancelled, or the connection broke), the host is still waiting for the PIN:
+        // it is told to unpair, from a task of its own, since this one may be cancelled.
+        let certificateAnswer: HostXMLElement
+        do {
+            certificateAnswer = try await pairingStep(first, timeout: nil)
+        } catch {
+            let client = self
+            Task { try? await client.unpair() }
+            throw error
+        }
         guard certificateAnswer.child("paired") == "1" else { return .failed }
         guard let certificateHex = certificateAnswer.child("plaincert"), !certificateHex.isEmpty else {
             try? await unpair()
