@@ -163,7 +163,7 @@ struct SettingsScreen: View {
         case .up:
             // A held Up stops at the first row; only a new press there goes on to the top navigation
             return navigator.commandRepeat > 0 && focusedRow?.id == rows.first?.id
-        case .down, .accept, .back, .menu:
+        case .down, .accept, .back, .menu, .options, .toastAction:
             return false
         }
     }
@@ -178,7 +178,7 @@ struct SettingsScreen: View {
         case .back:
             feedback?.play(.back)
             closePicker()
-        case .left, .right, .previousTab, .nextTab, .menu:
+        case .left, .right, .previousTab, .nextTab, .menu, .options, .toastAction:
             break
         }
         return true

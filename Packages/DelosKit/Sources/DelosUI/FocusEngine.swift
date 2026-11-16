@@ -41,6 +41,7 @@ public final class FocusModel {
     @ObservationIgnored private var frames: [AnyHashable: CGRect] = [:]
     @ObservationIgnored private var actions: [AnyHashable: @MainActor () -> Void] = [:]
     @ObservationIgnored private var moves: [AnyHashable: [FocusDirection: AnyHashable]] = [:]
+    @ObservationIgnored private var menus: [AnyHashable: @MainActor () -> ContextMenu?] = [:]
 
     public init(initial: AnyHashable? = nil) {
         focused = initial
@@ -50,12 +51,18 @@ public final class FocusModel {
         focused = id
     }
 
-    /// - Parameter moves: where a direction leads from this item instead of the nearest item that way (a grid whose
-    ///   rows continue in the next row).
-    func register(_ id: AnyHashable, frame: CGRect, moves: [FocusDirection: AnyHashable] = [:], action: @escaping @MainActor () -> Void) {
+    /// - Parameters:
+    ///   - moves: where a direction leads from this item instead of the nearest item that way (a grid whose rows
+    ///     continue in the next row).
+    ///   - menu: the item's context menu, built when it opens.
+    func register(
+        _ id: AnyHashable, frame: CGRect, moves: [FocusDirection: AnyHashable] = [:], menu: (@MainActor () -> ContextMenu?)? = nil,
+        action: @escaping @MainActor () -> Void
+    ) {
         frames[id] = frame
         actions[id] = action
         self.moves[id] = moves
+        menus[id] = menu
         if focused == nil { focused = id }
     }
 
@@ -63,7 +70,14 @@ public final class FocusModel {
         frames[id] = nil
         actions[id] = nil
         moves[id] = nil
+        menus[id] = nil
         if focused == id { focused = frames.keys.first }
+    }
+
+    /// The focused item's context menu and its frame (global points); nil when it has none.
+    func contextMenu() -> (ContextMenu, CGRect)? {
+        guard let focused, let frame = frames[focused], let menu = menus[focused]?() else { return nil }
+        return (menu, frame)
     }
 
     /// Handles a command: moves the focus or activates the focused item. Returns false when nothing happened.
@@ -79,7 +93,7 @@ public final class FocusModel {
             guard let focused, let action = actions[focused] else { return false }
             action()
             return true
-        case .back, .previousTab, .nextTab, .menu:
+        case .back, .previousTab, .nextTab, .menu, .options, .toastAction:
             return false
         }
         guard let focused, let current = frames[focused] else {
@@ -104,9 +118,11 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
     let id: ID
     let model: FocusModel
     let moves: [FocusDirection: AnyHashable]
+    let menu: (@MainActor () -> ContextMenu?)?
     let action: @MainActor () -> Void
     let tap: (@MainActor () -> Void)?
     let content: (Bool) -> Content
+    @Environment(Layers.self) private var layers: Layers?
 
     /// - Parameters:
     ///   - moves: where a direction leads from this item instead of the nearest item that way (iPhone, iPad and Mac;
@@ -117,9 +133,19 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
         id: ID, model: FocusModel, moves: [FocusDirection: AnyHashable] = [:], action: @escaping @MainActor () -> Void,
         tap: (@MainActor () -> Void)? = nil, @ViewBuilder content: @escaping (Bool) -> Content
     ) {
+        self.init(id: id, model: model, moves: moves, menu: nil, action: action, tap: tap, content: content)
+    }
+
+    /// - Parameter menu: the item's context menu (the right menu button, X, or a long press on touch), built when it
+    ///   opens so it shows what is true then.
+    init(
+        id: ID, model: FocusModel, moves: [FocusDirection: AnyHashable] = [:], menu: (@MainActor () -> ContextMenu?)?,
+        action: @escaping @MainActor () -> Void, tap: (@MainActor () -> Void)? = nil, @ViewBuilder content: @escaping (Bool) -> Content
+    ) {
         self.id = id
         self.model = model
         self.moves = moves
+        self.menu = menu
         self.action = action
         self.tap = tap
         self.content = content
@@ -140,9 +166,9 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
     }
     #else
     public var body: some View {
-        content(model.focused == AnyHashable(id))
+        let item = content(model.focused == AnyHashable(id))
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
-                model.register(AnyHashable(id), frame: frame, moves: moves, action: action)
+                model.register(AnyHashable(id), frame: frame, moves: moves, menu: menu, action: action)
             }
             .onDisappear { model.unregister(AnyHashable(id)) }
             .contentShape(Rectangle())
@@ -150,6 +176,15 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
                 model.focus(AnyHashable(id))
                 (tap ?? action)()
             }
+        if menu != nil {
+            // A long press is the touch way to the context menu; simultaneous, so a scroll view around still scrolls
+            item.simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in
+                model.focus(AnyHashable(id))
+                layers?.openContextMenu(of: model)
+            })
+        } else {
+            item
+        }
     }
     #endif
 }

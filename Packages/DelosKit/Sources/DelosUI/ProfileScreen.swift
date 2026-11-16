@@ -5,18 +5,15 @@ import UIKit
 #endif
 
 /// `#scr-profile` (`ProfileScreen` in DELOS for Android): the current profile with its avatar, and changing its avatar,
-/// adding a profile or deleting this one.
-///
-/// Android's Rename and Switch profile are left out until their layers exist: Rename opens the text dialog and Switch
-/// opens the profiles context menu. The name can be changed on the Change avatar page, whose name field is typed in
-/// directly. Delete has no Undo toast yet (no toasts exist), so it is final at once.
+/// renaming it (the profile name dialog), switching to another one (the profiles menu), adding a profile or deleting
+/// this one (at once, with Undo in the toast).
 struct ProfileScreen: View {
     let profile: Profile
     let count: Int
     let focus: FocusModel
+    let actions: ShellActions
     let onChangeAvatar: @MainActor () -> Void
     let onAdd: @MainActor () -> Void
-    let onDelete: @MainActor () -> Void
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
 
@@ -39,10 +36,18 @@ struct ProfileScreen: View {
                 FocusItem(id: "change-avatar", model: focus, action: onChangeAvatar) { focused in
                     CircleItem(icon: Symbols.face, label: L("profile_change_avatar"), big: false, focused: focused)
                 }
+                FocusItem(id: "rename", model: focus, action: actions.renameProfile) { focused in
+                    CircleItem(icon: Symbols.edit, label: L("profile_rename"), big: false, focused: focused)
+                }
+                FocusItem(
+                    id: "switch", model: focus, menu: { actions.profilesMenu() }, action: { actions.layers.openContextMenu(of: focus) }
+                ) { focused in
+                    CircleItem(icon: Symbols.switchAccount, label: L("profile_switch"), big: false, focused: focused)
+                }
                 FocusItem(id: "add", model: focus, action: onAdd) { focused in
                     CircleItem(icon: Symbols.personAdd, label: L("profile_add"), big: false, focused: focused)
                 }
-                FocusItem(id: "delete", model: focus, action: onDelete) { focused in
+                FocusItem(id: "delete", model: focus, action: actions.deleteProfile) { focused in
                     CircleItem(icon: Symbols.delete, label: L("profile_delete"), big: false, focused: focused)
                 }
             }

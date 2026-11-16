@@ -119,6 +119,48 @@ public final class HostStore {
         apps[id] = nil
     }
 
+    // MARK: Managing PCs
+
+    /// Gives a PC a name of its own in DELOS on this device (`PcRepository.rename` of DELOS for Android); a blank name
+    /// returns to the PC's own name. The name is trimmed and at most ``maxNameLength`` characters.
+    public func rename(_ id: String, to name: String) {
+        guard var record = host(id) else { return }
+        let clean = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maxNameLength))
+        record.customName = clean.isEmpty ? nil : clean
+        store(record)
+    }
+
+    /// The longest name of a PC, in characters (the rename field of DELOS for Android takes 24).
+    public static let maxNameLength = 24
+
+    /// What sending the Wake-on-LAN packet to a PC did (`WakeResult` of DELOS for Android).
+    public enum WakeResult: Equatable, Sendable {
+        /// The packet went out; whether the PC wakes cannot be known.
+        case sent
+        /// The PC never told its MAC address, so it cannot be woken from here.
+        case noMAC
+        /// The packet could not be sent.
+        case failed
+    }
+
+    /// Sends the Wake-on-LAN packet to every known address of a PC and to the broadcast address.
+    public func wake(_ id: String) async -> WakeResult {
+        guard let record = host(id), let mac = record.macAddress else { return .noMAC }
+        var addresses: [HostAddress] = []
+        for address in [record.activeAddress, record.localAddress, record.manualAddress, record.remoteAddress] {
+            if let address, !addresses.contains(address) { addresses.append(address) }
+        }
+        return await WakeOnLan.wake(macAddress: mac, addresses: addresses) > 0 ? .sent : .failed
+    }
+
+    /// Quits the app that runs on a paired PC (`cancel`), then asks the PC again so its record knows. Throws what the
+    /// PC answered (`HostError.refused`: it did not quit the app).
+    public func quitApp(_ id: String) async throws {
+        let (client, _, pin) = try pairedClient(id)
+        try await client.cancel(pin: pin)
+        await refresh(id)
+    }
+
     // MARK: Apps
 
     /// Loads a paired PC's apps.

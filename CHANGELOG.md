@@ -48,12 +48,21 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - Settings → About → MISC → Language on iPhone and iPad: the current app language, with an action that opens the
   app's page in system Settings. Language selection stays with iOS; the row and otherwise empty About tab are omitted
   on tvOS. Changing the language through Settings on physical devices is not verified.
+- Context menus of DELOS for Android, opened with the right menu button or X of a controller, or a long press: a PC on
+  the start screen (start DELOS with it, wake it, rename it), a game in the library (start, resume, quit, or quit the
+  running game and start this one) and the profiles (switch, new profile) from the profile chip or Switch profile.
+- Dialogs for typing a name: Rename PC and Rename profile.
+- The default PC: marked and focused first on the start screen, chosen per profile.
+- Toasts of DELOS for Android at the top right, colored by kind (information, done, warning, error, undo), with a
+  timer line. Deleting a profile can be undone for 10 seconds with Y or a tap on its toast.
 
 ### Changed
 
 - The repository is set up for DELOS: README, contribution and security policy, third-party record, commit and branch
   hooks. CI runs only for release tags.
 - Streams no longer ask GeForce Experience to optimize the game's settings, as DELOS for Android.
+- The profile chip on the start screen opens the profiles menu instead of the profile screen, as on Android; a PC that
+  sleeps and can be woken says so.
 
 ### Removed
 

@@ -47,6 +47,30 @@ import Testing
             #expect(pin.count == 4 && pin.allSatisfy(\.isNumber))
         }
     }
+
+    @Test func aRenamedPCKeepsItsNameAcrossLaunchesUntilTheNameIsCleared() throws {
+        let defaults = suite()
+        let store = HostStore(defaults: defaults)
+        let pin = HostPin(certificate: Data([1, 2, 3]), httpsPort: 47984)
+        store.store(try record(id: "BBBB", name: "DESKTOP-7Q").paired(with: pin))
+        store.rename("BBBB", to: "  Living room PC with a long name  ")
+        #expect(store.host("BBBB")?.name == "Living room PC with a lo")
+        #expect(store.host("BBBB")?.serverName == "DESKTOP-7Q")
+        #expect(HostStore(defaults: defaults).host("BBBB")?.name == "Living room PC with a lo")
+        store.rename("BBBB", to: " ")
+        #expect(store.host("BBBB")?.name == "DESKTOP-7Q")
+        #expect(HostStore(defaults: defaults).host("BBBB")?.customName == nil)
+    }
+
+    @Test func aRecordStoredBeforeCustomNamesKeepsTheServerName() throws {
+        let defaults = suite()
+        let json = try JSONEncoder().encode([try record(id: "DDDD", name: "Old").paired(with: HostPin(certificate: Data([9]), httpsPort: 1))])
+        var object = try #require(try JSONSerialization.jsonObject(with: json) as? [[String: Any]])
+        object[0]["customName"] = nil
+        #expect(object[0]["name"] as? String == "Old")
+        defaults.set(try JSONSerialization.data(withJSONObject: object), forKey: "hosts")
+        #expect(HostStore(defaults: defaults).host("DDDD")?.name == "Old")
+    }
 }
 
 @Suite struct StreamPlanTests {

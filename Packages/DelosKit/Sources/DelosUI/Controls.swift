@@ -69,11 +69,11 @@ struct PillButton: View {
 }
 
 /// The text field of a form (the prototype's `.field`, with the label of `ValuePill` in DELOS for Android): an 84 px
-/// pill, 520 px wide, with an icon, a small label in capitals and the value as a system text field (touch or a hardware
-/// keyboard). [focused] is the focus of the controller, [editing] whether the field is being typed in (on tvOS: whether
-/// the system focus is on it; selecting it opens the system keyboard).
+/// pill, [width] stage pixels wide, with an icon, a small label in capitals (a dialog's field has none) and the value as
+/// a system text field (touch or a hardware keyboard). [focused] is the focus of the controller, [editing] whether the
+/// field is being typed in (on tvOS: whether the system focus is on it; selecting it opens the system keyboard).
 struct TextPill: View {
-    let label: String
+    let label: String?
     let icon: String
     let placeholder: String
     @Binding var text: String
@@ -81,6 +81,7 @@ struct TextPill: View {
     let focused: Bool
     /// The field takes an address: no capitals, the URL keyboard.
     var address = false
+    var width = 520.0
     var onSubmit: () -> Void = {}
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
@@ -89,11 +90,13 @@ struct TextPill: View {
         HStack(spacing: stage.px(16)) {
             SymbolView(symbol: icon, size: 34, color: colors.text3)
             VStack(alignment: .leading, spacing: 0) {
-                Text(label.uppercased(with: .current))
-                    .font(DelosFonts.figtree(stage.tpx(17), .semibold))
-                    .tracking(stage.tpx(17) * 0.08)
-                    .foregroundStyle(colors.text3.color)
-                    .lineLimit(1)
+                if let label {
+                    Text(label.uppercased(with: .current))
+                        .font(DelosFonts.figtree(stage.tpx(17), .semibold))
+                        .tracking(stage.tpx(17) * 0.08)
+                        .foregroundStyle(colors.text3.color)
+                        .lineLimit(1)
+                }
                 #if os(tvOS)
                 // tvOS draws its own plate around a text field: the value is drawn here, and the field lies over the
                 // whole pill, almost transparent, only to take the focus and open the keyboard
@@ -107,7 +110,7 @@ struct TextPill: View {
             }
         }
         .padding(.horizontal, stage.px(28))
-        .frame(width: stage.px(520), height: stage.px(84), alignment: .leading)
+        .frame(width: stage.px(width), height: stage.px(84), alignment: .leading)
         .background {
             GlassShape(Capsule(), tint: colors.surface2)
                 .overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
@@ -119,7 +122,7 @@ struct TextPill: View {
     }
 
     private var field: some View {
-        TextField(text: $text, prompt: Text(placeholder).foregroundStyle(colors.text3.color)) { Text(label) }
+        TextField(text: $text, prompt: Text(placeholder).foregroundStyle(colors.text3.color)) { Text(label ?? placeholder) }
             .textFieldStyle(.plain)
             .font(DelosFonts.figtree(stage.tpx(30), .semibold))
             .foregroundStyle(colors.text.color)

@@ -33,9 +33,13 @@ import Testing
     }
 
     @Test func startScreenStatusLines() throws {
-        #expect(StartScreen.status(try host("A", "a", paired: true)) == "devices_status_online")
-        #expect(StartScreen.status(try host("A", "a", online: false, paired: true, mac: "AA:BB:CC:DD:EE:FF")) == "devices_status_asleep")
-        #expect(StartScreen.status(try host("A", "a", online: false, paired: true)) == "devices_status_offline")
+        #expect(StartScreen.status(try host("A", "a", paired: true), isDefault: false) == L("devices_status_online"))
+        #expect(StartScreen.status(try host("A", "a", online: false, paired: true, mac: "AA:BB:CC:DD:EE:FF"), isDefault: false)
+            == L("devices_status_asleep_wakes"))
+        #expect(StartScreen.status(try host("A", "a", online: false, paired: true), isDefault: false) == L("devices_status_offline"))
+        // The default PC says so after its state
+        #expect(StartScreen.status(try host("A", "a", paired: true), isDefault: true)
+            == L("devices_status_with_default", L("devices_status_online"), L("devices_status_default")))
     }
 
     @Test func addressEntry() {

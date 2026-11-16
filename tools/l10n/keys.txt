@@ -34,8 +34,22 @@ firstrun_avatar_dragon
 # Profile
 profile_signed_in
 profile_change_avatar
+profile_rename
+profile_switch
 profile_add
 profile_delete
+profile_menu_title
+profile_new
+profile_playing_as
+profile_rename_title
+profile_name_note
+profile_name_save
+profile_name_required
+profile_renamed
+profile_deleted
+profile_undo
+profile_restored
+profile_restore_failed
 
 # Start screen
 devices_start_welcome
@@ -45,8 +59,25 @@ devices_start_choose_note
 devices_pair_new
 devices_pair_new_meta
 devices_status_online
-devices_status_asleep
+devices_status_asleep_wakes
 devices_status_offline
+devices_status_default
+devices_status_with_default
+devices_menu_default_on
+devices_menu_default_off
+devices_menu_wake
+devices_menu_rename
+devices_default_set_toast
+devices_default_cleared_toast
+devices_wake_sent_toast
+devices_wake_unsupported
+devices_wake_failed
+devices_rename_title
+devices_rename_note
+devices_rename_action
+devices_rename_done_toast
+devices_rename_reset_toast
+devices_unreachable
 
 # Pairing
 pairing_pc_title
@@ -86,6 +117,29 @@ home_loading
 home_offline_title
 home_empty_title
 home_empty_note
+home_menu_start
+home_menu_resume
+home_menu_quit
+home_menu_quit_and_start
+home_menu_resume_other
+home_header_game
+home_header_running
+home_header_other_running
+shell_game_quitting
+home_quit_done
+home_quit_failed
+home_quit_other_device
+
+# Toasts and dialogs
+toast_kind_info
+toast_kind_success
+toast_kind_warning
+toast_kind_error
+toast_kind_action
+toast_description
+toast_description_action
+common_cancel
+
 # Status bar, navigation and side menu
 shell_nav_settings
 shell_nav_profile

@@ -59,7 +59,8 @@ import Testing
         // Later changes are independent
         stream.save(StreamSettings(fps: 30), profile: bob.id)
         #expect(stream.load(profile: ann.id).fps == 120)
-        profiles.remove(bob.id)
+        profiles.delete(bob.id)
+        profiles.purge(bob.id)
         #expect(stream.load(profile: bob.id) == StreamSettings())
     }
 

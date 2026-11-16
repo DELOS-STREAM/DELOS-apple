@@ -8,7 +8,10 @@ public struct HostRecord: Equatable, Sendable, Codable {
 
     /// The host's `uniqueid`; never changes.
     public private(set) var id: String
-    public var name: String
+    /// The name the host gives itself (`hostname` of `serverinfo`).
+    public var serverName: String
+    /// The name the user gave the PC in DELOS on this device (Rename in its context menu); nil: the PC's own name.
+    public var customName: String?
     /// `LocalIP` with the HTTP port the host was reached on.
     public var localAddress: HostAddress?
     /// `ExternalIP` with the external port.
@@ -35,10 +38,20 @@ public struct HostRecord: Equatable, Sendable, Codable {
     /// for it, but has not proved to be it (another certificate, or the host no longer knows this client).
     public var lastReplyVerified: Bool
 
+    /// The name DELOS shows: the user's name for the PC, else its own.
+    public var name: String { customName ?? serverName }
+
+    /// Stored under the keys of the records written before custom names: the server's name is `name`.
+    private enum CodingKeys: String, CodingKey {
+        case id, serverName = "name", customName, localAddress, remoteAddress, manualAddress, macAddress, httpsPort
+        case externalPort, appVersion, gfeVersion, codecModeSupport, isNvidiaServer, hostReportsPaired, runningAppID
+        case pinnedCertificate, reachability, activeAddress, lastReplyVerified
+    }
+
     /// A record from the first answer of a host (discovery or a typed address); not paired.
     public init(firstReply reply: ServerInfoReply) {
         id = reply.info.uniqueID
-        name = reply.info.hostName
+        serverName = reply.info.hostName
         httpsPort = reply.info.httpsPort
         codecModeSupport = 0
         isNvidiaServer = false
@@ -99,7 +112,7 @@ public struct HostRecord: Equatable, Sendable, Codable {
     private func applyingAll(_ reply: ServerInfoReply) -> HostRecord {
         let info = reply.info
         var record = self
-        record.name = info.hostName
+        record.serverName = info.hostName
         // The IPv4 loopback address comes from IPv6 forwarders on the host; it does not reach the PC from here.
         if let local = info.localIP, !local.hasPrefix("127.") {
             record.localAddress = HostAddress(host: local, port: reply.address.port)
