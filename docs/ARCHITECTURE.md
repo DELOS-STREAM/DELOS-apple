@@ -124,7 +124,9 @@ refresh. Balanced (the default on Apple, unlike Android's Lowest latency, after 
 holds a frame up to one frame interval and Smoothest up to two; frames are shown at their arrival plus that buffer,
 never sooner than 0.9 of a frame after the previous one (the slack follows the host's clock), and a backlog beyond the
 buffer starts the schedule again instead of carrying delay. `DisplayLayerRenderer` gives each sample that time on a
-timebase that follows the host clock; the layer shows it at the first refresh at or after it.
+timebase that follows the host clock; the layer shows it at the first refresh at or after it. Settings → Stream →
+Video frame pacing offers the three modes with Android's labels and help lines (Android's Warp modes, FPS limit and Fast
+V-Sync are not offered).
 
 ## Stream output
 

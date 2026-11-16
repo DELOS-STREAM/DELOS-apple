@@ -1,5 +1,6 @@
 import DelosCore
 import DelosData
+import enum DelosMedia.FramePacing
 import Foundation
 
 /// A tab of Settings (`SettingsTab` of DELOS for Android), as far as its rows are ported, in Android's order: Stream
@@ -100,12 +101,13 @@ struct StreamSettingsForm: Equatable {
     static let frameRate = "list_fps"
     static let bitrate = "seekbar_bitrate_kbps"
     static let codec = "video_format"
+    static let framePacing = "frame_pacing"
     static let hostAudio = "checkbox_host_audio"
 
     /// The rows of [tab] in their order.
     func rows(_ tab: SettingsTab) -> [SettingRow] {
         switch tab {
-        case .stream: [resolutionRow, frameRateRow, bitrateRow, codecRow]
+        case .stream: [resolutionRow, frameRateRow, bitrateRow, codecRow, framePacingRow]
         case .audio: [hostAudioRow]
         case .controls, .appearance: []
         }
@@ -230,6 +232,33 @@ struct StreamSettingsForm: Equatable {
             help: Self.details(value: label, explanation: Self.codecHelp(settings.codec), unavailable: selected == nil, about: L("help_video_format")))
     }
 
+    /// Android's modes that the display layer can do; the Warp modes, the FPS limit and Fast V-Sync are not offered.
+    var framePacingOptions: [(value: FramePacing, label: String)] {
+        FramePacing.allCases.map { mode in
+            switch mode {
+            case .latency: (mode, L("pacing_latency"))
+            case .balanced: (mode, L("pacing_balanced"))
+            case .smoothness: (mode, L("pacing_smoothness"))
+            }
+        }
+    }
+
+    private var framePacingRow: SettingRow {
+        let options = framePacingOptions
+        let selected = options.firstIndex { $0.value == settings.framePacing }
+        let label = selected.map { options[$0].label } ?? options[1].label
+        let explanation = switch settings.framePacing {
+        case .latency: L("help_frame_pacing_latency")
+        case .balanced: L("help_frame_pacing_balanced")
+        case .smoothness: L("help_frame_pacing_smoothness")
+        }
+        // Android's general help is about its Warp modes, which do not exist here: the chosen mode's line is the help
+        return SettingRow(
+            id: Self.framePacing, tab: .stream, section: section, icon: Symbols.smoothing, label: L("title_frame_pacing"),
+            value: .choice(label: label, options: options.map(\.label), selected: selected),
+            help: "\(label)\n\(explanation)")
+    }
+
     private var hostAudioRow: SettingRow {
         SettingRow(
             id: Self.hostAudio, tab: .audio, section: L("category_host_settings"), icon: Symbols.speaker,
@@ -257,6 +286,7 @@ struct StreamSettingsForm: Equatable {
         case Self.resolution: settings.resolution = Self.next(settings.resolution, in: resolutionOptions.map(\.value), direction)
         case Self.frameRate: settings.fps = Self.next(settings.fps, in: frameRateOptions.map(\.value), direction)
         case Self.codec: settings.codec = Self.next(settings.codec, in: codecOptions.map(\.value), direction)
+        case Self.framePacing: settings.framePacing = Self.next(settings.framePacing, in: framePacingOptions.map(\.value), direction)
         case Self.bitrate: setBitrate(effectiveBitrate + direction * StreamSettings.bitrateStep)
         case Self.hostAudio: settings.playAudioOnHost.toggle()
         default: break
@@ -270,6 +300,7 @@ struct StreamSettingsForm: Equatable {
         case Self.resolution: if resolutionOptions.indices.contains(index) { settings.resolution = resolutionOptions[index].value }
         case Self.frameRate: if frameRateOptions.indices.contains(index) { settings.fps = frameRateOptions[index].value }
         case Self.codec: if codecOptions.indices.contains(index) { settings.codec = codecOptions[index].value }
+        case Self.framePacing: if framePacingOptions.indices.contains(index) { settings.framePacing = framePacingOptions[index].value }
         default: break
         }
     }

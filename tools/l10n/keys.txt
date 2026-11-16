@@ -264,3 +264,12 @@ stream_result_unpaired_details
 
 # Navigation (touch)
 shell_hint_back
+
+# Settings: frame pacing
+title_frame_pacing
+pacing_latency
+pacing_balanced
+pacing_smoothness
+help_frame_pacing_latency
+help_frame_pacing_balanced
+help_frame_pacing_smoothness

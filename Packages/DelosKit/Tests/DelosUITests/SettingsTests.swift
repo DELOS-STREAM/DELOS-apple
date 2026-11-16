@@ -10,7 +10,7 @@ private let iPhone = StreamDevice(pixelWidth: 1290, pixelHeight: 2796, maxFrames
 @Suite struct SettingsFormTests {
     @Test func theTabsHoldTheirRowsInAndroidsOrder() {
         let form = StreamSettingsForm(settings: StreamSettings(), device: iPhone)
-        #expect(form.rows(.stream).map(\.id) == ["list_resolution", "list_fps", "seekbar_bitrate_kbps", "video_format"])
+        #expect(form.rows(.stream).map(\.id) == ["list_resolution", "list_fps", "seekbar_bitrate_kbps", "video_format", "frame_pacing"])
         #expect(form.rows(.audio).map(\.id) == ["checkbox_host_audio"])
         #expect(Set(form.rows(.stream).map(\.section)) == ["Video Settings"])
         #expect(form.rows(.audio)[0].section == "Host Settings")
@@ -58,6 +58,12 @@ private let iPhone = StreamDevice(pixelWidth: 1290, pixelHeight: 2796, maxFrames
         #expect(form.settings.resolution == StreamResolution(width: 2796, height: 1290))
         form.step("checkbox_host_audio", by: 1)
         #expect(form.settings.playAudioOnHost)
+        // Frame pacing: Balanced by default, then Smoothest, wrapping to Lowest latency
+        #expect(form.settings.framePacing == .balanced)
+        form.step("frame_pacing", by: 1)
+        #expect(form.settings.framePacing == .smoothness)
+        form.step("frame_pacing", by: 1)
+        #expect(form.settings.framePacing == .latency)
     }
 
     @Test func aPickedValueIsStored() {
