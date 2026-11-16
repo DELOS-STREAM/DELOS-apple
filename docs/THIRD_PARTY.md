@@ -55,6 +55,34 @@ kept with their checksums. Original to DELOS, project license.
 | `frames.obu` | `af07a43a263e20c5514a74e2a66886b233eea5468bb9752df6cf22a2c654ec40` |
 | `frames-10bit.obu` | `0601e1db7791b230c89745325a100dd4392c8645ccf99478c2e5acfd41d5f2ac` |
 
+## Avatars
+
+The sixteen profile avatars and their badge colors in `Packages/DelosKit/Sources/DelosUI/Resources/Avatars/` are copied
+byte for byte from DELOS for Android (`app/src/main/assets/avatars/`, last changed in commit `726693e0`). They were
+made for DELOS with an image generator (gpt-image-2) and imported by Android's `tools/avatars/import.py`, which also
+writes `avatars.json` (docs/gui/START_AND_HOME.md of DELOS for Android, "Profile avatars"). Original to DELOS, project
+license.
+
+| File | SHA-256 |
+|---|---|
+| `avatars.json` | `aaa653a43e96ee9ab2f0f31b5758944361d70c632e492c40d0c6c04d63c8c849` |
+| `calm.webp` | `3afad9fde877b4e6f063a0058b60c905dee6daa01b2c960b9e265189652d421e` |
+| `cat.webp` | `6ea41f27a13f7b87c64a3cdf515bc41fd5c6586e1bf18647bda9e0f0a112725d` |
+| `dragon.webp` | `5cc719fc9791bdf654b796ca1e71d3f7183f7ed34c2ce2a991ccea846c5ae8b8` |
+| `fox.webp` | `ce235917d1a204307161e349d535ccd03807264dee4583c610e5fdc65103dcd7` |
+| `ghost.webp` | `f351fb9170f806663f98c1b64fce9ea0985d318448208207fd13ef63d8d7438c` |
+| `hacker.webp` | `43dcf913641a2c600a9f59e3887c8feec73c250c00e774254071def60cdbd34e` |
+| `knight.webp` | `f06bc34aa6897d1c2069ca35d5688a4c3801af4d41bf5889c8d258086c9b0778` |
+| `owl.webp` | `6e02116ad7b3ab12125145897213c8ae5d41fc88fd6876b3409f25141dd56bc1` |
+| `player.webp` | `3645227cff9cb95c3208051c4d316f6b7e5eee7b114a63843fbda073cba7c17a` |
+| `racer.webp` | `142cc01e9d0b47fc9976a20c6290c897d6a12ba7f4765d1748c5a9ef925864b0` |
+| `robot.webp` | `1b39100b8ead3f9b52636c75158366c7a8946f37bf1d821c520bddc780c9a260` |
+| `sailor.webp` | `34dac01f10135b4ab6b8a6792d72b487ae38cc82caaa8211e786caf284af51b1` |
+| `spark.webp` | `5a7bb3654c11d77ff942e88ecd8a6060d1c541e4637d294f0d39f5612be80bb0` |
+| `voyager.webp` | `087d5e4b9c0f0a43cda1e677b6714789c783f1707aa0c9487ac4cff163d626cc` |
+| `wizard.webp` | `e67bf9eeda7b75d86b88e6e61ff6254bd181cee8aee68fdbfb5b79730fe3ebb0` |
+| `wolf.webp` | `2391c5bffa9aa0e26bd33addba8ecea90537f00d7fa45c2e4b1aa3f033dd9747` |
+
 ## Swift packages
 
 | Package | Origin | Version | Pin |

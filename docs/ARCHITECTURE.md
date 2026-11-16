@@ -53,6 +53,24 @@ On tvOS the system focus engine moves the focus. On iPhone, iPad and Mac a game 
 focus, so `MenuInput` (DelosInput) turns the D-pad, the left stick, A, B and the arrow, Return and Escape keys into
 commands, and `FocusModel` (DelosUI) moves the focus to the nearest item in the pressed direction (`FocusGeometry`).
 `FocusItem` wraps a view for both engines.
+A `FocusItem` can name where a direction leads instead of the nearest item (`moves`): the avatar grid continues a
+row's end in the next row.
+
+## Navigation
+
+`Navigator` (DelosUI) is the screen router: an `@Observable` back stack of `Screen` values (`boot`, `createProfile`,
+`start`, `profile`), each entry with its own `FocusModel`, so going back returns the focus to where it was. `DelosRoot`
+shows the top entry with the screen transition of the prototype (a fade with a slight zoom).
+
+| Call | Use |
+|---|---|
+| `push(_:focus:)` | Opens a screen above the current one with the focus on an item |
+| `back()` | B, Escape or the Menu button of the Siri Remote: pops the top screen; false at the root, where the system handles it |
+| `reset(to:focus:)` | Replaces the stack: the first run is over, or starts again after the last profile was deleted |
+
+While a text field is typed in, `isEditingText` is true and `DelosRoot` gives the controller and keyboard commands to
+the field instead of the focus; B or Escape stops typing. The Return that ends typing also reaches `MenuInput` as a key
+press, so an accept within 0.3 s after it is ignored (`swallowsAccept`).
 
 ## Video formats
 
@@ -118,6 +136,28 @@ counterpart. In debug builds `-DelosBackground <kind>` and `-DelosTheme light` p
 `Appearance` (DelosData) holds Settings → Appearance with the defaults of DELOS for Android. `AppearanceStore` keeps one
 per profile in `UserDefaults`; reading is lenient, so an unknown option falls back to its default without losing the
 other settings.
+
+## Profiles and the first run
+
+`ProfileStore` (DelosData) keeps the profiles of DELOS for Android (`shell/data/Profiles.kt`): an id (a lower-case
+UUID), a name (trimmed, at most 20 characters, never blank) and the index of the avatar. The list and the current id are
+one Codable value in `UserDefaults`; reading is lenient, so an unreadable profile is skipped and the others are kept. A
+new profile starts with a copy of the current one's appearance and becomes the current one; deleting a profile removes
+its appearance, and the first remaining profile takes over. Each profile's settings are stored under its id
+(`AppearanceStore`), and `DelosRoot` applies the current profile's appearance.
+
+Without a profile DELOS is on its first run: `DelosRoot` starts on the boot screen, "Get started" opens the
+create-profile page, and creating the profile goes on to the start screen. The start screen greets the current profile
+and shows its chip at the top; the chip opens the profile screen (Change avatar, Add profile, Delete profile).
+
+The sixteen avatars (`Avatar.all` in DelosUI) are DELOS for Android's, in its order, because a profile stores the index.
+Their 384 px WebP illustrations are decoded by ImageIO off the main thread and kept in memory; `avatars.json` gives each
+its badge gradient. A missing image keeps the avatar's font icon.
+
+Not ported yet, because the layers they need do not exist: the profiles context menu (Switch profile; the chip opens the
+profile screen instead), the Rename dialog (the name is typed on the Change avatar page), the Undo toast after Delete,
+the welcome toast, the pairing step after the first profile, Skip to home (it needs paired PCs) and the sideways
+scrolling avatar rows of a stage 1500 to 1800 px wide.
 
 ## Strings
 
@@ -226,7 +266,9 @@ Xcode merges with the generated keys (`INFOPLIST_FILE` next to `GENERATE_INFOPLI
 ## Verification
 
 - `swift test` in `Packages/DelosKit`: colors against an independent HSL implementation, focus geometry and model,
-  stage scaling, controller stick and key mapping, the background lights and saturations against the Kotlin formulas,
+  stage scaling, controller stick and key mapping, the profile store (create, rename, avatar, switch, delete, lenient
+  reading, the first run), the navigator's back stack, the avatar set (every WebP decodes through ImageIO, the badge
+  colors), the plural of "Signed in on this …", the background lights and saturations against the Kotlin formulas,
   and that every background shader is in the Metal library; the stream configuration and server information against the C
   structures, the audio, video format and codec bits against the protocol values, the C callbacks against events and
   sinks, input without a stream, a start against a closed local port (fails in the RTSP handshake with
@@ -250,7 +292,8 @@ Xcode merges with the generated keys (`INFOPLIST_FILE` next to `GENERATE_INFOPLI
   the identity (package tests cannot reach the keychain: they lack the entitlement, error -34018); `HostDiscovery`
   found a real Sunshine PC on the network, and its `serverinfo` was read over plain HTTP. Nothing was paired or
   launched.
-- `sh tools/sim.sh iphone|ipad|tv`: the start screen in the simulators.
+- `sh tools/sim.sh iphone|ipad|tv`: the start screen in the simulators. The boot, create-profile, start and profile
+  screens were looked at in the iPhone, iPad and Apple TV simulators (in Czech).
 - DelosMediaTests decode the first frame of an H.264, an HEVC and an 8-bit and a 10-bit AV1 stream with VideoToolbox on
   the Mac (AV1 is skipped where the Mac has no hardware AV1 decoder; the M6 used on 2026-11-16 has one).
 - The start screen in Czech in the iPhone simulator (`-AppleLanguages (cs)`).
@@ -273,3 +316,5 @@ Xcode merges with the generated keys (`INFOPLIST_FILE` next to `GENERATE_INFOPLI
 - The Wake-on-LAN broadcast (a BSD socket, as Network.framework cannot broadcast); on iOS it needs the multicast
   networking entitlement, which the app does not have yet, so only the unicast packets go out there.
 - The Local Network permission prompt and Bonjour discovery on a device.
+- Typing a profile name: the simulators were not driven by a keyboard, a controller or the Siri Remote, so the text
+  field, B while typing and the tvOS keyboard were not tried.
