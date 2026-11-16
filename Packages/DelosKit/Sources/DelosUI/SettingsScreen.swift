@@ -142,6 +142,7 @@ struct SettingsScreen: View {
                 .padding(.top, stage.px(14))
                 .padding(.bottom, stage.px(140))
             }
+            .focusable(false)
             .scrollClipDisabled()
             .onChange(of: focus.focused) { _, now in
                 guard let id = now as? String, rows.contains(where: { $0.id == id }) else { return }
@@ -683,6 +684,7 @@ private struct ChoicePicker: View {
                         }
                     }
                 }
+            .focusable(false)
                 .frame(height: listHeight)
                 .onAppear { proxy.scrollTo(Self.optionID(selected ?? 0)) }
                 .onChange(of: focus.focused) { _, now in if let now { proxy.scrollTo(now) } }

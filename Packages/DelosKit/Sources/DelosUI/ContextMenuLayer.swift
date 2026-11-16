@@ -164,7 +164,7 @@ private struct MenuCard: View {
                     layers.back()
                 }
                 if 2 * L.padding + 130 + rowsHeight > maxHeight {
-                    ScrollView(.vertical, showsIndicators: false) { rows(items) }
+                    ScrollView(.vertical, showsIndicators: false) { rows(items) }.focusable(false)
                         .frame(height: stage.px(maxHeight - 2 * L.padding - 130))
                 } else {
                     rows(items)

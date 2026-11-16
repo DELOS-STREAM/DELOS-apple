@@ -126,6 +126,7 @@ private struct GameLibrary: View {
     @Environment(HomeArt.self) private var art
     @Environment(\.stage) private var stage
     @State private var position = ScrollPosition(edge: .leading)
+    @State private var lastFocusMove = Date.distantPast
 
     static let tile = 300.0, height = 450.0, gap = 44.0
     /// The wide first cover: three covers and the two gaps between them.
@@ -164,11 +165,21 @@ private struct GameLibrary: View {
                 .padding(.vertical, stage.px(Self.rowPad))
             }
             .scrollClipDisabled()
+            // The row is moved by the focus alone: without this a hardware keyboard's arrow keys also scroll the
+            // scroll view by themselves, on top of the focus (owner's iPad with a Magic Keyboard: a crawl, then the
+            // focus ran off the screen)
+            .focusable(false)
             .scrollPosition($position)
             .padding(.top, stage.px(layout.coverTop - Self.rowPad))
             .onChange(of: focusedIndex) { _, now in
                 guard let now else { return }
-                withAnimation(.easeOut(duration: 0.2)) { position.scrollTo(x: stage.px(Self.itemStart(now))) }
+                // A held arrow moves the focus every 50 ms: overlapping 200 ms animations lagged behind it, so a fast
+                // move scrolls in one short step and a single press glides
+                let fast = Date.now.timeIntervalSince(lastFocusMove) < 0.12
+                lastFocusMove = .now
+                withAnimation(fast ? .linear(duration: 0.05) : .easeOut(duration: 0.2)) {
+                    position.scrollTo(x: stage.px(Self.itemStart(now)))
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
