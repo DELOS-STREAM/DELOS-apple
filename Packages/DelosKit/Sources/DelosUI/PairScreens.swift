@@ -126,6 +126,7 @@ struct PairPCScreen: View {
                 sub: searching ? L("pairing_pc_searching")
                     : shown.isEmpty ? L("pairing_pc_none") : L("pairing_pc_found", shown.count)
             )
+            .staggerEntrance()
             CircleRow {
                 ForEach(shown, id: \.id) { host in
                     FocusItem(id: Self.hostFocusID(host.id), model: focus, action: { onHost(host) }) { focused in
@@ -134,15 +135,19 @@ struct PairPCScreen: View {
                             metaDot: host.reachability == .online ? .onlineGreen : nil, selected: host.pin != nil, focused: focused
                         )
                     }
+                    .staggerEntrance()
                 }
                 FocusItem(id: "address", model: focus, action: onAddress) { focused in
                     CircleItem(icon: Symbols.addAddress, label: L("pairing_pc_address"), meta: L("pairing_pc_address_hint"), focused: focused)
                 }
+                .staggerEntrance()
                 FocusItem(id: "search", model: focus, action: searchAgain) { focused in
                     CircleItem(icon: Symbols.refresh, label: L("pairing_pc_search_again"), meta: L("pairing_pc_network"), focused: focused)
                 }
+                .staggerEntrance()
             }
         }
+        .entranceScope()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { hosts.startDiscovery() }
         .task(id: searching) {
@@ -171,12 +176,14 @@ struct PairAddressScreen: View {
     var body: some View {
         VStack(spacing: stage.px(48)) {
             Heading(title: L("devices_address_title"), sub: L("devices_address_note"))
+                .staggerEntrance()
             addressField
             FocusItem(id: "add", model: focus, moves: [.up: "field"], action: { onSubmit(text) }) { focused in
                 PillButton(label: L("devices_address_action"), icon: Symbols.addLink, primary: true, focused: focused)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .entranceScope()
         .onChange(of: typing) { _, now in navigator.textEditing(now) }
         .onChange(of: navigator.isEditingText) { _, now in if !now { typing = false } }
         .onAppear { typing = true }
@@ -223,6 +230,7 @@ struct PinScreen: View {
         let name = hosts.host(hostID)?.name ?? ""
         VStack(spacing: stage.px(44)) {
             Heading(title: L("pairing_pin_title", name), sub: L("pairing_pin_note"))
+                .staggerEntrance()
             PinDigits(pin: pin)
             HStack(spacing: stage.px(16)) {
                 if !accepted { Spinner() }
@@ -235,6 +243,7 @@ struct PinScreen: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .entranceScope()
         .task { await pair() }
     }
 

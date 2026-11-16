@@ -59,6 +59,7 @@ struct StartScreen: View {
                 title: profile.map { L("devices_start_greeting", $0.name) } ?? L("devices_start_welcome"),
                 sub: paired.isEmpty ? L("devices_start_pair_note") : L("devices_start_choose_note")
             )
+            .staggerEntrance()
             CircleRow {
                 ForEach(paired, id: \.id) { host in
                     FocusItem(id: Self.pcID(host.id), model: focus, menu: { actions.startMenu(host.id) }, action: { onPC(host) }) { focused in
@@ -67,6 +68,7 @@ struct StartScreen: View {
                             metaDot: host.reachability == .online ? .onlineGreen : nil, selected: host.id == defaultPC, focused: focused
                         )
                     }
+                    .staggerEntrance()
                 }
                 FocusItem(id: "pair", model: focus, action: onPair) { focused in
                     CircleItem(
@@ -76,8 +78,10 @@ struct StartScreen: View {
                         focused: focused
                     )
                 }
+                .staggerEntrance()
             }
         }
+        .entranceScope()
     }
 }
 

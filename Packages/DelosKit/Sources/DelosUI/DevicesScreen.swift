@@ -73,6 +73,7 @@ struct DevicesScreen: View {
         let paired = DevicesLogic.paired(hosts.hosts)
         VStack(spacing: stage.px(48)) {
             Heading(title: L("devices_title"), sub: L("devices_note"))
+                .staggerEntrance()
             CircleRow {
                 ForEach(paired, id: \.id) { host in
                     let active = host.id == activeID
@@ -86,12 +87,15 @@ struct DevicesScreen: View {
                             metaDot: host.reachability == .online ? .onlineGreen : nil,
                             selected: active, focused: focused)
                     }
+                    .staggerEntrance()
                 }
                 FocusItem(id: "pair", model: focus, action: onPair) { focused in
                     CircleItem(icon: Symbols.addLink, label: L("devices_pair_new"), meta: L("devices_pair_new_meta"), focused: focused)
                 }
+                .staggerEntrance()
             }
         }
+        .entranceScope()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { hosts.startDiscovery() }
         .task {

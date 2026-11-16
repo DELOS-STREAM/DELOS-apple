@@ -36,22 +36,28 @@ struct ProfileScreen: View {
                 FocusItem(id: "change-avatar", model: focus, action: onChangeAvatar) { focused in
                     CircleItem(icon: Symbols.face, label: L("profile_change_avatar"), big: false, focused: focused)
                 }
+                .staggerEntrance()
                 FocusItem(id: "rename", model: focus, action: actions.renameProfile) { focused in
                     CircleItem(icon: Symbols.edit, label: L("profile_rename"), big: false, focused: focused)
                 }
+                .staggerEntrance()
                 FocusItem(
                     id: "switch", model: focus, menu: { actions.profilesMenu() }, action: { actions.layers.openContextMenu(of: focus) }
                 ) { focused in
                     CircleItem(icon: Symbols.switchAccount, label: L("profile_switch"), big: false, focused: focused)
                 }
+                .staggerEntrance()
                 FocusItem(id: "add", model: focus, action: onAdd) { focused in
                     CircleItem(icon: Symbols.personAdd, label: L("profile_add"), big: false, focused: focused)
                 }
+                .staggerEntrance()
                 FocusItem(id: "delete", model: focus, action: actions.deleteProfile) { focused in
                     CircleItem(icon: Symbols.delete, label: L("profile_delete"), big: false, focused: focused)
                 }
+                .staggerEntrance()
             }
         }
+        .entranceScope()
     }
 }
 
