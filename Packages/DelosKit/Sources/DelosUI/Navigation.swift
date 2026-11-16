@@ -1,3 +1,4 @@
+import DelosInput
 import Foundation
 import Observation
 
@@ -32,6 +33,9 @@ public final class Navigator {
         didSet { if oldValue, !isEditingText { textEditingEnded = .now } }
     }
     @ObservationIgnored private var textEditingEnded = Date.distantPast
+    /// While set, every controller and keyboard command goes here first; true: consumed (the stream screen owns the
+    /// controller).
+    @ObservationIgnored public var commandCapture: (@MainActor (MenuCommand) -> Bool)?
 
     public init(root: Screen, focus: AnyHashable? = nil) {
         stack = [Entry(screen: root, focus: FocusModel(initial: focus))]

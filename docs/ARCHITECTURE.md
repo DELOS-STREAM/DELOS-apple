@@ -25,6 +25,7 @@ graph LR
   App --> DelosUI
   DelosUI --> DelosData
   DelosUI --> DelosInput
+  DelosUI --> DelosMedia
   DelosData --> DelosHost
   DelosHost --> DelosCore
   DelosMedia --> DelosCore
@@ -98,6 +99,59 @@ packets on the core's audio thread into an `AudioRing` and plays them through an
 playback audio session; the ring keeps at most 60 ms and drops the oldest samples beyond that, so a network burst does
 not add lasting delay. The core calls each sink from one thread at a time, which is why their state has no lock; only the
 ring, read by the render thread, has one.
+
+## The stream screen
+
+`StreamScreen` (DelosUI) shows one stream: `Screen.stream(hostID:appID:)`. `StreamController` runs it in phases:
+connecting (the loader), streaming, leaving, failed (the result overlay) and ended (the screen goes back). The steps
+that talk to the PC and the core are behind the `StreamSteps` protocol, so the tests drive the controller with a fake;
+`LiveStream` is the real one.
+
+| Step | What happens |
+|---|---|
+| Display | `VideoSurface` (a thin `UIView` host of the `AVSampleBufferDisplayLayer`, full screen, aspect fit, black) reports the screen's pixel size and highest refresh rate once it is in a window; the stream starts then |
+| Launch | `HostStore.refresh` asks the PC again over its pinned connection: offline and "not paired" end here. The app is found in the loaded app list (else it is loaded). `StreamSettings.forDisplay` and `StreamPlan` with the formats VideoToolbox decodes in hardware (`DecoderSupport`: H.264 always, HEVC and AV1 8-bit where supported; 10-bit waits for HDR). The app is resumed when the PC runs it, another running app is quit first, else it is launched (`NvConnection.startApp` of DELOS for Android) |
+| Connect | `StreamSession.start` with `VideoOutput(DisplayLayerRenderer)` and `AudioOutput`, the server information of the launch's session URL. Each `stageStarting` event tells a line of the stage (Android's `stream_loader_lines_*`) and adds 8 % to the progress, up to 92 % |
+| Stream | `connectionStarted`: the video shows, `GameInput` starts; rumble events go to the controllers. A termination shows the result overlay (`StreamText.termination`, Android's `describeStreamFailure`); a graceful end goes back (without Android's toast "The PC ended the stream" yet) |
+| Leave | Disconnect stops the session (the app keeps running on the PC); Quit app also asks the PC to quit it (`cancel`), and a refusal shows "The PC did not quit …". Leaving the screen any other way disconnects |
+
+The result overlay is Android's `StreamResultLayer`: a sad face, the title, one sentence, Try again (focused first) and
+Back to library, and the technical text behind Details. B is Back to library. A launch the PC refused shows Android's
+`conn_*` message (resume foreign 470, app minimized 525, quit foreign 599, denied 403).
+
+During the stream the screen stays on (`isIdleTimerDisabled`), the system overlays are hidden and the system gestures
+deferred. `Navigator.commandCapture` gives the stream screen every controller and keyboard command first: while the
+stream runs nothing reaches the screens behind it, the stream menu and the result overlay use the screen's focus, B
+closes the menu, and B while connecting leaves. The statistics overlay is not ported yet.
+
+### The stream menu
+
+It opens as in DELOS for Android by default: L3 + R3 held together (`MenuShortcut`, Android's `ButtonShortcut`: the
+button that completes the shortcut is kept from the PC, the menu opens when both are let go), or a swipe up from the
+bottom edge of the touch screen (`MenuSwipe`: a touch starting in the bottom 6 % belongs to the swipe and does not reach
+the PC; 12 % of the height up opens the menu). The menu is minimal: Resume, Disconnect and Quit app from Android's dock.
+While it is open, `GameInput` sends nothing and releases every held button, key and mouse button at the PC.
+
+### Input during a stream
+
+`GameInput` (DelosInput) sends to a `StreamInputSink` (the running `StreamSession`).
+
+| Device | Mapping |
+|---|---|
+| Game controller (`GCExtendedGamepad`) | Lowest free controller number (`ControllerSlots`, up to 16, the active mask); an arrival event with the type (Xbox, PlayStation, Switch by product category), the buttons it has and its capabilities (analog triggers, rumble and trigger rumble from the haptic localities, LED, battery, motion). The gamepad's profile-level change handler sends the full state: `GamepadMapping` (Menu = Start, Options = Back, Home = Guide, paddles, touchpad button, Share; sticks −1…1 → ±32767, y up; triggers 0…1 → 0…255). The buttons' system gestures are off while the stream runs |
+| Rumble | `ControllerHaptics`: a CoreHaptics engine of the controller per motor (low frequency → left handle, high → right handle, trigger motors → triggers) playing an endless continuous event whose intensity follows the PC's amplitude, as Moonlight for iOS does |
+| Hardware keyboard (`GCKeyboard`) | Per-key handlers; HID usage → Windows virtual-key code (`KeyboardMapping`, Moonlight's table) with the `0x8000` prefix; the modifiers from the held Shift, Control, Alt (Option) and Command keys |
+| Mouse (`GCMouse`) | Relative motion (divided by 1.25, as Moonlight), left, right, middle and two side buttons, scroll in 1/120 notches (20 per unit) |
+| Touch | Android's default trackpad mode (`TouchTrackpad`): one finger moves the pointer by its motion in screen pixels, a tap shorter than 230 ms and 30 pixels clicks left, a two-finger tap clicks right, two fingers moving scroll (3 wheel units per pixel). Pointer touches are ignored while a mouse is connected |
+
+The gamepad and keyboard handlers sit next to `MenuInput`'s (which sets the per-element and the keyboard-wide
+handlers), so both work; `commandCapture` decides who uses the commands.
+
+### Frame rate
+
+`CADisableMinimumFrameDurationOnPhone` is in `Config/Info.plist` (no `INFOPLIST_KEY_*` setting exists for it), so a
+ProMotion iPhone reports and can show 120 Hz; the stream asks the host for 60 fps (the default of DELOS for Android) with
+the display's refresh rate as the client refresh rate.
 
 ## Sounds and haptics
 
@@ -174,9 +228,10 @@ stereo audio; `StreamSettings.forDisplay` takes the display's resolution, capped
 User-visible text comes from DELOS for Android's string resources, so both apps say the same thing in the same ten
 languages. `tools/l10n/keys.txt` lists the names the Apple app uses; `tools/l10n/import_android.py <Android checkout>`
 copies them with every translation into `DelosUI/Resources/Localizable.xcstrings` (placeholders converted to Apple's
-format, plurals as plural variations). Swift reads them with `L("name")`; `tools/l10n/check_usage.py` (part of
-`tools/test.sh`) fails when a used name is missing or lacks a language. `App/Shared/InfoPlist.xcstrings` gives the app
-bundle the same ten languages; without it iOS shows the package's strings in English only.
+format, plurals as plural variations, item i of a string array as `<array>_<i>`). Swift reads them with `L("name")`;
+`tools/l10n/check_usage.py` (part of `tools/test.sh`) fails when a used name is missing or lacks a language.
+`App/Shared/InfoPlist.xcstrings` gives the app bundle the same ten languages; without it iOS shows the package's strings
+in English only.
 
 ## The streaming core
 
@@ -270,8 +325,9 @@ Experience. The value of `LiGetLaunchUrlQueryParameters()` from the streaming co
 ### Info.plist
 
 `NSLocalNetworkUsageDescription` comes from `INFOPLIST_KEY_NSLocalNetworkUsageDescription` in `Config/Shared.xcconfig`.
-`NSBonjourServices` is an array, which `INFOPLIST_KEY_*` settings cannot express; it is in `Config/Info.plist`, which
-Xcode merges with the generated keys (`INFOPLIST_FILE` next to `GENERATE_INFOPLIST_FILE = YES`).
+`NSBonjourServices` is an array, which `INFOPLIST_KEY_*` settings cannot express, and `CADisableMinimumFrameDurationOnPhone`
+has no such setting; both are in `Config/Info.plist`, which Xcode merges with the generated keys (`INFOPLIST_FILE` next to
+`GENERATE_INFOPLIST_FILE = YES`).
 
 ## Verification
 
@@ -309,7 +365,16 @@ Xcode merges with the generated keys (`INFOPLIST_FILE` next to `GENERATE_INFOPLI
 - The start screen in Czech in the iPhone simulator (`-AppleLanguages (cs)`).
 - Every background in the iPhone simulator (dark theme; Contour, Nebula and Aurora also light), compared with the
   Android code; Nebula, Lava and Orbit also against a NumPy reimplementation of their AGSL at the same clock.
-- `python3 -m unittest discover -s tools/l10n`: placeholder and escape conversion, the usage check.
+- `python3 -m unittest discover -s tools/l10n`: placeholder and escape conversion, string arrays, the usage check.
+- The stream screen without a PC (`swift test`): `StreamController` with a fake `StreamSteps` (stage lines and progress,
+  the running stream, a launch failure, a failed stage, Try again, a lost connection and a graceful end, Disconnect,
+  Quit app and a refused quit, leaving while connecting, who gets the controller commands), the failure texts against
+  Android's rules, the PC's launch answers (470, 525, 599), the controller button flags, stick and trigger scaling,
+  controller numbers, the menu shortcut, the keyboard table, the trackpad and the bottom-edge swipe, the decoder formats.
+- A throwaway debug harness in the iPhone 18 Pro Max simulator (iOS 27.2, 2026-11-16), removed afterwards: the loader
+  with a fake stage, the result overlay of a timed-out RTSP handshake, the stream menu, and the two H.264 test-pattern
+  frames of `frames.h264` through `VideoSamples` into `DisplayLayerRenderer` and `VideoSurface` (the pattern shows,
+  aspect fit on black). The built app's `Info.plist` contains `CADisableMinimumFrameDurationOnPhone` (`plutil -p`).
 
 ### Not verified
 
@@ -317,8 +382,10 @@ Xcode merges with the generated keys (`INFOPLIST_FILE` next to `GENERATE_INFOPLI
   covered by the unit tests only.
 - GPU cost of the backgrounds (the shaders and the canvas ones) on a device.
 - How the sounds and haptics feel on a device.
-- A real stream: start, video and audio sinks with real data, input, statistics and termination against a host. The
-  owner runs streams; P4 connects the sinks.
+- A real stream: launch, resume and quit against a PC, start, video and audio with real data, input, rumble on a
+  controller, the 120 Hz display path, latency and termination. The owner runs streams. Also untried: a mouse on an
+  iPad (no pointer lock, which needs a view controller: the system pointer stays visible), the keyboard, the edge swipe
+  and the L3 + R3 shortcut on a device, and the Details of the result overlay opened.
 - libopus on x86_64 (Intel Macs and simulators) was only compiled; the tests ran on arm64, where the NEON paths are
   used.
 - Pairing, the app list, box art, launch and quit against a real Sunshine, Apollo or Vibepollo host: the protocol is

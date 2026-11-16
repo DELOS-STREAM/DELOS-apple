@@ -21,6 +21,20 @@ class ConvertTextTest(unittest.TestCase):
         self.assertEqual(import_android.convert_text('"  padded "'), "  padded ")
 
 
+class ReadElementsTest(unittest.TestCase):
+    def test_a_string_array_gives_one_name_per_item(self):
+        root = import_android.ET.fromstring(
+            '<resources><string name="s">One</string>'
+            '<string-array name="lines"><item>Hi %1$s</item><item>Bye</item></string-array></resources>')
+        self.assertEqual(import_android.read_elements(root, translated=False),
+                         {"s": "One", "lines_0": "Hi %1$@", "lines_1": "Bye"})
+
+    def test_untranslatable_names_are_skipped_in_translations_only(self):
+        root = import_android.ET.fromstring('<resources><string name="n" translatable="false">X</string></resources>')
+        self.assertEqual(import_android.read_elements(root, translated=False), {"n": "X"})
+        self.assertEqual(import_android.read_elements(root, translated=True), {})
+
+
 class CheckUsageTest(unittest.TestCase):
     catalog = {"strings": {
         "full": {"localizations": {language: {} for language in check_usage.LANGUAGES}},
