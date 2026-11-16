@@ -27,6 +27,7 @@ graph LR
   DelosUI --> DelosInput
   DelosUI --> DelosMedia
   DelosData --> DelosHost
+  DelosData --> DelosMedia
   DelosHost --> DelosCore
   DelosMedia --> DelosCore
   DelosMedia --> COpus
@@ -114,6 +115,16 @@ bottom of the stage, gone after 3.5 s.
 parameter sets) and wraps each frame in a sample buffer marked "display immediately", since the host paces the stream;
 a frame before the first key frame fails with `needsKeyFrame`, the signal to ask the host for one. `VideoRenderer` is the
 renderer interface; `DisplayLayerRenderer` shows the samples through `AVSampleBufferDisplayLayer` (decision L4).
+
+## Frame pacing
+
+`FramePacer` (DelosMedia) times the frames on screen. With Lowest latency each frame is shown as soon as it is decoded,
+so the network's jitter shows as uneven motion: on a 120 Hz screen a frame that arrives a little late misses its
+refresh. Balanced (the default on Apple, unlike Android's Lowest latency, after the owner's test on the iPad Pro M5)
+holds a frame up to one frame interval and Smoothest up to two; frames are shown at their arrival plus that buffer,
+never sooner than 0.9 of a frame after the previous one (the slack follows the host's clock), and a backlog beyond the
+buffer starts the schedule again instead of carrying delay. `DisplayLayerRenderer` gives each sample that time on a
+timebase that follows the host clock; the layer shows it at the first refresh at or after it.
 
 ## Stream output
 

@@ -57,7 +57,7 @@ struct StreamScreen: View {
 
     private func begin() {
         guard controller == nil else { return }
-        let renderer = DisplayLayerRenderer()
+        let renderer = DisplayLayerRenderer(pacing: settings.framePacing, fps: settings.fps)
         let controller = StreamController { [hosts, hostID, appID, settings] in
             LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer)
         }

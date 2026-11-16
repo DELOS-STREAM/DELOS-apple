@@ -1,4 +1,5 @@
 import DelosCore
+import DelosMedia
 import Foundation
 
 /// The size of a stream in pixels (`list_resolution` of DELOS for Android, `<width>x<height>`).
@@ -75,6 +76,9 @@ public struct StreamSettings: Codable, Equatable, Sendable {
     public var codec = VideoCodec.automatic
     /// Plays the app's audio on the PC as well (`checkbox_host_audio`).
     public var playAudioOnHost = false
+    /// How frames are timed on screen. Balanced by default, unlike Android's lowest latency: on iPad the display layer
+    /// showed the network's jitter as uneven motion (owner, iPad Pro M5, 120 fps, 2026-11-16).
+    public var framePacing = FramePacing.balanced
 
     /// The bitrate slider of Android (`seekbar_bitrate_kbps`): 1 to 1000 Mbps in steps of 1 Mbps.
     public static let bitrateRange = 1000...1_000_000
@@ -111,6 +115,7 @@ public struct StreamSettings: Codable, Equatable, Sendable {
         bitrateKbps = value(.bitrateKbps, d.bitrateKbps).map(Self.clampBitrate)
         codec = value(.codec, d.codec)
         playAudioOnHost = value(.playAudioOnHost, d.playAudioOnHost)
+        framePacing = value(.framePacing, d.framePacing)
     }
 }
 
