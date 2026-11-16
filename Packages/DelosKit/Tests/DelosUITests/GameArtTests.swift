@@ -82,19 +82,22 @@ import Testing
         #expect(!portrait.extended && portrait.width == 2100 && portrait.height == 3150 && portrait.top == -945)
         let unknown = HeroGeometry.layout(area, width: 0, height: 0)
         #expect(!unknown.extended && unknown.width == 2100 && unknown.height == 1260)
-        // A very flat image is still scaled up to half of the area (its sides cropped); the fade stays 160
+        // A very flat image is still scaled up to half of the (16:9) area (its sides cropped); the fade stays 160
         let flat = HeroGeometry.layout(area, width: 21000, height: 1000)
-        #expect(flat.extended && flat.height == 630 && flat.fade == 160 && flat.left < 0)
+        #expect(flat.extended && abs(flat.height - 630) < 1e-9 && flat.fade == 160 && flat.left < 0)
     }
 
-    @Test func aTallerStageScalesTheBandUpToHalfOfTheArea() {
-        // iPad Pro 13": a 1920 × 1440 stage, an area of 2100 × 1680; the width-fitted band would be 678 px (40 %)
+    @Test func aTallerStageScalesTheBandUpToTwoThirdsOfTheArea() {
+        // iPad Pro 13": a 1920 × 1440 stage, an area of 2100 × 1680; the width-fitted band would be 678 px (40 %), now 1120 (two thirds)
         let tall = HeroArea.of(stageWidth: 1920, stageHeight: 1440)
         let layout = HeroGeometry.layout(tall, width: 1920, height: 620)
-        #expect(layout.extended && abs(layout.height - 840) < 1e-9)
+        #expect(layout.extended && abs(layout.height - 1120) < 1e-9)
         // Scaled by the height, so wider than the area and centred: the sides are cropped equally
         #expect(layout.width > tall.width && abs(layout.left + (layout.width - tall.width) / 2) < 1e-9)
-        // On 16:9 nothing changes: the band is already more than half
+        // Between 16:9 and 4:3 the share grows evenly: a stage 1260 high (area 2100 × 1470) is halfway
+        #expect(abs(HeroGeometry.minBandShare(HeroArea.of(stageWidth: 1920, stageHeight: 1260)) - (0.5 + 0.5 * (2.0 / 3.0 - 0.5))) < 1e-9)
+        #expect(abs(HeroGeometry.minBandShare(area) - 0.5) < 1e-9 && abs(HeroGeometry.minBandShare(tall) - 2.0 / 3.0) < 1e-9)
+        // On 16:9 nothing changes: the band (678 of 1260) is already above half; the two thirds apply to a stage of 4:3 or taller
         #expect(HeroGeometry.layout(area, width: 1920, height: 620).height < 1260 * 0.55)
         #expect(HeroGeometry.layout(area, width: 1920, height: 620).left == 0)
     }

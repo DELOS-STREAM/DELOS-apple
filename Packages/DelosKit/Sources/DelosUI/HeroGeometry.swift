@@ -23,8 +23,13 @@ struct HeroArea: Equatable, Hashable, Sendable {
 /// into an extension: a heavily blurred, darkened copy of the same image over the whole area. An image that leaves
 /// nothing to extend (its width-fit height reaches the area's) fills the area and is cropped.
 enum HeroGeometry {
-    /// The least share of the area's height a width-fitted band fills.
-    static let minBandShare = 0.5
+    /// The least share of the area's height a width-fitted band fills: half on 16:9 (where a SteamGridDB hero is above it
+    /// anyway), growing with the height of the stage to two thirds at 4:3 and beyond, so the hero grows with the screen.
+    static func minBandShare(_ area: HeroArea) -> Double {
+        let wide = 1260.0 / 2100.0, tall = 1680.0 / 2100.0
+        let t = min(max((area.height / area.width - wide) / (tall - wide), 0), 1)
+        return 0.5 + t * (2.0 / 3.0 - 0.5)
+    }
     /// The soft bottom edge of a width-fitted hero.
     static let fade = 160.0
     /// CSS blur(σ) of the extension, stage pixels.
@@ -56,7 +61,7 @@ enum HeroGeometry {
         // On a taller stage the width-fitted band would fill only a third of the screen: it is scaled up to at least
         // half of the area, its sides cropped, so the hero grows with the screen (owner, on the iPad). On 16:9 a
         // SteamGridDB hero already fills more than half, so nothing changes there.
-        let bandHeight = max(fitHeight, area.height * minBandShare)
+        let bandHeight = max(fitHeight, area.height * minBandShare(area))
         let bandWidth = bandHeight * Double(width) / Double(height)
         return Layout(extended: true, left: (area.width - bandWidth) / 2, top: 0, width: bandWidth, height: bandHeight, fade: min(fade, bandHeight))
     }

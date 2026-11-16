@@ -540,8 +540,9 @@ tall shape keeps the row at 430 from the top instead; the owner wants the bottom
 Meitoncz/DELOS).
 
 The game background's hero is fitted to the width at the top and fades into a blurred extension; on a stage taller than
-16:9 that band would fill only a third of the screen, so it is scaled up to at least half of the hero area (its sides
-cropped equally). On 16:9 a SteamGridDB hero already fills more than half, so nothing changes there.
+16:9 that band would fill only a third of the screen, so it is scaled up to a share of the hero area that grows from half at 16:9 to two thirds at 4:3 and beyond
+(`HeroGeometry.minBandShare`; its sides cropped equally). On 16:9 a SteamGridDB hero already fills more than half, so
+nothing changes there.
 
 ## Strings
 
