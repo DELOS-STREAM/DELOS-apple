@@ -19,10 +19,15 @@ private final class FakeSteps: StreamSteps {
     /// Reported while connecting, before `connect` waits for ``finishConnect()``.
     var stages: [StreamStage] = []
     var quitSucceeds = true
+    /// `launch` waits for ``finishLaunch()``, `stop` for ``finishStop()``.
+    var holdsLaunch = false
+    var holdsStop = false
     private(set) var launchedOn: DisplayInfo?
     private(set) var stops = 0
     private(set) var quits = 0
     private var gate: CheckedContinuation<Void, Never>?
+    private var launchGate: CheckedContinuation<Void, Never>?
+    private var stopGate: CheckedContinuation<Void, Never>?
 
     init() {
         (events, continuation) = AsyncStream.makeStream(of: StreamEvent.self)
@@ -30,8 +35,16 @@ private final class FakeSteps: StreamSteps {
 
     func launch(display: DisplayInfo) async throws(LaunchFailure) {
         launchedOn = display
+        if holdsLaunch { await withCheckedContinuation { launchGate = $0 } }
         if let launchFailure { throw launchFailure }
     }
+
+    func finishLaunch() {
+        launchGate?.resume()
+        launchGate = nil
+    }
+
+    var isLaunching: Bool { launchGate != nil }
 
     func connect() async throws(StreamError) {
         for stage in stages { continuation.yield(.stageStarting(stage)) }
@@ -47,11 +60,21 @@ private final class FakeSteps: StreamSteps {
 
     var isConnecting: Bool { gate != nil }
 
+    /// Ends a connect that waits, as a real session's stop does; here the connect returns normally, as a start that
+    /// won the race against the stop would.
     func stop() async {
         stops += 1
         finishConnect()
         continuation.finish()
+        if holdsStop { await withCheckedContinuation { stopGate = $0 } }
     }
+
+    func finishStop() {
+        stopGate?.resume()
+        stopGate = nil
+    }
+
+    var isStopping: Bool { stopGate != nil }
 
     func quitApp() async -> Bool {
         quits += 1
@@ -128,7 +151,7 @@ private let iPhone = DisplayInfo(pixelWidth: 1290, pixelHeight: 2796, maxFramesP
         await eventually { made.steps.last?.isConnecting == true }
         made.steps.last?.finishConnect()
         await eventually { controller.phase == .streaming }
-        await controller.enteredBackground()
+        await controller.enteredBackground()?.value
         // Closed at once, no failure shown, the loader waits for the return
         #expect(made.steps[0].stops == 1)
         #expect(controller.phase == .connecting)
@@ -137,6 +160,98 @@ private let iPhone = DisplayInfo(pixelWidth: 1290, pixelHeight: 2796, maxFramesP
         made.steps[1].finishConnect()
         await eventually { controller.phase == .streaming }
         #expect(controller.phase == .streaming)
+        #expect(made.steps[1].launchedOn == iPhone)
+    }
+
+    @Test func theReturnLaunchesOnlyOnceTheClosedConnectionHasStopped() async {
+        final class Made { var steps: [FakeSteps] = [] }
+        let made = Made()
+        let controller = StreamController {
+            let steps = FakeSteps()
+            made.steps.append(steps)
+            return steps
+        }
+        controller.start(display: iPhone)
+        await eventually { made.steps.last?.isConnecting == true }
+        made.steps[0].finishConnect()
+        await eventually { controller.phase == .streaming }
+        made.steps[0].holdsStop = true
+
+        let closed = controller.enteredBackground()
+        controller.returnedToForeground()
+        await eventually { made.steps[0].isStopping }
+        // The core still stops: the new attempt waits instead of finding it taken
+        #expect(made.steps.count == 2)
+        #expect(made.steps[1].launchedOn == nil)
+        made.steps[0].finishStop()
+        await closed?.value
+        await eventually { made.steps[1].isConnecting }
+        #expect(made.steps[1].launchedOn == iPhone)
+    }
+
+    @Test func aLaunchThatFailsAfterTheReturnDoesNotFailTheNewAttempt() async {
+        final class Made { var steps: [FakeSteps] = [] }
+        let made = Made()
+        let controller = StreamController {
+            let steps = FakeSteps()
+            if made.steps.isEmpty {
+                steps.holdsLaunch = true
+                steps.launchFailure = .offline
+            }
+            made.steps.append(steps)
+            return steps
+        }
+        controller.start(display: iPhone)
+        await eventually { made.steps[0].isLaunching }
+        await controller.enteredBackground()?.value
+        controller.returnedToForeground()
+        await eventually { made.steps.count == 2 && made.steps[1].isConnecting }
+
+        // The first attempt's launch ends only now, and fails
+        made.steps[0].finishLaunch()
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(controller.phase == .connecting)
+        made.steps[1].finishConnect()
+        await eventually { controller.phase == .streaming }
+        #expect(controller.phase == .streaming)
+    }
+
+    @Test func aConnectionThatCompletesAfterTheBackgroundIsNotShown() async {
+        let steps = FakeSteps()
+        let controller = StreamController { steps }
+        controller.start(display: iPhone)
+        await eventually { steps.isConnecting }
+
+        // The stop lets the waiting connect return normally
+        await controller.enteredBackground()?.value
+        try? await Task.sleep(for: .milliseconds(50))
+
+        #expect(controller.phase == .connecting)
+        #expect(controller.suspended)
+    }
+
+    @Test func tryAgainAfterALostConnectionLaunchesOnceTheOldOneHasStopped() async {
+        final class Made { var steps: [FakeSteps] = [] }
+        let made = Made()
+        let controller = StreamController {
+            let steps = FakeSteps()
+            made.steps.append(steps)
+            return steps
+        }
+        controller.start(display: iPhone)
+        await eventually { made.steps.last?.isConnecting == true }
+        made.steps[0].finishConnect()
+        await eventually { controller.phase == .streaming }
+        made.steps[0].holdsStop = true
+        made.steps[0].continuation.yield(.terminated(.noVideoTraffic))
+        await eventually { controller.phase != .streaming }
+
+        controller.retry()
+        await eventually { made.steps[0].isStopping }
+        #expect(made.steps[0].stops == 1)
+        #expect(made.steps.count == 2 && made.steps[1].launchedOn == nil)
+        made.steps[0].finishStop()
+        await eventually { made.steps[1].isConnecting }
         #expect(made.steps[1].launchedOn == iPhone)
     }
 

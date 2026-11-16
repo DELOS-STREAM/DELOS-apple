@@ -211,7 +211,7 @@ struct HTTPResponseParser {
         guard let head else { return nil }
         let body = buffer[head.bodyStart...]
         if head.headers["transfer-encoding"]?.lowercased().contains("chunked") == true {
-            guard let decoded = try Self.dechunk(body) else { return nil }
+            guard let decoded = try Self.dechunk(body, limit: maximumBodySize) else { return nil }
             return try finish(head, Data(decoded))
         }
         if let lengthText = head.headers["content-length"] {
@@ -245,22 +245,53 @@ struct HTTPResponseParser {
         return (status, headers, bodyStart)
     }
 
-    /// The decoded body once the last chunk has arrived; nil before.
-    private static func dechunk(_ body: Data) throws -> [UInt8]? {
+    /// The decoded body once the last chunk has arrived; nil before. A chunk that would take the body past `limit` is
+    /// refused as soon as its size line arrives, before any arithmetic with the size: the size comes from the network.
+    private static func dechunk(_ body: Data, limit: Int) throws -> [UInt8]? {
         let bytes = [UInt8](body)
         var out = [UInt8]()
         var index = 0
         while true {
             guard let lineEnd = find(bytes, from: index) else { return nil }
-            let sizeText = String(decoding: bytes[index..<lineEnd], as: UTF8.self).split(separator: ";").first ?? ""
-            guard let size = Int(sizeText.trimmingCharacters(in: .whitespaces), radix: 16), size >= 0 else {
-                throw HostError.malformedResponse("invalid chunk size")
-            }
+            let size = try chunkSize(bytes[index..<lineEnd], remaining: limit - out.count)
             index = lineEnd + 2
             if size == 0 { return out }
-            guard bytes.count >= index + size + 2 else { return nil }
+            // `size` is at most `limit`, and the comparison subtracts instead of adding to it.
+            let available = bytes.count - index
+            guard available >= 2, available - 2 >= size else { return nil }
+            guard bytes[index + size] == 13, bytes[index + size + 1] == 10 else {
+                throw HostError.malformedResponse("a chunk does not end with CRLF")
+            }
             out += bytes[index..<index + size]
             index += size + 2
+        }
+    }
+
+    /// The size on a chunk's line: hexadecimal digits, optionally followed by `;` and extensions. Throws
+    /// `responseTooLarge` once the digits pass `remaining`, so no size can overflow.
+    private static func chunkSize(_ line: ArraySlice<UInt8>, remaining: Int) throws -> Int {
+        let isBlank = { (byte: UInt8) in byte == UInt8(ascii: " ") || byte == UInt8(ascii: "\t") }
+        var digits = line.prefix { $0 != UInt8(ascii: ";") }
+        while let first = digits.first, isBlank(first) { digits.removeFirst() }
+        while let last = digits.last, isBlank(last) { digits.removeLast() }
+        guard !digits.isEmpty else { throw HostError.malformedResponse("invalid chunk size") }
+        var size = 0
+        for byte in digits {
+            guard let digit = hexValue(byte) else { throw HostError.malformedResponse("invalid chunk size") }
+            let (shifted, overflowed) = size.multipliedReportingOverflow(by: 16)
+            let (next, carried) = shifted.addingReportingOverflow(digit)
+            guard !overflowed, !carried, next <= remaining else { throw HostError.responseTooLarge }
+            size = next
+        }
+        return size
+    }
+
+    private static func hexValue(_ byte: UInt8) -> Int? {
+        switch byte {
+        case UInt8(ascii: "0")...UInt8(ascii: "9"): Int(byte - UInt8(ascii: "0"))
+        case UInt8(ascii: "a")...UInt8(ascii: "f"): Int(byte - UInt8(ascii: "a")) + 10
+        case UInt8(ascii: "A")...UInt8(ascii: "F"): Int(byte - UInt8(ascii: "A")) + 10
+        default: nil
         }
     }
 

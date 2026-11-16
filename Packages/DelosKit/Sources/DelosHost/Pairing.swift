@@ -22,7 +22,8 @@ extension HostClient {
     /// SHA-1 before. `passphrase` is Apollo's one-time password option, sent only as a salted hash.
     ///
     /// The steps run over plain HTTP, the final `pairchallenge` over HTTPS pinned to the certificate the host sent.
-    /// After any failure past the first step, the client asks the host to `unpair`.
+    /// After any failure past the first step, a refusal as well as a thrown error (a time-out, a broken connection, a
+    /// malformed answer, cancellation), the client asks the host to `unpair`.
     public func pair(pin: String, passphrase: String? = nil, serverInfo: ServerInfo) async throws -> PairingOutcome {
         let hash = PairingHash(generation: try serverInfo.generation())
         let salt = Data(randomBytes(16))
@@ -38,13 +39,12 @@ extension HostClient {
         }
         // No time limit: the host answers once its user has typed the PIN. When the wait ends otherwise (the user left
         // the PIN screen and the task was cancelled, or the connection broke), the host is still waiting for the PIN:
-        // it is told to unpair, from a task of its own, since this one may be cancelled.
+        // it is told to unpair.
         let certificateAnswer: HostXMLElement
         do {
             certificateAnswer = try await pairingStep(first, timeout: nil)
         } catch {
-            let client = self
-            Task { try? await client.unpair() }
+            abandonAfterThrow()
             throw error
         }
         guard certificateAnswer.child("paired") == "1" else { return .failed }
@@ -58,6 +58,23 @@ extension HostClient {
               let serverKey = SecCertificateCopyKey(parsed)
         else { return try await abandon(.failed) }
 
+        // From here on the host holds this client's attempt. The refusals below abandon it themselves; a thrown
+        // failure (a time-out, a broken connection, a malformed answer, cancellation) abandons it here.
+        do {
+            return try await prove(
+                aesKey: aesKey, hash: hash, serverCertificate: serverCertificate, serverSignature: serverSignature,
+                serverKey: serverKey, httpsPort: serverInfo.httpsPort)
+        } catch {
+            abandonAfterThrow()
+            throw error
+        }
+    }
+
+    /// The steps after the host sent its certificate: both sides prove they know the PIN and own their keys, then the
+    /// final challenge goes over HTTPS pinned to the host's certificate.
+    private func prove(
+        aesKey: Data, hash: PairingHash, serverCertificate: Data, serverSignature: Data, serverKey: SecKey, httpsPort: Int
+    ) async throws -> PairingOutcome {
         let clientChallenge = Data(randomBytes(16))
         let challengeAnswer = try await pairingStep(
             [("updateState", "1"), ("clientchallenge", Hex.encode(try PairingAES.encrypt(clientChallenge, key: aesKey)))],
@@ -93,7 +110,7 @@ extension HostClient {
             [("updateState", "1"), ("clientpairingsecret", Hex.encode(clientPairingSecret))], timeout: Self.requestTimeout)
         guard clientSecretAnswer.child("paired") == "1" else { return try await abandon(.failed) }
 
-        let hostPin = HostPin(certificate: serverCertificate, httpsPort: serverInfo.httpsPort)
+        let hostPin = HostPin(certificate: serverCertificate, httpsPort: httpsPort)
         let query = HTTPRequest.encode([("updateState", "1"), ("phrase", "pairchallenge")])
         let challenge = try HostXML.root(
             await perform("pair", query: query, pin: hostPin, timeout: Self.requestTimeout, limit: Self.xmlLimit))
@@ -106,9 +123,17 @@ extension HostClient {
             await perform("pair", query: HTTPRequest.encode(arguments), pin: nil, timeout: timeout, limit: Self.xmlLimit))
     }
 
+    /// A refusal or a failed proof: the host is told to unpair before the outcome is reported.
     private func abandon(_ outcome: PairingOutcome) async throws -> PairingOutcome {
         try? await unpair()
         return outcome
+    }
+
+    /// A thrown failure: the host is told to unpair from a task of its own, since a cancelled task cannot send
+    /// requests, and the failure is reported without waiting for that request.
+    private func abandonAfterThrow() {
+        let client = self
+        Task { try? await client.unpair() }
     }
 
     /// SHA-256 signatures with RSA (PKCS #1 v1.5) or ECDSA, by the type of the host's key.

@@ -43,7 +43,7 @@ struct StreamScreen: View {
         .onChange(of: scenePhase) { _, now in
             guard let controller else { return }
             switch now {
-            case .background: Task { await controller.enteredBackground() }
+            case .background: controller.enteredBackground()
             case .active: controller.returnedToForeground()
             default: break
             }

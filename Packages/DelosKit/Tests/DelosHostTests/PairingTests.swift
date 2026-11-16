@@ -201,4 +201,48 @@ import Testing
         }
         #expect(host.requests.contains { $0.path.hasSuffix("unpair") })
     }
+
+    /// A step that throws after the host sent its certificate (an HTTP error here; a time-out or a broken connection
+    /// take the same way) leaves the host holding the attempt unless the client unpairs.
+    @Test(arguments: ["clientchallenge", "serverchallengeresp", "clientpairingsecret", "pairchallenge"])
+    func aThrownFailureAfterTheCertificateAsksTheHostToUnpair(failingStep: String) async throws {
+        let pairing = FakePairingHost(identity: TestIdentities.host, settings: .init(pin: Self.pin))
+        let host = try await FakeHost(identity: TestIdentities.host) { request in
+            let failing = request.path == "/pair"
+                && (request.query[failingStep] != nil || request.query["phrase"] == failingStep)
+            return failing ? FakeHost.Response(status: 500, body: Data()) : pairing.respond(request)
+        }
+        let info = try ServerInfo.parse(Data(Documents.serverInfo(httpsPort: host.httpsPort, appVersion: "7.1.431.-1").utf8))
+        let client = HostClient(address: host.httpAddress, identity: TestIdentities.client)
+
+        await #expect(throws: HostError.httpStatus(500)) { try await client.pair(pin: Self.pin, serverInfo: info) }
+
+        for _ in 0..<50 where pairing.observed.unpairCount == 0 {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(pairing.observed.unpairCount == 1)
+    }
+
+    @Test func leavingDuringALaterStepAsksTheHostToUnpair() async throws {
+        // The host sends its certificate, then never answers the client's challenge
+        let pairing = FakePairingHost(identity: TestIdentities.host, settings: .init(pin: Self.pin))
+        let host = try await FakeHost(identity: TestIdentities.host) { request in
+            request.query["clientchallenge"] != nil ? FakeHost.Response(body: Data(), silent: true) : pairing.respond(request)
+        }
+        let info = try ServerInfo.parse(Data(Documents.serverInfo(httpsPort: host.httpsPort, appVersion: "7.1.431.-1").utf8))
+        let client = HostClient(address: host.httpAddress, identity: TestIdentities.client)
+        let task = Task { try await client.pair(pin: Self.pin, serverInfo: info) }
+        for _ in 0..<250 where !host.requests.contains(where: { $0.query["clientchallenge"] != nil }) {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(pairing.observed.unpairCount == 0)
+
+        task.cancel()
+
+        await #expect(throws: CancellationError.self) { try await task.value }
+        for _ in 0..<50 where pairing.observed.unpairCount == 0 {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(pairing.observed.unpairCount == 1)
+    }
 }

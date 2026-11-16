@@ -166,9 +166,12 @@ reduced motion only the fades remain.
 `AV1.parseSequenceHeader` reads the sequence header (AV1 specification, section 5.5) with `BitReader`.
 
 `VideoSamples` keeps the format description of the running stream (replaced when a key frame brings different
-parameter sets) and wraps each frame in a sample buffer marked "display immediately", since the host paces the stream;
-a frame before the first key frame fails with `needsKeyFrame`, the signal to ask the host for one. `VideoRenderer` is the
-renderer interface; `DisplayLayerRenderer` shows the samples through `AVSampleBufferDisplayLayer` (decision L4).
+parameter sets; the same ones keep it without building it again) and wraps each frame in a sample buffer marked
+"display immediately", since the host paces the stream; a frame before the first key frame fails with `needsKeyFrame`,
+the signal to ask the host for one. It reads a frame once, in place (`AnnexB.forEachUnit` finds the units as ranges
+of the frame, `AV1.sequenceHeader` the sequence header), and writes it once, into the sample's own block.
+`VideoRenderer` is the renderer interface; `DisplayLayerRenderer` shows the samples through
+`AVSampleBufferDisplayLayer` (decision L4).
 
 ## Frame pacing
 
@@ -184,14 +187,18 @@ V-Sync are not offered).
 
 ## Stream output
 
-`VideoOutput` and `AudioOutput` (DelosMedia) are the sinks the stream session hands the core. `VideoOutput` joins each
-decode unit's buffers into one Annex B or OBU frame, wraps it with `VideoSamples` and gives it to the renderer; a frame
-that cannot be shown answers `needIDRFrame`, so the core asks the host for a key frame. `AudioOutput` decodes the Opus
-packets on the core's audio thread into an `AudioRing` and plays them through an `AVAudioEngine` source node in the
-playback audio session; the ring keeps at most 60 ms and drops the oldest samples beyond that, so a network burst does
-not add lasting delay. The core calls each sink from one thread at a time, so their decoding state has no lock.
-`VideoStatistics` has a separate mutex for scalar frame/byte/host-time counters read by the statistics sampler; the
-audio ring, read by the audio render thread, has its own lock.
+`VideoOutput` and `AudioOutput` (DelosMedia) are the sinks the stream session hands the core. `VideoOutput` runs on the
+core's receive thread (direct submit): it copies each decode unit's buffers, which are valid only during the call, into
+one Annex B or OBU frame in storage it keeps from frame to frame, wraps it with `VideoSamples` and gives it to the
+renderer; a frame that cannot be shown answers `needIDRFrame`, so the core asks the host for a key frame. `AudioOutput`
+decodes the Opus packets on the core's audio thread into an `AudioRing` and plays them through an `AVAudioEngine`
+source node in the playback audio session; the ring keeps at most 60 ms and skips the oldest samples beyond that, so a
+network burst does not add lasting delay. The core calls each sink from one thread at a time, so their decoding state
+has no lock.
+`VideoStatistics` has a separate mutex for scalar frame/byte/host-time counters read by the statistics sampler. The
+audio ring has no lock, so the audio render thread never waits for the decoder: one writer and one reader share
+preallocated storage, each moving its own atomic position (acquire/release), and the reader skips what is older than
+60 ms; a full ring (nothing reads) drops what does not fit.
 
 ## The stream screen
 
@@ -260,6 +267,10 @@ While it is open, `GameInput` sends nothing and releases every held button, key 
 When the app goes to the background during a stream, iOS suspends it and the connection would break; the stream is
 closed at once instead (as Disconnect: the game keeps running on the PC), the loader shows, and on return the same game
 is resumed with a new connection (`StreamController.enteredBackground` / `returnedToForeground`).
+Each attempt (the first, the return from the background, Try again) has an identity: what an ended attempt reports or
+returns afterwards (a launch that fails late, a connect that completes late, queued events) is ignored. A new attempt
+launches only once the previous one has stopped, since the core runs one connection at a time; leaving uses the steps
+of the attempt that ran.
 
 ### Input during a stream
 
@@ -474,6 +485,11 @@ bitrate of DELOS for Android (`getDefaultBitrate`) and stereo audio. `rename` gi
 device (`HostRecord.customName`; blank returns to the PC's `serverName`), `wake` sends Wake-on-LAN to its known
 addresses, `quitApp` quits the app that runs on it.
 
+A request to a PC can take long (pairing waits for the user), and the record can change meanwhile. So an answer goes
+onto the record as it is when the answer arrives (a rename made meanwhile stays), and an answer to a request made
+before the PC was paired or unpaired is dropped: a refresh still on its way never brings back a removed pin. `unpair`
+removes the pin locally before it asks the PC to unpair.
+
 The screens (DelosUI, as DELOS for Android's `DeviceScreens.kt`, `PairScreens.kt` and `HomeScreen.kt`):
 
 - The start screen shows every paired PC (online, asleep and wakeable when its MAC address is known, offline; the
@@ -537,7 +553,16 @@ blocking `LiStartConnection` on its own thread and throws `StreamError` with the
 `LiStopConnection`, and `events` is an `AsyncStream` of stage progress, connection status, termination, rumble, LEDs,
 motion and trigger requests. Video decode units and audio packets go to `Sendable` sinks (`VideoDecodeUnitSink`,
 `AudioSampleSink`); a `DecodeUnit` is non-copyable and borrowed, so the core's memory cannot outlive the call. Input
-(`sendController`, mouse, keyboard, text, scroll, touch) and statistics are `nonisolated` and call the core directly.
+(`sendController`, mouse, keyboard, text, scroll, touch) and the RTP packet counters are `nonisolated` and call the
+core directly. `estimatedRoundTrip` is isolated to the session and answers only while the stream runs: the core's
+round-trip read locks a mutex that `LiStopConnection` destroys, and `stop` leaves the running state before it starts
+the core's teardown.
+
+`stop` returns once the core is released, so the next session can start at once. During `start` it interrupts the
+attempt and waits for it to unwind; a second `stop` waits for the first. `LiStartConnection` clears the core's
+interrupted flag before its first stage, so an interruption that comes before that is kept in the session's
+`CoreContext`: the start thread does not call the core at all when it is already interrupted, and the first stage
+report interrupts the core again.
 
 The core keeps its connection in global state and its callbacks get no context pointer. So one global `CoreContext`
 (`CoreBridge`, behind a `Mutex`) connects the callbacks to the session that holds the core; a second session cannot
@@ -616,8 +641,9 @@ has no such setting; both are in `Config/Info.plist`, which Xcode merges with th
   structures, the audio, video format and codec bits against the protocol values, the C callbacks against events and
   sinks, input without a stream, a start against a closed local port (fails in the RTSP handshake with
   `ECONNREFUSED` after the core's 10-second retry), `stop()` and task cancellation during that retry (the start ends
-  within a second), an invalid configuration, Opus encode → decode of stereo sweeps (2.5 ms delay, both channels
-  above 15 dB SNR), packet loss concealment, 5.1 layout, invalid layouts and packets.
+  within a second; `stop()` returns with the core released), a task cancelled before the start (ends at once), no
+  round-trip read without a running stream, an invalid configuration, Opus encode → decode of stereo sweeps (2.5 ms
+  delay, both channels above 15 dB SNR), packet loss concealment, 5.1 layout, invalid layouts and packets.
 - `xcodebuild -scheme DelosCore` and `-scheme DelosMedia` for `generic/platform=iOS`, `tvOS`, `macOS` and the iOS and
   tvOS simulators.
 - `swift test`, host layer (`Tests/DelosHostTests`), against a fake host on the loopback interface (Network.framework

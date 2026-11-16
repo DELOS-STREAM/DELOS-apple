@@ -245,4 +245,38 @@ import Testing
     @Test func aDeclaredLengthOverTheLimitIsRefused() {
         #expect(throws: HostError.responseTooLarge) { try parse(["HTTP/1.1 200 OK\r\nContent-Length: 4096\r\n\r\n"], atEnd: false) }
     }
+
+    /// A size line of a few bytes must not end the app: the size was added to an index with trapping arithmetic.
+    @Test(arguments: ["7fffffffffffffff", "ffffffffffffffff", "10000000000000000000", "401"])
+    func aChunkLargerThanTheLimitIsRefusedBeforeItsBytesArrive(size: String) {
+        #expect(throws: HostError.responseTooLarge) {
+            try parse(["HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n\(size)\r\n"], atEnd: false)
+        }
+    }
+
+    @Test func chunksPastTheLimitTogetherAreRefused() {
+        let chunk = "200\r\n" + String(repeating: "a", count: 512) + "\r\n"
+        #expect(throws: HostError.responseTooLarge) {
+            try parse(["HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n", chunk, chunk, "1\r\n"], atEnd: false)
+        }
+    }
+
+    @Test(arguments: ["-5", "+5", "0x5", "g", ""])
+    func aChunkSizeThatIsNotHexadecimalIsMalformed(size: String) {
+        #expect(throws: HostError.malformedResponse("invalid chunk size")) {
+            try parse(["HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n\(size)\r\nabcde\r\n0\r\n\r\n"], atEnd: false)
+        }
+    }
+
+    @Test func aChunkWithoutItsLineEndIsMalformed() {
+        #expect(throws: HostError.malformedResponse("a chunk does not end with CRLF")) {
+            try parse(["HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabcde\r\n0\r\n\r\n"], atEnd: false)
+        }
+    }
+
+    @Test func aChunkSizeMayHaveBlanksAndUppercaseDigits() throws {
+        let response = try parse(["HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n A \r\n0123456789\r\n0\r\n\r\n"], atEnd: false)
+
+        #expect(response?.body == Data("0123456789".utf8))
+    }
 }

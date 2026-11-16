@@ -19,6 +19,7 @@ final class CoreContext: Sendable {
     let onTermination: @Sendable () -> Void
     /// The last stage the core reported as failed, for the error of `start`.
     let failedStage = Mutex<(stage: StreamStage, errorCode: Int32)?>(nil)
+    private let interruption = Atomic<Bool>(false)
 
     init(
         events: AsyncStream<StreamEvent>.Continuation,
@@ -30,6 +31,17 @@ final class CoreContext: Sendable {
         self.video = video
         self.audio = audio
         self.onTermination = onTermination
+    }
+
+    /// The session asked the core to stop while it starts.
+    var interruptRequested: Bool { interruption.load(ordering: .sequentiallyConsistent) }
+
+    /// Interrupts the start. `LiStartConnection` clears the core's interrupted flag before its first stage, so a stop
+    /// that comes before that would be lost: the flag set here makes the start thread skip the core when it has not
+    /// called it yet, and the first stage report interrupts again (`listenerCallbacks`).
+    func interrupt() {
+        interruption.store(true, ordering: .sequentiallyConsistent)
+        LiInterruptConnection()
     }
 }
 
@@ -72,8 +84,12 @@ enum CoreBridge {
         var callbacks = CONNECTION_LISTENER_CALLBACKS()
         LiInitializeConnectionCallbacks(&callbacks)
         callbacks.stageStarting = { stage in
+            let context = CoreBridge.current
+            // The core reports its first stage after it has cleared its interrupted flag: a stop that came while the
+            // start thread was entering the core is made again here.
+            if context?.interruptRequested == true { LiInterruptConnection() }
             guard let stage = StreamStage(rawValue: stage) else { return }
-            CoreBridge.emit(.stageStarting(stage))
+            context?.events.yield(.stageStarting(stage))
         }
         callbacks.stageComplete = { stage in
             guard let stage = StreamStage(rawValue: stage) else { return }
