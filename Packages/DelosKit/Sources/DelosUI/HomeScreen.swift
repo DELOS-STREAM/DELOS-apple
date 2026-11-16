@@ -284,6 +284,13 @@ struct GameLibrary: View {
         start - wide * (focusScale - 1) + tile * (focusScale - 1) / 2
     }
 
+    /// A or a tap on [app] opens its menu (another game runs on the PC) instead of starting it.
+    private func offersChoices(_ app: HostApp) -> Bool {
+        let running = hosts.host(hostID).flatMap { $0.runningAppID == 0 ? nil : $0.runningAppID }
+        let known = running.flatMap { id in apps.first { $0.id == id }?.id }
+        return GameActivation.of(app: app.id, running: known) == .offerChoices
+    }
+
     private var menuOpen: Bool {
         if case .context = layers.layer { true } else { false }
     }
@@ -316,6 +323,8 @@ struct GameLibrary: View {
                         FocusItem(
                             id: Self.id(app), model: focus, moves: LibraryWrap.moves(index: index, ids: keys),
                             menu: { actions.gameMenu(hostID: hostID, app: app) },
+                            // The offer menu plays its own OPEN cue, not SELECT
+                            clickCue: offersChoices(app) ? nil : .select,
                             action: { actions.activate(hostID: hostID, app: app, focus: focus) }
                         ) { isFocused in
                             Cover(hostID: hostID, app: app, wide: index == 0, focused: isFocused, menuOpen: menuOpen, badge: badge)
