@@ -447,7 +447,12 @@ private struct BatteryIndicator: View {
         let fill = battery.low ? Self.lowRed : RGBA.onlineGreen
         let pulse = phase.map { 0.55 + 0.45 * Self.easeOut.value(at: $0 < 0.5 ? $0 * 2 : (1 - $0) * 2) } ?? 1
         let wave = phase.map { Self.easeOut.value(at: ($0 + 0.5).truncatingRemainder(dividingBy: 1)) }
-        return Canvas { context, size in
+        // The ring of the pulse reaches 12 px outside the battery: the canvas has that margin on every side (it is
+        // centered in the 48 × 24 box, which does not clip), else the ring was cut off at the box's edges
+        let margin = 12 * stage.scale
+        return Canvas { context, full in
+            context.translateBy(x: margin, y: margin)
+            let size = CGSize(width: full.width - 2 * margin, height: full.height - 2 * margin)
             let k = stage.scale
             let stroke = 2 * k
             let cap = 3 * k
@@ -474,6 +479,7 @@ private struct BatteryIndicator: View {
                 rounded(CGRect(x: inset, y: inset, width: inner.width * battery.fill, height: inner.height), 4 * k),
                 with: .color(fill.opacity(pulse).color))
         }
+        .frame(width: stage.px(48) + 2 * margin, height: stage.px(24) + 2 * margin)
     }
 }
 
