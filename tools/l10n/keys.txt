@@ -11,6 +11,8 @@ firstrun_create_edit_title
 firstrun_create_edit_note
 firstrun_create_name_label
 firstrun_create_name_placeholder
+firstrun_create_name_title
+firstrun_create_change_name
 firstrun_create_default_name
 firstrun_create_save
 firstrun_create_create
@@ -167,6 +169,9 @@ toast_kind_error
 toast_kind_action
 toast_description
 toast_description_action
+shell_welcome
+shell_profile_updated
+shell_default_profile_name
 common_cancel
 
 # Status bar, navigation and side menu
@@ -176,6 +181,12 @@ shell_nav_devices
 shell_side_not_connected
 shell_side_connected
 shell_side_offline
+shell_side_theme
+shell_side_theme_dark
+shell_side_theme_light
+shell_side_background
+shell_side_sounds
+shell_side_haptics
 shell_side_all_settings
 
 # Settings: frame, Stream and Audio tabs

@@ -349,6 +349,43 @@ final class ShellActions {
         })
     }
 
+    /// Create / Save on the profile page (`CreateProfileScreen`'s `onDone` in `Shell.kt`), acknowledged in a toast. A
+    /// profile made in the first run goes on to pairing, unless PCs are paired already (then to the start screen); one
+    /// added or changed from the profile screen returns there.
+    func profileDone(editing: Bool, name: String, avatar: Int) {
+        if editing {
+            if let id = profiles.current?.id { _ = profiles.update(id, name: name, avatar: avatar) }
+            toasts.show(L("shell_profile_updated"), icon: Symbols.checkCircle)
+            go { navigator.back() }
+            return
+        }
+        _ = profiles.create(name: name, avatar: avatar)
+        toasts.show(L("shell_welcome", name), icon: Symbols.wavingHand, kind: .success)
+        let landing = FirstRunLanding.after(fromBoot: navigator.stack.first?.screen == .boot, pairedPCs: !hosts.paired.isEmpty)
+        go {
+            switch landing {
+            case .pair:
+                navigator.reset(to: .start, focus: startFocus())
+                navigator.push(.pair, focus: PairPCScreen.firstFocus(hosts.hosts))
+            case .start: navigator.reset(to: .start, focus: startFocus())
+            case .back: navigator.back()
+            }
+        }
+    }
+
+    /// "Skip to home" on the boot screen (shown only when PCs are paired already): a default profile, then straight
+    /// into the library of the first online paired PC, else the first one.
+    func skipBoot() {
+        let paired = hosts.paired.sorted { $0.name.lowercased() < $1.name.lowercased() }
+        guard let host = paired.first(where: { $0.reachability == .online }) ?? paired.first else { return }
+        let player = Avatar.all.firstIndex { $0.name == "Player" } ?? 0
+        _ = profiles.create(name: L("shell_default_profile_name"), avatar: player)
+        go {
+            navigator.reset(to: .start, focus: startFocus())
+            navigator.openHome(hostID: host.id)
+        }
+    }
+
     /// Deletes the current profile at once (`deleteProfile`): choosing Delete is the confirmation. The toast undoes it
     /// with Y or a tap while its settings are kept; the next profile takes over, or the first run starts again.
     func deleteProfile() {

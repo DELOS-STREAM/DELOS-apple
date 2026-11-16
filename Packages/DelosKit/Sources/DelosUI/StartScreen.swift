@@ -344,13 +344,15 @@ public struct DelosRoot: View {
     @ViewBuilder private func screen(_ entry: Navigator.Entry) -> some View {
         switch entry.screen {
         case .boot:
-            BootScreen(focus: entry.focus, onBegin: { go { navigator.push(.createProfile(editing: false), focus: CreateProfileScreen.avatarID(0)) } })
+            BootScreen(
+                focus: entry.focus,
+                onBegin: { go { navigator.push(.createProfile(editing: false), focus: CreateProfileScreen.avatarID(0)) } },
+                onSkip: bootSkip)
         case .createProfile(let editing):
             CreateProfileScreen(
-                editing: editing, initial: editing ? profiles.current : nil, focus: entry.focus, navigator: navigator,
-                feedback: feedback
+                editing: editing, initial: editing ? profiles.current : nil, focus: entry.focus, actions: actions
             ) { name, avatar in
-                profileDone(editing: editing, name: name, avatar: avatar)
+                actions.profileDone(editing: editing, name: name, avatar: avatar)
             }
         case .start:
             StartScreen(
@@ -420,6 +422,12 @@ public struct DelosRoot: View {
         return TopBar.Navigation(buttons: buttons, focus: entry.focus)
     }
 
+    /// "Skip to home" on the boot screen: only when PCs are paired already.
+    private var bootSkip: (@MainActor () -> Void)? {
+        guard !hosts.paired.isEmpty else { return nil }
+        return { actions.skipBoot() }
+    }
+
     /// The PC whose library is open below the current screen, for the side menu.
     private var connectedPC: (name: String, online: Bool)? {
         for entry in navigator.stack.reversed() {
@@ -467,25 +475,6 @@ public struct DelosRoot: View {
             } catch {
                 feedback?.play(.error)
                 toasts.show(L("devices_add_no_answer", address.description), icon: Symbols.error)
-            }
-        }
-    }
-
-    /// Create / Save on the profile page. A profile made in the first run goes on to pairing (the start screen below
-    /// it); one added or changed from the profile screen returns there.
-    private func profileDone(editing: Bool, name: String, avatar: Int) {
-        if editing {
-            if let id = profiles.current?.id { profiles.update(id, name: name, avatar: avatar) }
-            go { navigator.back() }
-            return
-        }
-        profiles.create(name: name, avatar: avatar)
-        go {
-            if navigator.stack.first?.screen == .boot {
-                navigator.reset(to: .start, focus: actions.startFocus())
-                navigator.push(.pair, focus: PairPCScreen.firstFocus(hosts.hosts))
-            } else {
-                navigator.back()
             }
         }
     }
