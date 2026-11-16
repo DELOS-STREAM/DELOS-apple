@@ -22,11 +22,10 @@ ENABLE_USER_SCRIPT_SANDBOXING = YES
 // The package's OpenSSL is a dynamic framework embedded in the app: the app must find it in its Frameworks folder
 LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks
 CODE_SIGN_STYLE = Automatic
-// The OpenSSL package of the streaming core is a dynamic framework embedded in the app; without this the app does not start
-LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks
 
 GENERATE_INFOPLIST_FILE = YES
-// Arrays (NSBonjourServices) cannot be written as INFOPLIST_KEY_* settings; they are in this partial plist.
+// Arrays (NSBonjourServices) and keys without an INFOPLIST_KEY_* setting (CADisableMinimumFrameDurationOnPhone) cannot
+// be written here; they are in this partial plist.
 INFOPLIST_FILE = Config/Info.plist
 INFOPLIST_KEY_NSLocalNetworkUsageDescription = DELOS uses the local network to find your gaming PC and stream from it.
 INFOPLIST_KEY_CFBundleDisplayName = DELOS

@@ -22,6 +22,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - Pairing a PC and its library: the start screen shows the paired PCs, the pairing screen the PCs found on the network
   or an address typed in, the PIN screen waits while the PIN is typed on the PC, and the library shows the PC's apps
   with their box art.
+- The stream screen: it launches or resumes the app on the PC, tells DELOS for Android's loading lines while it
+  connects, shows the video full screen at up to 120 Hz and sends game controllers (with rumble), a keyboard, a mouse
+  and touch as a trackpad to the PC. L3 + R3 or a swipe up from the bottom edge opens a small stream menu (Resume,
+  Disconnect, Quit app); a stream that fails shows Android's result screen with Try again. Not yet tried with a real
+  stream.
 
 ### Changed
 

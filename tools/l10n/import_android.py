@@ -4,8 +4,9 @@
     python3 tools/l10n/import_android.py /path/to/DELOS            # write the catalog
     python3 tools/l10n/import_android.py /path/to/DELOS --check    # exit 1 if the catalog is not up to date
 
-The names listed in tools/l10n/keys.txt are looked up in app/src/main/res/values*/strings*.xml (strings and plurals)
-of the Android checkout. The catalog keys are the Android names; Swift code reads them with `L("name")` (DelosUI).
+The names listed in tools/l10n/keys.txt are looked up in app/src/main/res/values*/strings*.xml (strings, plurals and
+string arrays) of the Android checkout. The catalog keys are the Android names; item i of a string array is the name
+`<array>_<i>`. Swift code reads them with `L("name")` (DelosUI).
 Placeholders are converted to Apple's format (`%1$s` -> `%1$@`, `%s` -> `%@`; numbers stay), Android escapes are
 resolved (`\\'`, `\\"`, `\\n`, `\\@`, `\\?`), and a plural becomes a variation by plural category. Every name must have an
 English text; a missing translation is left out (the app shows English) and listed on standard error.
@@ -63,6 +64,24 @@ def element_text(element: ET.Element) -> str:
     return "".join(element.itertext())
 
 
+def read_elements(root: ET.Element, translated: bool) -> dict[str, object]:
+    """name -> text (str) or plural (dict category -> text) of one resource file; a string array gives one name per
+    item (`<array>_<index>`). [translated]: a translation folder, where untranslatable names are skipped."""
+    entries: dict[str, object] = {}
+    for element in root:
+        name = element.get("name")
+        if not name or element.get("translatable") == "false" and translated:
+            continue
+        if element.tag == "string":
+            entries[name] = convert_text(element_text(element))
+        elif element.tag == "plurals":
+            entries[name] = {item.get("quantity"): convert_text(element_text(item)) for item in element}
+        elif element.tag == "string-array":
+            for index, item in enumerate(element):
+                entries[f"{name}_{index}"] = convert_text(element_text(item))
+    return entries
+
+
 def read_resources(android: Path) -> dict[str, dict[str, object]]:
     """language -> name -> text (str) or plural (dict category -> text)."""
     result: dict[str, dict[str, object]] = {}
@@ -70,14 +89,7 @@ def read_resources(android: Path) -> dict[str, dict[str, object]]:
         folder = android / RES / ("values" if not qualifier else f"values-{qualifier}")
         entries: dict[str, object] = {}
         for file in sorted(folder.glob("strings*.xml")):
-            for element in ET.parse(file).getroot():
-                name = element.get("name")
-                if not name or element.get("translatable") == "false" and qualifier:
-                    continue
-                if element.tag == "string":
-                    entries[name] = convert_text(element_text(element))
-                elif element.tag == "plurals":
-                    entries[name] = {item.get("quantity"): convert_text(element_text(item)) for item in element}
+            entries.update(read_elements(ET.parse(file).getroot(), translated=bool(qualifier)))
         result[language] = entries
     return result
 

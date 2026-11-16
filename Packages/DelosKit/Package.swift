@@ -108,7 +108,7 @@ let package = Package(
         .target(name: "DelosData", dependencies: ["DelosHost"], swiftSettings: strict),
         .target(
             name: "DelosUI",
-            dependencies: ["DelosData", "DelosInput"],
+            dependencies: ["DelosData", "DelosInput", "DelosMedia"],
             resources: [.process("Resources")],
             swiftSettings: strict
         ),

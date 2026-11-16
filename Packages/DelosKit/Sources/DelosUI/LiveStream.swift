@@ -1,0 +1,127 @@
+import DelosCore
+import DelosData
+import DelosHost
+import DelosInput
+import DelosMedia
+import Foundation
+
+/// The real steps of a stream (`NvConnection.startApp` and the stream start of DELOS for Android): ask the PC again
+/// over its pinned connection, launch the app (resume it when it already runs, quit another app first), then connect
+/// the streaming core with the video and audio outputs.
+@MainActor
+final class LiveStream: StreamSteps {
+    let pcName: String
+    private(set) var appName: String
+    let events: AsyncStream<StreamEvent>
+    var input: (any StreamInputSink)? { session }
+
+    private let hosts: HostStore
+    private let hostID: String
+    private let appID: Int
+    private let session: StreamSession
+    private let formats: VideoFormats
+    private var client: (HostClient, HostPin)?
+    private var plan: (server: ServerInformation, configuration: StreamConfiguration)?
+
+    init(hosts: HostStore, hostID: String, appID: Int, renderer: any VideoRenderer) {
+        self.hosts = hosts
+        self.hostID = hostID
+        self.appID = appID
+        pcName = hosts.host(hostID)?.name ?? L("stream_result_default_pc")
+        appName = hosts.apps[hostID]?.first { $0.id == appID }?.title ?? ""
+        formats = DecoderSupport.device
+        session = StreamSession(videoSink: VideoOutput(renderer: renderer, supportedFormats: formats), audioSink: AudioOutput())
+        events = session.events
+    }
+
+    func launch(display: DisplayInfo) async throws(LaunchFailure) {
+        // A fresh answer: whether the PC is there, still knows this device, and what it runs
+        await hosts.refresh(hostID)
+        guard let record = hosts.host(hostID), record.reachability != .offline else { throw .offline }
+        guard record.lastReplyVerified else { throw .notPaired }
+        let client: HostClient, pin: HostPin
+        do {
+            (client, _, pin) = try hosts.pairedClient(hostID)
+        } catch {
+            throw .offline
+        }
+        var app = hosts.apps[hostID]?.first { $0.id == appID }
+        if app == nil { app = try? await hosts.loadApps(hostID).first { $0.id == appID } }
+        guard let app else { throw .appNotFound }
+        appName = app.title
+
+        let settings = StreamSettings.forDisplay(pixelWidth: display.pixelWidth, pixelHeight: display.pixelHeight)
+        let plan = StreamPlan(app: app, settings: settings, formats: formats, refreshRate: display.maxFramesPerSecond)
+        let nvidia = record.isNvidiaServer
+        let sessionURL: String?
+        if record.runningAppID == appID {
+            do {
+                sessionURL = try await client.resume(plan.request, nvidiaServer: nvidia, pin: pin)
+            } catch {
+                throw Self.resumeFailure(error)
+            }
+        } else {
+            if record.runningAppID != 0 {
+                do {
+                    try await client.cancel(pin: pin)
+                } catch {
+                    throw Self.quitFailure(error)
+                }
+            }
+            do {
+                sessionURL = try await client.launch(plan.request, nvidiaServer: nvidia, pin: pin)
+            } catch HostError.hostStatus(code: 403, _) {
+                throw .denied
+            } catch {
+                throw .launchFailed(detail: Self.detail(error))
+            }
+        }
+        self.client = (client, pin)
+        self.plan = (StreamPlan.serverInformation(record, address: client.address, sessionURL: sessionURL), plan.configuration)
+    }
+
+    func connect() async throws(StreamError) {
+        guard let plan else { throw .cancelled }
+        try await session.start(server: plan.server, configuration: plan.configuration)
+    }
+
+    func stop() async {
+        await session.stop()
+    }
+
+    func quitApp() async -> Bool {
+        guard let (client, pin) = client else { return false }
+        do {
+            try await client.cancel(pin: pin)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    // MARK: The PC's answers (NvConnection.startApp)
+
+    static func resumeFailure(_ error: any Error) -> LaunchFailure {
+        switch error {
+        case HostError.hostStatus(470, _): .resumeForeign(code: 470)
+        case HostError.hostStatus(525, _): .appMinimized
+        case HostError.hostStatus(403, _): .denied
+        default: .resumeFailed(detail: detail(error))
+        }
+    }
+
+    static func quitFailure(_ error: any Error) -> LaunchFailure {
+        switch error {
+        case HostError.hostStatus(599, _): .quitForeign(code: 599)
+        default: .quitFailed(detail: detail(error))
+        }
+    }
+
+    /// The technical text behind Details: the host's own message and status, or the error.
+    static func detail(_ error: any Error) -> String {
+        switch error {
+        case let HostError.hostStatus(code, message?): "\(message) (\(code))"
+        default: String(describing: error)
+        }
+    }
+}

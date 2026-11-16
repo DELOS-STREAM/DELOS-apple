@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-Keys of the app's Info.plist that build settings cannot express (arrays). Xcode merges this file with the keys it
-generates from the INFOPLIST_KEY_* settings in Shared.xcconfig (GENERATE_INFOPLIST_FILE = YES).
+Keys of the app's Info.plist that build settings cannot express: arrays (NSBonjourServices) and keys without an
+INFOPLIST_KEY_* setting (CADisableMinimumFrameDurationOnPhone: ProMotion iPhones show more than 60 frames per second
+only with it). Xcode merges this file with the keys it generates from the INFOPLIST_KEY_* settings in
+Shared.xcconfig (GENERATE_INFOPLIST_FILE = YES).
 -->
 <plist version="1.0">
 <dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_nvstream._tcp</string>
