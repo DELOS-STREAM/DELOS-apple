@@ -73,7 +73,7 @@ private struct Lenient<Value: Decodable>: Decodable {
 
 /// Keeps the profiles in `UserDefaults` (kept on tvOS, which may purge files), the list and the current id in one
 /// value so they never disagree. Each profile's settings are stored by its id (``AppearanceStore``,
-/// ``StreamSettingsStore``).
+/// ``StreamSettingsStore``, ``StartupStore``).
 ///
 /// Without a profile DELOS is on its first run: it shows the first-run screens until one is created
 /// (`ShellActivity` in DELOS for Android).
@@ -81,18 +81,47 @@ private struct Lenient<Value: Decodable>: Decodable {
 @Observable
 public final class ProfileStore {
     public private(set) var profiles: Profiles
+    /// How the current profile starts (its default PC).
+    public private(set) var startup = Startup()
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let appearance: AppearanceStore
     @ObservationIgnored private let stream: StreamSettingsStore
+    @ObservationIgnored private let startups: StartupStore
+    @ObservationIgnored private let deleteGrace: Duration
+    /// The profiles deleted less than ``deleteGrace`` ago, which Undo can bring back.
+    @ObservationIgnored private var deleted: [String: Deleted] = [:]
     private static let key = "profiles"
+    /// The ids of deleted profiles whose settings are still kept: when DELOS ends before the grace is over, the next
+    /// start removes them.
+    private static let deletedKey = "profiles.deleted"
 
-    /// - Parameter suiteName: a `UserDefaults` suite; nil is the app's standard defaults.
-    public init(suiteName: String? = nil) {
+    /// A deleted profile and where it was: its place in the list, whether it was the current one and which profile took
+    /// over.
+    private struct Deleted {
+        let profile: Profile
+        let index: Int
+        let wasCurrent: Bool
+        let successor: String?
+    }
+
+    /// - Parameters:
+    ///   - suiteName: a `UserDefaults` suite; nil is the app's standard defaults.
+    ///   - deleteGrace: how long a deleted profile's settings are kept for Undo (`DELETE_GRACE_MS` of DELOS for
+    ///     Android).
+    public init(suiteName: String? = nil, deleteGrace: Duration = .seconds(10)) {
         defaults = suiteName.flatMap(UserDefaults.init(suiteName:)) ?? .standard
         appearance = AppearanceStore(suiteName: suiteName)
         stream = StreamSettingsStore(suiteName: suiteName)
-        profiles = defaults.data(forKey: Self.key)
+        startups = StartupStore(suiteName: suiteName)
+        self.deleteGrace = deleteGrace
+        let stored = defaults.data(forKey: Self.key)
             .flatMap { try? JSONDecoder().decode(Profiles.self, from: $0) } ?? Profiles()
+        profiles = stored
+        startup = stored.current.map { startups.load(profile: $0.id) } ?? Startup()
+        for id in defaults.stringArray(forKey: Self.deletedKey) ?? [] where !stored.all.contains(where: { $0.id == id }) {
+            removeSettings(id)
+        }
+        defaults.removeObject(forKey: Self.deletedKey)
     }
 
     /// No profile exists: the first run.
@@ -109,6 +138,7 @@ public final class ProfileStore {
         if let current = profiles.current {
             appearance.save(appearance.load(profile: current.id), profile: profile.id)
             stream.save(stream.load(profile: current.id), profile: profile.id)
+            startups.save(startups.load(profile: current.id), profile: profile.id)
         }
         save(Profiles(all: profiles.all + [profile], currentID: profile.id))
         return profile
@@ -143,21 +173,66 @@ public final class ProfileStore {
         save(Profiles(all: profiles.all, currentID: id))
     }
 
-    /// Removes a profile and its settings without asking. When it was the current one, the next remaining profile takes
-    /// over. Returns false when no profile is left (the first run starts again).
+    /// Makes [hostID] the current profile's default PC; nil: none.
+    public func setDefaultPC(_ hostID: String?) {
+        guard let current = profiles.current else { return }
+        var next = startup
+        next.defaultPC = hostID
+        startups.save(next, profile: current.id)
+        startup = next
+    }
+
+    /// Deletes a profile without asking (`ProfileStore.delete` of DELOS for Android): it disappears at once, and when it
+    /// was the current one the first remaining profile takes over. Its settings are kept for the delete grace, so
+    /// ``undoDelete(_:)`` can bring it back; then, or at the next start if DELOS ended meanwhile, they are removed.
+    /// Returns false when no profile is left (the first run starts again).
     @discardableResult
-    public func remove(_ id: String) -> Bool {
-        guard profiles.all.contains(where: { $0.id == id }) else { return !profiles.all.isEmpty }
+    public func delete(_ id: String) -> Bool {
+        guard let index = profiles.all.firstIndex(where: { $0.id == id }) else { return !profiles.all.isEmpty }
         let wasCurrent = profiles.current?.id == id
-        let rest = profiles.all.filter { $0.id != id }
+        var rest = profiles.all
+        let profile = rest.remove(at: index)
+        deleted[id] = Deleted(profile: profile, index: index, wasCurrent: wasCurrent, successor: rest.first?.id)
+        defaults.set(Array(deleted.keys), forKey: Self.deletedKey)
         save(Profiles(all: rest, currentID: wasCurrent ? rest.first?.id : profiles.currentID))
+        let grace = deleteGrace
+        Task { [weak self] in
+            try? await Task.sleep(for: grace)
+            self?.purge(id)
+        }
+        return !rest.isEmpty
+    }
+
+    /// Brings back a profile deleted less than the delete grace ago, at its old place with all its settings. It is the
+    /// current one again when it was and nobody has chosen another profile since. False when it is gone for good.
+    @discardableResult
+    public func undoDelete(_ id: String) -> Bool {
+        guard let gone = deleted.removeValue(forKey: id) else { return false }
+        defaults.set(Array(deleted.keys), forKey: Self.deletedKey)
+        let takesOver = gone.wasCurrent && profiles.current?.id == gone.successor
+        var all = profiles.all
+        all.insert(gone.profile, at: min(gone.index, all.count))
+        save(Profiles(all: all, currentID: takesOver ? id : profiles.currentID))
+        return true
+    }
+
+    /// The grace of a deleted profile is over: its settings are removed for good.
+    func purge(_ id: String) {
+        guard deleted.removeValue(forKey: id) != nil else { return }
+        defaults.set(Array(deleted.keys), forKey: Self.deletedKey)
+        removeSettings(id)
+    }
+
+    private func removeSettings(_ id: String) {
         appearance.remove(profile: id)
         stream.remove(profile: id)
-        return !rest.isEmpty
+        startups.remove(profile: id)
     }
 
     private func save(_ next: Profiles) {
         if let data = try? JSONEncoder().encode(next) { defaults.set(data, forKey: Self.key) }
         profiles = next
+        let startup = next.current.map { startups.load(profile: $0.id) } ?? Startup()
+        if startup != self.startup { self.startup = startup }
     }
 }

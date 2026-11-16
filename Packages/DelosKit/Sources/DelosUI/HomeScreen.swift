@@ -24,11 +24,12 @@ enum HomeContent: Equatable {
 }
 
 /// The library of a paired PC (`HomeScreen` of DELOS for Android), a first version: the row of covers (the PC's box
-/// art, the first one three covers wide), the focused app's title above it; A starts the app. The PC is asked again
-/// and its apps loaded when the screen shows.
+/// art, the first one three covers wide), the focused app's title above it; A starts the app, its context menu resumes,
+/// quits or starts it. The PC is asked again and its apps loaded when the screen shows.
 struct HomeScreen: View {
     let hostID: String
     let focus: FocusModel
+    let actions: ShellActions
     let onApp: @MainActor (HostApp) -> Void
     @Environment(HostStore.self) private var hosts
     @Environment(\.stage) private var stage
@@ -44,7 +45,7 @@ struct HomeScreen: View {
             case .loading: HomeMessage(icon: Symbols.loading, title: L("home_loading"), text: nil)
             case .offline: HomeMessage(icon: Symbols.wifiOff, title: L("home_offline_title", name), text: nil)
             case .empty: HomeMessage(icon: Symbols.sportsEsports, title: L("home_empty_title", name), text: L("home_empty_note"))
-            case .apps(let apps): AppRow(hostID: hostID, apps: apps, focus: focus, onApp: onApp)
+            case .apps(let apps): AppRow(hostID: hostID, apps: apps, focus: focus, actions: actions, onApp: onApp)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -66,6 +67,7 @@ private struct AppRow: View {
     let hostID: String
     let apps: [HostApp]
     let focus: FocusModel
+    let actions: ShellActions
     let onApp: @MainActor (HostApp) -> Void
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
@@ -92,7 +94,7 @@ private struct AppRow: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: stage.px(Self.gap)) {
                     ForEach(Array(apps.enumerated()), id: \.element.id) { index, app in
-                        FocusItem(id: Self.id(app), model: focus, action: { onApp(app) }) { focused in
+                        FocusItem(id: Self.id(app), model: focus, menu: { actions.gameMenu(hostID: hostID, app: app) }, action: { onApp(app) }) { focused in
                             Cover(hostID: hostID, app: app, wide: index == 0, focused: focused)
                         }
                     }

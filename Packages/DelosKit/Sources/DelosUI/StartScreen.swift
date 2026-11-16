@@ -4,14 +4,15 @@ import DelosInput
 import SwiftUI
 
 /// The start screen (`StartScreen` in DELOS for Android's DeviceScreens.kt): the greeting, the current profile's chip at
-/// the top, every paired PC in a circle with its status, and the circle that pairs a new PC. Showing it starts looking
-/// for PCs and asks the paired ones again. The default PC and the PCs' context menu are not ported yet.
-///
-/// On Android the chip opens the profiles context menu; until context menus exist it opens the profile screen.
+/// the top, every paired PC in a circle with its status (the default one marked), and the circle that pairs a new PC.
+/// Showing it starts looking for PCs and asks the paired ones again. The chip opens the profiles menu; a PC's context
+/// menu makes it the default, wakes it or renames it.
 struct StartScreen: View {
     let focus: FocusModel
     let profile: Profile?
-    let onProfile: @MainActor () -> Void
+    /// The current profile's default PC.
+    let defaultPC: String?
+    let actions: ShellActions
     let onPC: @MainActor (HostRecord) -> Void
     let onPair: @MainActor () -> Void
     @Environment(HostStore.self) private var hosts
@@ -20,18 +21,22 @@ struct StartScreen: View {
     /// The focus id of a PC's circle.
     static func pcID(_ hostID: String) -> String { "pc-\(hostID)" }
 
-    /// The string name of the line under a paired PC: online, asleep (it can be woken: its MAC address is known) or
-    /// offline.
-    static func status(_ host: HostRecord) -> String {
-        if host.reachability == .online { return "devices_status_online" }
-        return host.macAddress != nil ? "devices_status_asleep" : "devices_status_offline"
+    /// The line under a paired PC (`pcStatus`): online, asleep (it can be woken: its MAC address is known) or offline,
+    /// and whether it is the default one.
+    nonisolated static func status(_ host: HostRecord, isDefault: Bool) -> String {
+        let status = host.reachability == .online ? L("devices_status_online")
+            : host.macAddress != nil ? L("devices_status_asleep_wakes") : L("devices_status_offline")
+        return isDefault ? L("devices_status_with_default", status, L("devices_status_default")) : status
     }
 
     var body: some View {
         ZStack(alignment: .top) {
             circles.frame(maxWidth: .infinity, maxHeight: .infinity)
             if let profile {
-                FocusItem(id: "profile", model: focus, action: onProfile) { focused in
+                FocusItem(
+                    id: "profile", model: focus, menu: { actions.profilesMenu() },
+                    action: { actions.layers.openContextMenu(of: focus) }
+                ) { focused in
                     ProfileChip(profile: profile, focused: focused)
                 }
                 .padding(.top, stage.px(44 + stage.safe.top))
@@ -55,10 +60,10 @@ struct StartScreen: View {
             )
             CircleRow {
                 ForEach(paired, id: \.id) { host in
-                    FocusItem(id: Self.pcID(host.id), model: focus, action: { onPC(host) }) { focused in
+                    FocusItem(id: Self.pcID(host.id), model: focus, menu: { actions.startMenu(host.id) }, action: { onPC(host) }) { focused in
                         CircleItem(
-                            icon: Symbols.desktopWindows, label: host.name, meta: L(Self.status(host)),
-                            metaDot: host.reachability == .online ? .onlineGreen : nil, focused: focused
+                            icon: Symbols.desktopWindows, label: host.name, meta: Self.status(host, isDefault: host.id == defaultPC),
+                            metaDot: host.reachability == .online ? .onlineGreen : nil, selected: host.id == defaultPC, focused: focused
                         )
                     }
                 }
@@ -82,7 +87,10 @@ public struct DelosRoot: View {
     @State private var profiles: ProfileStore
     @State private var navigator: Navigator
     @State private var hosts: HostStore
-    @State private var toasts = Toasts()
+    @State private var toasts: Toasts
+    @State private var layers: Layers
+    /// What the context menus and dialogs do.
+    @State private var actions: ShellActions
     @State private var appearance: Appearance
     @State private var input: MenuInput?
     @State private var feedback: Feedback?
@@ -98,10 +106,16 @@ public struct DelosRoot: View {
     public init() {
         let profiles = ProfileStore()
         let hosts = HostStore()
+        let toasts = Toasts()
+        let layers = Layers()
         _profiles = State(initialValue: profiles)
         _hosts = State(initialValue: hosts)
-        let navigator = profiles.isFirstRun
-            ? Navigator(root: .boot, focus: "begin") : Navigator(root: .start, focus: Self.startFocus(hosts))
+        _toasts = State(initialValue: toasts)
+        _layers = State(initialValue: layers)
+        let navigator = Navigator(root: .boot, focus: "begin")
+        let actions = ShellActions(navigator: navigator, hosts: hosts, profiles: profiles, toasts: toasts, layers: layers)
+        _actions = State(initialValue: actions)
+        if !profiles.isFirstRun { navigator.reset(to: .start, focus: actions.startFocus()) }
         var appearance = profiles.current.map { AppearanceStore().load(profile: $0.id) } ?? Appearance()
         var settingsTab = SettingsTab.stream
         #if DEBUG
@@ -157,12 +171,14 @@ public struct DelosRoot: View {
                         },
                         onClose: { closeSideMenu(sound: .back) })
                 }
-                ToastOverlay(toasts: toasts)
+                LayerHost(layers: layers, navigator: navigator)
+                ToastHost(toasts: toasts)
             }
         }
         .onPreferenceChange(VideoCoversBackdrop.self) { videoCoversBackdrop = $0 }
         .environment(hosts)
         .environment(navigator)
+        .environment(layers)
         .environment(\.delosColors, colors)
         .environment(\.reducedMotion, systemReduceMotion || appearance.reducedMotion)
         .preferredColorScheme(colors.dark ? .dark : .light)
@@ -185,14 +201,26 @@ public struct DelosRoot: View {
             feedback.soundsEnabled = appearance.sounds
             feedback.hapticsEnabled = appearance.haptics
             self.feedback = feedback
-            let input = MenuInput { [navigator, feedback] command, repeatCount in
+            layers.feedback = feedback
+            let input = MenuInput { [navigator, feedback, layers, toasts] command, repeatCount in
                 navigator.commandRepeat = repeatCount
                 if let sideMenu {
                     // The side menu takes every command while it is open
                     switch command {
                     case .back, .menu: closeSideMenu(sound: .back)
                     case .up, .down, .accept: if sideMenu.handle(command) { feedback.play(command == .accept ? .select : .move) }
-                    case .left, .right, .previousTab, .nextTab: break
+                    case .left, .right, .previousTab, .nextTab, .options, .toastAction: break
+                    }
+                    return
+                }
+                if layers.isOpen {
+                    // An open layer takes every command; the text field of a dialog takes the keys while it is typed in
+                    if navigator.isEditingText {
+                        if command == .back { navigator.isEditingText = false }
+                    } else if command == .toastAction {
+                        toasts.runAction()
+                    } else if command != .accept || !navigator.swallowsAccept() {
+                        layers.handle(command)
                     }
                     return
                 }
@@ -206,6 +234,16 @@ public struct DelosRoot: View {
                 if navigator.isEditingText {
                     if command == .back { navigator.isEditingText = false }
                     return
+                }
+                switch command {
+                case .toastAction:
+                    toasts.runAction()
+                    return
+                case .options:
+                    layers.openContextMenu(of: navigator.focus)
+                    return
+                default:
+                    break
                 }
                 if command == .accept, navigator.swallowsAccept() { return }
                 if command == .back {
@@ -237,24 +275,18 @@ public struct DelosRoot: View {
             }
         case .start:
             StartScreen(
-                focus: entry.focus, profile: profiles.current,
-                onProfile: { go { navigator.push(.profile, focus: "change-avatar") } },
+                focus: entry.focus, profile: profiles.current, defaultPC: profiles.startup.defaultPC, actions: actions,
                 onPC: { host in go { navigator.openHome(hostID: host.id) } },
                 onPair: { go { navigator.push(.pair, focus: PairPCScreen.firstFocus(hosts.hosts)) } }
             )
         case .profile:
             if let profile = profiles.current {
                 ProfileScreen(
-                    profile: profile, count: profiles.profiles.all.count, focus: entry.focus,
+                    profile: profile, count: profiles.profiles.all.count, focus: entry.focus, actions: actions,
                     onChangeAvatar: {
                         go { navigator.push(.createProfile(editing: true), focus: CreateProfileScreen.avatarID(Avatar.of(profile.avatar).index)) }
                     },
-                    onAdd: { go { navigator.push(.createProfile(editing: false), focus: CreateProfileScreen.avatarID(0)) } },
-                    onDelete: {
-                        // Choosing Delete is the confirmation; without a profile left the first run starts again
-                        let another = profiles.remove(profile.id)
-                        go { another ? navigator.reset(to: .start, focus: Self.startFocus(hosts)) : navigator.reset(to: .boot, focus: "begin") }
-                    }
+                    onAdd: { go { navigator.push(.createProfile(editing: false), focus: CreateProfileScreen.avatarID(0)) } }
                 )
             }
         case .pair:
@@ -280,7 +312,7 @@ public struct DelosRoot: View {
                 }
             )
         case .home(let hostID):
-            HomeScreen(hostID: hostID, focus: entry.focus) { app in
+            HomeScreen(hostID: hostID, focus: entry.focus, actions: actions) { app in
                 go { navigator.openStream(hostID: hostID, appID: app.id) }
             }
         case .stream(let hostID, let appID):
@@ -315,12 +347,6 @@ public struct DelosRoot: View {
     private func closeSideMenu(sound: Cue?) {
         if let sound { feedback?.play(sound) }
         withAnimation(.easeOut(duration: 0.24)) { sideMenu = nil }
-    }
-
-    /// The start screen's first focus: the first paired PC that is online, else the first one, else "Pair a new PC".
-    static func startFocus(_ hosts: HostStore) -> String {
-        let paired = hosts.paired.sorted { $0.name.lowercased() < $1.name.lowercased() }
-        return (paired.first { $0.reachability == .online } ?? paired.first).map { StartScreen.pcID($0.id) } ?? "pair"
     }
 
     /// "Add PC" on the address screen (`addAndPair` of DELOS for Android): asks the address who it is, then pairs with
@@ -370,7 +396,7 @@ public struct DelosRoot: View {
         profiles.create(name: name, avatar: avatar)
         go {
             if navigator.stack.first?.screen == .boot {
-                navigator.reset(to: .start, focus: Self.startFocus(hosts))
+                navigator.reset(to: .start, focus: actions.startFocus())
                 navigator.push(.pair, focus: PairPCScreen.firstFocus(hosts.hosts))
             } else {
                 navigator.back()
@@ -380,7 +406,7 @@ public struct DelosRoot: View {
 }
 
 /// Changes the screen with the shared screen transition (`.screen` of the prototype: a fade with a slight zoom).
-@MainActor private func go(_ change: () -> Void) {
+@MainActor func go(_ change: () -> Void) {
     withAnimation(.easeOut(duration: 0.5), change)
 }
 

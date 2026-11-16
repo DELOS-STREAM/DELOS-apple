@@ -23,6 +23,7 @@ import Testing
         #expect(MenuInput.keyCommand(.upArrow) == .up)
         #expect(MenuInput.keyCommand(.returnOrEnter) == .accept)
         #expect(MenuInput.keyCommand(.escape) == .back)
+        #expect(MenuInput.keyCommand(.application) == .options)
         #expect(MenuInput.keyCommand(.keyA) == nil)
     }
 }

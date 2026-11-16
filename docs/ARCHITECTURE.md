@@ -56,8 +56,9 @@ and iOS has no system back (Android's system back covers this there).
 
 
 On tvOS the system focus engine moves the focus. On iPhone, iPad and Mac a game controller does not drive SwiftUI's
-focus, so `MenuInput` (DelosInput) turns the D-pad, the left stick, A, B, L1, R1, the left menu button (View, Select,
-Create: `buttonOptions`) and the arrow, Return and Escape keys into commands, and `FocusModel` (DelosUI) moves the focus
+focus, so `MenuInput` (DelosInput) turns the D-pad, the left stick, A, B, X, Y, L1, R1, the left menu button (View,
+Select, Create: `buttonOptions`), the right menu button (Menu, Start, Options: `buttonMenu`) and the arrow, Return,
+Escape and menu keys into commands, and `FocusModel` (DelosUI) moves the focus
 to the nearest item in the pressed direction (`FocusGeometry`). A direction held down repeats as a held key does on
 Android (after 500 ms, every 50 ms); the handler gets the number of the repeat (`Navigator.commandRepeat`), which the
 settings use to speed up a slider and to stop a held Up at the first row.
@@ -93,11 +94,38 @@ waits for its screen); the buttons are items of the shown screen's focus, so Up 
 row reaches them. On those screens and on the start screen (`hasSideMenu`), the left menu button opens the side menu
 (`SideMenu`, Android's `SideMenuLayer`): the profile and the connected PC at the top and All settings; it takes every
 command while it is open, and B, the menu button or a tap beside it closes it. Android's quick settings in the side
-menu (theme, background, sounds, haptics) are not ported yet. Android has no touch way to the side menu, so on the
-start screen touch reaches Settings through the profile chip and the profile screen's top navigation.
+menu (theme, background, sounds, haptics) are not ported yet. Android has no touch way to the side menu; on the start
+screen the profile chip opens the profiles menu (as on Android), so touch reaches Profile and Settings through a PC's
+library and its top navigation.
 
-Short messages (a pairing that failed, an address that does not answer) are toasts (`Toasts`): one at a time at the
-bottom of the stage, gone after 3.5 s.
+### Layers
+
+`Layers` (DelosUI, the layer half of Android's `ShellState`) holds the one layer above the screen: a context menu or a
+dialog. An open layer has a `FocusModel` of its own and takes every command (B, a tap on the scrim; the screen's focus
+stays where it was, so the element a menu belongs to keeps its focus look and has the focus again when it closes).
+`LayerHost` draws it over the screen with Android's scrim: light under a menu, the scrim token under a dialog.
+
+| Layer | Opens | Port of |
+|---|---|---|
+| Context menu (`ContextMenuLayer`) | The right menu button, X or the menu key on the focused item, a long press on touch (`FocusItem`'s `menu`, built when it opens), or an item's own action (the profile chip, Switch profile) | `ContextMenuLayer`, `ContextMenuPlacement`: the glass card (Liquid Glass in the card's outline with its caret, `MenuCardShape`), 470 to 640 px as wide as its longest row, a header with the subject's tile, status and facts, rows on one gliding plate (red under a destructive row), submenus in the same card (B or the back chip goes up, the button that opened it closes all). `placeContextMenu` places it beside the element or, for `below`, under or above it; it opens from the caret's tip and shrinks back into it |
+| Dialog (`DialogLayer`) | `Layers.openDialog(DialogSpec)` | `DialogLayer`: title, note, fields (the shared `TextPill`), the confirm button and Cancel; the focus starts on the first field, A or a tap types, Return in the last field confirms, and the card moves above the system keyboard |
+
+`ShellActions` builds the menus and dialogs of the screens and runs their actions (Android's `DeviceActions`,
+`GameActions` and profile functions). Not ported: the dimming of the covers beside an open game menu, the focus
+anchor's growth (the anchor is the element's frame without its focus scale), the hint bar of a compact stage, whose
+card keeps 48 px from every edge, and context menus on tvOS (the system focus engine registers no item frames there;
+the Apple TV pass brings them).
+
+### Toasts
+
+Messages are Android's console toasts (`Toasts`, `ToastHost`; the pure rules in `ToastLogic`): one card at the top
+right, 112 px from the top and 44 from the right, in the color of its kind (`ToastKind`: information, success, warning,
+error, Undo; read from the icon unless the caller names it). A newer toast replaces the shown one, which leaves at once
+while the new one enters 120 ms later (`ToastStageLogic`); there is never a queue. A toast stays 4.5 s, one with an
+action 10 s; the gold line along its bottom edge drains with the time left. Y or a tap runs the action (Undo after
+deleting a profile) and squeezes the chip first. The motion is a function of one clock that runs only while a toast
+is shown (`TimelineView`): the spring from the right, the icon's pop, the rising text, the halo, one light sweep; with
+reduced motion only the fades remain.
 
 ## Video formats
 
@@ -210,10 +238,11 @@ one role, so the same kind of element looks the same everywhere:
 | Role | Elements | Glass |
 |---|---|---|
 | `control` | Circles, chips, secondary pills, the back button, text fields: what can be pressed or focused | Regular, tinted with the surface token at 45 % of its alpha, interactive on iPhone and iPad (it reacts to touch) |
-| `panel` | Cards, panels, toasts, the PIN digits: what is read | Regular, tinted at 60 %, not interactive, for text contrast |
+| `panel` | Cards, panels, the context menu and the dialog, the PIN digits: what is read | Regular, tinted at 60 %, not interactive, for text contrast |
 | over the video (`glassOverMedia`) | The stream menu and anything shown over the stream | Clear (the picture shows through), tinted with the scrim token for contrast |
 
-Not glass: primary buttons (solid main color, as on Android), focus rings, progress bars and cover art.
+Not glass: primary buttons (solid main color, as on Android), focus rings, progress bars, cover art and toasts (an
+opaque navy card, as on Android, so it reads over any frame of a stream).
 
 ## Backgrounds
 
@@ -306,23 +335,26 @@ Android's link guidance rows.
 `ProfileStore` (DelosData) keeps the profiles of DELOS for Android (`shell/data/Profiles.kt`): an id (a lower-case
 UUID), a name (trimmed, at most 20 characters, never blank) and the index of the avatar. The list and the current id are
 one Codable value in `UserDefaults`; reading is lenient, so an unreadable profile is skipped and the others are kept. A
-new profile starts with a copy of the current one's appearance and stream settings and becomes the current one;
-deleting a profile removes its settings, and the first remaining profile takes over. Each profile's settings are stored
-under its id (`AppearanceStore`, `StreamSettingsStore`), and `DelosRoot` applies the current profile's appearance.
+new profile starts with a copy of the current one's appearance, stream settings and startup (its default PC) and
+becomes the current one. Deleting a profile (`delete`) removes it at once, and the first remaining profile takes over;
+its settings are kept for 10 s, so `undoDelete` brings it back at its place (the current one again, unless another was
+chosen since); then, or at the next start when DELOS ended meanwhile, they are removed. Each profile's settings are
+stored under its id (`AppearanceStore`, `StreamSettingsStore`, `StartupStore`), and `DelosRoot` applies the current
+profile's appearance.
 
 Without a profile DELOS is on its first run: `DelosRoot` starts on the boot screen, "Get started" opens the
 create-profile page, and creating the profile goes on to pairing, above the start screen. The start screen greets the
-current profile and shows its chip at the top; the chip opens the profile screen (Change avatar, Add profile, Delete
-profile).
+current profile and shows its chip at the top; the chip opens the profiles menu (the profiles, the current one
+checked, and New profile; switching says "Playing as …"). The profile screen has Change avatar, Rename (the profile
+name dialog), Switch profile (the profiles menu), Add profile and Delete profile (at once; the toast's Undo brings it
+back, Y or a tap).
 
 The sixteen avatars (`Avatar.all` in DelosUI) are DELOS for Android's, in its order, because a profile stores the index.
 Their 384 px WebP illustrations are decoded by ImageIO off the main thread and kept in memory; `avatars.json` gives each
 its badge gradient. A missing image keeps the avatar's font icon.
 
-Not ported yet, because the layers they need do not exist: the profiles context menu (Switch profile; the chip opens the
-profile screen instead), the Rename dialog (the name is typed on the Change avatar page), the Undo toast after Delete,
-the welcome toast, Skip to home (it needs paired PCs) and the sideways
-scrolling avatar rows of a stage 1500 to 1800 px wide.
+Not ported yet: the welcome toast, Skip to home (it needs paired PCs), the name dialog of the create-profile page (the
+name is typed into its field) and the sideways scrolling avatar rows of a stage 1500 to 1800 px wide.
 
 ## PCs and stream plans
 
@@ -332,23 +364,30 @@ pairing with a four-digit PIN the app shows, and `loadApps` reads a paired PC's 
 (`UserDefaults`, JSON; a record that no longer decodes is skipped, the others are kept); they start offline until
 refreshed. `StreamPlan` makes the launch request and the stream configuration of one stream with one random remote
 input key (the IV is the key id, big-endian), the profile's `StreamSettings` on the display it is shown on, the default
-bitrate of DELOS for Android (`getDefaultBitrate`) and stereo audio.
+bitrate of DELOS for Android (`getDefaultBitrate`) and stereo audio. `rename` gives a PC a name of its own on this
+device (`HostRecord.customName`; blank returns to the PC's `serverName`), `wake` sends Wake-on-LAN to its known
+addresses, `quitApp` quits the app that runs on it.
 
 The screens (DelosUI, as DELOS for Android's `DeviceScreens.kt`, `PairScreens.kt` and `HomeScreen.kt`):
 
-- The start screen shows every paired PC (online, asleep when its MAC address is known, offline) and "Pair a new PC";
-  showing it starts discovery and asks the paired PCs again. A opens the PC's library.
+- The start screen shows every paired PC (online, asleep and wakeable when its MAC address is known, offline; the
+  default PC marked with the check badge and "Default", and focused first) and "Pair a new PC"; showing it starts
+  discovery and asks the paired PCs again. A opens the PC's library. A PC's context menu (below it) makes it the
+  default or not, wakes an asleep PC and renames it (the Rename PC dialog).
 - Pairing lists every known PC (found ones first, online before offline, then paired ones), "Enter address" (a system
   text field; `HostAddress.parse`, default port 47989) and "Search again" (discovery restarts). Choosing an unpaired PC
   opens the PIN screen, which runs `HostStore.pair` while it shows; leaving it cancels the task, and `HostClient.pair`
   then asks the PC to unpair (from a task of its own), as after any failure. Pairing results map to Android's messages
   (`PairFailure`); a paired PC opens its library.
 - The library (first version) loads the apps when it shows and lays them out as Android's row of covers (300 × 450,
-  the first three covers wide, the focused one at the row's start) with the PC's box art; A opens the stream.
+  the first three covers wide, the focused one at the row's start) with the PC's box art; A opens the stream. A game's
+  context menu has a header (the tile in the main color, Running or App, another game that runs) and Start, or Resume
+  and Quit for the running game, or Quit … and start and Resume … when another one runs (the stream quits it first).
 
-Not ported yet: the default PC, the PCs' context menus (wake, rename, pair with a one-time code), waking an asleep PC on
-A, the companion screen; in the library the hero background, SteamGridDB artwork, game info chips, the game menu,
-hidden games, last played, per-game settings and the running-app choices.
+Not ported yet: the default PC's Skip the start screen, the PCs' Devices screen menu (connect, unpair, remove, pair
+with a one-time code), waking an asleep PC on A, the companion screen; in the library the hero background, SteamGridDB
+artwork, game info chips, the game menu's Artwork, Metadata, App settings and Hide, the game's colors in its tile,
+hidden games, last played and per-game settings.
 
 ## Strings
 

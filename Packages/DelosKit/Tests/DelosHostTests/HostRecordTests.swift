@@ -56,6 +56,16 @@ import Testing
         #expect(updated.lastReplyVerified)
     }
 
+    @Test func theUsersNameForAPCOutlivesTheAnswersOfThePC() throws {
+        var record = try pairedRecord()
+        record.customName = "Living room"
+        let updated = try record.updated(with: reply(Documents.sunshine.replacingOccurrences(of: "LIVINGROOM", with: "STUDY"), .pinnedHTTPS))
+        #expect(updated.name == "Living room")
+        #expect(updated.serverName == "STUDY")
+        let decoded = try JSONDecoder().decode(HostRecord.self, from: JSONEncoder().encode(updated))
+        #expect(decoded == updated)
+    }
+
     @Test func anUnverifiedAnswerForAPairedHostChangesOnlyReachability() throws {
         let record = try pairedRecord().markedOffline()
         // Anyone on the network can answer over HTTP with the host's id (it is served to everyone).

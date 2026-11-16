@@ -12,12 +12,17 @@ public enum MenuCommand: Sendable, Equatable {
     case previousTab, nextTab
     /// The left menu button (View, Select, Create): the side menu.
     case menu
+    /// The right menu button (Menu, Start, Options), X or the keyboard's menu key: the focused item's context menu
+    /// (`KEYCODE_BUTTON_START` and `KEYCODE_BUTTON_X` of DELOS for Android).
+    case options
+    /// Y: the action of the toast that is shown (Undo).
+    case toastAction
 }
 
 /// Turns game controller and keyboard input into ``MenuCommand``s: the D-pad, the left stick (past half of its travel,
-/// once per push), A, B, L1, R1 and the left menu button, and the arrow, Return and Escape keys. Each press emits one
-/// command; a direction held down repeats like a held key on Android: after 500 ms, every 50 ms, with the number of the
-/// repeat (0 for the press itself).
+/// once per push), A, B, X, Y, L1, R1 and both menu buttons, and the arrow, Return, Escape and menu keys. Each press
+/// emits one command; a direction held down repeats like a held key on Android: after 500 ms, every 50 ms, with the
+/// number of the repeat (0 for the press itself).
 ///
 /// Used on iPhone, iPad and Mac, where a controller does not drive SwiftUI's focus; tvOS uses the system focus engine.
 @MainActor
@@ -94,7 +99,7 @@ public final class MenuInput {
     nonisolated static func repeats(_ command: MenuCommand) -> Bool {
         switch command {
         case .up, .down, .left, .right: true
-        case .accept, .back, .previousTab, .nextTab, .menu: false
+        case .accept, .back, .previousTab, .nextTab, .menu, .options, .toastAction: false
         }
     }
 
@@ -110,6 +115,9 @@ public final class MenuInput {
         pad.leftShoulder.pressedChangedHandler = button(.previousTab, id)
         pad.rightShoulder.pressedChangedHandler = button(.nextTab, id)
         pad.buttonOptions?.pressedChangedHandler = button(.menu, id)
+        pad.buttonMenu.pressedChangedHandler = button(.options, id)
+        pad.buttonX.pressedChangedHandler = button(.options, id)
+        pad.buttonY.pressedChangedHandler = button(.toastAction, id)
         pad.leftThumbstick.valueChangedHandler = { [weak self] _, x, y in
             MainActor.assumeIsolated {
                 guard let self else { return }
@@ -150,6 +158,7 @@ public final class MenuInput {
         case .rightArrow: .right
         case .returnOrEnter, .keypadEnter, .spacebar: .accept
         case .escape: .back
+        case .application: .options
         default: nil
         }
     }

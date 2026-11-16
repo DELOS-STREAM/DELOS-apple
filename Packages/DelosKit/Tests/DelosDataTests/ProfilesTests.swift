@@ -78,33 +78,119 @@ private final class TestDefaults {
         #expect(ProfileStore(suiteName: suite.name).current == ann)
     }
 
-    @Test func removingTheCurrentProfileHandsOverToTheFirstRemainingOne() throws {
+    @Test func deletingTheCurrentProfileHandsOverToTheFirstRemainingOne() throws {
         let suite = TestDefaults()
         let store = ProfileStore(suiteName: suite.name)
         let ann = try #require(store.create(name: "Ann", avatar: 0))
         let bob = try #require(store.create(name: "Bob", avatar: 0))
         let cid = try #require(store.create(name: "Cid", avatar: 0))
         store.switchTo(bob.id)
-        #expect(store.remove(bob.id))
+        #expect(store.delete(bob.id))
         #expect(store.current == ann)
-        // Removing another profile keeps the current one
-        #expect(store.remove(cid.id))
+        // Deleting another profile keeps the current one
+        #expect(store.delete(cid.id))
         #expect(store.current == ann)
         #expect(store.profiles.all == [ann])
     }
 
-    @Test func removingTheLastProfileStartsTheFirstRunAgainAndForgetsItsSettings() throws {
+    @Test func deletingTheLastProfileStartsTheFirstRunAgainAndForgetsItsSettingsAfterTheGrace() async throws {
         let suite = TestDefaults()
-        let store = ProfileStore(suiteName: suite.name)
+        let store = ProfileStore(suiteName: suite.name, deleteGrace: .milliseconds(20))
         let appearance = AppearanceStore(suiteName: suite.name)
         let ann = try #require(store.create(name: "Ann", avatar: 0))
         var light = Appearance()
         light.dark = false
         appearance.save(light, profile: ann.id)
-        #expect(!store.remove(ann.id))
+        #expect(!store.delete(ann.id))
         #expect(store.isFirstRun)
+        // Kept for Undo, then removed
+        #expect(appearance.load(profile: ann.id) == light)
+        try await Task.sleep(for: .milliseconds(200))
         #expect(appearance.load(profile: ann.id) == Appearance())
+        #expect(!store.undoDelete(ann.id))
         #expect(ProfileStore(suiteName: suite.name).isFirstRun)
+    }
+
+    @Test func undoBringsADeletedProfileBackInItsPlaceWithItsSettings() throws {
+        let suite = TestDefaults()
+        let store = ProfileStore(suiteName: suite.name)
+        let appearance = AppearanceStore(suiteName: suite.name)
+        let ann = try #require(store.create(name: "Ann", avatar: 0))
+        let bob = try #require(store.create(name: "Bob", avatar: 1))
+        let cid = try #require(store.create(name: "Cid", avatar: 2))
+        var light = Appearance()
+        light.dark = false
+        appearance.save(light, profile: bob.id)
+        store.switchTo(bob.id)
+        store.delete(bob.id)
+        #expect(store.current == ann)
+        #expect(store.undoDelete(bob.id))
+        #expect(store.profiles.all == [ann, bob, cid])
+        // It was the current one and nobody chose another since: it is again
+        #expect(store.current == bob)
+        #expect(appearance.load(profile: bob.id) == light)
+        // Only once
+        #expect(!store.undoDelete(bob.id))
+    }
+
+    @Test func undoKeepsAProfileChosenSinceTheDeletion() throws {
+        let suite = TestDefaults()
+        let store = ProfileStore(suiteName: suite.name)
+        let ann = try #require(store.create(name: "Ann", avatar: 0))
+        let bob = try #require(store.create(name: "Bob", avatar: 1))
+        let cid = try #require(store.create(name: "Cid", avatar: 2))
+        store.delete(cid.id)
+        store.switchTo(bob.id)
+        #expect(store.undoDelete(cid.id))
+        #expect(store.profiles.all == [ann, bob, cid])
+        #expect(store.current == bob)
+    }
+
+    @Test func undoAfterTheLastProfileWasDeletedEndsTheFirstRun() throws {
+        let suite = TestDefaults()
+        let store = ProfileStore(suiteName: suite.name)
+        let ann = try #require(store.create(name: "Ann", avatar: 0))
+        store.delete(ann.id)
+        #expect(store.isFirstRun)
+        #expect(store.undoDelete(ann.id))
+        #expect(store.current == ann)
+    }
+
+    @Test func settingsOfAProfileDeletedBeforeDelosEndedAreRemovedAtTheNextStart() throws {
+        let suite = TestDefaults()
+        let appearance = AppearanceStore(suiteName: suite.name)
+        var light = Appearance()
+        light.dark = false
+        do {
+            let store = ProfileStore(suiteName: suite.name)
+            let ann = try #require(store.create(name: "Ann", avatar: 0))
+            let bob = try #require(store.create(name: "Bob", avatar: 0))
+            appearance.save(light, profile: bob.id)
+            appearance.save(light, profile: ann.id)
+            store.delete(bob.id)
+            #expect(appearance.load(profile: bob.id) == light)
+            let next = ProfileStore(suiteName: suite.name)
+            #expect(appearance.load(profile: bob.id) == Appearance())
+            #expect(appearance.load(profile: ann.id) == light)
+            #expect(next.current == ann)
+        }
+    }
+
+    @Test func theDefaultPCBelongsToTheCurrentProfileAndANewProfileCopiesIt() throws {
+        let suite = TestDefaults()
+        let store = ProfileStore(suiteName: suite.name)
+        let ann = try #require(store.create(name: "Ann", avatar: 0))
+        store.setDefaultPC("pc-1")
+        #expect(store.startup.defaultPC == "pc-1")
+        let bob = try #require(store.create(name: "Bob", avatar: 0))
+        #expect(store.startup.defaultPC == "pc-1")
+        store.setDefaultPC(nil)
+        #expect(store.startup.defaultPC == nil)
+        store.switchTo(ann.id)
+        #expect(store.startup.defaultPC == "pc-1")
+        #expect(ProfileStore(suiteName: suite.name).startup.defaultPC == "pc-1")
+        store.switchTo(bob.id)
+        #expect(store.startup == Startup())
     }
 }
 
