@@ -186,7 +186,7 @@ public struct DelosRoot: View {
                 }
                 if let sideMenu {
                     SideMenu(
-                        profile: profiles.current, pc: connectedPC, focus: sideMenu,
+                        profile: profiles.current, pc: connectedPC, focus: sideMenu, appearance: appearance, onStep: { id, direction in _ = quickStep(id, by: direction) },
                         onSettings: {
                             closeSideMenu(sound: nil)
                             go { navigator.openFromNavigation(.settings, focus: SettingsScreen.initialFocus) }
@@ -266,6 +266,10 @@ public struct DelosRoot: View {
     /// A swipe or a controller's direction: the focus engine moves the focus on its own; only a screen that takes
     /// over left and right (the value of a Settings row) gets them first.
     private func routeMove(_ direction: MoveCommandDirection) {
+        if let sideMenu, direction == .left || direction == .right {
+            adjustQuickSetting(of: sideMenu, direction == .right ? 1 : -1)
+            return
+        }
         guard sideMenu == nil, !layers.isOpen, !navigator.isEditingText, let capture = navigator.commandCapture else { return }
         switch direction {
         case .left: navigator.commandRepeat = 0; _ = capture(.left)
@@ -288,7 +292,8 @@ public struct DelosRoot: View {
             case .back, .menu: closeSideMenu(sound: .back)
             case .accept: feedback.activate(sideMenu.acceptCue) { sideMenu.handle(.accept) }
             case .up, .down: if sideMenu.handle(command) { feedback.play(.move) }
-            case .left, .right, .previousTab, .nextTab, .options, .toastAction: break
+            case .left, .right: adjustQuickSetting(of: sideMenu, command == .right ? 1 : -1)
+            case .previousTab, .nextTab, .options, .toastAction: break
             }
             return
         }
@@ -306,7 +311,7 @@ public struct DelosRoot: View {
         if let capture = navigator.commandCapture, capture(command) { return }
         if command == .menu, navigator.current.hasSideMenu {
             feedback.play(.open)
-            withAnimation(.easeOut(duration: 0.3)) { self.sideMenu = FocusModel(initial: SideMenu.settingsID) }
+            withAnimation(.easeOut(duration: 0.3)) { self.sideMenu = FocusModel(initial: QuickSettings.ids[0]) }
             return
         }
         // While a text field is typed in, the keys belong to it; B and Escape stop typing
@@ -441,6 +446,21 @@ public struct DelosRoot: View {
     private func closeSideMenu(sound: Cue?) {
         if let sound { feedback?.play(sound) }
         withAnimation(.easeOut(duration: 0.24)) { sideMenu = nil }
+    }
+
+    /// A quick setting of the side menu stepped (the side menu's rows): applied at once and kept with the current
+    /// profile's appearance. False when nothing changed.
+    private func quickStep(_ id: String, by direction: Int) -> Bool {
+        guard let profile = profiles.current?.id, let next = QuickSettings.step(id, by: direction, from: appearance) else { return false }
+        appearance = next
+        appearances.save(next, profile: profile)
+        return true
+    }
+
+    /// Left or right on the side menu's focused row: a quick setting takes the next or the previous value.
+    private func adjustQuickSetting(of menu: FocusModel, _ direction: Int) {
+        guard let id = menu.focused as? String, quickStep(id, by: direction) else { return }
+        feedback?.play(.move)
     }
 
     /// "Add PC" on the address screen (`addAndPair` of DELOS for Android): asks the address who it is, then pairs with
