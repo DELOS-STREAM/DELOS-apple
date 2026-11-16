@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Pairing with a one-time code: the menu of a PC that is not paired yet offers "Pair with a PIN" and "Pair with a
+  one-time code"; the latter asks for the PIN and passphrase made in the PC's web UI and says when the code was wrong.
 - Settings now keeps the last tab during the session, moves one focus plate between rows, scrolls overflowing focused
   labels and reads long help automatically. Reduced motion leaves text still and help manually scrollable.
 - Screen transitions follow the Android timing: the new screen settles while the previous one leaves faster.

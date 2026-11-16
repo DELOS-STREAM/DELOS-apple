@@ -42,16 +42,60 @@ enum AddressEntry: Equatable {
     }
 }
 
+/// A one-time code from the PC's web UI (Android's `Otp`): its PIN and the passphrase it was made with.
+public struct OneTimeCode: Hashable, Sendable {
+    public let pin: String
+    public let passphrase: String
+
+    public init(pin: String, passphrase: String) {
+        self.pin = pin
+        self.passphrase = passphrase
+    }
+
+    static let pinLength = 4
+    static let minPassphraseLength = 4
+    static let maxPassphraseLength = 64
+
+    /// What the dialog's two fields make of what was typed.
+    enum Entry: Equatable {
+        case code(OneTimeCode)
+        /// The PIN is not four digits (`pairing_otp_pin_error`).
+        case pinInvalid
+        /// The passphrase is shorter than four characters (`pairing_otp_passphrase_error`).
+        case passphraseTooShort
+
+        init(pin: String, passphrase: String) {
+            if pin.count != OneTimeCode.pinLength {
+                self = .pinInvalid
+            } else if passphrase.count < OneTimeCode.minPassphraseLength {
+                self = .passphraseTooShort
+            } else {
+                self = .code(OneTimeCode(pin: pin, passphrase: passphrase))
+            }
+        }
+
+        /// The string name of what is wrong; nil for a code.
+        var errorKey: String? {
+            switch self {
+            case .code: nil
+            case .pinInvalid: "pairing_otp_pin_error"
+            case .passphraseTooShort: "pairing_otp_passphrase_error"
+            }
+        }
+    }
+}
+
 /// Why a pairing did not happen (`PcSetup.PairFailure` of DELOS for Android, as far as it applies here).
 enum PairFailure: Equatable {
-    case offline, pinWrong, busy, gameRunning, notFound, unsupported, failed
+    case offline, pinWrong, codeWrong, busy, gameRunning, notFound, unsupported, failed
 
     /// The failure of an attempt that ended with [outcome]; nil when it paired. [runningAppID] is the app the PC had
-    /// running: a PC that refuses while an app runs wants it quit first.
-    init?(_ outcome: PairingOutcome, runningAppID: Int) {
+    /// running: a PC that refuses while an app runs wants it quit first. [oneTime]: the attempt used a one-time code, so a
+    /// refused proof means the code or passphrase was wrong, not a PIN.
+    init?(_ outcome: PairingOutcome, runningAppID: Int, oneTime: Bool = false) {
         switch outcome {
         case .paired: return nil
-        case .pinWrong: self = .pinWrong
+        case .pinWrong: self = oneTime ? .codeWrong : .pinWrong
         case .alreadyInProgress: self = .busy
         case .failed: self = runningAppID != 0 ? .gameRunning : .failed
         }
@@ -71,6 +115,7 @@ enum PairFailure: Equatable {
         switch self {
         case .offline: "pairing_failed_offline"
         case .pinWrong: "pairing_failed_pin_wrong"
+        case .codeWrong: "pairing_failed_code_wrong"
         case .busy: "pairing_failed_busy"
         case .gameRunning: "pairing_failed_game_running"
         case .notFound: "pairing_failed_not_found"
@@ -80,7 +125,7 @@ enum PairFailure: Equatable {
     }
 
     func text(pcName: String) -> String {
-        self == .pinWrong ? L(key) : L(key, pcName)
+        self == .pinWrong || self == .codeWrong ? L(key) : L(key, pcName)
     }
 }
 
@@ -105,6 +150,8 @@ struct CircleRow<Content: View>: View {
 struct PairPCScreen: View {
     let focus: FocusModel
     let onHost: @MainActor (HostRecord) -> Void
+    /// "Pair with a one-time code" in the menu of a PC that is not paired yet.
+    let onCode: @MainActor (HostRecord) -> Void
     let onAddress: @MainActor () -> Void
     @Environment(HostStore.self) private var hosts
     @Environment(\.stage) private var stage
@@ -118,6 +165,18 @@ struct PairPCScreen: View {
         PairList.shown(hosts).first.map { hostFocusID($0.id) } ?? "address"
     }
 
+    /// The menu of a PC that is not paired (`contextMenu` of Android's `PairPcScreen`): pair with the PIN or with a one-time
+    /// code. A paired PC has none, A opens its library.
+    static func menu(
+        _ host: HostRecord, onPin: @escaping @MainActor (HostRecord) -> Void, onCode: @escaping @MainActor (HostRecord) -> Void
+    ) -> ContextMenu? {
+        guard host.pin == nil else { return nil }
+        return ContextMenu(title: host.name, items: [
+            MenuItem(icon: Symbols.dialpad, label: L("pairing_pc_with_pin")) { onPin(host) },
+            MenuItem(icon: Symbols.password, label: L("pairing_pc_with_code")) { onCode(host) },
+        ], below: true)
+    }
+
     var body: some View {
         let shown = PairList.shown(hosts.hosts)
         VStack(spacing: stage.px(48)) {
@@ -128,7 +187,10 @@ struct PairPCScreen: View {
             )
             CircleRow {
                 ForEach(shown, id: \.id) { host in
-                    FocusItem(id: Self.hostFocusID(host.id), model: focus, action: { onHost(host) }) { focused in
+                    FocusItem(
+                        id: Self.hostFocusID(host.id), model: focus, menu: { Self.menu(host, onPin: onHost, onCode: onCode) },
+                        action: { onHost(host) }
+                    ) { focused in
                         CircleItem(
                             icon: Symbols.desktopWindows, label: host.name, meta: L(PairList.status(host)),
                             metaDot: host.reachability == .online ? .onlineGreen : nil, selected: host.pin != nil, focused: focused
@@ -204,10 +266,11 @@ extension PairAddressScreen {
     }
 }
 
-/// `#scr-pin`: pairing with a PC. Shows the PIN to type in the PC's web UI, waits for the PC and moves on when it
-/// accepts. Leaving the screen cancels the attempt (and the PC is asked to forget it).
+/// `#scr-pin`: pairing with a PC. Shows the PIN to type in the PC's web UI (with a one-time [code]: no PIN is shown, the
+/// code is sent), waits for the PC and moves on when it accepts. Leaving the screen cancels the attempt (and the PC is asked to forget it).
 struct PinScreen: View {
     let hostID: String
+    var code: OneTimeCode?
     let focus: FocusModel
     let feedback: Feedback?
     let onPaired: @MainActor () -> Void
@@ -216,17 +279,21 @@ struct PinScreen: View {
     @Environment(HostStore.self) private var hosts
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
-    @State private var pin = HostStore.newPIN()
+    @State private var generatedPIN = HostStore.newPIN()
     @State private var accepted = false
 
     var body: some View {
         let name = hosts.host(hostID)?.name ?? ""
         VStack(spacing: stage.px(44)) {
-            Heading(title: L("pairing_pin_title", name), sub: L("pairing_pin_note"))
-            PinDigits(pin: pin)
+            if code == nil {
+                Heading(title: L("pairing_pin_title", name), sub: L("pairing_pin_note"))
+                PinDigits(pin: generatedPIN)
+            } else {
+                Heading(title: L("pairing_code_title", name), sub: L("pairing_code_note"))
+            }
             HStack(spacing: stage.px(16)) {
                 if !accepted { Spinner() }
-                Text(accepted ? L("pairing_pin_accepted") : L("pairing_pin_waiting"))
+                Text(accepted ? L(code == nil ? "pairing_pin_accepted" : "pairing_code_accepted") : L("pairing_pin_waiting"))
                     .font(DelosFonts.figtree(stage.tpx(26)))
                     .foregroundStyle(accepted ? RGBA.onlineGreen.color : colors.text2.color)
             }
@@ -249,7 +316,8 @@ struct PinScreen: View {
         }
         let failure: PairFailure?
         do {
-            failure = PairFailure(try await hosts.pair(hostID, pin: pin), runningAppID: host.runningAppID)
+            let outcome = try await hosts.pair(hostID, pin: code?.pin ?? generatedPIN, passphrase: code?.passphrase)
+            failure = PairFailure(outcome, runningAppID: host.runningAppID, oneTime: code != nil)
         } catch {
             failure = PairFailure(error)
         }

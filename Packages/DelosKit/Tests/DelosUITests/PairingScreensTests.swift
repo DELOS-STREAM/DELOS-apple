@@ -62,6 +62,50 @@ import Testing
         #expect(PairFailure.busy.key == "pairing_failed_busy")
     }
 
+    @Test func aRefusedProofOfAOneTimeCodeSaysTheCodeWasWrong() {
+        #expect(PairFailure(.pinWrong, runningAppID: 0, oneTime: true) == .codeWrong)
+        #expect(PairFailure(.pinWrong, runningAppID: 0, oneTime: false) == .pinWrong)
+        #expect(PairFailure(.failed, runningAppID: 0, oneTime: true) == .failed)
+        #expect(PairFailure(.alreadyInProgress, runningAppID: 0, oneTime: true) == .busy)
+        #expect(PairFailure.codeWrong.key == "pairing_failed_code_wrong")
+        #expect(PairFailure.codeWrong.text(pcName: "PC") == L("pairing_failed_code_wrong"))
+    }
+
+    @Test func oneTimeCodeEntry() {
+        #expect(OneTimeCode.Entry(pin: "4821", passphrase: "abcd") == .code(OneTimeCode(pin: "4821", passphrase: "abcd")))
+        #expect(OneTimeCode.Entry(pin: "482", passphrase: "abcd") == .pinInvalid)
+        #expect(OneTimeCode.Entry(pin: "48211", passphrase: "abcd") == .pinInvalid)
+        #expect(OneTimeCode.Entry(pin: "", passphrase: "") == .pinInvalid)
+        #expect(OneTimeCode.Entry(pin: "4821", passphrase: "abc") == .passphraseTooShort)
+        #expect(OneTimeCode.Entry(pin: "4821", passphrase: "abc").errorKey == "pairing_otp_passphrase_error")
+        #expect(OneTimeCode.Entry(pin: "12", passphrase: "x").errorKey == "pairing_otp_pin_error")
+        #expect(OneTimeCode.Entry(pin: "4821", passphrase: "abcd").errorKey == nil)
+    }
+
+    @MainActor @Test func theMenuOfAPCNotPairedYetOffersPinAndCodeAndAPairedOneHasNone() throws {
+        var chosen: [String] = []
+        let found = try host("A", "Desk")
+        let menu = try #require(PairPCScreen.menu(found, onPin: { chosen.append("pin-" + $0.id) }, onCode: { chosen.append("code-" + $0.id) }))
+        #expect(menu.items.map(\.label) == [L("pairing_pc_with_pin"), L("pairing_pc_with_code")])
+        #expect(menu.below)
+        menu.items.forEach { $0.action() }
+        #expect(chosen == ["pin-A", "code-A"])
+        #expect(PairPCScreen.menu(try host("B", "b", paired: true), onPin: { _ in }, onCode: { _ in }) == nil)
+    }
+
+    @MainActor @Test func pairingWithACodeLeavesLikeAPinAndKeepsTheCode() {
+        let navigator = Navigator(root: .start, focus: "pair")
+        navigator.push(.pair)
+        let code = OneTimeCode(pin: "4821", passphrase: "abcd")
+        navigator.push(.pairCode(hostID: "A", code: code), focus: "cancel")
+        #expect(navigator.current == .pairCode(hostID: "A", code: code))
+        #expect(navigator.back())
+        #expect(navigator.current == .pair)
+        navigator.push(.pairCode(hostID: "A", code: code))
+        navigator.openHome(hostID: "A")
+        #expect(navigator.stack.map(\.screen) == [.start, .home(hostID: "A")])
+    }
+
     @Test func homeContent() {
         let app = HostApp(id: 1, title: "Desktop")
         #expect(HomeContent(apps: nil, loadFailed: false) == .loading)

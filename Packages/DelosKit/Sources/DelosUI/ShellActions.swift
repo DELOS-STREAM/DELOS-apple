@@ -120,6 +120,28 @@ final class ShellActions {
         }
     }
 
+    /// "Pair with a one-time code" (`pairWithCode`): a dialog for the PIN and passphrase made in the PC's web UI; a valid
+    /// pair goes on to the pairing screen, which sends them. What is wrong with them is said in a toast.
+    func pairWithCode(hostID: String) {
+        layers.openDialog(DialogSpec(
+            title: L("pairing_otp_title"), note: L("pairing_otp_note"),
+            fields: [
+                DialogField(icon: Symbols.dialpad, placeholder: L("pairing_otp_pin_hint"), maxLength: OneTimeCode.pinLength, secret: true),
+                DialogField(icon: Symbols.password, placeholder: L("pairing_otp_passphrase_hint"), maxLength: OneTimeCode.maxPassphraseLength, secret: true),
+            ],
+            confirm: L("pairing_otp_action")
+        ) { [self] values in
+            let entry = OneTimeCode.Entry(pin: values[0], passphrase: values[1])
+            guard case .code(let code) = entry else {
+                feedback?.play(.error)
+                toasts.show(L(entry.errorKey ?? ""), icon: Symbols.error)
+                return false
+            }
+            go { navigator.push(.pairCode(hostID: hostID, code: code), focus: "cancel") }
+            return true
+        })
+    }
+
     /// The PC's name in DELOS on this device: empty returns to the PC's own name.
     private func rename(_ hostID: String) {
         guard let host = hosts.host(hostID) else { return }

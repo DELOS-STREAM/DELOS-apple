@@ -18,6 +18,8 @@ public enum Screen: Hashable, Sendable {
     case pairAddress
     /// The PIN to type on the PC [hostID] while pairing with it waits; leaving it cancels the attempt.
     case pin(hostID: String)
+    /// Pairing with the one-time [code] from the PC's web UI instead of a PIN shown here; leaving it cancels the attempt.
+    case pairCode(hostID: String, code: OneTimeCode)
     /// A paired PC's library: its apps.
     case home(hostID: String)
     /// A stream of the app [appID] of the PC [hostID].

@@ -369,24 +369,15 @@ public struct DelosRoot: View {
             PairPCScreen(
                 focus: entry.focus,
                 onHost: { host in go { host.pin != nil ? navigator.openHome(hostID: host.id) : navigator.push(.pin(hostID: host.id), focus: "cancel") } },
+                onCode: { host in actions.pairWithCode(hostID: host.id) },
                 onAddress: { go { navigator.push(.pairAddress, focus: "field") } }
             )
         case .pairAddress:
             PairAddressScreen(focus: entry.focus, navigator: navigator, onSubmit: addAndPair)
         case .pin(let hostID):
-            PinScreen(
-                hostID: hostID, focus: entry.focus, feedback: feedback,
-                onPaired: { go { navigator.openHome(hostID: hostID) } },
-                onFailed: { message in
-                    feedback?.play(.error)
-                    toasts.show(message, icon: Symbols.error)
-                    go { _ = navigator.back() }
-                },
-                onCancel: {
-                    feedback?.play(.back)
-                    go { _ = navigator.back() }
-                }
-            )
+            pinScreen(hostID: hostID, code: nil, entry: entry)
+        case .pairCode(let hostID, let code):
+            pinScreen(hostID: hostID, code: code, entry: entry)
         case .home(let hostID):
             HomeScreen(hostID: hostID, focus: entry.focus, actions: actions) { app in actions.play(hostID: hostID, app: app) }
         case .stream(let hostID, let appID):
@@ -396,6 +387,22 @@ public struct DelosRoot: View {
                 profileID: profiles.current?.id ?? "", appearance: $appearance, focus: entry.focus, navigator: navigator,
                 feedback: feedback, actions: actions, tab: settingsTab)
         }
+    }
+
+    private func pinScreen(hostID: String, code: OneTimeCode?, entry: Navigator.Entry) -> some View {
+        PinScreen(
+            hostID: hostID, code: code, focus: entry.focus, feedback: feedback,
+            onPaired: { go { navigator.openHome(hostID: hostID) } },
+            onFailed: { message in
+                feedback?.play(.error)
+                toasts.show(message, icon: Symbols.error)
+                go { _ = navigator.back() }
+            },
+            onCancel: {
+                feedback?.play(.back)
+                go { _ = navigator.back() }
+            }
+            )
     }
 
     private var showsLibrary: Bool {
