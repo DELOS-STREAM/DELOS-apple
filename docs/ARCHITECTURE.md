@@ -59,18 +59,25 @@ row's end in the next row.
 ## Navigation
 
 `Navigator` (DelosUI) is the screen router: an `@Observable` back stack of `Screen` values (`boot`, `createProfile`,
-`start`, `profile`), each entry with its own `FocusModel`, so going back returns the focus to where it was. `DelosRoot`
-shows the top entry with the screen transition of the prototype (a fade with a slight zoom).
+`start`, `profile`, `pair`, `pairAddress`, `pin`, `home`, `stream`), each entry with its own `FocusModel`, so going back
+returns the focus to where it was. `DelosRoot` shows the top entry with the screen transition of the prototype (a fade
+with a slight zoom), and puts the navigator and the one `HostStore` in the environment.
 
 | Call | Use |
 |---|---|
 | `push(_:focus:)` | Opens a screen above the current one with the focus on an item |
 | `back()` | B, Escape or the Menu button of the Siri Remote: pops the top screen; false at the root, where the system handles it |
 | `reset(to:focus:)` | Replaces the stack: the first run is over, or starts again after the last profile was deleted |
+| `openHome(hostID:)` | A PC's library above the start screen (from the start screen, or once pairing is done: B returns to the start screen) |
+| `openStream(hostID:appID:)` | Pushes the stream of an app |
 
 While a text field is typed in, `isEditingText` is true and `DelosRoot` gives the controller and keyboard commands to
 the field instead of the focus; B or Escape stops typing. The Return that ends typing also reaches `MenuInput` as a key
-press, so an accept within 0.3 s after it is ignored (`swallowsAccept`).
+press, so an accept within 0.3 s after it is ignored (`swallowsAccept`). While `commandCapture` is set (the stream
+screen), every command goes there first.
+
+Short messages (a pairing that failed, an address that does not answer) are toasts (`Toasts`): one at a time at the
+bottom of the stage, gone after 3.5 s.
 
 ## Video formats
 
@@ -147,8 +154,9 @@ its appearance, and the first remaining profile takes over. Each profile's setti
 (`AppearanceStore`), and `DelosRoot` applies the current profile's appearance.
 
 Without a profile DELOS is on its first run: `DelosRoot` starts on the boot screen, "Get started" opens the
-create-profile page, and creating the profile goes on to the start screen. The start screen greets the current profile
-and shows its chip at the top; the chip opens the profile screen (Change avatar, Add profile, Delete profile).
+create-profile page, and creating the profile goes on to pairing, above the start screen. The start screen greets the
+current profile and shows its chip at the top; the chip opens the profile screen (Change avatar, Add profile, Delete
+profile).
 
 The sixteen avatars (`Avatar.all` in DelosUI) are DELOS for Android's, in its order, because a profile stores the index.
 Their 384 px WebP illustrations are decoded by ImageIO off the main thread and kept in memory; `avatars.json` gives each
@@ -156,7 +164,7 @@ its badge gradient. A missing image keeps the avatar's font icon.
 
 Not ported yet, because the layers they need do not exist: the profiles context menu (Switch profile; the chip opens the
 profile screen instead), the Rename dialog (the name is typed on the Change avatar page), the Undo toast after Delete,
-the welcome toast, the pairing step after the first profile, Skip to home (it needs paired PCs) and the sideways
+the welcome toast, Skip to home (it needs paired PCs) and the sideways
 scrolling avatar rows of a stage 1500 to 1800 px wide.
 
 ## PCs and stream plans
@@ -168,6 +176,22 @@ pairing with a four-digit PIN the app shows, and `loadApps` reads a paired PC's 
 refreshed. `StreamPlan` makes the launch request and the stream configuration of one stream with one random remote
 input key (the IV is the key id, big-endian), the default bitrate of DELOS for Android (`getDefaultBitrate`) and
 stereo audio; `StreamSettings.forDisplay` takes the display's resolution, capped at 1080p.
+
+The screens (DelosUI, as DELOS for Android's `DeviceScreens.kt`, `PairScreens.kt` and `HomeScreen.kt`):
+
+- The start screen shows every paired PC (online, asleep when its MAC address is known, offline) and "Pair a new PC";
+  showing it starts discovery and asks the paired PCs again. A opens the PC's library.
+- Pairing lists every known PC (found ones first, online before offline, then paired ones), "Enter address" (a system
+  text field; `HostAddress.parse`, default port 47989) and "Search again" (discovery restarts). Choosing an unpaired PC
+  opens the PIN screen, which runs `HostStore.pair` while it shows; leaving it cancels the task, and `HostClient.pair`
+  then asks the PC to unpair (from a task of its own), as after any failure. Pairing results map to Android's messages
+  (`PairFailure`); a paired PC opens its library.
+- The library (first version) loads the apps when it shows and lays them out as Android's row of covers (300 × 450,
+  the first three covers wide, the focused one at the row's start) with the PC's box art; A opens the stream.
+
+Not ported yet: the default PC, the PCs' context menus (wake, rename, pair with a one-time code), waking an asleep PC on
+A, the companion screen; in the library the hero background, SteamGridDB artwork, game info chips, the game menu,
+hidden games, last played, per-game settings and the running-app choices.
 
 ## Strings
 

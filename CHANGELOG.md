@@ -19,6 +19,9 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - The first run and profiles of DELOS for Android: the boot screen, creating a profile with one of the sixteen avatars
   and a name, the start screen's greeting and profile chip, and the profile screen (change the avatar and name, add or
   delete a profile). Each profile keeps its own appearance.
+- Pairing a PC and its library: the start screen shows the paired PCs, the pairing screen the PCs found on the network
+  or an address typed in, the PIN screen waits while the PIN is typed on the PC, and the library shows the PC's apps
+  with their box art.
 
 ### Changed
 
@@ -32,3 +35,4 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 ### Fixed
 
 - The Moonlight reference app starts on iOS and tvOS 27, which stop apps without the scene lifecycle.
+- The DELOS app no longer stops at launch: it finds the OpenSSL framework it embeds.

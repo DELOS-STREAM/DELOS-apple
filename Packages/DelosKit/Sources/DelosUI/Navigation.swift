@@ -1,3 +1,4 @@
+import DelosInput
 import Foundation
 import Observation
 
@@ -11,6 +12,16 @@ public enum Screen: Hashable, Sendable {
     case start
     /// The current profile and what can be done with it.
     case profile
+    /// Pairing: the PCs found on the network, entering an address, searching again.
+    case pair
+    /// Entering a PC's address to add and pair it.
+    case pairAddress
+    /// The PIN to type on the PC [hostID] while pairing with it waits; leaving it cancels the attempt.
+    case pin(hostID: String)
+    /// A paired PC's library: its apps.
+    case home(hostID: String)
+    /// A stream of the app [appID] of the PC [hostID].
+    case stream(hostID: String, appID: Int)
 }
 
 /// Where the interface is: a back stack of screens, each with its own ``FocusModel``, so going back returns to the item
@@ -32,6 +43,9 @@ public final class Navigator {
         didSet { if oldValue, !isEditingText { textEditingEnded = .now } }
     }
     @ObservationIgnored private var textEditingEnded = Date.distantPast
+    /// While set, every controller and keyboard command goes here first; true: consumed (the stream screen owns the
+    /// controller).
+    @ObservationIgnored public var commandCapture: (@MainActor (MenuCommand) -> Bool)?
 
     public init(root: Screen, focus: AnyHashable? = nil) {
         stack = [Entry(screen: root, focus: FocusModel(initial: focus))]
@@ -57,6 +71,23 @@ public final class Navigator {
     /// Replaces the whole stack with [screen] (the first run is over, or starts again).
     public func reset(to screen: Screen, focus: AnyHashable? = nil) {
         stack = [Entry(screen: screen, focus: FocusModel(initial: focus))]
+    }
+
+    /// Opens the library of the PC [hostID] above the start screen (from the start screen, or once pairing is done:
+    /// B then returns to the start screen, not to the pairing screens).
+    public func openHome(hostID: String) {
+        if let start = stack.firstIndex(where: { $0.screen == .start }) {
+            stack.removeSubrange((start + 1)...)
+            stack[start].focus.focus(StartScreen.pcID(hostID))
+        } else {
+            stack = [Entry(screen: .start, focus: FocusModel(initial: StartScreen.pcID(hostID)))]
+        }
+        push(.home(hostID: hostID), focus: HomeScreen.initialFocus)
+    }
+
+    /// Starts streaming the app [appID] of the PC [hostID].
+    public func openStream(hostID: String, appID: Int) {
+        push(.stream(hostID: hostID, appID: appID))
     }
 
     /// Return ends typing and is then delivered as a key press too: an A or Return within this time after the field

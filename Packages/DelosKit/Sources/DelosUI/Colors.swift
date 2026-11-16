@@ -18,6 +18,9 @@ public struct RGBA: Equatable, Sendable {
     public var color: Color { Color(.sRGB, red: red, green: green, blue: blue, opacity: alpha) }
 
     public func opacity(_ alpha: Double) -> RGBA { RGBA(red: red, green: green, blue: blue, alpha: alpha) }
+
+    /// The dot of an online PC and the "PIN accepted" line (`OnlineGreen` of DELOS for Android), in every palette.
+    public static let onlineGreen = RGBA(red: 0x3D / 255, green: 0xDC / 255, blue: 0x84 / 255)
 }
 
 /// CSS-style `hsl()`: hue in degrees (any value), saturation and lightness in percent; out-of-range values are clamped.
