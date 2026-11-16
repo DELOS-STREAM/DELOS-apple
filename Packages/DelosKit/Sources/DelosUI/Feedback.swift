@@ -43,7 +43,22 @@ public final class Feedback {
         if focusSilenced { focusSilenced = false } else { play(.move) }
     }
 
+    /// How many cues were played: an activation sees whether the action it ran announced itself.
+    private(set) var playedCount = 0
+
+    /// An activation (A, a tap, a click): runs [run] and then plays [cue], unless [run] played a cue itself, so one
+    /// activation is never two sounds. [cue] nil: the activation is silent on its own. [run] returns whether it did
+    /// anything; nothing, no cue.
+    @discardableResult
+    public func activate(_ cue: Cue?, _ run: () -> Bool) -> Bool {
+        let before = playedCount
+        guard run() else { return false }
+        if let cue, playedCount == before { play(cue) }
+        return true
+    }
+
     public func play(_ cue: Cue) {
+        playedCount += 1
         if soundsEnabled, let id = sounds[cue] { AudioServicesPlaySystemSound(id) }
         #if os(iOS)
         guard hapticsEnabled else { return }

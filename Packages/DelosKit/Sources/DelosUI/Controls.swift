@@ -11,7 +11,6 @@ struct PillButton: View {
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
-    @State private var sweep = 0.0
 
     var body: some View {
         let content = primary ? colors.onAccent : colors.text
@@ -32,17 +31,32 @@ struct PillButton: View {
                     .overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
             }
         }
-        .overlay { if primary && focused { sweepLight } }
-        .focusLook(focused, scale: 1.08, ring: 4, glowBlur: 50, glowY: 18)
-        .onChange(of: focused, initial: true) { _, now in
-            guard primary, now else { return }
-            sweep = 0
-            withAnimation(.easeOut(duration: 1.25).delay(0.08)) { sweep = 1 }
-        }
+        .focusLook(focused, scale: 1.08, ring: 4, glowBlur: 50, glowY: 18, sweep: primary)
+    }
+}
+
+/// `.sweep`: a band of white light (115°, 28 % at its middle) that crosses a button or a cover once when it gains the
+/// focus (1250 ms after 80 ms, the prototype's `--ease-out`), clipped to [shape]. One view for every element that has it,
+/// so the pill and the cover share the geometry and the timeline.
+struct SweepLight<S: Shape>: View {
+    let shape: S
+    let focused: Bool
+    @Environment(\.reducedMotion) private var reduceMotion
+    @State private var progress = 0.0
+
+    var body: some View {
+        light
+            .clipShape(shape)
+            .allowsHitTesting(false)
+            .opacity(reduceMotion || !focused ? 0 : 1)
+            .onChange(of: focused, initial: true) { _, now in
+                guard now else { return }
+                progress = 0
+                withAnimation(Motion.out(1250).delay(0.08)) { progress = 1 }
+            }
     }
 
-    /// `.sweep`: a band of white light (115°, 28 % at its middle) that crosses the button once when it gains the focus.
-    private var sweepLight: some View {
+        private var light: some View {
         GeometryReader { proxy in
             let w = proxy.size.width, h = proxy.size.height
             let band = w * 2.6
@@ -60,11 +74,8 @@ struct PillButton: View {
                 endPoint: UnitPoint(x: 0.5 + dx * half / band, y: 0.5 + dy * half / h)
             )
             .frame(width: band, height: h)
-            .offset(x: (w - band) * (1.3 - 1.7 * sweep))
+            .offset(x: (w - band) * (1.3 - 1.7 * progress))
         }
-        .clipShape(Capsule())
-        .allowsHitTesting(false)
-        .opacity(reduceMotion ? 0 : 1)
     }
 }
 
@@ -159,8 +170,27 @@ extension View {
     /// The focus look of a pill: it grows by [scale], gets a ring of [ring] stage pixels as far outside it, and a glow of
     /// [glowBlur] (CSS box-shadow blur) moved down by [glowY]; no glow when [glowBlur] is 0. [corner] makes the ring a
     /// rounded rectangle around a shape with that corner radius (a cover) instead of a pill.
-    func focusLook(_ focused: Bool, scale: Double, ring: Double, glowBlur: Double, glowY: Double, corner: Double? = nil, anchor: UnitPoint = .center) -> some View {
-        modifier(FocusLook(focused: focused, scale: scale, ring: ring, glowBlur: glowBlur, glowY: glowY, corner: corner, anchor: anchor))
+    func focusLook(_ focused: Bool, scale: Double, ring: Double, glowBlur: Double, glowY: Double, corner: Double? = nil, anchor: UnitPoint = .center, sweep: Bool = false) -> some View {
+        modifier(FocusLook(focused: focused, scale: scale, ring: ring, glowBlur: glowBlur, glowY: glowY, corner: corner, anchor: anchor, sweep: sweep))
+    }
+}
+
+/// The scale of a focusable element (`animateFocusScale`): a press squeezes it to ``Motion/pressScale`` (absolute, below
+/// every focus scale), else the focus lifts it to [focus]; 1 otherwise.
+func focusScale(focused: Bool, pressed: Bool, focus: Double) -> Double {
+    pressed ? Motion.pressScale : focused ? focus : 1
+}
+
+extension Animation {
+    /// How the scale of a focusable element moves: the press in 120 ms, the focus 420 ms, both on the prototype's spring;
+    /// nil (a jump) with reduced motion.
+    static func focusScale(pressed: Bool, reduced: Bool) -> Animation? {
+        reduced ? nil : Motion.spring(pressed ? Motion.press : Motion.focus)
+    }
+
+    /// The focus ring's and the glow's alpha: 140 ms in, 110 ms out.
+    static func focusRing(focused: Bool) -> Animation {
+        Motion.out(focused ? Motion.ringIn : Motion.ringOut)
     }
 }
 
@@ -173,9 +203,11 @@ private struct FocusLook: ViewModifier {
     let corner: Double?
     /// The point that stays put while the item grows (the wide first cover grows to the left only).
     let anchor: UnitPoint
+    let sweep: Bool
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
+    @Environment(\.pressed) private var pressed
 
     func body(content: Content) -> some View {
         content
@@ -190,9 +222,20 @@ private struct FocusLook: ViewModifier {
                 .padding(-stage.px(2 * ring))
                 .opacity(focused ? 1 : 0)
             }
+            .overlay {
+                if sweep {
+                    if let corner { SweepLight(shape: RoundedRectangle(cornerRadius: stage.px(corner)), focused: focused) } else { SweepLight(shape: Capsule(), focused: focused) }
+                }
+            }
             .shadow(color: focused && glowBlur > 0 ? colors.glow.color : .clear, radius: stage.px(glowBlur / 2), y: stage.px(glowY))
-            .scaleEffect(focused ? scale : 1, anchor: anchor)
+            .animation(.focusRing(focused: focused), value: focused)
+            .scaleEffect(focusScale(focused: focused, pressed: pressed, focus: scale), anchor: anchor)
             .zIndex(focused ? 1 : 0)
-            .animation(reduceMotion ? .easeOut(duration: 0.18) : .spring(response: 0.32, dampingFraction: 0.68), value: focused)
+            .animation(.focusScale(pressed: pressed, reduced: reduceMotion), value: ScaleState(focused: focused, pressed: pressed))
     }
+}
+
+private struct ScaleState: Equatable {
+    let focused: Bool
+    let pressed: Bool
 }

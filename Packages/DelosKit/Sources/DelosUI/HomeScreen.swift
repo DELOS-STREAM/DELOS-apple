@@ -390,7 +390,7 @@ private struct Cover: View {
         .clipShape(shape)
         .overlay(shape.strokeBorder(colors.line.color, lineWidth: stage.px(1)))
         // Android's TILE_FOCUS_SCALE; the wide first cover grows only to the left, so it never covers its neighbour
-        .focusLook(focused, scale: 1.055, ring: 5, glowBlur: 50, glowY: 18, corner: 26, anchor: wide ? .trailing : .center)
+        .focusLook(focused, scale: 1.055, ring: 5, glowBlur: 50, glowY: 18, corner: 26, anchor: wide ? .trailing : .center, sweep: true)
         .task(id: "\(app.id)#\(art.artwork.version)") { await load() }
     }
 
