@@ -1,6 +1,42 @@
 # Android string resources that DELOS for Apple uses, one name per line. import_android.py copies them, with every
 # translation, into Packages/DelosKit/Sources/DelosUI/Resources/Localizable.xcstrings. Keep the list sorted by screen.
 
+# First run
+firstrun_boot_tagline
+firstrun_boot_begin
+firstrun_boot_skip
+firstrun_create_new_title
+firstrun_create_new_note
+firstrun_create_edit_title
+firstrun_create_edit_note
+firstrun_create_name_label
+firstrun_create_name_placeholder
+firstrun_create_default_name
+firstrun_create_save
+firstrun_create_create
+firstrun_avatar_sailor
+firstrun_avatar_voyager
+firstrun_avatar_player
+firstrun_avatar_fox
+firstrun_avatar_spark
+firstrun_avatar_calm
+firstrun_avatar_knight
+firstrun_avatar_robot
+firstrun_avatar_cat
+firstrun_avatar_wizard
+firstrun_avatar_racer
+firstrun_avatar_ghost
+firstrun_avatar_owl
+firstrun_avatar_hacker
+firstrun_avatar_wolf
+firstrun_avatar_dragon
+
+# Profile
+profile_signed_in
+profile_change_avatar
+profile_add
+profile_delete
+
 # Start screen
 devices_start_welcome
 devices_start_greeting

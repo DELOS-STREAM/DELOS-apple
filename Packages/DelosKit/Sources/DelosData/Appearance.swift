@@ -82,4 +82,9 @@ public struct AppearanceStore: Sendable {
         guard let data = try? JSONEncoder().encode(appearance) else { return }
         defaults.set(data, forKey: key(profile))
     }
+
+    /// Forgets a removed profile's appearance.
+    public func remove(profile: String) {
+        defaults.removeObject(forKey: key(profile))
+    }
 }

@@ -40,6 +40,7 @@ public final class FocusModel {
     public private(set) var focused: AnyHashable?
     @ObservationIgnored private var frames: [AnyHashable: CGRect] = [:]
     @ObservationIgnored private var actions: [AnyHashable: @MainActor () -> Void] = [:]
+    @ObservationIgnored private var moves: [AnyHashable: [FocusDirection: AnyHashable]] = [:]
 
     public init(initial: AnyHashable? = nil) {
         focused = initial
@@ -49,15 +50,19 @@ public final class FocusModel {
         focused = id
     }
 
-    func register(_ id: AnyHashable, frame: CGRect, action: @escaping @MainActor () -> Void) {
+    /// - Parameter moves: where a direction leads from this item instead of the nearest item that way (a grid whose
+    ///   rows continue in the next row).
+    func register(_ id: AnyHashable, frame: CGRect, moves: [FocusDirection: AnyHashable] = [:], action: @escaping @MainActor () -> Void) {
         frames[id] = frame
         actions[id] = action
+        self.moves[id] = moves
         if focused == nil { focused = id }
     }
 
     func unregister(_ id: AnyHashable) {
         frames[id] = nil
         actions[id] = nil
+        moves[id] = nil
         if focused == id { focused = frames.keys.first }
     }
 
@@ -81,6 +86,10 @@ public final class FocusModel {
             self.focused = frames.keys.first
             return self.focused != nil
         }
+        if let target = moves[focused]?[direction], frames[target] != nil {
+            self.focused = target
+            return true
+        }
         var others = frames
         others[focused] = nil
         guard let next = FocusGeometry.next(from: current, direction: direction, candidates: others) else { return false }
@@ -94,12 +103,19 @@ public final class FocusModel {
 public struct FocusItem<ID: Hashable, Content: View>: View {
     let id: ID
     let model: FocusModel
+    let moves: [FocusDirection: AnyHashable]
     let action: @MainActor () -> Void
     let content: (Bool) -> Content
 
-    public init(id: ID, model: FocusModel, action: @escaping @MainActor () -> Void, @ViewBuilder content: @escaping (Bool) -> Content) {
+    /// - Parameter moves: where a direction leads from this item instead of the nearest item that way (iPhone, iPad
+    ///   and Mac; on tvOS the system focus engine decides).
+    public init(
+        id: ID, model: FocusModel, moves: [FocusDirection: AnyHashable] = [:], action: @escaping @MainActor () -> Void,
+        @ViewBuilder content: @escaping (Bool) -> Content
+    ) {
         self.id = id
         self.model = model
+        self.moves = moves
         self.action = action
         self.content = content
     }
@@ -111,6 +127,8 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
             .focusable()
             .focused($systemFocused)
             .onChange(of: systemFocused) { _, now in if now { model.focus(AnyHashable(id)) } }
+            // The model moves the focus too (to the next step of a form, or the first item of a screen)
+            .onChange(of: model.focused) { _, now in if now == AnyHashable(id) { systemFocused = true } }
             .onAppear { if model.focused == AnyHashable(id) { systemFocused = true } }
             .onTapGesture(perform: action)
     }
@@ -118,7 +136,7 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
     public var body: some View {
         content(model.focused == AnyHashable(id))
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
-                model.register(AnyHashable(id), frame: frame, action: action)
+                model.register(AnyHashable(id), frame: frame, moves: moves, action: action)
             }
             .onDisappear { model.unregister(AnyHashable(id)) }
             .contentShape(Rectangle())

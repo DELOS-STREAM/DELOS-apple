@@ -13,6 +13,9 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   start screen: the greeting, the Contour background, the DELOS palette, fonts and icons, and a focus that a game
   controller or the arrow keys move between two circles (iOS and iPadOS) or the Apple TV remote moves (tvOS).
 - The app speaks the ten languages of DELOS for Android, with the same texts.
+- The first run and profiles of DELOS for Android: the boot screen, creating a profile with one of the sixteen avatars
+  and a name, the start screen's greeting and profile chip, and the profile screen (change the avatar and name, add or
+  delete a profile). Each profile keeps its own appearance.
 
 ### Changed
 

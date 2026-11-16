@@ -62,25 +62,37 @@ struct Heading: View {
 }
 
 /// A round item with an icon, a label and a status line (`CircleItem` in DELOS for Android): 220 stage pixels wide
-/// when [big]. The focused circle grows by 16 %, gets a ring in the main color 5 px outside it and a glow.
+/// when [big], 176 otherwise, or [diameter]; [width] is a fixed width of the item (a grid's cell), else 220. The focused
+/// circle grows by 16 %, gets a ring in the main color 5 px outside it and a glow. [avatar] fills the circle with the
+/// avatar's colors and illustration; [selected] adds the check badge on its edge and lights the label like the focus.
 struct CircleItem: View {
     let icon: String
     let label: String
     var meta: String?
     var big = true
+    var avatar: Avatar?
+    var selected = false
+    var diameter: Double?
+    var width: Double?
     let focused: Bool
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let side = big ? 220.0 : 176.0
-        VStack(spacing: stage.px(22)) {
+        let side = diameter ?? (big ? 220.0 : 176.0)
+        let iconSize = big ? 96.0 : 76.0
+        let lit = focused || selected
+        VStack(spacing: stage.px(side < 176 ? 14 : 22)) {
             ZStack {
-                Circle()
-                    .fill(colors.surface2.color)
-                    .overlay(Circle().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
-                SymbolView(symbol: icon, size: big ? 96 : 76, color: colors.text, filled: focused)
+                if let avatar {
+                    AvatarBadge(avatar: avatar, size: side, iconSize: iconSize)
+                } else {
+                    Circle()
+                        .fill(colors.surface2.color)
+                        .overlay(Circle().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
+                    SymbolView(symbol: icon, size: iconSize, color: colors.text, filled: focused)
+                }
             }
             .frame(width: stage.px(side), height: stage.px(side))
             .background {
@@ -91,14 +103,15 @@ struct CircleItem: View {
                     .opacity(focused ? 1 : 0)
             }
             .shadow(color: focused ? colors.glow.color : .clear, radius: stage.px(35), y: stage.px(26))
+            .overlay(alignment: .topLeading) { if selected { checkBadge(side: side) } }
             .scaleEffect(focused ? 1.16 : 1)
             .zIndex(focused ? 1 : 0)
             VStack(spacing: stage.px(8)) {
                 Text(label)
                     .font(DelosFonts.figtree(stage.px(26), .semibold))
                     .foregroundStyle(colors.text.color)
-                    .opacity(focused ? 1 : 0.55)
-                    .offset(y: focused ? 0 : -stage.px(6))
+                    .opacity(lit ? 1 : 0.55)
+                    .offset(y: lit ? 0 : -stage.px(6))
                     .lineLimit(1)
                 if let meta {
                     Text(meta)
@@ -109,7 +122,22 @@ struct CircleItem: View {
                 }
             }
         }
-        .frame(width: stage.px(220))
+        .frame(width: stage.px(max(width ?? 220, side)))
         .animation(reduceMotion ? .easeOut(duration: 0.18) : .spring(response: 0.32, dampingFraction: 0.68), value: focused)
+        .animation(reduceMotion ? .easeOut(duration: 0.18) : .spring(response: 0.36, dampingFraction: 0.6), value: selected)
+    }
+
+    /// `.circle::before`: a 52 px circle in the secondary color with a check, centered on the circle's edge at the top
+    /// right (45°), above the focus ring. It pops in when the circle becomes the selected one.
+    private func checkBadge(side: Double) -> some View {
+        let edge = side / 2 * (1 - 0.70710677)
+        let badge = 52.0
+        return ZStack {
+            Circle().fill(colors.accent2.color)
+            SymbolView(symbol: Symbols.check, size: 26, color: colors.onAccent)
+        }
+        .frame(width: stage.px(badge), height: stage.px(badge))
+        .offset(x: stage.px(side - edge - badge / 2), y: stage.px(edge - badge / 2))
+        .transition(reduceMotion ? .opacity : .scale(scale: 0.4).combined(with: .opacity))
     }
 }
