@@ -1,0 +1,275 @@
+import Foundation
+import Network
+import Security
+import Synchronization
+
+/// What HTTPS trusts: exactly one certificate, the one pinned at pairing (rule S-07 of DELOS for Android). The system
+/// trust store, the host name and the validity dates play no part. The client identity is presented when the host
+/// asks for a client certificate.
+struct TLSPolicy: Sendable {
+    let pinnedCertificate: Data
+    let identity: ClientIdentity
+}
+
+struct HTTPRequest: Sendable {
+    var address: HostAddress
+    var path: String
+    /// Already percent-encoded (`HTTPRequest.encode`).
+    var query: String
+    /// Nil: plain HTTP.
+    var tls: TLSPolicy?
+    /// Nil: no limit (the host waits for the user, as in the first pairing step, or for a game to start).
+    var timeout: Duration?
+    var maximumBodySize: Int
+
+    var target: String { query.isEmpty ? path : path + "?" + query }
+
+    static func encode(_ pairs: [(String, String)]) -> String {
+        pairs.map { "\(escape($0.0))=\(escape($0.1))" }.joined(separator: "&")
+    }
+
+    var head: Data {
+        Data("GET \(target) HTTP/1.1\r\nHost: \(address.description)\r\nUser-Agent: DELOS\r\nAccept: */*\r\nConnection: close\r\n\r\n".utf8)
+    }
+
+    private static let unreserved = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+
+    static func escape(_ text: String) -> String {
+        text.addingPercentEncoding(withAllowedCharacters: unreserved) ?? ""
+    }
+}
+
+struct HTTPResponse: Sendable {
+    let status: Int
+    let headers: [String: String]
+    let body: Data
+}
+
+/// One GET request per connection over Network.framework (`Connection: close`). Network.framework instead of
+/// URLSession: the exclusive pin is a TLS verify block that replaces the system evaluation completely, the client
+/// certificate is a TLS option, and plain HTTP to a PC by address or name needs no App Transport Security exception.
+enum HTTPTransport {
+    static func get(_ request: HTTPRequest) async throws -> HTTPResponse {
+        let outcome = Outcome()
+        let parameters: NWParameters
+        if let tls = request.tls {
+            parameters = NWParameters(tls: tlsOptions(tls, outcome: outcome), tcp: NWProtocolTCP.Options())
+        } else {
+            parameters = .tcp
+        }
+        guard let port = NWEndpoint.Port(rawValue: UInt16(request.address.port)) else {
+            throw HostError.unreachable("invalid port")
+        }
+        let connection = NWConnection(host: NWEndpoint.Host(request.address.host), port: port, using: parameters)
+        let timer = request.timeout.map { timeout in
+            Task {
+                try? await Task.sleep(for: timeout)
+                guard !Task.isCancelled else { return }
+                outcome.timedOut.store(true, ordering: .relaxed)
+                connection.cancel()
+            }
+        }
+        defer {
+            timer?.cancel()
+            connection.cancel()
+        }
+        do {
+            return try await withTaskCancellationHandler {
+                try await exchange(connection, request)
+            } onCancel: {
+                connection.cancel()
+            }
+        } catch {
+            if Task.isCancelled { throw CancellationError() }
+            if outcome.timedOut.load(ordering: .relaxed) { throw HostError.timedOut }
+            if outcome.pinMismatch.load(ordering: .relaxed) { throw HostError.certificateMismatch }
+            if let error = error as? HostError { throw error }
+            throw HostError.unreachable(String(describing: error))
+        }
+    }
+
+    private final class Outcome: Sendable {
+        let timedOut = Atomic<Bool>(false)
+        let pinMismatch = Atomic<Bool>(false)
+    }
+
+    private static let queue = DispatchQueue(label: "io.github.meitoncz.delos.host.http", attributes: .concurrent)
+
+    private static func tlsOptions(_ policy: TLSPolicy, outcome: Outcome) -> NWProtocolTLS.Options {
+        let options = NWProtocolTLS.Options()
+        let security = options.securityProtocolOptions
+        sec_protocol_options_set_min_tls_protocol_version(security, .TLSv12)
+        if let identity = sec_identity_create(policy.identity.secIdentity) {
+            sec_protocol_options_set_local_identity(security, identity)
+        }
+        let pinned = policy.pinnedCertificate
+        sec_protocol_options_set_verify_block(security, { _, trust, complete in
+            let matches = leafCertificate(sec_trust_copy_ref(trust).takeRetainedValue()) == pinned
+            if !matches { outcome.pinMismatch.store(true, ordering: .relaxed) }
+            complete(matches)
+        }, queue)
+        return options
+    }
+
+    static func leafCertificate(_ trust: SecTrust) -> Data? {
+        guard let chain = SecTrustCopyCertificateChain(trust) as? [SecCertificate], let leaf = chain.first else {
+            return nil
+        }
+        return SecCertificateCopyData(leaf) as Data
+    }
+
+    private static func exchange(_ connection: NWConnection, _ request: HTTPRequest) async throws -> HTTPResponse {
+        try await ready(connection)
+        try await send(request.head, on: connection)
+        var parser = HTTPResponseParser(maximumBodySize: request.maximumBodySize)
+        while true {
+            let (data, complete) = try await receive(connection)
+            if let data { try parser.append(data) }
+            if let response = try parser.response(atEnd: complete) { return response }
+            if complete { throw HostError.malformedResponse("the connection closed before the answer was complete") }
+        }
+    }
+
+    private static func ready(_ connection: NWConnection) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let once = Once(continuation)
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .ready: once.resume(with: .success(()))
+                // Waiting means no path or a refused connection: report it now instead of retrying silently.
+                case .waiting(let error), .failed(let error): once.resume(with: .failure(error))
+                case .cancelled: once.resume(with: .failure(CancellationError()))
+                default: break
+                }
+            }
+            connection.start(queue: queue)
+        }
+    }
+
+    private static func send(_ data: Data, on connection: NWConnection) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            connection.send(content: data, completion: .contentProcessed { error in
+                if let error { continuation.resume(throwing: error) } else { continuation.resume() }
+            })
+        }
+    }
+
+    private static func receive(_ connection: NWConnection) async throws -> (Data?, Bool) {
+        try await withCheckedThrowingContinuation { continuation in
+            connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { data, _, complete, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: (data, complete))
+                }
+            }
+        }
+    }
+}
+
+/// Resumes a continuation at most once (connection state handlers fire repeatedly).
+final class Once<Value: Sendable>: Sendable {
+    private let continuation: Mutex<CheckedContinuation<Value, Error>?>
+
+    init(_ continuation: CheckedContinuation<Value, Error>) {
+        self.continuation = Mutex(continuation)
+    }
+
+    func resume(with result: Result<Value, Error>) {
+        continuation.withLock { stored in
+            stored?.resume(with: result)
+            stored = nil
+        }
+    }
+}
+
+/// Reads an HTTP/1.1 response: status line, headers, then a body by `Content-Length`, chunked transfer coding or
+/// up to the end of the connection.
+struct HTTPResponseParser {
+    let maximumBodySize: Int
+    private var buffer = Data()
+    private var head: (status: Int, headers: [String: String], bodyStart: Int)?
+
+    init(maximumBodySize: Int) {
+        self.maximumBodySize = maximumBodySize
+    }
+
+    mutating func append(_ data: Data) throws {
+        buffer.append(data)
+        if buffer.count > maximumBodySize + 64 * 1024 { throw HostError.responseTooLarge }
+    }
+
+    /// The response once it is complete; nil while more bytes are needed.
+    mutating func response(atEnd: Bool) throws -> HTTPResponse? {
+        if head == nil {
+            guard let end = buffer.range(of: Data("\r\n\r\n".utf8)) else {
+                if buffer.count > 64 * 1024 { throw HostError.responseTooLarge }
+                return nil
+            }
+            head = try Self.parseHead(buffer[buffer.startIndex..<end.lowerBound], bodyStart: end.upperBound)
+        }
+        guard let head else { return nil }
+        let body = buffer[head.bodyStart...]
+        if head.headers["transfer-encoding"]?.lowercased().contains("chunked") == true {
+            guard let decoded = try Self.dechunk(body) else { return nil }
+            return try finish(head, Data(decoded))
+        }
+        if let lengthText = head.headers["content-length"] {
+            guard let length = Int(lengthText), length >= 0 else {
+                throw HostError.malformedResponse("invalid Content-Length")
+            }
+            if length > maximumBodySize { throw HostError.responseTooLarge }
+            guard body.count >= length else { return nil }
+            return try finish(head, Data(body.prefix(length)))
+        }
+        return atEnd ? try finish(head, Data(body)) : nil
+    }
+
+    private func finish(_ head: (status: Int, headers: [String: String], bodyStart: Int), _ body: Data) throws -> HTTPResponse {
+        if body.count > maximumBodySize { throw HostError.responseTooLarge }
+        return HTTPResponse(status: head.status, headers: head.headers, body: body)
+    }
+
+    private static func parseHead(_ bytes: Data, bodyStart: Int) throws -> (status: Int, headers: [String: String], bodyStart: Int) {
+        let lines = String(decoding: bytes, as: UTF8.self).components(separatedBy: "\r\n")
+        let statusParts = lines[0].split(separator: " ", maxSplits: 2)
+        guard statusParts.count >= 2, statusParts[0].hasPrefix("HTTP/1."), let status = Int(statusParts[1]) else {
+            throw HostError.malformedResponse("not an HTTP response")
+        }
+        var headers = [String: String]()
+        for line in lines.dropFirst() {
+            guard let colon = line.firstIndex(of: ":") else { continue }
+            let name = line[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
+            headers[name] = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+        }
+        return (status, headers, bodyStart)
+    }
+
+    /// The decoded body once the last chunk has arrived; nil before.
+    private static func dechunk(_ body: Data) throws -> [UInt8]? {
+        let bytes = [UInt8](body)
+        var out = [UInt8]()
+        var index = 0
+        while true {
+            guard let lineEnd = find(bytes, from: index) else { return nil }
+            let sizeText = String(decoding: bytes[index..<lineEnd], as: UTF8.self).split(separator: ";").first ?? ""
+            guard let size = Int(sizeText.trimmingCharacters(in: .whitespaces), radix: 16), size >= 0 else {
+                throw HostError.malformedResponse("invalid chunk size")
+            }
+            index = lineEnd + 2
+            if size == 0 { return out }
+            guard bytes.count >= index + size + 2 else { return nil }
+            out += bytes[index..<index + size]
+            index += size + 2
+        }
+    }
+
+    private static func find(_ bytes: [UInt8], from start: Int) -> Int? {
+        var index = start
+        while index + 1 < bytes.count {
+            if bytes[index] == 13 && bytes[index + 1] == 10 { return index }
+            index += 1
+        }
+        return nil
+    }
+}
