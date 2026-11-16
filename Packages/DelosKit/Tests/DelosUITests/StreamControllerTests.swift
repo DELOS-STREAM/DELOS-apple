@@ -362,6 +362,32 @@ private let iPhone = DisplayInfo(pixelWidth: 1290, pixelHeight: 2796, maxFramesP
         #expect(!controller.menuOpen)
     }
 
+    @Test func theSiriRemoteOpensTheStreamMenuWithPlayPauseAndWithoutAControllerWithMenu() async {
+        let steps = FakeSteps()
+        let controller = StreamController { steps }
+        let focus = FocusModel()
+        controller.start(display: iPhone)
+        await eventually { steps.isConnecting }
+        steps.finishConnect()
+        await eventually { controller.phase == .streaming }
+        // A controller's Menu button reaches the app as Menu too, but it is Start for the PC: nothing opens
+        #expect(StreamScreen.capture(.back, controller: controller, focus: focus, fromRemote: true, hasGamepad: true))
+        #expect(!controller.menuOpen)
+        // X of a controller is the same command as Play/Pause, but not from the remote: the PC gets it
+        #expect(StreamScreen.capture(.options, controller: controller, focus: focus, fromRemote: false, hasGamepad: true))
+        #expect(!controller.menuOpen)
+        // Play/Pause opens the menu and closes it again; so does Menu while it is open
+        #expect(StreamScreen.capture(.options, controller: controller, focus: focus, fromRemote: true, hasGamepad: true))
+        #expect(controller.menuOpen)
+        #expect(StreamScreen.capture(.options, controller: controller, focus: focus, fromRemote: true, hasGamepad: true))
+        #expect(!controller.menuOpen)
+        // Without a controller the remote's Menu opens it, and closes it
+        #expect(StreamScreen.capture(.back, controller: controller, focus: focus, fromRemote: true, hasGamepad: false))
+        #expect(controller.menuOpen)
+        #expect(StreamScreen.capture(.back, controller: controller, focus: focus, fromRemote: true, hasGamepad: false))
+        #expect(!controller.menuOpen)
+    }
+
     @Test func touchesAreIgnoredOutsideTheRunningStream() {
         let controller = StreamController { FakeSteps() }
         // No crash and no effect while connecting

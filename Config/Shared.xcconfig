@@ -32,8 +32,9 @@ INFOPLIST_KEY_CFBundleDisplayName = DELOS
 INFOPLIST_KEY_LSApplicationCategoryType = public.app-category.games
 INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES
 INFOPLIST_KEY_UILaunchScreen_Generation = YES
-INFOPLIST_KEY_UIRequiresFullScreen = YES
-INFOPLIST_KEY_UIStatusBarHidden = YES
+// The full-screen and status bar keys are iOS and iPadOS keys; the Apple TV build does not carry them
+INFOPLIST_KEY_UIRequiresFullScreen[sdk=iphone*] = YES
+INFOPLIST_KEY_UIStatusBarHidden[sdk=iphone*] = YES
 INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
 INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
 INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES

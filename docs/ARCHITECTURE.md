@@ -139,8 +139,7 @@ stays where it was, so the element a menu belongs to keeps its focus look and ha
 `ShellActions` builds the menus and dialogs of the screens and runs their actions (Android's `DeviceActions`,
 `GameActions` and profile functions). Not ported: the dimming of the covers beside an open game menu, the focus
 anchor's growth (the anchor is the element's frame without its focus scale), the hint bar of a compact stage, whose
-card keeps 48 px from every edge, and context menus on tvOS (the system focus engine registers no item frames there;
-the Apple TV pass brings them).
+card keeps 48 px from every edge.
 
 ### Toasts
 
@@ -292,6 +291,27 @@ handlers), so both work; `commandCapture` decides who uses the commands.
 `CADisableMinimumFrameDurationOnPhone` is in `Config/Info.plist` (no `INFOPLIST_KEY_*` setting exists for it), so a
 ProMotion iPhone reports and can show 120 Hz; the stream asks the host for the profile's frame rate (60 fps by default,
 as DELOS for Android) with the display's refresh rate as the client refresh rate.
+
+## Apple TV
+
+One code base; the differences are in `FocusItem`, the root's commands, the stage and the storage.
+
+| Part | On tvOS |
+|---|---|
+| Focus | The system focus engine moves the focus (D-pad, Siri Remote swipes, controllers). `FocusItem` is `.focusable()` with `@FocusState` kept in step with its `FocusModel`, and registers its frame, action and menu in the model as elsewhere, so a context menu is placed beside its item. Select is the item's action. `tvFocusSection()` (full-width focus sections) lets Up and Down reach the top navigation, the profile chip, the tabs and the name field from an item beside them: the engine only moves to views that overlap along the other axis |
+| Layers | A layer or the side menu is `modalFocus`: every other item becomes unfocusable, and the root asks the engine to look again (`resetFocus` in a focus scope, items marking their model's focused item `prefersDefaultFocus`) 150 ms after the owner changes, because the engine otherwise keeps its focus on the item that went away until the next press. The element a layer belongs to keeps its focus look |
+| Commands | Menu is back (`onExitCommand`; at the first screen the system's Home), Play/Pause or a long press of select is the context menu, a controller's X too. `MenuInput(only: tvCommands)` brings the buttons the system has no event for: the left menu button (side menu), X, Y (toast action), L1 and R1. Left and right reach a screen that captures them (`onMoveCommand`: a Settings row's value). Settings tabs are focus items on tvOS (no L1 and R1 on the remote). The profile menu has Profile and Settings rows, as on touch, because the remote has no left menu button |
+| Text fields | The `TextField` itself takes the focus and select opens the system keyboard; a `FocusItem` around it would take the select. `Navigator.textEditing` does nothing on tvOS: the keyboard is a screen of its own that ends itself, Menu closes it |
+| Stream | Menu and Play/Pause reach the app only through a focused view, so the loader and the running stream hold the focus on an invisible item. Play/Pause opens the stream menu; so does Menu when no game controller is connected (a controller's Menu is Start for the PC); either closes it. `GameInput` is unchanged |
+| Safe area | `Stage.safe` is at least the title-safe area, 60 points above and below and 90 at the sides (the system's own is 60 and 80). 1080p and 4K Apple TVs both give 1920 × 1080 points, so one stage pixel is one point |
+| Text | `Stage.minimumText` (24 points on tvOS) is the floor of `tpx`: the captions of the handheld design (16 to 23 px) are raised to it. A deviation from Android that the owner may veto |
+| Status bar | No touch back button; a wired connection shows no Wi-Fi icon |
+| Storage (decision L7) | Hosts, profiles, per-profile settings, default PC, playtimes and played games are in `UserDefaults` on every platform, which is the one store tvOS keeps (Apple allows 500 KB; a heavy use of 6 profiles, 4 PCs and 80 apps each measures about 217 KB, `StorageMirrorTests`). The planned file store with a mirror was never built, so nothing needs mirroring. Files are caches: the images and, on tvOS, the artwork matches (`Caches/artwork-matches`). The client identity is in the Keychain |
+| Info.plist | `NSLocalNetworkUsageDescription` and `NSBonjourServices` apply; `UIRequiresFullScreen` and `UIStatusBarHidden` are iOS-only settings (`[sdk=iphone*]`) |
+
+The focus model's `unregister` leaves the focus where it was when a whole screen goes away, so going back returns to the item that was focused.
+
+Not verified: a real Apple TV (focus, the Siri Remote's touch surface and long press, the system keyboard, the Menu button of controllers, wired network, HDR and streaming). The simulator reports its remote as an extended gamepad, so Menu opening the stream menu without a controller is covered by unit tests only.
 
 ## Sounds and haptics
 

@@ -43,6 +43,10 @@ installed app:
 xcrun simctl launch <UDID> io.github.meitoncz.delos.debug -DelosBackground nebula -DelosTheme light -DelosSettings appearance
 ```
 
+Apple TV: `sh tools/sim.sh tv /tmp/shot.png` shows the start screen in the Apple TV 4K simulator. The simulator has no remote
+input from `simctl`; a throwaway XCUITest bundle that calls `XCUIRemote.shared.press(.select)` and the like (and
+`XCUIScreen.main.screenshot()`) drives the real focus engine, Menu and Play/Pause against the installed debug app.
+
 ## Project layout
 
 The app target is thin: `App/` holds the entry point and is a folder-synchronized group, so a new file there needs no

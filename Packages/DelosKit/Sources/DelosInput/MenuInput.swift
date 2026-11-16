@@ -2,7 +2,7 @@ import Foundation
 import GameController
 
 /// A command for moving through the interface, from a game controller or a hardware keyboard.
-public enum MenuCommand: Sendable, Equatable {
+public enum MenuCommand: Sendable, Hashable {
     case up, down, left, right
     /// A (or Return): activate the focused item.
     case accept
@@ -24,7 +24,9 @@ public enum MenuCommand: Sendable, Equatable {
 /// emits one command; a direction held down repeats like a held key on Android: after 500 ms, every 50 ms, with the
 /// number of the repeat (0 for the press itself).
 ///
-/// Used on iPhone, iPad and Mac, where a controller does not drive SwiftUI's focus; tvOS uses the system focus engine.
+/// Used on iPhone, iPad and Mac, where a controller does not drive SwiftUI's focus. tvOS uses the system focus engine
+/// for the directions and A, and Menu is its exit command; there ``MenuInput`` only brings the commands the system has
+/// no event for (``tvCommands``).
 @MainActor
 public final class MenuInput {
     /// Where the stick has to be pushed for a direction, and where it has to come back before the next one.
@@ -34,16 +36,26 @@ public final class MenuInput {
     nonisolated static let repeatAfter = Duration.milliseconds(500)
     nonisolated static let repeatEvery = Duration.milliseconds(50)
 
+    /// The commands tvOS has no event for: the left menu button, X, Y, L1 and R1. A controller's directions, A and Menu
+    /// reach the app as the system's move, select and exit commands.
+    public nonisolated static let tvCommands: Set<MenuCommand> = [.menu, .options, .toastAction, .previousTab, .nextTab]
+
+    private let only: Set<MenuCommand>?
     private let handler: @MainActor (MenuCommand, Int) -> Void
     private var observers: [NSObjectProtocol] = []
     private var stickDirection: [ObjectIdentifier: MenuCommand] = [:]
     /// The direction that is held (and who holds it: a button, a stick or a key) and its repeats.
     private var held: (source: AnyHashable, repeating: Task<Void, Never>)?
 
-    /// - Parameter handler: gets each command and how often it has repeated while held (0: a new press).
-    public init(handler: @escaping @MainActor (MenuCommand, _ repeatCount: Int) -> Void) {
+    /// - Parameters:
+    ///   - only: the commands to emit; nil: all of them.
+    ///   - handler: gets each command and how often it has repeated while held (0: a new press).
+    public init(only: Set<MenuCommand>? = nil, handler: @escaping @MainActor (MenuCommand, _ repeatCount: Int) -> Void) {
+        self.only = only
         self.handler = handler
     }
+
+    private func emits(_ command: MenuCommand) -> Bool { only?.contains(command) ?? true }
 
     /// Starts listening to every connected controller and keyboard, and to the ones connected later.
     public func start() {
@@ -106,18 +118,25 @@ public final class MenuInput {
     private func attach(_ controller: GCController) {
         guard let pad = controller.extendedGamepad else { return }
         let id = ObjectIdentifier(controller)
-        pad.dpad.up.pressedChangedHandler = button(.up, id)
-        pad.dpad.down.pressedChangedHandler = button(.down, id)
-        pad.dpad.left.pressedChangedHandler = button(.left, id)
-        pad.dpad.right.pressedChangedHandler = button(.right, id)
-        pad.buttonA.pressedChangedHandler = button(.accept, id)
-        pad.buttonB.pressedChangedHandler = button(.back, id)
-        pad.leftShoulder.pressedChangedHandler = button(.previousTab, id)
-        pad.rightShoulder.pressedChangedHandler = button(.nextTab, id)
-        pad.buttonOptions?.pressedChangedHandler = button(.menu, id)
-        pad.buttonMenu.pressedChangedHandler = button(.options, id)
-        pad.buttonX.pressedChangedHandler = button(.options, id)
-        pad.buttonY.pressedChangedHandler = button(.toastAction, id)
+        func bind(_ input: GCControllerButtonInput?, _ command: MenuCommand) {
+            input?.pressedChangedHandler = emits(command) ? button(command, id) : nil
+        }
+        bind(pad.dpad.up, .up)
+        bind(pad.dpad.down, .down)
+        bind(pad.dpad.left, .left)
+        bind(pad.dpad.right, .right)
+        bind(pad.buttonA, .accept)
+        bind(pad.buttonB, .back)
+        bind(pad.leftShoulder, .previousTab)
+        bind(pad.rightShoulder, .nextTab)
+        bind(pad.buttonOptions, .menu)
+        #if !os(tvOS)
+        // On tvOS the right menu button is the system's Menu: the exit command
+        bind(pad.buttonMenu, .options)
+        #endif
+        bind(pad.buttonX, .options)
+        bind(pad.buttonY, .toastAction)
+        guard emits(.up) else { return }
         pad.leftThumbstick.valueChangedHandler = { [weak self] _, x, y in
             MainActor.assumeIsolated {
                 guard let self else { return }
@@ -144,6 +163,7 @@ public final class MenuInput {
         keyboard.keyboardInput?.keyChangedHandler = { [weak self] _, _, key, pressed in
             guard let command = Self.keyCommand(key) else { return }
             MainActor.assumeIsolated {
+                guard self?.emits(command) ?? false else { return }
                 let source = AnyHashable(["key", AnyHashable(key.rawValue)])
                 if pressed { self?.press(command, from: source) } else { self?.release(source) }
             }
@@ -173,4 +193,10 @@ public final class MenuInput {
         // GameController's y grows upwards
         return y > 0 ? .up : .down
     }
+}
+
+/// What is connected.
+public enum ConnectedControllers {
+    /// Whether a game controller with a full gamepad is connected (the Siri Remote is a micro gamepad).
+    public static var hasGamepad: Bool { GCController.controllers().contains { $0.extendedGamepad != nil } }
 }

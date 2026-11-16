@@ -142,15 +142,16 @@ struct CreateProfileScreen: View {
                 sub: editing ? L("firstrun_create_edit_note") : L("firstrun_create_new_note")
             )
             avatarGrid
-            nameField
+            nameField.tvFocusSection()
             FocusItem(id: "create", model: focus, action: submit) { focused in
                 PillButton(
                     label: editing ? L("firstrun_create_save") : L("firstrun_create_create"),
                     icon: Symbols.check, primary: true, focused: focused
                 )
             }
+            .tvFocusSection()
         }
-        .onChange(of: typing) { _, now in navigator.isEditingText = now }
+        .onChange(of: typing) { _, now in navigator.textEditing(now) }
         .onChange(of: navigator.isEditingText) { _, now in if !now { typing = false } }
         .onChange(of: name) { _, now in
             if now.count > Profile.maxNameLength { name = String(now.prefix(Profile.maxNameLength)) }

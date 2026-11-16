@@ -39,6 +39,7 @@ struct StartScreen: View {
                 ) { focused in
                     ProfileChip(profile: profile, focused: focused)
                 }
+                .tvFocusSection()
                 .padding(.top, stage.px(44 + stage.safe.top))
             }
         }
@@ -106,6 +107,10 @@ public struct DelosRoot: View {
     /// The tab Settings opens with (debug builds: `-DelosSettings <tab>`).
     private let settingsTab: SettingsTab
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    #if os(tvOS)
+    @Namespace private var focusScope
+    @Environment(\.resetFocus) private var resetFocus
+    #endif
 
     public init() {
         let profiles = ProfileStore()
@@ -193,6 +198,19 @@ public struct DelosRoot: View {
         .environment(homeArt)
         .environment(navigator)
         .environment(layers)
+        .environment(\.modalFocus, sideMenu ?? (layers.isOpen ? layers.focus : nil))
+        #if os(tvOS)
+        // The focus engine keeps its focus on an item that can no longer take it until the next press: when the focus
+        // owner changes (a layer opens or closes, another screen shows), it is asked to look for the preferred item,
+        // once the items of the new owner exist
+        .focusScope(focusScope)
+        .environment(\.focusNamespace, focusScope)
+        .task(id: ObjectIdentifier(sideMenu ?? (layers.isOpen ? layers.focus : navigator.focus))) {
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            resetFocus(in: focusScope)
+        }
+        #endif
         .environment(\.delosColors, colors)
         .environment(\.reducedMotion, systemReduceMotion || appearance.reducedMotion)
         .preferredColorScheme(colors.dark ? .dark : .light)
@@ -209,72 +227,107 @@ public struct DelosRoot: View {
         .persistentSystemOverlays(.hidden)
         #endif
         #if os(tvOS)
-        .onExitCommand(perform: navigator.canGoBack ? { go { navigator.back() } } : nil)
-        #else
-        .onAppear {
-            let feedback = Feedback()
-            feedback.soundsEnabled = appearance.sounds
-            feedback.hapticsEnabled = appearance.haptics
-            self.feedback = feedback
-            layers.feedback = feedback
-            let input = MenuInput { [navigator, feedback, layers, toasts] command, repeatCount in
-                navigator.commandRepeat = repeatCount
-                if let sideMenu {
-                    // The side menu takes every command while it is open
-                    switch command {
-                    case .back, .menu: closeSideMenu(sound: .back)
-                    case .up, .down, .accept: if sideMenu.handle(command) { feedback.play(command == .accept ? .select : .move) }
-                    case .left, .right, .previousTab, .nextTab, .options, .toastAction: break
-                    }
-                    return
-                }
-                if layers.isOpen {
-                    // An open layer takes every command; the text field of a dialog takes the keys while it is typed in
-                    if navigator.isEditingText {
-                        if command == .back { navigator.isEditingText = false }
-                    } else if command == .toastAction {
-                        toasts.runAction()
-                    } else if command != .accept || !navigator.swallowsAccept() {
-                        layers.handle(command)
-                    }
-                    return
-                }
-                if let capture = navigator.commandCapture, capture(command) { return }
-                if command == .menu, navigator.current.hasSideMenu {
-                    feedback.play(.open)
-                    withAnimation(.easeOut(duration: 0.3)) { self.sideMenu = FocusModel(initial: SideMenu.settingsID) }
-                    return
-                }
-                // While a text field is typed in, the keys belong to it; B and Escape stop typing
-                if navigator.isEditingText {
-                    if command == .back { navigator.isEditingText = false }
-                    return
-                }
-                switch command {
-                case .toastAction:
-                    toasts.runAction()
-                    return
-                case .options:
-                    layers.openContextMenu(of: navigator.focus)
-                    return
-                default:
-                    break
-                }
-                if command == .accept, navigator.swallowsAccept() { return }
-                if command == .back {
-                    if navigator.canGoBack {
-                        feedback.play(.back)
-                        go { navigator.back() }
-                    }
-                    return
-                }
-                guard navigator.focus.handle(command) else { return }
-                feedback.play(command == .accept ? .select : .move)
-            }
-            input.start()
-            self.input = input
-        }
+        // Menu is back (at the start screen the system's Home), Play/Pause the focused item's context menu; the
+        // directions and select are the system focus engine's, a swipe or a direction also reaches `route`
+        .onExitCommand(perform: handlesExit ? { route(.back, repeatCount: 0, fromRemote: true) } : nil)
+        .onPlayPauseCommand { route(.options, repeatCount: 0, fromRemote: true) }
+        .onMoveCommand { routeMove($0) }
         #endif
+        .onAppear(perform: startInput)
+    }
+
+    /// Whether Menu is ours: a layer or the side menu is open, or there is a screen to go back to. At the first screen it
+    /// is the system's (tvOS: Home).
+    private var handlesExit: Bool { sideMenu != nil || layers.isOpen || navigator.canGoBack }
+
+    /// The sounds, and the controllers' and keyboards' commands (on tvOS only the ones the system has no event for).
+    private func startInput() {
+        guard input == nil else { return }
+        let feedback = Feedback()
+        feedback.soundsEnabled = appearance.sounds
+        feedback.hapticsEnabled = appearance.haptics
+        self.feedback = feedback
+        layers.feedback = feedback
+        #if os(tvOS)
+        let input = MenuInput(only: MenuInput.tvCommands) { command, repeatCount in route(command, repeatCount: repeatCount) }
+        #else
+        let input = MenuInput { command, repeatCount in route(command, repeatCount: repeatCount) }
+        #endif
+        input.start()
+        self.input = input
+    }
+
+    #if os(tvOS)
+    /// A swipe or a controller's direction: the focus engine moves the focus on its own; only a screen that takes
+    /// over left and right (the value of a Settings row) gets them first.
+    private func routeMove(_ direction: MoveCommandDirection) {
+        guard sideMenu == nil, !layers.isOpen, !navigator.isEditingText, let capture = navigator.commandCapture else { return }
+        switch direction {
+        case .left: navigator.commandRepeat = 0; _ = capture(.left)
+        case .right: navigator.commandRepeat = 0; _ = capture(.right)
+        default: break
+        }
+    }
+    #endif
+
+    /// A controller, keyboard or remote command, to whoever owns it: the side menu, an open layer, the screen that
+    /// captures the commands (the stream, Settings), a text field being typed in, else the screen's focus.
+    /// [fromRemote]: the Siri Remote's Menu or Play/Pause.
+    private func route(_ command: MenuCommand, repeatCount: Int, fromRemote: Bool = false) {
+        guard let feedback else { return }
+        navigator.commandRepeat = repeatCount
+        navigator.commandFromRemote = fromRemote
+        if let sideMenu {
+            // The side menu takes every command while it is open
+            switch command {
+            case .back, .menu: closeSideMenu(sound: .back)
+            case .up, .down, .accept: if sideMenu.handle(command) { feedback.play(command == .accept ? .select : .move) }
+            case .left, .right, .previousTab, .nextTab, .options, .toastAction: break
+            }
+            return
+        }
+        if layers.isOpen {
+            // An open layer takes every command; the text field of a dialog takes the keys while it is typed in
+            if navigator.isEditingText {
+                if command == .back { navigator.isEditingText = false }
+            } else if command == .toastAction {
+                toasts.runAction()
+            } else if command != .accept || !navigator.swallowsAccept() {
+                layers.handle(command)
+            }
+            return
+        }
+        if let capture = navigator.commandCapture, capture(command) { return }
+        if command == .menu, navigator.current.hasSideMenu {
+            feedback.play(.open)
+            withAnimation(.easeOut(duration: 0.3)) { self.sideMenu = FocusModel(initial: SideMenu.settingsID) }
+            return
+        }
+        // While a text field is typed in, the keys belong to it; B and Escape stop typing
+        if navigator.isEditingText {
+            if command == .back { navigator.isEditingText = false }
+            return
+        }
+        switch command {
+        case .toastAction:
+            toasts.runAction()
+            return
+        case .options:
+            layers.openContextMenu(of: navigator.focus)
+            return
+        default:
+            break
+        }
+        if command == .accept, navigator.swallowsAccept() { return }
+        if command == .back {
+            if navigator.canGoBack {
+                feedback.play(.back)
+                go { navigator.back() }
+            }
+            return
+        }
+        guard navigator.focus.handle(command) else { return }
+        feedback.play(command == .accept ? .select : .move)
     }
 
     @ViewBuilder private func screen(_ entry: Navigator.Entry) -> some View {

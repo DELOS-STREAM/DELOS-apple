@@ -51,8 +51,21 @@ public final class ArtworkStore {
     static let keyAccount = "api-key"
     static let automaticKey = "sgdb.automatic"
 
+    /// Where the matches are kept: Application Support/artwork; on tvOS, which has no persistent files (only the caches
+    /// may be written, and the system may empty them), Caches/artwork-matches. A lost match is looked up again, as a lost
+    /// image is downloaded again.
+    public static var defaultMatchesDirectory: URL {
+        #if os(tvOS)
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appending(path: "artwork-matches", directoryHint: .isDirectory)
+        #else
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appending(path: "artwork", directoryHint: .isDirectory)
+        #endif
+    }
+
     /// - Parameters:
-    ///   - matches: where the matches are kept (nil: Application Support/artwork).
+    ///   - matches: where the matches are kept (nil: ``defaultMatchesDirectory``).
     ///   - cache: the images.
     public init(
         secrets: any SecretStorage = KeychainStorage(service: ArtworkStore.keychainService),
@@ -64,8 +77,7 @@ public final class ArtworkStore {
         self.secrets = secrets
         self.defaults = defaults
         self.transport = transport
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        files = ArtworkFiles(matches: matches ?? support.appending(path: "artwork", directoryHint: .isDirectory), cache: cache)
+        files = ArtworkFiles(matches: matches ?? Self.defaultMatchesDirectory, cache: cache)
         apiKey = (try? secrets.read(account: Self.keyAccount)).flatMap { $0.flatMap { String(data: $0, encoding: .utf8) } } ?? ""
         automatic = defaults.object(forKey: Self.automaticKey) as? Bool ?? true
     }

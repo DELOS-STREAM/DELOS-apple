@@ -32,6 +32,7 @@ struct SettingsScreen: View {
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.openURL) private var openURL
+    @Environment(\.modalFocus) private var inheritedModal
     @State private var form: StreamSettingsForm
     @State private var tab: SettingsTab
     /// The row whose list of values is open, and the focus inside the list.
@@ -83,11 +84,12 @@ struct SettingsScreen: View {
             Text(L("settings_screen_title"))
                 .font(DelosFonts.unbounded(stage.tpx(46)))
                 .foregroundStyle(colors.text.color)
-                .offset(x: stage.px(left), y: stage.px(124))
-            SettingsTabs(selected: tab) { next in select(next, sound: .select) }
+                .offset(x: stage.px(left), y: stage.px(124 + stage.safe.top))
+            SettingsTabs(selected: tab, focus: focus) { next in select(next, sound: .select, keepFocus: true) }
                 .frame(height: stage.px(66))
                 .frame(maxWidth: .infinity)
-                .offset(y: stage.px(206))
+                .tvFocusSection()
+                .offset(y: stage.px(206 + stage.safe.top))
             HStack(alignment: .top, spacing: stage.px(56)) {
                 list
                 DescriptionPanel(tab: tab, row: focusedRow)
@@ -95,7 +97,7 @@ struct SettingsScreen: View {
             }
             .padding(.leading, stage.px(left))
             .padding(.trailing, stage.px(right))
-            .padding(.top, stage.px(312))
+            .padding(.top, stage.px(312 + stage.safe.top))
             .padding(.bottom, stage.px(96 + stage.safe.bottom))
             if let picker, let row = rows.first(where: { $0.id == picker.id }), case let .choice(_, options, selected) = row.value {
                 ChoicePicker(
@@ -106,6 +108,8 @@ struct SettingsScreen: View {
             }
         }
         .coordinateSpace(.named(Self.space))
+        // The rows cannot take the system focus (tvOS) while the list of values is open
+        .environment(\.modalFocus, picker?.focus ?? inheritedModal)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onChange(of: form.settings) { _, now in store.save(now, profile: profileID) }
         .onChange(of: appearance) { _, now in appearances.save(now, profile: profileID) }
@@ -281,11 +285,12 @@ struct SettingsScreen: View {
         withAnimation(.easeOut(duration: 0.2)) { picker = nil }
     }
 
-    private func select(_ next: SettingsTab, sound: Cue) {
+    /// [keepFocus]: the tab was chosen on the tab itself (tvOS), so the focus stays there.
+    private func select(_ next: SettingsTab, sound: Cue, keepFocus: Bool = false) {
         guard next != tab else { return }
         feedback?.play(sound)
         tab = next
-        if let first = rows.first { focus.focus(AnyHashable(first.id)) }
+        if !keepFocus, let first = rows.first { focus.focus(AnyHashable(first.id)) }
     }
 }
 
@@ -322,41 +327,61 @@ private struct SectionHeading: View {
     }
 }
 
-/// The tabs between the L1 and R1 badges (`TabPill` in a `TabRow` of DELOS for Android), centred on the stage. They
-/// are never focused: L1 and R1 switch them, a tap selects one. The selected one sits on the accent pill, which glides
-/// to the next.
+/// The tabs between the L1 and R1 badges (`TabPill` in a `TabRow` of DELOS for Android), centred on the stage. On the
+/// controller they are never focused: L1 and R1 switch them; a tap selects one. On tvOS the Siri Remote has no L1 and
+/// R1, so each tab is also an item of the screen's focus (up from the first row): select picks it. The selected one
+/// sits on the accent pill, which glides to the next.
 private struct SettingsTabs: View {
     let selected: SettingsTab
+    let focus: FocusModel
     let onSelect: (SettingsTab) -> Void
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
     @Namespace private var pill
 
+    static func tabID(_ tab: SettingsTab) -> String { "tab-\(tab)" }
+
     var body: some View {
         HStack(spacing: 0) {
             ShoulderLabel(label: "L1")
             ForEach(SettingsTab.availableCases, id: \.self) { tab in
-                let on = tab == selected
-                HStack(spacing: stage.px(12)) {
-                    SymbolView(symbol: tab.icon, size: 30, color: on ? colors.onAccent : colors.text2, filled: on)
-                    Text(tab.label)
-                        .font(DelosFonts.figtree(stage.tpx(22), .semibold))
-                        .foregroundStyle((on ? colors.onAccent : colors.text2).color)
-                }
-                .padding(.horizontal, stage.px(22))
-                .frame(height: stage.px(66))
-                .background {
-                    if on { Capsule().fill(colors.accent.color).matchedGeometryEffect(id: "pill", in: pill) }
-                }
-                .contentShape(Capsule())
-                .onTapGesture { onSelect(tab) }
-                .padding(.horizontal, stage.px(5))
-                .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+                tabView(tab)
             }
             ShoulderLabel(label: "R1")
         }
         .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.8), value: selected)
+    }
+
+    @ViewBuilder private func tabView(_ tab: SettingsTab) -> some View {
+        #if os(tvOS)
+        FocusItem(id: Self.tabID(tab), model: focus, action: { onSelect(tab) }) { focused in
+            pillView(tab)
+                .focusLook(focused, scale: 1.06, ring: 3, glowBlur: 0, glowY: 0)
+        }
+        .padding(.horizontal, stage.px(5))
+        #else
+        pillView(tab)
+            .contentShape(Capsule())
+            .onTapGesture { onSelect(tab) }
+            .padding(.horizontal, stage.px(5))
+        #endif
+    }
+
+    private func pillView(_ tab: SettingsTab) -> some View {
+        let on = tab == selected
+        return HStack(spacing: stage.px(12)) {
+            SymbolView(symbol: tab.icon, size: 30, color: on ? colors.onAccent : colors.text2, filled: on)
+            Text(tab.label)
+                .font(DelosFonts.figtree(stage.tpx(22), .semibold))
+                .foregroundStyle((on ? colors.onAccent : colors.text2).color)
+        }
+        .padding(.horizontal, stage.px(22))
+        .frame(height: stage.px(66))
+        .background {
+            if on { Capsule().fill(colors.accent.color).matchedGeometryEffect(id: "pill", in: pill) }
+        }
+        .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
     }
 }
 

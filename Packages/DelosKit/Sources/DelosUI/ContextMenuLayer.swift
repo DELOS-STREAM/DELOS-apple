@@ -28,9 +28,10 @@ struct ContextMenuLayer: View {
 
     private typealias L = ContextMenuLayout
 
-    private var marginX: Double { stage.compact ? L.compactMargin : L.marginX }
-    private var marginY: Double { stage.compact ? L.compactMargin + stage.safe.top : L.marginY }
-    private var marginBottom: Double { stage.compact ? L.compactMargin + stage.safe.bottom : L.marginY }
+    // The card keeps clear of the safe area too (on Apple TV the overscan margins, 60 and 90 points)
+    private var marginX: Double { (stage.compact ? L.compactMargin : L.marginX) + max(stage.safe.leading, stage.safe.trailing) }
+    private var marginY: Double { (stage.compact ? L.compactMargin : L.marginY) + stage.safe.top }
+    private var marginBottom: Double { (stage.compact ? L.compactMargin : L.marginY) + stage.safe.bottom }
 
     private var stageAnchor: CGRect? {
         anchor.map {

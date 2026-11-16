@@ -58,11 +58,24 @@ public final class Navigator {
         didSet { if oldValue, !isEditingText { textEditingEnded = .now } }
     }
     @ObservationIgnored private var textEditingEnded = Date.distantPast
+
+    /// A text field has started or stopped being typed in. On tvOS this is not told: the system keyboard is a screen of its
+    /// own that takes the remote and ends itself (Menu closes it without the app hearing of it), and a focused field is
+    /// not a field being typed in, so the commands never belong to a field there.
+    func textEditing(_ editing: Bool) {
+        #if !os(tvOS)
+        isEditingText = editing
+        #endif
+    }
+
     /// While set, every controller and keyboard command goes here first; true: consumed (the stream screen owns the
     /// controller).
     @ObservationIgnored public var commandCapture: (@MainActor (MenuCommand) -> Bool)?
     /// How often the command being handled has repeated while its direction is held (0: a new press).
     @ObservationIgnored public internal(set) var commandRepeat = 0
+    /// Whether the command being handled is the Siri Remote's Menu or Play/Pause (tvOS): not a button of a game
+    /// controller, whose buttons the stream sends to the PC.
+    @ObservationIgnored public internal(set) var commandFromRemote = false
 
     public init(root: Screen, focus: AnyHashable? = nil) {
         stack = [Entry(screen: root, focus: FocusModel(initial: focus))]
