@@ -33,11 +33,21 @@ struct Brand: View {
     var body: some View {
         HStack(spacing: stage.px(18)) {
             LogoMark()
-            Text("DELOS")
-                .font(DelosFonts.unbounded(stage.px(26)))
-                .tracking(stage.px(26) * 0.14)
-                .foregroundStyle(colors.text.color)
+            Wordmark()
         }
+    }
+}
+
+/// "DELOS" beside the mark.
+struct Wordmark: View {
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+
+    var body: some View {
+        Text(verbatim: "DELOS")
+            .font(DelosFonts.unbounded(stage.tpx(26)))
+            .tracking(stage.tpx(26) * 0.14)
+            .foregroundStyle(colors.text.color)
     }
 }
 
@@ -51,12 +61,12 @@ struct Heading: View {
     var body: some View {
         VStack(spacing: stage.px(14)) {
             Text(title)
-                .font(DelosFonts.unbounded(stage.px(64)))
-                .tracking(-stage.px(64) * 0.01)
+                .font(DelosFonts.unbounded(stage.tpx(64)))
+                .tracking(-stage.tpx(64) * 0.01)
                 .foregroundStyle(colors.text.color)
             if let sub {
                 Text(sub)
-                    .font(DelosFonts.figtree(stage.px(26)))
+                    .font(DelosFonts.figtree(stage.tpx(26)))
                     .foregroundStyle(colors.text2.color)
                     .frame(maxWidth: stage.px(1000))
             }
@@ -113,7 +123,7 @@ struct CircleItem: View {
             .zIndex(focused ? 1 : 0)
             VStack(spacing: stage.px(8)) {
                 Text(label)
-                    .font(DelosFonts.figtree(stage.px(26), .semibold))
+                    .font(DelosFonts.figtree(stage.tpx(26), .semibold))
                     .foregroundStyle(colors.text.color)
                     .opacity(lit ? 1 : 0.55)
                     .offset(y: lit ? 0 : -stage.px(6))
@@ -122,7 +132,7 @@ struct CircleItem: View {
                     HStack(spacing: stage.px(8)) {
                         if let metaDot { Circle().fill(metaDot.color).frame(width: stage.px(12), height: stage.px(12)) }
                         Text(meta)
-                            .font(DelosFonts.figtree(stage.px(20)))
+                            .font(DelosFonts.figtree(stage.tpx(20)))
                             .foregroundStyle(colors.text3.color)
                             .multilineTextAlignment(.center)
                             .lineLimit(2)

@@ -11,13 +11,16 @@ struct NavButton: Identifiable {
     let action: @MainActor () -> Void
 }
 
-/// The top navigation in the middle of the status bar (`TopNav` of DELOS for Android): round 64 px buttons, 14 px apart,
-/// in a glass capsule. The focused button lies on the main color, grows by 12 % and shows its name under it; the
-/// current screen's button has its icon in the main color and a small dot. Android's buttons are Settings, Profile and
-/// Devices; Devices waits for its screen.
+/// The top navigation in the middle of the status bar (`TopNav` of DELOS for Android): round buttons [buttonSize] wide
+/// (64 px; 56 on a compact stage) and [gap] apart (14 px, 6 when the compact bar is tight), in a glass capsule. The
+/// focused button lies on the main color, grows by 12 % and shows its name under it; the current screen's button has its
+/// icon in the main color and a small dot. Android's buttons are Settings, Profile and Devices; Devices waits for its
+/// screen.
 struct TopNav: View {
     let buttons: [NavButton]
     let focus: FocusModel
+    var buttonSize = 64.0
+    var gap = StatusBarLayout.navGap
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
@@ -30,14 +33,14 @@ struct TopNav: View {
     }
 
     var body: some View {
-        HStack(spacing: stage.px(14)) {
+        HStack(spacing: stage.px(gap)) {
             ForEach(buttons) { button in
                 FocusItem(id: button.id, model: focus, action: button.action) { focused in
                     buttonView(button, focused: focused)
                 }
             }
         }
-        .padding(stage.px(8))
+        .padding(stage.px(StatusBarLayout.navPadding))
         .background {
             Capsule().fill(colors.surface.color)
                 .overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
@@ -45,7 +48,7 @@ struct TopNav: View {
     }
 
     private func buttonView(_ button: NavButton, focused: Bool) -> some View {
-        let size = 64.0
+        let size = buttonSize
         return ZStack {
             Circle().fill(colors.accent.color).opacity(focused ? 1 : 0)
             SymbolView(symbol: button.icon, size: 34, color: focused ? colors.onAccent : button.current ? colors.accent : colors.text2, filled: focused)
@@ -63,7 +66,7 @@ struct TopNav: View {
         .overlay(alignment: .top) {
             if focused {
                 Text(button.label)
-                    .font(DelosFonts.figtree(stage.px(18), .semibold))
+                    .font(DelosFonts.figtree(stage.tpx(18), .semibold))
                     .foregroundStyle(colors.text.color)
                     .lineLimit(1)
                     .fixedSize()
@@ -133,11 +136,11 @@ struct SideMenu: View {
             if let profile { AvatarBadge(avatar: .of(profile.avatar), size: 72, iconSize: 40) }
             VStack(alignment: .leading, spacing: stage.px(2)) {
                 Text(profile?.name ?? "DELOS")
-                    .font(DelosFonts.unbounded(stage.px(28)))
+                    .font(DelosFonts.unbounded(stage.tpx(28)))
                     .foregroundStyle(colors.text.color)
                     .lineLimit(1)
                 Text(status)
-                    .font(DelosFonts.figtree(stage.px(20)))
+                    .font(DelosFonts.figtree(stage.tpx(20)))
                     .foregroundStyle(colors.text3.color)
                     .lineLimit(1)
             }

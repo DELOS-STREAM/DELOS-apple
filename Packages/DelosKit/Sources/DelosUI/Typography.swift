@@ -45,7 +45,7 @@ struct SymbolView: View {
 
     var body: some View {
         Text(symbol)
-            .font(DelosFonts.symbol(stage.px(size), filled: filled))
+            .font(DelosFonts.symbol(stage.tpx(size), filled: filled))
             .foregroundStyle(color.color)
     }
 }

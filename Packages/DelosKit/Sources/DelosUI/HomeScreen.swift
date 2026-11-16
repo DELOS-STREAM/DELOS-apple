@@ -85,7 +85,7 @@ private struct AppRow: View {
         VStack(alignment: .leading, spacing: stage.px(40)) {
             Spacer()
             Text(apps[focusedIndex ?? 0].title)
-                .font(DelosFonts.unbounded(stage.px(64)))
+                .font(DelosFonts.unbounded(stage.tpx(64)))
                 .foregroundStyle(colors.text.color)
                 .lineLimit(1)
                 .padding(.leading, stage.px(150 + stage.safe.leading))
@@ -135,7 +135,7 @@ private struct Cover: View {
                 Image(decorative: art, scale: 1).resizable().scaledToFill()
             } else {
                 Text(app.title)
-                    .font(DelosFonts.figtree(stage.px(30), .semibold))
+                    .font(DelosFonts.figtree(stage.tpx(30), .semibold))
                     .foregroundStyle(colors.text2.color)
                     .multilineTextAlignment(.center)
                     .padding(stage.px(24))
@@ -170,11 +170,11 @@ private struct HomeMessage: View {
         VStack(spacing: stage.px(22)) {
             SymbolView(symbol: icon, size: 110, color: colors.accent, filled: true)
             Text(title)
-                .font(DelosFonts.unbounded(stage.px(52)))
+                .font(DelosFonts.unbounded(stage.tpx(52)))
                 .foregroundStyle(colors.text.color)
             if let text {
                 Text(text)
-                    .font(DelosFonts.figtree(stage.px(26)))
+                    .font(DelosFonts.figtree(stage.tpx(26)))
                     .foregroundStyle(colors.text2.color)
             }
         }

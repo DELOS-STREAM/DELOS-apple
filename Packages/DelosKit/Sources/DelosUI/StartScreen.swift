@@ -89,6 +89,8 @@ public struct DelosRoot: View {
     @State private var videoCoversBackdrop = false
     /// The side menu's focus while it is open.
     @State private var sideMenu: FocusModel?
+    /// The battery and the network for the status bar.
+    @State private var device = DeviceStatus()
     private let appearances = AppearanceStore()
     private let streamSettings = StreamSettingsStore()
     /// The tab Settings opens with (debug builds: `-DelosSettings <tab>`).
@@ -105,8 +107,9 @@ public struct DelosRoot: View {
         var appearance = profiles.current.map { AppearanceStore().load(profile: $0.id) } ?? Appearance()
         var settingsTab = SettingsTab.stream
         #if DEBUG
-        // Screenshots (docs/BUILDING.md): -DelosBackground <kind>, -DelosTheme light, -DelosPalette <name>, and
-        // -DelosSettings <tab> opens Settings on that tab, focused on its first row or on -DelosFocus <row id>
+        // Screenshots (docs/BUILDING.md): -DelosBackground <kind>, -DelosTheme light, -DelosPalette <name>,
+        // -DelosScale <percent>, -DelosClock <system|h12|h24>, and -DelosSettings <tab> opens Settings on that tab,
+        // focused on its first row or on -DelosFocus <row id>
         let defaults = UserDefaults.standard
         if let kind = defaults.string(forKey: "DelosBackground").flatMap(BackgroundKind.init(rawValue:)) {
             appearance.background = kind
@@ -115,6 +118,8 @@ public struct DelosRoot: View {
         if let palette = defaults.string(forKey: "DelosPalette").flatMap(PaletteName.init(rawValue:)) {
             appearance.palette = palette
         }
+        if defaults.object(forKey: "DelosScale") != nil { appearance.uiScale = defaults.integer(forKey: "DelosScale") }
+        if let clock = defaults.string(forKey: "DelosClock").flatMap(ClockFormat.init(rawValue:)) { appearance.clock = clock }
         if let name = defaults.string(forKey: "DelosSettings"), let tab = SettingsTab.allCases.first(where: { "\($0)" == name }),
            !profiles.isFirstRun {
             settingsTab = tab
@@ -131,7 +136,7 @@ public struct DelosRoot: View {
     }
 
     public var body: some View {
-        StageReader {
+        StageReader(textScale: Double(appearance.uiScale) / 100) {
             ZStack {
                 if !videoCoversBackdrop { Backdrop(kind: appearance.background) }
                 let entry = navigator.stack[navigator.stack.count - 1]
@@ -144,7 +149,10 @@ public struct DelosRoot: View {
                 if case .stream = navigator.current {} else {
                     TopBar(
                         brand: navigator.current != .start, navigation: navigation(entry),
-                        onBack: navigator.canGoBack ? { go { navigator.back() } } : nil)
+                        pc: navigator.current.showsNavigation ? connectedPC : nil, wifi: device.wifi, battery: device.battery,
+                        clock: appearance.clock, onBack: navigator.canGoBack ? { go { navigator.back() } } : nil)
+                        // The interface scale zooms the whole bar
+                        .modifier(ZoomedBar())
                         // The navigation's buttons belong to the focus of the screen shown
                         .id(ObjectIdentifier(entry.focus))
                 }
@@ -173,6 +181,7 @@ public struct DelosRoot: View {
             feedback?.soundsEnabled = now.sounds
             feedback?.hapticsEnabled = now.haptics
         }
+        .onAppear { device.start() }
         #if os(iOS)
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
@@ -382,52 +391,4 @@ public struct DelosRoot: View {
 /// Changes the screen with the shared screen transition (`.screen` of the prototype: a fade with a slight zoom).
 @MainActor private func go(_ change: () -> Void) {
     withAnimation(.easeOut(duration: 0.5), change)
-}
-
-/// The status bar: the brand at the top left, 72 stage pixels from the side, in a 104 px high bar, and on the screens of
-/// the top navigation its buttons in the middle. The start screen leaves the brand out: the profile chip is at the top
-/// there.
-struct TopBar: View {
-    /// The buttons of the top navigation and the focus they belong to.
-    struct Navigation {
-        let buttons: [NavButton]
-        let focus: FocusModel
-    }
-
-    var brand = true
-    var navigation: Navigation?
-    /// Shown on iPhone and iPad when the screen can go back: a touch user has no B button and the system has no back
-    /// gesture of its own (on Android the system's back does it, so DELOS for Android has no such button).
-    var onBack: (() -> Void)?
-    @Environment(\.stage) private var stage
-    @Environment(\.delosColors) private var colors
-
-    var body: some View {
-        VStack {
-            ZStack {
-                HStack(spacing: stage.px(24)) {
-                    #if os(iOS)
-                    if let onBack {
-                        Button(action: onBack) {
-                            SymbolView(symbol: Symbols.arrowBack, size: 34, color: colors.text)
-                                .frame(width: stage.px(68), height: stage.px(68))
-                                .background(GlassShape(Circle(), tint: colors.surface))
-                                .overlay(Circle().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(L("shell_hint_back"))
-                    }
-                    #endif
-                    if brand { Brand() }
-                    Spacer()
-                }
-                if let navigation { TopNav(buttons: navigation.buttons, focus: navigation.focus) }
-            }
-            .frame(height: stage.px(104))
-            .padding(.top, stage.px(stage.safe.top))
-            .padding(.leading, stage.px(72 + stage.safe.leading))
-            .padding(.trailing, stage.px(72 + stage.safe.trailing))
-            Spacer()
-        }
-    }
 }

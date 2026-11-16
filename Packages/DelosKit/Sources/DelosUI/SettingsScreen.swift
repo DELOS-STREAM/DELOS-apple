@@ -69,7 +69,7 @@ struct SettingsScreen: View {
         let left = 150 + stage.safe.leading, right = 150 + stage.safe.trailing
         ZStack(alignment: .topLeading) {
             Text(L("settings_screen_title"))
-                .font(DelosFonts.unbounded(stage.px(46)))
+                .font(DelosFonts.unbounded(stage.tpx(46)))
                 .foregroundStyle(colors.text.color)
                 .offset(x: stage.px(left), y: stage.px(124))
             SettingsTabs(selected: tab) { next in select(next, sound: .select) }
@@ -116,9 +116,9 @@ struct SettingsScreen: View {
                         FocusItem(
                             id: row.id, model: focus, action: { activate(row) }, tap: { tapped(row) }
                         ) { focused in
-                            SettingRowView(row: row, focused: focused) { kbps in
+                            SettingRowView(row: row, focused: focused) { value in
                                 focus.focus(AnyHashable(row.id))
-                                form.setBitrate(kbps)
+                                slide(row.id, to: value)
                             }
                         }
                         .id(row.id)
@@ -197,6 +197,17 @@ struct SettingsScreen: View {
         return true
     }
 
+    /// A slider's value set on its track by touch: the bitrate or the interface scale.
+    private func slide(_ id: String, to value: Int) {
+        if AppearanceForm.ids.contains(id) {
+            var next = appearanceForm
+            next.slide(id, to: value)
+            appearance = next.appearance
+        } else if id == StreamSettingsForm.bitrate {
+            form.setBitrate(value)
+        }
+    }
+
     /// A tap on a row (it is focused already): a toggle flips, a choice opens its list, a slider waits for its track.
     private func tapped(_ row: SettingRow) {
         switch row.value {
@@ -259,8 +270,8 @@ private struct SectionHeading: View {
 
     var body: some View {
         Text(label.uppercased(with: .current))
-            .font(DelosFonts.figtree(stage.px(16), .semibold))
-            .tracking(stage.px(16) * 0.08)
+            .font(DelosFonts.figtree(stage.tpx(16), .semibold))
+            .tracking(stage.tpx(16) * 0.08)
             .foregroundStyle(colors.text3.color)
             .padding(.leading, stage.px(26))
             .padding(.top, stage.px(10))
@@ -287,7 +298,7 @@ private struct SettingsTabs: View {
                 HStack(spacing: stage.px(12)) {
                     SymbolView(symbol: tab.icon, size: 30, color: on ? colors.onAccent : colors.text2, filled: on)
                     Text(tab.label)
-                        .font(DelosFonts.figtree(stage.px(22), .semibold))
+                        .font(DelosFonts.figtree(stage.tpx(22), .semibold))
                         .foregroundStyle((on ? colors.onAccent : colors.text2).color)
                 }
                 .padding(.horizontal, stage.px(22))
@@ -314,7 +325,7 @@ private struct ShoulderLabel: View {
 
     var body: some View {
         Text(label)
-            .font(DelosFonts.figtree(stage.px(18), .bold))
+            .font(DelosFonts.figtree(stage.tpx(18), .bold))
             .foregroundStyle(colors.text3.color)
             .padding(.horizontal, stage.px(12))
             .padding(.vertical, stage.px(6))
@@ -340,7 +351,7 @@ struct SettingRowView: View {
             SymbolView(symbol: row.icon, size: 34, color: focused ? colors.accent2 : colors.accent2.opacity(0.62), filled: focused)
                 .frame(width: stage.px(compact ? 44 : 52), alignment: .leading)
             Text(row.label)
-                .font(DelosFonts.figtree(stage.px(26), .semibold))
+                .font(DelosFonts.figtree(stage.tpx(26), .semibold))
                 .foregroundStyle(colors.text.color)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -375,7 +386,7 @@ struct SettingRowView: View {
                         Circle().fill(swatch.color).frame(width: stage.px(26), height: stage.px(26))
                     }
                     Text(label)
-                        .font(DelosFonts.figtree(stage.px(23)))
+                        .font(DelosFonts.figtree(stage.tpx(23)))
                         .foregroundStyle(colors.text2.color)
                         .lineLimit(1)
                 }
@@ -455,7 +466,7 @@ private struct SettingSlider: View {
             .contentShape(Rectangle()), width: stage.px(track))
             .animation(dragging == nil && !reduceMotion ? .easeOut(duration: 0.2) : nil, value: number)
             Text(label(number))
-                .font(DelosFonts.figtree(stage.px(23)))
+                .font(DelosFonts.figtree(stage.tpx(23)))
                 .foregroundStyle(colors.text2.color)
                 .lineLimit(1)
                 .frame(width: stage.px(160), alignment: .trailing)
@@ -504,14 +515,14 @@ private struct DescriptionPanel: View {
             }
             .frame(width: stage.px(120), height: stage.px(120))
             Text(row?.label ?? tab.label)
-                .font(DelosFonts.unbounded(stage.px(30)))
+                .font(DelosFonts.unbounded(stage.tpx(30)))
                 .foregroundStyle(colors.text.color)
                 .padding(.top, stage.px(8))
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: stage.px(18)) {
                     Text(row?.help ?? tab.help)
-                        .font(DelosFonts.figtree(stage.px(22)))
-                        .lineSpacing(stage.px(22 * 0.45))
+                        .font(DelosFonts.figtree(stage.tpx(22)))
+                        .lineSpacing(stage.tpx(22 * 0.45))
                         .foregroundStyle(colors.text2.color)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if row?.id == AppearanceForm.palette { swatches }
@@ -536,7 +547,7 @@ private struct DescriptionPanel: View {
                         .overlay(RoundedRectangle(cornerRadius: stage.px(18)).strokeBorder(colors.line.color, lineWidth: stage.px(1)))
                         .frame(width: stage.px(120), height: stage.px(72))
                     Text(name)
-                        .font(DelosFonts.figtree(stage.px(18)))
+                        .font(DelosFonts.figtree(stage.tpx(18)))
                         .foregroundStyle(colors.text2.color)
                 }
             }
@@ -589,7 +600,7 @@ private struct ChoicePicker: View {
     private func card(listHeight: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: stage.px(Self.gap)) {
             Text(title)
-                .font(DelosFonts.figtree(stage.px(20), .semibold))
+                .font(DelosFonts.figtree(stage.tpx(20), .semibold))
                 .foregroundStyle(colors.text3.color)
                 .lineLimit(1)
                 .padding(.horizontal, stage.px(24))
@@ -626,7 +637,7 @@ private struct ChoicePicker: View {
     private func optionView(_ label: String, current: Bool, focused: Bool) -> some View {
         HStack(spacing: stage.px(18)) {
             Text(label)
-                .font(DelosFonts.figtree(stage.px(23), .semibold))
+                .font(DelosFonts.figtree(stage.tpx(23), .semibold))
                 .foregroundStyle(colors.text.color)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -41,6 +41,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   codec, incoming and displayed frame rates, video payload bandwidth, network round-trip time, host processing,
   presentation lateness and missing frames. Actual decode duration and RTP packet-loss percentage are unavailable
   with the current renderer/core and are not invented. Live statistics on a real stream are not verified.
+- The status bar of DELOS for Android: Wi-Fi, the battery with its percentage (red when low, a bolt while charging)
+  and the clock at the right, and the connected PC beside the brand on the library, Settings and Profile. Settings →
+  Appearance has the Clock (System, 12-hour, 24-hour) and the Interface scale (100 to 130 %), which enlarges text and
+  icons and zooms the status bar.
 
 ### Changed
 

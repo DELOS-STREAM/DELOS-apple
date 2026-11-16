@@ -31,9 +31,12 @@ cp Config/Local.example.xcconfig Config/Local.xcconfig   # only for a real devic
 
 Debug builds read launch arguments for screenshots of each background, theme and palette: `-DelosBackground <kind>`
 (`aurora`, `tide`, `silk`, `contour`, `nebula`, `plasma`, `lava`, `caustics`, `bokeh`, `orbit` or `still`),
-`-DelosTheme light`, `-DelosPalette <name>` (`delos`, `ember`, `rose`, `orchid`, `dusk`, `iris`, `graphite` or `mint`)
-and, once a profile exists, `-DelosSettings <tab>` (`stream`, `audio`, `controls` or `appearance`), which opens Settings
-on that tab, focused on its first row or on `-DelosFocus <row id>` (Android's key, such as `ui_palette`). With an
+`-DelosTheme light`, `-DelosPalette <name>` (`delos`, `ember`, `rose`, `orchid`, `dusk`, `iris`, `graphite` or `mint`),
+`-DelosScale <percent>` (the interface scale, 100 to 130), `-DelosClock <format>` (`system`, `h12` or `h24`),
+`-DelosBattery <percent>` (a battery for the status bar, which a simulator lacks; `c` after the number: charging, such
+as `40c`) and, once a profile exists, `-DelosSettings <tab>` (`stream`, `audio`, `controls` or `appearance`), which
+opens Settings on that tab, focused on its first row or on `-DelosFocus <row id>` (Android's key, such as
+`ui_palette`). With an
 installed app:
 
 ```sh

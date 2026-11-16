@@ -49,6 +49,32 @@ layout family, and `Stage.safe` holds the safe area in stage pixels: the window 
 to an edge keeps clear of the safe area itself. Views read the stage from the environment and write sizes as
 `stage.px(26)`.
 
+The interface scale (Settings → Appearance, 100 to 130 %) is `Stage.textScale` (Android's `StageMetrics.textScale`):
+text and icon sizes are written as `stage.tpx(26)`, which grows with it, while every other size keeps its stage pixels,
+so covers, circles and gaps stay as they are. The status bar is zoomed as a whole instead (`ZoomedBar`, the prototype's
+CSS zoom): `Stage.zoomed(by:)` makes one stage pixel larger by the scale and the stage as much narrower and lower, with
+a text scale of 1 inside, so the bar keeps its proportions and has as many stage pixels across as it really has room
+for. The stream screen's text does not follow the scale yet.
+
+## The status bar
+
+`TopBar` (`StatusBar` of DELOS for Android, `StatusBar.swift`) is on every screen but the stream: the brand at the top
+left (the start screen leaves it out for the profile chip; on iPhone and iPad the back button comes first), on the
+screens of the top navigation the connected PC in a glass pill beside it (green dot while online) and `TopNav` in the
+middle, and at the right Wi-Fi, the battery with its percentage and the clock, in a 104 px bar 72 px from the sides.
+
+| Part | Source | Shown |
+|---|---|---|
+| Wi-Fi | `NWPathMonitor` (`DeviceStatus`) | Wi-Fi while the default network is a satisfied Wi-Fi path, else Wi-Fi off (cellular and Ethernet too, as on Android). iOS gives apps no signal strength, so there are no bars |
+| Battery | `UIDevice` battery monitoring | The iOS-style battery of Android's `BatteryIndicator`: filled green to the level, red at 20 % and below while not charging, a bolt and a pulse while charging; none where the level is unknown (simulators, Apple TV) |
+| Clock | `StatusClock`, every minute | The `Hm` or `hm` pattern of the app's locale (the narrow space before AM / PM becomes a space); Settings → Appearance → Clock: System follows the device's 24-Hour Time (the locale's hour cycle), 12-hour, 24-hour |
+
+A compact stage gets `CompactStatusBar`: 56 px navigation buttons, the PC only as its dot with the PC glyph (the name
+is its accessibility label), no wordmark under 1280 bar pixels, and `StatusBarLayout.fit` (Android's `fitStatusBar`)
+places the navigation on the bar's middle while 24 px stay to both clusters, else in the middle of the free space,
+tightening the inner gaps and last dropping the battery's percentage when even that is too narrow. The clusters are
+measured by hidden copies.
+
 ## Focus
 
 On iPhone and iPad every screen that can go back shows a back button at the top left: a touch user has no B button,
@@ -317,18 +343,19 @@ menu's bitrate), the summary of the catalog or no value line is used instead.
 
 **Appearance** (`AppearanceForm`, the native rows of Android's `nativeSettings`): the Appearance tab has Theme (Dark,
 Light), Color palette (all eight; the value shows a dot of the palette's main hue, `hsl(accent, 90, 60)`, and the panel
-the main, secondary and accent colors as 120 × 72 swatches), Animated background (all eleven) and Animations (Full,
-Reduced); Interface sounds sits in the Audio tab and Interface haptics in the Controls tab, all under the Interface
-section, as on Android. A change goes into `DelosRoot`'s appearance through a binding, so the colors, the backdrop behind
-Settings, the sounds and the haptics change at once, and `SettingsScreen` stores it for the profile. The help is
+the main, secondary and accent colors as 120 × 72 swatches), Clock (System, 12-hour, 24-hour), Animated background (all
+eleven), Interface scale (a slider, 100 to 130 % in steps of 5) and Animations (Full, Reduced); Interface sounds sits in
+the Audio tab and Interface haptics in the Controls tab, all under the Interface section, as on Android. A change goes
+into `DelosRoot`'s appearance through a binding, so the colors, the backdrop behind Settings, the clock, the interface
+scale, the sounds and the haptics change at once, and `SettingsScreen` stores it for the profile. The help is
 `NativeSettingsHelp.details` (the value with its line, then the row's description); the background row shows only the
-chosen background's line, because Android's description names its Android version. Reduced animations set the
+chosen background's line, because Android's description names its Android version, and the clock's System has no line
+of its own, because Android's names Android's setting. Reduced animations set the
 `reducedMotion` environment value (`LocalReducedMotion`; also on with the system's Reduce Motion), which the focus
 springs, the tabs, the switches and the screen transition (a plain fade) follow.
 
-Not in the Appearance tab: Material You (no counterpart), the game colors, the game background with its blur and
-opacity (no game background yet), the clock format (the status bar has no clock yet) and the interface scale (Android's
-`uiScale` scales the text and zooms the bars of every screen through the stage; the stage has no text scale yet).
+Not in the Appearance tab: Material You (no counterpart), the game colors and the game background with its blur and
+opacity (no game background yet).
 
 Not ported yet: the Display, Covers, Devices and About tabs, the other rows of Audio and Controls, search, the impact
 chips, the compact layout (the help dock under the list), the gliding focus plate and the auto-scrolling help, and

@@ -16,12 +16,12 @@ struct BootScreen: View {
                 .padding(.bottom, stage.px(8))
             // The leading padding balances the letter spacing after the last letter
             Text(verbatim: "DELOS")
-                .font(DelosFonts.unbounded(stage.px(stage.compact ? 96 : 132)))
-                .tracking(stage.px(stage.compact ? 96 : 132) * 0.24)
+                .font(DelosFonts.unbounded(stage.tpx(stage.compact ? 96 : 132)))
+                .tracking(stage.tpx(stage.compact ? 96 : 132) * 0.24)
                 .foregroundStyle(colors.text.color)
                 .padding(.leading, stage.px(stage.compact ? 22 : 30))
             Text(L("firstrun_boot_tagline"))
-                .font(DelosFonts.figtree(stage.px(28)))
+                .font(DelosFonts.figtree(stage.tpx(28)))
                 .foregroundStyle(colors.text2.color)
                 .multilineTextAlignment(.center)
             HStack(spacing: stage.px(24)) {

@@ -2,24 +2,29 @@ import DelosData
 import Foundation
 
 /// The rows of the current profile's ``Appearance`` in Settings (the native rows of `nativeSettings` in DELOS for
-/// Android): Appearance → theme, palette, animated background and animations; the interface sounds under Audio and the
-/// interface haptics under Controls, where Android has them. Each change applies at once.
+/// Android): Appearance → theme, palette, clock, animated background, interface scale and animations; the interface
+/// sounds under Audio and the interface haptics under Controls, where Android has them. Each change applies at once.
 ///
 /// Not ported: Material You (no counterpart on Apple platforms), the game colors and the game background with its blur
-/// and opacity (no game background yet), the clock format (the status bar has no clock yet) and the interface scale
-/// (the stage has no text scale yet).
+/// and opacity (no game background yet).
 struct AppearanceForm: Equatable {
     var appearance: Appearance
 
     static let theme = "ui_dark"
     static let palette = "ui_palette"
+    static let clock = "ui_clock"
     static let background = "ui_background"
+    static let scale = "ui_scale"
     static let motion = "ui_reduced_motion"
     static let sounds = "ui_sounds"
     static let haptics = "ui_haptics"
 
     /// The ids of every row this form owns.
-    static let ids: Set<String> = [theme, palette, background, motion, sounds, haptics]
+    static let ids: Set<String> = [theme, palette, clock, background, scale, motion, sounds, haptics]
+
+    /// The interface scale's slider, in percent.
+    static let scaleRange = 100...130
+    static let scaleStep = 5
 
     /// The rows of [tab] in Android's order.
     func rows(_ tab: SettingsTab) -> [SettingRow] {
@@ -27,7 +32,7 @@ struct AppearanceForm: Equatable {
         case .stream: []
         case .audio: [soundsRow]
         case .controls: [hapticsRow]
-        case .appearance: [themeRow, paletteRow, backgroundRow, motionRow]
+        case .appearance: [themeRow, paletteRow, clockRow, backgroundRow, scaleRow, motionRow]
         }
     }
 
@@ -94,6 +99,23 @@ struct AppearanceForm: Equatable {
     /// The dot beside a palette's name: its main hue (`hsl(accent, 90, 60)` of DELOS for Android), in either theme.
     static func swatch(_ palette: PaletteName) -> RGBA { hsl(Palette(palette).accent, 90, 60) }
 
+    static func label(_ clock: ClockFormat) -> String {
+        switch clock {
+        case .system: L("settings_option_clock_system")
+        case .h12: L("settings_option_clock_12")
+        case .h24: L("settings_option_clock_24")
+        }
+    }
+
+    /// What a clock format does. Android's line for System names Android's own setting: System has none here.
+    static func help(_ clock: ClockFormat) -> String? {
+        switch clock {
+        case .system: nil
+        case .h12: L("settings_native_help_clock_12")
+        case .h24: L("settings_native_help_clock_24")
+        }
+    }
+
     // MARK: Rows
 
     private var interface: String { L("settings_native_section_interface") }
@@ -140,6 +162,21 @@ struct AppearanceForm: Equatable {
                 about: L("settings_native_animations_description")))
     }
 
+    private var clockRow: SettingRow {
+        let label = Self.label(appearance.clock)
+        return SettingRow(
+            id: Self.clock, tab: .appearance, section: interface, icon: Symbols.schedule, label: L("settings_native_clock_title"),
+            value: .choice(label: label, options: ClockFormat.allCases.map(Self.label), selected: ClockFormat.allCases.firstIndex(of: appearance.clock)),
+            help: Self.details(value: label, explanation: Self.help(appearance.clock), about: L("settings_native_clock_description")))
+    }
+
+    private var scaleRow: SettingRow {
+        SettingRow(
+            id: Self.scale, tab: .appearance, section: interface, icon: Symbols.formatSize, label: L("settings_native_scale_title"),
+            value: .slider(value: appearance.uiScale, range: Self.scaleRange, step: Self.scaleStep, divisor: 1, unit: " %"),
+            help: L("settings_native_scale_description"))
+    }
+
     private var soundsRow: SettingRow {
         SettingRow(
             id: Self.sounds, tab: .audio, section: interface, icon: Symbols.musicNote, label: L("settings_native_sounds_title"),
@@ -159,14 +196,17 @@ struct AppearanceForm: Equatable {
 
     // MARK: Changes
 
-    /// Left / right (A: +1) on row [id]: the next value, wrapping around; a toggle flips. False when nothing changed.
+    /// Left / right (A: +1) on row [id]: the next value, wrapping around; a slider's next step on its grid, stopping at its
+    /// ends; a toggle flips. False when nothing changed.
     @discardableResult
     mutating func step(_ id: String, by direction: Int) -> Bool {
         let before = appearance
         switch id {
         case Self.theme: appearance.dark = Self.next(appearance.dark, in: Self.themes, direction)
         case Self.palette: appearance.palette = Self.next(appearance.palette, in: PaletteName.allCases, direction)
+        case Self.clock: appearance.clock = Self.next(appearance.clock, in: ClockFormat.allCases, direction)
         case Self.background: appearance.background = Self.next(appearance.background, in: BackgroundKind.allCases, direction)
+        case Self.scale: slide(Self.scale, to: appearance.uiScale + direction * Self.scaleStep)
         case Self.motion: appearance.reducedMotion = Self.next(appearance.reducedMotion, in: Self.motions, direction)
         case Self.sounds: appearance.sounds.toggle()
         case Self.haptics: appearance.haptics.toggle()
@@ -180,10 +220,20 @@ struct AppearanceForm: Equatable {
         switch id {
         case Self.theme: if Self.themes.indices.contains(index) { appearance.dark = Self.themes[index] }
         case Self.palette: if PaletteName.allCases.indices.contains(index) { appearance.palette = PaletteName.allCases[index] }
+        case Self.clock: if ClockFormat.allCases.indices.contains(index) { appearance.clock = ClockFormat.allCases[index] }
         case Self.background: if BackgroundKind.allCases.indices.contains(index) { appearance.background = BackgroundKind.allCases[index] }
         case Self.motion: if Self.motions.indices.contains(index) { appearance.reducedMotion = Self.motions[index] }
         default: break
         }
+    }
+
+    /// A slider's value (a step, or set on its track by touch), snapped to its grid within its range (Android's
+    /// `RowValue.Slider` adjust).
+    mutating func slide(_ id: String, to value: Int) {
+        guard id == Self.scale else { return }
+        let low = Self.scaleRange.lowerBound
+        let snapped = low + Int((Double(value - low) / Double(Self.scaleStep)).rounded()) * Self.scaleStep
+        appearance.uiScale = min(max(snapped, low), Self.scaleRange.upperBound)
     }
 
     private static func next<T: Equatable>(_ value: T, in list: [T], _ direction: Int) -> T {

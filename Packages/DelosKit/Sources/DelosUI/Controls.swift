@@ -18,7 +18,7 @@ struct PillButton: View {
         HStack(spacing: stage.px(14)) {
             if let icon { SymbolView(symbol: icon, size: 32, color: content, filled: focused) }
             Text(label)
-                .font(DelosFonts.figtree(stage.px(26), .semibold))
+                .font(DelosFonts.figtree(stage.tpx(26), .semibold))
                 .foregroundStyle(content.color)
                 .lineLimit(1)
         }
@@ -90,15 +90,15 @@ struct TextPill: View {
             SymbolView(symbol: icon, size: 34, color: colors.text3)
             VStack(alignment: .leading, spacing: 0) {
                 Text(label.uppercased(with: .current))
-                    .font(DelosFonts.figtree(stage.px(17), .semibold))
-                    .tracking(stage.px(17) * 0.08)
+                    .font(DelosFonts.figtree(stage.tpx(17), .semibold))
+                    .tracking(stage.tpx(17) * 0.08)
                     .foregroundStyle(colors.text3.color)
                     .lineLimit(1)
                 #if os(tvOS)
                 // tvOS draws its own plate around a text field: the value is drawn here, and the field lies over the
                 // whole pill, almost transparent, only to take the focus and open the keyboard
                 Text(text.isEmpty ? placeholder : text)
-                    .font(DelosFonts.figtree(stage.px(30), .semibold))
+                    .font(DelosFonts.figtree(stage.tpx(30), .semibold))
                     .foregroundStyle((text.isEmpty ? colors.text3 : colors.text).color)
                     .lineLimit(1)
                 #else
@@ -121,7 +121,7 @@ struct TextPill: View {
     private var field: some View {
         TextField(text: $text, prompt: Text(placeholder).foregroundStyle(colors.text3.color)) { Text(label) }
             .textFieldStyle(.plain)
-            .font(DelosFonts.figtree(stage.px(30), .semibold))
+            .font(DelosFonts.figtree(stage.tpx(30), .semibold))
             .foregroundStyle(colors.text.color)
             .tint(colors.accent.color)
             .focused(editing)
