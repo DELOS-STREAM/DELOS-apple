@@ -333,6 +333,31 @@ private let iPhone = DisplayInfo(pixelWidth: 1290, pixelHeight: 2796, maxFramesP
         #expect(controller.phase == .failed(StreamText.quitFailure(appName: "Desktop")))
     }
 
+    @Test func aSecondLeaveWaitsForTheFirstToFinish() async {
+        let steps = FakeSteps()
+        steps.holdsStop = true
+        let controller = StreamController { steps }
+        controller.start(display: iPhone)
+        await eventually { steps.isConnecting }
+        steps.finishConnect()
+        await eventually { controller.phase == .streaming }
+        let first = Task { await controller.leave(quit: false) }
+        await eventually { steps.isStopping }
+        // What the app does on Command-Q after the screen's own leaving has begun
+        var secondReturned = false
+        let second = Task {
+            await controller.leave(quit: false)
+            secondReturned = true
+        }
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(!secondReturned && controller.phase != .ended, "the disconnect is not over")
+        steps.finishStop()
+        await first.value
+        await second.value
+        #expect(secondReturned && controller.phase == .ended)
+        #expect(steps.stops == 1)
+    }
+
     @Test func leavingWhileConnectingIsNoFailure() async {
         let steps = FakeSteps()
         steps.connectFailure = .cancelled

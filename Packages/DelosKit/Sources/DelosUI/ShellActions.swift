@@ -230,11 +230,11 @@ final class ShellActions {
         return ContextMenu(title: L("profile_menu_title"), items: items, below: true)
     }
 
-    /// On iPhone and iPad the profile and the settings are also in this menu. Android reaches them from the start
-    /// screen with the left menu button only; without a controller and without a paired PC, a touch user had no way to
+    /// On iPhone, iPad and Mac the profile and the settings are also in this menu. Android reaches them from the start
+    /// screen with the left menu button only; without a controller and without a paired PC, a touch or mouse user had no way to
     /// Settings (the library's top navigation is the other way in).
     private var touchShortcuts: [MenuItem] {
-        #if os(iOS)
+        #if os(iOS) || os(macOS)
         [
             MenuItem(icon: Symbols.accountCircle, label: L("shell_nav_profile")) { [self] in
                 go { navigator.openFromNavigation(.profile, focus: "change-avatar") }

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+Entitlements of the ad-hoc signed local build (tools/mac.sh), the ones of DELOS-macOS.entitlements plus one: the
+hardened runtime's library validation only loads libraries signed by the same team, and an ad-hoc signature has none,
+so the app could not load its own OpenSSL.framework and DELOS.debug.dylib. A build signed with a team does not need it.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.network.server</key>
+	<true/>
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+</dict>
+</plist>

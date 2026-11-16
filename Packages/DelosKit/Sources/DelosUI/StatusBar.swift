@@ -6,6 +6,9 @@ import SwiftUI
 #if canImport(UIKit)
 import UIKit
 #endif
+#if os(macOS)
+import IOKit.ps
+#endif
 
 // MARK: Device state
 
@@ -54,11 +57,26 @@ enum WifiStatus: Equatable, Sendable {
     var icon: String { self == .connected ? Symbols.wifi : Symbols.wifiOff }
 }
 
+extension BatteryStatus {
+    /// The battery of one power source as `IOPSGetPowerSourceDescription` describes it (the Mac); nil for anything but
+    /// the internal battery. A Mac on the charger shows the bolt, charging or holding its charge, as an iPhone does.
+    init?(powerSource info: [String: Any]) {
+        guard info["Type"] as? String == "InternalBattery",
+              let current = info["Current Capacity"] as? Int, let maximum = info["Max Capacity"] as? Int, maximum > 0
+        else { return nil }
+        let charging = info["Is Charging"] as? Bool == true || info["Power Source State"] as? String == "AC Power"
+        self.init(level: Double(current) / Double(maximum), state: charging ? .charging : .unplugged)
+    }
+}
+
 /// Follows the battery (`UIDevice` battery monitoring) and the network (`NWPathMonitor`) for the status bar.
 @MainActor @Observable final class DeviceStatus {
     private(set) var battery: BatteryStatus?
     private(set) var wifi = WifiStatus.none
     @ObservationIgnored private var monitor: NWPathMonitor?
+    #if os(macOS)
+    @ObservationIgnored private var batteryTask: Task<Void, Never>?
+    #endif
     #if DEBUG
     /// Screenshots: `-DelosBattery <percent>` (`c` after it: charging) stands in for the battery a simulator lacks.
     @ObservationIgnored private let debugBattery: BatteryStatus? = UserDefaults.standard.string(forKey: "DelosBattery").flatMap { text in
@@ -86,6 +104,8 @@ enum WifiStatus: Equatable, Sendable {
             }
         }
         readBattery()
+        #elseif os(macOS)
+        startBatteryPolling()
         #endif
         #if DEBUG
         if let debugBattery { battery = debugBattery }
@@ -105,6 +125,31 @@ enum WifiStatus: Equatable, Sendable {
         @unknown default: .unknown
         }
         battery = BatteryStatus(level: Double(UIDevice.current.batteryLevel), state: state)
+    }
+    #elseif os(macOS)
+    /// A Mac's internal battery is read once a minute; a Mac without one shows none, as a simulator does.
+    private func startBatteryPolling() {
+        batteryTask = Task { [weak self] in
+            while !Task.isCancelled {
+                self?.readBattery()
+                try? await Task.sleep(for: .seconds(60))
+            }
+        }
+    }
+
+    private func readBattery() {
+        #if DEBUG
+        if debugBattery != nil { return }
+        #endif
+        guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let sources = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef] else {
+            battery = nil
+            return
+        }
+        battery = sources.lazy
+            .compactMap { IOPSGetPowerSourceDescription(blob, $0)?.takeUnretainedValue() as? [String: Any] }
+            .compactMap(BatteryStatus.init(powerSource:))
+            .first
     }
     #endif
 }
@@ -247,8 +292,8 @@ struct TopBar: View {
     var wifi = WifiStatus.none
     var battery: BatteryStatus?
     var clock = ClockFormat.system
-    /// Shown on iPhone and iPad when the screen can go back: a touch user has no B button and the system has no back
-    /// gesture of its own (on Android the system's back does it, so DELOS for Android has no such button).
+    /// Shown on iPhone, iPad and Mac when the screen can go back: a touch or mouse user has no B button and the system has
+    /// no back gesture of its own (on Android the system's back does it, so DELOS for Android has no such button).
     var onBack: (() -> Void)?
     @Environment(\.stage) private var stage
 
@@ -284,14 +329,14 @@ struct TopBar: View {
     }
 }
 
-/// The back button at the start of the bar (iPhone and iPad only).
+/// The back button at the start of the bar (iPhone, iPad and Mac).
 private struct BackButton: View {
     let onBack: (() -> Void)?
     @Environment(\.stage) private var stage
     @Environment(\.delosColors) private var colors
 
     var body: some View {
-        #if os(iOS)
+        #if os(iOS) || os(macOS)
         if let onBack {
             Button(action: onBack) {
                 SymbolView(symbol: Symbols.arrowBack, size: 34, color: colors.text)

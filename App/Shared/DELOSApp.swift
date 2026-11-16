@@ -75,6 +75,8 @@ final class OrientationLockedContainer: UIViewController {
 struct DELOSApp: App {
     #if os(iOS)
     @UIApplicationDelegateAdaptor(OrientationLock.self) private var orientationLock
+    #elseif os(macOS)
+    @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var macDelegate
     #endif
 
     init() {
@@ -82,8 +84,22 @@ struct DELOSApp: App {
     }
 
     var body: some Scene {
+        #if os(macOS)
+        // One window: a second one would be a second interface over the one streaming core. It opens at 1920 × 1080
+        // points (the system keeps it on the screen), resizes to any shape (the Stage adapts) and goes full screen.
+        // The title bar is hidden, so the traffic lights lie over the corner of the stage; below 960 × 540 points
+        // the status bar's first button would reach them.
+        Window("DELOS", id: "main") {
+            DelosRoot()
+                .frame(minWidth: 960, minHeight: 540)
+        }
+        .defaultSize(width: 1920, height: 1080)
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentMinSize)
+        #else
         WindowGroup {
             DelosRoot()
         }
+        #endif
     }
 }
