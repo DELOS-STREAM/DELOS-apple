@@ -89,6 +89,9 @@ public final class Navigator {
         #endif
     }
 
+    /// What the screen shown says about its buttons for the hint bar (adjust, reset).
+    var screenHints = ScreenHints()
+
     /// While set, every controller and keyboard command goes here first; true: consumed (the stream screen owns the
     /// controller).
     @ObservationIgnored public var commandCapture: (@MainActor (MenuCommand) -> Bool)?

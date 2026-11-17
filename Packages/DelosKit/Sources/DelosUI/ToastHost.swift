@@ -1,3 +1,4 @@
+import DelosInput
 import Observation
 import SwiftUI
 
@@ -242,11 +243,7 @@ private struct ToastCard: View {
                 }
                 if let action = toast.action {
                     HStack(spacing: stage.px(10)) {
-                        Text("Y")
-                            .font(DelosFonts.figtree(stage.tpx(21), .heavy))
-                            .foregroundStyle(cardBottom.color)
-                            .frame(width: stage.px(38), height: stage.px(38))
-                            .background(Circle().fill(cardText.color))
+                        GlyphButton(.north, disc: cardText, ink: cardBottom)
                         Text(action.label)
                             .font(DelosFonts.figtree(stage.tpx(24), .heavy))
                             .foregroundStyle(mix(gold, RGBA(red: 1, green: 1, blue: 1), 0.45).color)

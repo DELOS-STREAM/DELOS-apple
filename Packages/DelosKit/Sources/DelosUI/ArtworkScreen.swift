@@ -330,9 +330,9 @@ private struct ArtworkTabs: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            ShoulderBadge(label: "L1")
+            ShoulderBadge(role: .leftShoulder)
             ForEach(ArtworkTab.allCases, id: \.self) { tab in tabView(tab) }
-            ShoulderBadge(label: "R1")
+            ShoulderBadge(role: .rightShoulder)
         }
         .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.8), value: selected)
     }
@@ -369,14 +369,14 @@ private struct ArtworkTabs: View {
     }
 }
 
-/// The L1 / R1 hint beside the tabs.
+/// The previous / next tab hint beside the tabs (L1 / R1 on a PlayStation or generic pad, LB / RB, L / R): the connected controller's.
 private struct ShoulderBadge: View {
-    let label: String
+    let role: GlyphRole
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
 
     var body: some View {
-        Text(label)
+        Text(ControllerGlyphs.shared.mark(role).text ?? "")
             .font(DelosFonts.figtree(stage.tpx(18), .bold))
             .foregroundStyle(colors.text3.color)
             .padding(.horizontal, stage.px(12))

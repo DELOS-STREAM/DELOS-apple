@@ -144,8 +144,12 @@ struct SettingsScreen: View {
             if focusedRow == nil { focus.focus(Self.firstRow(tab)) }
             SettingsSession.shared.tab = tab
         }
-        .onDisappear { navigator.commandCapture = nil }
+        .onDisappear {
+            navigator.commandCapture = nil
+            navigator.screenHints = ScreenHints()
+        }
         .onChange(of: tab) { _, next in SettingsSession.shared.tab = next }
+        .onChange(of: focus.focused, initial: true) { navigator.screenHints = ScreenHints(adjustable: ShellHints.adjustable(focusedRow)) }
     }
 
     nonisolated static let space = "settings"
@@ -393,11 +397,11 @@ private struct SettingsTabs: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            ShoulderLabel(label: "L1")
+            ShoulderLabel(role: .leftShoulder)
             ForEach(SettingsTab.availableCases, id: \.self) { tab in
                 tabView(tab)
             }
-            ShoulderLabel(label: "R1")
+            ShoulderLabel(role: .rightShoulder)
         }
         .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.8), value: selected)
     }
@@ -438,14 +442,14 @@ private struct SettingsTabs: View {
     }
 }
 
-/// The L1 / R1 hint beside the tabs.
+/// The previous / next tab hint beside the tabs (L1 / R1 on a PlayStation or generic pad, LB / RB, L / R): the connected controller's.
 private struct ShoulderLabel: View {
-    let label: String
+    let role: GlyphRole
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
 
     var body: some View {
-        Text(label)
+        Text(ControllerGlyphs.shared.mark(role).text ?? "")
             .font(DelosFonts.figtree(stage.tpx(18), .bold))
             .foregroundStyle(colors.text3.color)
             .padding(.horizontal, stage.px(12))

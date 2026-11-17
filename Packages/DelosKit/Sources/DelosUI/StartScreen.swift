@@ -196,6 +196,11 @@ public struct DelosRoot: View {
                             // The navigation's buttons belong to the focus of the screen shown
                             .id(ObjectIdentifier(entry.focus))
                     }
+                    if case .stream = navigator.current {} else {
+                        HintBar(hints: hints, note: libraryNote, noteLabel: libraryNote == nil ? nil : L("shell_hint_library_label"))
+                            // The interface scale zooms the whole bar
+                            .modifier(ZoomedBar())
+                    }
                     if let sideMenu {
                         SideMenu(
                             profile: profiles.current, pc: connectedPC, focus: sideMenu, appearance: appearance, onStep: { id, direction in _ = quickStep(id, by: direction) },
@@ -278,6 +283,7 @@ public struct DelosRoot: View {
     /// The sounds, and the controllers' and keyboards' commands (on tvOS only the ones the system has no event for).
     private func startInput() {
         guard input == nil else { return }
+        ControllerGlyphs.shared.start()
         let feedback = Feedback()
         feedback.soundsEnabled = appearance.sounds
         feedback.hapticsEnabled = appearance.haptics
@@ -470,6 +476,28 @@ public struct DelosRoot: View {
         case .home, .appSettings: true
         default: false
         }
+    }
+
+    /// The button hints of the screen, layer and side menu in front (``ShellHints``).
+    private var hints: [Hint] {
+        var layer: ShellHints.Layer?
+        switch layers.layer {
+        case .context?: layer = .context(root: layers.menuPath.isEmpty)
+        case .dialog?: layer = .dialog
+        case nil: break
+        }
+        let focus = layers.isOpen ? layers.focus : navigator.focus
+        return ShellHints.hints(ShellHints.Context(
+            screen: navigator.current, layer: layer, sideMenu: sideMenu != nil,
+            portalCancellable: actions.connection.portal.map(\.cancellable), canGoBack: navigator.canGoBack,
+            hasContextMenu: focus.focusedHasMenu, screenHints: navigator.screenHints))
+    }
+
+    /// The library's note on the hint bar: how many apps the PC has (the home screen with nothing open).
+    private var libraryNote: String? {
+        guard case .home(let hostID) = navigator.current, !layers.isOpen, sideMenu == nil,
+              let apps = hosts.apps[hostID], let host = hosts.hosts.first(where: { $0.id == hostID }) else { return nil }
+        return ShellHints.libraryNote(apps: apps.count, pc: host.name)
     }
 
     /// The top navigation of the screen [entry] shows, if it has one.

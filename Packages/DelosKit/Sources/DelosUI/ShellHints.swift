@@ -1,0 +1,88 @@
+import DelosInput
+import Foundation
+
+/// What the focused screen says about its own buttons beyond what its kind implies (`FocusTracker.adjustable` and the
+/// screen's reset action of DELOS for Android): Settings and the app settings set it as the focus moves.
+struct ScreenHints: Equatable, Sendable {
+    /// The focused row changes its value with left and right (the adjust hint).
+    var adjustable = false
+    /// X resets the focused row to the profile's value (an app setting that is custom).
+    var resetsRow = false
+}
+
+/// The button hints of the shell (`hints` in DELOS for Android's `Shell.kt`, the prototype's `updateHints`): by screen and
+/// layer, which buttons do what. Android's filter and search hints are left out where Apple has no such feature.
+enum ShellHints {
+    enum Layer: Equatable, Sendable {
+        /// A context menu; [root]: its first level (B closes it), else B goes back one level.
+        case context(root: Bool)
+        case dialog
+    }
+
+    struct Context: Sendable {
+        var screen: Screen
+        var layer: Layer?
+        var sideMenu = false
+        /// The portal into a PC is up: nil when it is not, else whether B can cancel it.
+        var portalCancellable: Bool?
+        var canGoBack = false
+        /// The focused item has a context menu (the right menu button and X open it).
+        var hasContextMenu = false
+        var screenHints = ScreenHints()
+    }
+
+    @MainActor static func hints(_ c: Context) -> [Hint] {
+        func hint(_ role: GlyphRole, _ label: String, short: String? = nil) -> Hint {
+            Hint(button: .pad(role), label: label, shortLabel: short)
+        }
+        let adjust = Hint(button: .adjust, label: L("shell_hint_adjust"))
+        let options = hint(.menuRight, L("shell_hint_options"))
+        let select = hint(.south, L("shell_hint_select"))
+        let back = hint(.east, L("shell_hint_back"))
+        let tabs = [hint(.leftShoulder, L("shell_hint_previous_tab")), hint(.rightShoulder, L("shell_hint_next_tab"))]
+        let menu = hint(.menuLeft, L("shell_hint_menu"))
+        if let cancellable = c.portalCancellable { return cancellable ? [hint(.east, L("shell_hint_cancel"))] : [] }
+        if c.sideMenu { return [adjust, hint(.south, L("shell_hint_change")), hint(.east, L("shell_hint_close"))] }
+        switch c.layer {
+        case .context(let root)?: return [select, hint(.east, L(root ? "shell_hint_close" : "shell_hint_back"))]
+        case .dialog?: return [select, hint(.east, L("shell_hint_cancel"))]
+        case nil: break
+        }
+        let adjustHint = c.screenHints.adjustable ? [adjust] : []
+        let optionsHint = c.hasContextMenu ? [options] : []
+        switch c.screen {
+        case .home: return [hint(.south, L("shell_hint_start")), menu] + optionsHint
+        case .settings: return adjustHint + tabs + [hint(.south, L("shell_hint_change")), back]
+        case .start: return [hint(.south, L("shell_hint_connect")), menu] + optionsHint
+        case .boot: return [select] + (c.canGoBack ? [back] : [])
+        case .createProfile: return [select, back]
+        case .pair, .pairAddress: return [select, back] + optionsHint
+        case .pin, .pairCode: return [hint(.east, L("shell_hint_cancel"))]
+        case .stream: return []
+        case .artwork:
+            return tabs + [
+                hint(.south, L("shell_hint_use_image"), short: L("shell_hint_choose")),
+                hint(.west, L("shell_hint_search_name"), short: L("shell_hint_search")), back,
+            ]
+        case .appSettings:
+            return adjustHint + [hint(.south, L("shell_hint_change"))]
+                + (c.screenHints.resetsRow ? [hint(.west, L("shell_hint_reset_to_profile"), short: L("shell_hint_reset"))] : [])
+                + optionsHint + [back]
+        case .profile, .devices: return [select, back, menu]
+        }
+    }
+
+    /// Whether left and right change [row]'s value: a slider or a list of values of a row that is available.
+    static func adjustable(_ row: SettingRow?) -> Bool {
+        guard let row, row.enabled else { return false }
+        switch row.value {
+        case .slider, .choice: return true
+        case .toggle, .action, .appSettings, .info: return false
+        }
+    }
+
+    /// The note on the left of the home screen's bar: how many apps the PC has.
+    @MainActor static func libraryNote(apps: Int, pc: String) -> String {
+        String.localizedStringWithFormat(Bundle.module.localizedString(forKey: "shell_home_apps_on_pc", value: nil, table: nil), apps, pc)
+    }
+}

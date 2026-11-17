@@ -255,10 +255,11 @@ public final class GameInput {
     }
 
     private static func type(of controller: GCController) -> ControllerType {
-        switch controller.extendedGamepad {
-        case is GCXboxGamepad: .xbox
-        case is GCDualShockGamepad, is GCDualSenseGamepad: .playStation
-        default: controller.productCategory.localizedCaseInsensitiveContains("switch") ? .nintendo : .unknown
+        switch PadDescriptor(controller).family {
+        case .xbox: .xbox
+        case .dualSense, .dualShock: .playStation
+        case .nintendo: .nintendo
+        case .generic: .unknown
         }
     }
 

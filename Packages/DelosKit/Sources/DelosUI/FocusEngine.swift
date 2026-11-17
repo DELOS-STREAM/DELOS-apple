@@ -90,6 +90,13 @@ public final class FocusModel {
         return cue
     }
 
+    /// Whether the focused item has a context menu (the hint bar's options hint). Reads ``focused``, so a view that asks is
+    /// redrawn when the focus moves.
+    var focusedHasMenu: Bool {
+        guard let focused else { return false }
+        return menus[focused] != nil
+    }
+
     /// The focused item's context menu and its frame (global points); nil when it has none.
     func contextMenu() -> (ContextMenu, CGRect)? {
         guard let focused, let frame = frames[focused], let menu = menus[focused]?() else { return nil }
