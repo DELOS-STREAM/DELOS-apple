@@ -114,11 +114,12 @@ public struct HostRecord: Equatable, Sendable, Codable {
         var record = self
         record.serverName = info.hostName
         // The IPv4 loopback address comes from IPv6 forwarders on the host; it does not reach the PC from here.
-        if let local = info.localIP, !local.hasPrefix("127.") {
+        // The addresses come from an answer that may be unauthenticated: only a host name or an IP literal is kept.
+        if let local = info.localIP, !local.hasPrefix("127."), HostAddress.isValidHost(local) {
             record.localAddress = HostAddress(host: local, port: reply.address.port)
         }
         let externalPort = info.externalPort ?? reply.address.port
-        if let external = info.externalIP {
+        if let external = info.externalIP, HostAddress.isValidHost(external) {
             record.remoteAddress = HostAddress(host: external, port: externalPort)
         } else if let remote = record.remoteAddress, let port = info.externalPort {
             record.remoteAddress = HostAddress(host: remote.host, port: port)

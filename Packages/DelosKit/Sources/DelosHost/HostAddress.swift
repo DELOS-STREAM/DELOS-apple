@@ -66,6 +66,13 @@ public struct HostAddress: Hashable, Sendable, Codable, CustomStringConvertible 
         return Typed(host: host, port: port)
     }
 
+    /// Whether [text] is exactly one host name or IP literal, without a port, brackets, white space or control
+    /// characters: what an address from the network may be before it is stored, used in a header or sent a packet.
+    public static func isValidHost(_ text: String) -> Bool {
+        guard let typed = parse(text), typed.port == nil else { return false }
+        return typed.host == text
+    }
+
     /// An IPv6 address the system can read, or one written with hexadecimal digits, colons and dots only. The second
     /// case keeps the Android contract (`2001:db8:0:0:0:0:0:47989` is taken as typed); a wrong address then fails
     /// when the client connects.

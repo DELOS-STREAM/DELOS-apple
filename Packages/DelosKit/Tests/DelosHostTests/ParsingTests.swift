@@ -254,6 +254,37 @@ import Testing
         }
     }
 
+    /// Each read must cost its own bytes: a body of many chunks, fed in small reads, is decoded once.
+    @Test func aLargeChunkedBodyInSmallReadsIsDecodedOnceAndCorrectly() throws {
+        let limit = 8 << 20
+        var parser = HTTPResponseParser(maximumBodySize: limit)
+        try parser.append(Data("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n".utf8))
+        let chunk = Data(repeating: UInt8(ascii: "a"), count: 4096)
+        var wire = Data()
+        for _ in 0..<1024 { wire.append(Data("1000\r\n".utf8)); wire.append(chunk); wire.append(Data("\r\n".utf8)) }
+        wire.append(Data("0\r\n\r\n".utf8))
+        var response: HTTPResponse?
+        let clock = ContinuousClock()
+        let elapsed = try clock.measure {
+            var offset = 0
+            while offset < wire.count, response == nil {
+                let end = min(offset + 1024, wire.count)
+                try parser.append(wire[offset..<end])
+                response = try parser.response(atEnd: false)
+                offset = end
+            }
+        }
+        #expect(response?.body.count == 4096 * 1024)
+        // The quadratic decoder copied the whole body on each of the 4000 reads: tens of seconds
+        #expect(elapsed < .seconds(5))
+    }
+
+    @Test func aChunkSizeLineWithoutAnEndIsRefused() {
+        #expect(throws: HostError.malformedResponse("a chunk size line is too long")) {
+            try parse(["HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n", String(repeating: "1", count: 2000)], atEnd: false, limit: 1 << 20)
+        }
+    }
+
     @Test func chunksPastTheLimitTogetherAreRefused() {
         let chunk = "200\r\n" + String(repeating: "a", count: 512) + "\r\n"
         #expect(throws: HostError.responseTooLarge) {

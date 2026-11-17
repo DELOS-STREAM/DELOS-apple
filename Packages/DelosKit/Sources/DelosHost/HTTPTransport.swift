@@ -51,11 +51,17 @@ struct HTTPResponse: Sendable {
 enum HTTPTransport {
     static func get(_ request: HTTPRequest) async throws -> HTTPResponse {
         let outcome = Outcome()
+        // Keep-alive probes end a connection to a PC that vanished while a request without a time limit waits.
+        let tcp = NWProtocolTCP.Options()
+        tcp.enableKeepalive = true
+        tcp.keepaliveIdle = 10
+        tcp.keepaliveInterval = 5
+        tcp.keepaliveCount = 3
         let parameters: NWParameters
         if let tls = request.tls {
-            parameters = NWParameters(tls: tlsOptions(tls, outcome: outcome), tcp: NWProtocolTCP.Options())
+            parameters = NWParameters(tls: tlsOptions(tls, outcome: outcome), tcp: tcp)
         } else {
-            parameters = .tcp
+            parameters = NWParameters(tls: nil, tcp: tcp)
         }
         guard let port = NWEndpoint.Port(rawValue: UInt16(request.address.port)) else {
             throw HostError.unreachable("invalid port")
@@ -189,6 +195,10 @@ struct HTTPResponseParser {
     let maximumBodySize: Int
     private var buffer = Data()
     private var head: (status: Int, headers: [String: String], bodyStart: Int)?
+    /// Chunked bodies are decoded once, as the bytes arrive: the part decoded so far and where the next chunk's size
+    /// line starts in `buffer`. Each call then costs the new bytes, not the whole body again.
+    private var decoded = [UInt8]()
+    private var nextChunk: Int?
 
     init(maximumBodySize: Int) {
         self.maximumBodySize = maximumBodySize
@@ -209,11 +219,11 @@ struct HTTPResponseParser {
             head = try Self.parseHead(buffer[buffer.startIndex..<end.lowerBound], bodyStart: end.upperBound)
         }
         guard let head else { return nil }
-        let body = buffer[head.bodyStart...]
         if head.headers["transfer-encoding"]?.lowercased().contains("chunked") == true {
-            guard let decoded = try Self.dechunk(body, limit: maximumBodySize) else { return nil }
+            guard try dechunk() else { return nil }
             return try finish(head, Data(decoded))
         }
+        let body = buffer[head.bodyStart...]
         if let lengthText = head.headers["content-length"] {
             guard let length = Int(lengthText), length >= 0 else {
                 throw HostError.malformedResponse("invalid Content-Length")
@@ -245,31 +255,38 @@ struct HTTPResponseParser {
         return (status, headers, bodyStart)
     }
 
-    /// The decoded body once the last chunk has arrived; nil before. A chunk that would take the body past `limit` is
-    /// refused as soon as its size line arrives, before any arithmetic with the size: the size comes from the network.
-    private static func dechunk(_ body: Data, limit: Int) throws -> [UInt8]? {
-        let bytes = [UInt8](body)
-        var out = [UInt8]()
-        var index = 0
+    /// The longest chunk size line (digits and extensions) accepted.
+    private static let maximumChunkLine = 1024
+
+    /// Decodes the chunks that are complete in `buffer` into `decoded`; true once the last chunk has arrived. A chunk
+    /// that would take the body past the limit is refused as soon as its size line arrives, before any arithmetic with
+    /// the size: the size comes from the network.
+    private mutating func dechunk() throws -> Bool {
+        guard let head else { return false }
+        var index = nextChunk ?? head.bodyStart
+        defer { nextChunk = index }
         while true {
-            guard let lineEnd = find(bytes, from: index) else { return nil }
-            let size = try chunkSize(bytes[index..<lineEnd], remaining: limit - out.count)
-            index = lineEnd + 2
-            if size == 0 { return out }
-            // `size` is at most `limit`, and the comparison subtracts instead of adding to it.
-            let available = bytes.count - index
-            guard available >= 2, available - 2 >= size else { return nil }
-            guard bytes[index + size] == 13, bytes[index + size + 1] == 10 else {
+            guard let lineEnd = find(from: index) else {
+                if buffer.count - index > Self.maximumChunkLine { throw HostError.malformedResponse("a chunk size line is too long") }
+                return false
+            }
+            let size = try Self.chunkSize(buffer[index..<lineEnd], remaining: maximumBodySize - decoded.count)
+            let start = lineEnd + 2
+            if size == 0 { index = start; return true }
+            // `size` is at most the limit, and the comparison subtracts instead of adding to it.
+            let available = buffer.count - start
+            guard available >= 2, available - 2 >= size else { return false }
+            guard buffer[start + size] == 13, buffer[start + size + 1] == 10 else {
                 throw HostError.malformedResponse("a chunk does not end with CRLF")
             }
-            out += bytes[index..<index + size]
-            index += size + 2
+            decoded.append(contentsOf: buffer[start..<start + size])
+            index = start + size + 2
         }
     }
 
     /// The size on a chunk's line: hexadecimal digits, optionally followed by `;` and extensions. Throws
     /// `responseTooLarge` once the digits pass `remaining`, so no size can overflow.
-    private static func chunkSize(_ line: ArraySlice<UInt8>, remaining: Int) throws -> Int {
+    private static func chunkSize(_ line: Data, remaining: Int) throws -> Int {
         let isBlank = { (byte: UInt8) in byte == UInt8(ascii: " ") || byte == UInt8(ascii: "\t") }
         var digits = line.prefix { $0 != UInt8(ascii: ";") }
         while let first = digits.first, isBlank(first) { digits.removeFirst() }
@@ -295,10 +312,10 @@ struct HTTPResponseParser {
         }
     }
 
-    private static func find(_ bytes: [UInt8], from start: Int) -> Int? {
+    private func find(from start: Int) -> Int? {
         var index = start
-        while index + 1 < bytes.count {
-            if bytes[index] == 13 && bytes[index + 1] == 10 { return index }
+        while index + 1 < buffer.count {
+            if buffer[index] == 13 && buffer[index + 1] == 10 { return index }
             index += 1
         }
         return nil
