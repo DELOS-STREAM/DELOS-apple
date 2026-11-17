@@ -109,6 +109,7 @@ struct StreamScreen: View {
             LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer)
         }
         controller.rumbleConfiguration = settings.rumble
+        controller.controllerOptions = ControllerOptions(settings: settings)
         controller.leavingHold = .seconds(ExitLook.handoff(reduced: reducedMotion))
         controller.menuOpened = { [navigator] in navigator.cancelRepeats?() }
         controller.statisticsChosen = keepStatisticsOverlay
