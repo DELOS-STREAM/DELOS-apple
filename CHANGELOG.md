@@ -173,6 +173,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- App settings no longer widen as they open: the banner's art, wider than the stage, made the whole screen 180 stage px wider
+  the moment it arrived, so the top bar, the list, the panel and the hints jumped outwards and the clock was cut off.
 - Moving the focus no longer jumps to the wrong row: the focus finder follows Android's (beams and weights), so Right on the
   library's filter button or at the end of the Artwork grid stays where it is instead of jumping to a button above or a cover
   below, and Up from every cover goes through the filter button to the navigation. A library without games, or one still
