@@ -11,6 +11,8 @@ public protocol StreamInputSink: Sendable {
     func sendMouseMove(deltaX: Int16, deltaY: Int16) throws(InputError)
     func sendMouseButton(_ button: MouseButton, pressed: Bool) throws(InputError)
     func sendKey(code: Int16, pressed: Bool, modifiers: KeyModifiers, nonNormalized: Bool) throws(InputError)
+    func sendText(_ text: String) throws(InputError)
+    func sendServerCommand(_ id: UInt8) throws(InputError)
     func sendHighResolutionScroll(amount: Int16) throws(InputError)
     func sendHighResolutionHorizontalScroll(amount: Int16) throws(InputError)
 }
@@ -384,6 +386,44 @@ public final class GameInput {
         case let .scroll(amount):
             try? sink.sendHighResolutionScroll(amount: amount)
         }
+    }
+
+    // MARK: Sent by the stream menu and the on-screen keyboard
+
+    /// Presses a key combination once (the menu closes first: sent while the input is paused it still reaches the host).
+    public func send(_ combo: KeyCombo) {
+        for event in combo.events {
+            try? sink.sendKey(code: event.code, pressed: event.pressed, modifiers: event.modifiers, nonNormalized: false)
+        }
+    }
+
+    /// Text typed on the on-screen keyboard: Return, Tab and Backspace are keys, the rest goes as text.
+    public func type(_ text: String) {
+        var run = ""
+        func flush() {
+            guard !run.isEmpty else { return }
+            try? sink.sendText(run)
+            run = ""
+        }
+        for character in text {
+            switch character {
+            case "\n", "\r", "\r\n": flush(); send(KeyCombo([VirtualKey.enter]))
+            case "\t": flush(); send(KeyCombo([VirtualKey.tab]))
+            default: run.append(character)
+            }
+        }
+        flush()
+    }
+
+    /// The on-screen keyboard's Backspace.
+    public func backspace() {
+        send(KeyCombo([VirtualKey.backspace]))
+    }
+
+    /// Runs the host's server command [index] (its position in the host's list).
+    public func runServerCommand(_ index: Int) {
+        guard let id = UInt8(exactly: index) else { return }
+        try? sink.sendServerCommand(id)
     }
 
     /// Releases at the host every button, key and stick held, so nothing stays pressed while the menu is open or

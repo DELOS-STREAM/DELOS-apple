@@ -109,6 +109,8 @@ private final class RecordingSink: StreamInputSink, @unchecked Sendable {
     func sendKey(code: Int16, pressed: Bool, modifiers: KeyModifiers, nonNormalized: Bool) throws(InputError) {
         lock.withLock { keys.append((code, pressed)) }
     }
+    func sendText(_ text: String) throws(InputError) {}
+    func sendServerCommand(_ id: UInt8) throws(InputError) {}
     func sendHighResolutionScroll(amount: Int16) throws(InputError) {}
     func sendHighResolutionHorizontalScroll(amount: Int16) throws(InputError) {}
 }
