@@ -218,7 +218,7 @@ final class ShellActions {
             hidden
                 ? MenuItem(icon: Symbols.visibility, label: L("home_menu_show")) { [self] in setHidden(false, hostID: hostID, app: app) }
                 : MenuItem(icon: Symbols.visibilityOff, label: L("home_menu_hide")) { [self] in setHidden(true, hostID: hostID, app: app) })
-        return ContextMenu(title: app.title, items: items, header: header)
+        return ContextMenu(title: app.title, items: items, header: header, initialRow: running != nil && running?.id != app.id ? 1 : 0)
     }
 
     // MARK: Hiding games

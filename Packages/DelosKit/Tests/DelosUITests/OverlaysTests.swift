@@ -356,6 +356,22 @@ import Testing
         #expect(!layers.isOpen)
     }
 
+    @Test func aConfirmingMenuOpensOnItsSafeRowAndIgnoresTheAcceptThatOpenedIt() {
+        var ran = false
+        let menu = ContextMenu(
+            title: "Menu",
+            items: [MenuItem(icon: "a", label: "Quit and start", danger: true) { ran = true }, MenuItem(icon: "b", label: "Resume")],
+            initialRow: 1)
+        let layers = Layers()
+        layers.openContextMenu(menu, anchor: nil)
+        #expect(layers.focus.focused == Layers.rowID(1))
+        // A second press right after the opening (a double press, a double click) is not a choice
+        #expect(layers.swallowsAccept())
+        layers.handle(.accept)
+        #expect(!ran && layers.isOpen)
+        #expect(!layers.swallowsAccept(at: .now.addingTimeInterval(1)))
+    }
+
     @Test func aDialogStartsOnItsFirstFieldAndBClosesIt() {
         let layers = Layers()
         layers.openDialog(DialogSpec(title: "T", note: "N", fields: [DialogField(icon: "e")], confirm: "Save") { _ in true })

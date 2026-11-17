@@ -183,7 +183,7 @@ private struct MenuCard: View {
         let danger = focusedIndex.map { items[$0].danger } ?? false
         return VStack(alignment: .leading, spacing: stage.px(L.rowGap)) {
             ForEach(items.indices, id: \.self) { index in
-                FocusItem(id: Layers.rowID(index), model: layers.focus, action: { layers.choose(index) }) { focused in
+                FocusItem(id: Layers.rowID(index), model: layers.focus, action: { if !layers.swallowsAccept() { layers.choose(index) } }) { focused in
                     MenuRow(item: items[index], index: index, focused: focused)
                 }
             }
