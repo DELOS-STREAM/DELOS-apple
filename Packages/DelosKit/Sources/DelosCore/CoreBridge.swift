@@ -75,7 +75,12 @@ enum CoreBridge {
     /// Set once, before the first connection; the core logs only during connections.
     private static let installLogSink: Void = DelosCommonSetLogSink { message in
         guard let message else { return }
+        // The messages carry host addresses and RTSP details: readable only while debugging
+        #if DEBUG
         CoreBridge.logger.debug("\(String(cString: message), privacy: .public)")
+        #else
+        CoreBridge.logger.debug("\(String(cString: message), privacy: .private)")
+        #endif
     }
 
     // MARK: - C callback tables
