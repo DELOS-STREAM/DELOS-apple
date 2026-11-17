@@ -248,8 +248,8 @@ struct SideMenu: View {
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
 
-    /// The panel's width in stage pixels (the safe area on its left comes on top).
-    static let width = 680.0
+    /// The panel's width in stage pixels (the safe area on its left comes on top of the edge panel's).
+    static let width = SideMenuStyle.width
     /// How far the focused row's scale, ring and glow reach beyond the rows' place at the sides and above and below.
     static let glowSide = 40.0, glowVertical = 56.0
     static let settingsID = "side-settings"
@@ -263,7 +263,11 @@ struct SideMenu: View {
 
     var body: some View {
         // The scrim under it is the root's (`LayerScrim`, with the blur of the screen), as Android's `Scrim` is the shell's
-        ZStack(alignment: .leading) {
+        let style = SideMenuStyle(stage: stage)
+        let frame = style.frame(stage), insets = style.contentInsets(stage)
+        // The layer fills the window and the panel is placed by its frame in it (docked left: a fixed-width view alone would
+        // be centered by the root's stack)
+        return ZStack(alignment: .topLeading) {
             VStack(alignment: .leading, spacing: stage.px(10)) {
                 header
                     .staggerEntrance()
@@ -298,26 +302,39 @@ struct SideMenu: View {
                 .frame(maxHeight: .infinity)
             }
             .entranceScope()
-            .padding(.top, stage.px(48 + stage.safe.top))
-            .padding(.bottom, stage.px(48))
-            .padding(.leading, stage.px(40 + stage.safe.leading))
-            .padding(.trailing, stage.px(40))
-            .frame(width: stage.px(Self.width + stage.safe.leading))
-            .frame(maxHeight: .infinity)
+            .padding(.top, stage.px(insets.top))
+            .padding(.bottom, stage.px(insets.bottom))
+            .padding(.leading, stage.px(insets.leading))
+            .padding(.trailing, stage.px(insets.trailing))
+            .frame(width: stage.px(frame.width), height: stage.px(frame.height))
             .background {
                 // backdropBlur(haze, 28f, surface3): the panel glass
-                GlassShape(Rectangle(), tint: colors.surface3, role: .panel)
-                    .overlay(alignment: .trailing) { Rectangle().fill(colors.line.color).frame(width: stage.px(1)) }
-                    .ignoresSafeArea()
+                if style.kind == .box {
+                    GlassShape(RoundedRectangle(cornerRadius: stage.px(style.cornerRadius), style: .continuous), tint: colors.surface3, role: .panel)
+                } else {
+                    GlassShape(Rectangle(), tint: colors.surface3, role: .panel)
+                        .overlay(alignment: .trailing) { Rectangle().fill(colors.line.color).frame(width: stage.px(1)) }
+                        .ignoresSafeArea()
+                }
             }
-            // `sideEnter` / `sideExit`: from a tenth of its width left of its place, sliding in over 560 ms (ease-out) while
-            // fading in over 280 ms, and out over 240 ms (ease-in); with reduced motion it only fades
-            .transition(.asymmetric(
-                insertion: reduceMotion ? Self.fade(Motion.fade)
-                    : Self.fade(Motion.fade).combined(with: .offset(x: -stage.px(Self.width) / 10).animation(Motion.out(Motion.popIn))),
-                removal: reduceMotion ? Self.fade(Motion.exit)
-                    : Self.fade(Motion.exit).combined(with: .offset(x: -stage.px(Self.width) / 10).animation(LayerHost.easeIn(Motion.exit)))))
+            .padding(.leading, stage.px(frame.minX))
+            .padding(.top, stage.px(frame.minY))
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // `sideEnter` / `sideExit` (``transition(reducedMotion:stage:)``) on the whole layer, which is what the root inserts
+        .transition(Self.transition(reducedMotion: reduceMotion, stage: stage))
+    }
+
+    /// How far left of its place the panel starts and ends: a tenth of its width.
+    static func slideShift(_ stage: Stage) -> CGFloat { -stage.px(width) / 10 }
+
+    /// `sideEnter` / `sideExit` as a transition: in from a tenth of the width to the left over 560 ms (ease-out) with a
+    /// 280 ms fade, out over 240 ms (ease-in); with reduced motion only the fades.
+    static func transition(reducedMotion: Bool, stage: Stage) -> AnyTransition {
+        let shift = slideShift(stage)
+        return .asymmetric(
+            insertion: reducedMotion ? fade(Motion.fade) : fade(Motion.fade).combined(with: .offset(x: shift).animation(Motion.out(Motion.popIn))),
+            removal: reducedMotion ? fade(Motion.exit) : fade(Motion.exit).combined(with: .offset(x: shift).animation(LayerHost.easeIn(Motion.exit))))
     }
 
     /// A quick-setting row: focusable, on the shared plate, rising in with the others.
