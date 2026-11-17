@@ -196,11 +196,6 @@ public struct DelosRoot: View {
                             // The navigation's buttons belong to the focus of the screen shown
                             .id(ObjectIdentifier(entry.focus))
                     }
-                    if case .stream = navigator.current {} else {
-                        ShellHintBar(
-                            hints: hints, note: libraryNote, noteLabel: libraryNote == nil ? nil : L("shell_hint_library_label"),
-                            libraryRow: showsLibraryRow)
-                    }
                 }
                 .modifier(PortalBackdropBlur(active: actions.connection.portal.map { !$0.arriving } ?? false))
                 // The scrim of the side menu or a dialog blurs the screen under it
@@ -216,6 +211,12 @@ public struct DelosRoot: View {
                         hidden: actions.hiddenRow(pcName: connectedPC?.name))
                 }
                 LayerHost(layers: layers, navigator: navigator)
+                // The hint bar is above the scrim and the layers, crisp (Android's `HintBar` follows `Scrim` in `Shell`)
+                if case .stream = navigator.current {} else {
+                    ShellHintBar(
+                        hints: hints, note: libraryNote, noteLabel: libraryNote == nil ? nil : L("shell_hint_library_label"),
+                        libraryRow: showsLibraryRow)
+                }
                 ZStack {
                     if let portal = actions.connection.portal {
                         PortalOverlay(portal: portal, burst: actions.connection.burst, focus: portalFocus, onCancel: { actions.connection.cancel() })

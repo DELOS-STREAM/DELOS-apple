@@ -168,6 +168,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- The hint bar is no longer blurred and dimmed under the side menu, a context menu or a dialog: as on Android it is above the
+  scrim and the layers and stays crisp.
 - The circles of the Devices, Start, Profile, Pair and Create screens match Android's: the focus ring is no longer grown twice
   (it was 40 px too wide, so the glow showed through its gap), the glow's middle stop keeps a third of its alpha instead of
   replacing it (it was twice as bright), the discs and the profile chip are Liquid Glass tinted with Android's whole fill alpha,
