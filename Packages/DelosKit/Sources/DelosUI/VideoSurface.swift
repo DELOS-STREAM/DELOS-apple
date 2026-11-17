@@ -11,8 +11,8 @@ struct VideoSurface {
     /// Whether a touch of the system pointer (a mouse or trackpad) is ignored: the mouse's own input already moves the
     /// PC's pointer.
     var ignoresPointer: @MainActor () -> Bool = { false }
-    /// Whether the stream wants the system pointer locked to it (the Mac): hidden and detached from the mouse, whose
-    /// motion the PC gets as relative movement.
+    /// Whether the stream wants the system pointer locked to it (``PointerLock``: the Mac and iPad): hidden and detached
+    /// from the mouse or trackpad, whose motion the PC gets as relative movement through GameController's `GCMouse`.
     var capturesPointer = false
     /// Whether the on-screen keyboard is up (iPhone and iPad): what is typed goes to the PC as text, Return, Tab and Backspace
     /// as keys.
@@ -37,6 +37,12 @@ extension VideoSurface: UIViewRepresentable {
         update(view)
     }
 
+    static func dismantleUIView(_ view: VideoHostView, coordinator: ()) {
+        #if os(iOS)
+        view.releasePointer()
+        #endif
+    }
+
     @MainActor private func update(_ view: VideoHostView) {
         view.onDisplay = onDisplay
         view.onTouch = onTouch
@@ -45,8 +51,48 @@ extension VideoSurface: UIViewRepresentable {
         view.onBackspace = onBackspace
         view.onKeyboardHidden = onKeyboardHidden
         view.setKeyboard(keyboard)
+        #if os(iOS)
+        view.capturesPointer = capturesPointer
+        #endif
     }
 }
+
+#if os(iOS)
+/// What the app's root view controller answers for `prefersPointerLocked` (iPadOS asks only the root, or the child it
+/// names): whether a stream wants the pointer now. ``VideoHostView``'s ``PointerLock`` sets it.
+@MainActor
+public enum StreamPointerLock {
+    public private(set) static var prefersLocked = false
+
+    /// Asks every window's root view controller again (`setNeedsUpdateOfPrefersPointerLocked`).
+    static func set(_ locked: Bool) {
+        prefersLocked = locked
+        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
+        for root in windows.compactMap(\.rootViewController) { root.setNeedsUpdateOfPrefersPointerLocked() }
+    }
+}
+
+/// iPadOS's pointer lock: the root view controller's preference (``StreamPointerLock``); [changed] runs after each change,
+/// so the video's pointer style follows.
+@MainActor
+private final class ScenePointerBackend: PointerLockBackend {
+    private let changed: @MainActor () -> Void
+
+    init(changed: @escaping @MainActor () -> Void) {
+        self.changed = changed
+    }
+
+    func lock() {
+        StreamPointerLock.set(true)
+        changed()
+    }
+
+    func unlock() {
+        StreamPointerLock.set(false)
+        changed()
+    }
+}
+#endif
 
 /// The thin UIKit host of the video layer (the one UIKit view of the app, docs/ENGINEERING_RULES.md).
 final class VideoHostView: UIView {
@@ -59,6 +105,16 @@ final class VideoHostView: UIView {
     var onKeyboardHidden: @MainActor () -> Void = {}
     /// The keyboard was asked for (not taken away by the system).
     private var keyboardWanted = false
+    #if os(iOS)
+    /// A stream wants the pointer: it runs, and neither its menu, the loader nor the result overlay is shown.
+    var capturesPointer = false {
+        didSet { pointer.setWanted(capturesPointer) }
+    }
+    private lazy var pointer = PointerLock(backend: ScenePointerBackend { [weak self] in self?.pointerStyle.invalidate() })
+    /// Hides the pointer over the video when iPadOS refused the lock (``PointerLock/hidesPointer``).
+    private lazy var pointerStyle = UIPointerInteraction(delegate: self)
+    private var sceneObservers: [NSObjectProtocol] = []
+    #endif
 
     init(renderer: any VideoRenderer) {
         self.renderer = renderer
@@ -66,6 +122,7 @@ final class VideoHostView: UIView {
         backgroundColor = .black
         #if os(iOS)
         isMultipleTouchEnabled = true
+        addInteraction(pointerStyle)
         #endif
         layer.addSublayer(renderer.hostLayer)
     }
@@ -162,6 +219,7 @@ final class VideoHostView: UIView {
         #if os(iOS)
         // The keyboard was asked for before the view had a window
         if window != nil { raiseKeyboard(retries: Self.raiseRetries) }
+        followScene()
         #endif
         refreshLink?.invalidate()
         refreshLink = nil
@@ -213,6 +271,48 @@ extension VideoHostView: UIKeyInput, UITextInputTraits {
 
     func deleteBackward() {
         onBackspace()
+    }
+}
+
+// MARK: The pointer lock (iPad)
+
+extension VideoHostView: UIPointerInteractionDelegate {
+    /// Gives the pointer back (the stream screen is gone).
+    func releasePointer() {
+        pointer.release()
+    }
+
+    /// Follows the window's scene: the pointer is the stream's only while the scene is in the foreground and active, and
+    /// the system says whether it holds the lock it was asked for.
+    private func followScene() {
+        let center = NotificationCenter.default
+        sceneObservers.forEach(center.removeObserver)
+        sceneObservers.removeAll()
+        guard let scene = window?.windowScene else {
+            pointer.setEligible(false)
+            return
+        }
+        let changes: [(Notification.Name, Bool?)] = [
+            (UIScene.didActivateNotification, true), (UIScene.willDeactivateNotification, false),
+            (UIScene.didEnterBackgroundNotification, false), (UIPointerLockState.didChangeNotification, nil),
+        ]
+        for (name, active) in changes {
+            sceneObservers.append(center.addObserver(forName: name, object: scene, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.sceneChanged(active: active) }
+            })
+        }
+        sceneChanged(active: scene.activationState == .foregroundActive)
+    }
+
+    /// [active]: the scene became active (true) or is leaving it (false); nil: only the lock's state changed.
+    private func sceneChanged(active: Bool?) {
+        if let active { pointer.setEligible(active) }
+        pointer.setGranted(window?.windowScene?.pointerLockState?.isLocked == true)
+        pointerStyle.invalidate()
+    }
+
+    func pointerInteraction(_ interaction: UIPointerInteraction, styleFor region: UIPointerRegion) -> UIPointerStyle? {
+        pointer.hidesPointer ? .hidden() : nil
     }
 }
 #endif

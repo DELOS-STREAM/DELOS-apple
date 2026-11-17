@@ -9,18 +9,25 @@ public protocol PointerLockBackend: AnyObject {
     func unlock()
 }
 
-/// Decides when the system pointer is locked to a stream (the Mac): while a stream wants the mouse (it runs and its
-/// menu is closed) and the app can have it (it is the active app and the video's window is the key window). Any other
-/// time the pointer is free, so the menu, another app and the window's buttons can be clicked.
+/// Decides when the system pointer is locked to a stream: while a stream wants the mouse (it runs, and neither its menu,
+/// the loader nor the result overlay is shown) and the app can have it (the Mac: it is the active app and the video's
+/// window is the key window; iPad: the scene is in the foreground and active). Any other time the pointer is free, so the
+/// menu, another app and the window's buttons can be clicked. iPadOS may refuse the lock (a window that is not full
+/// screen: Slide Over, Stage Manager); then the pointer is hidden over the video by its style instead (``hidesPointer``).
 @MainActor
 public final class PointerLock {
     private let backend: any PointerLockBackend
     /// A stream wants the mouse.
     public private(set) var wanted = false
-    /// The app is active and the video's window is the key window.
+    /// The app can have the pointer: active, and the video's window is the key one.
     public private(set) var eligible = false
-    /// The pointer is locked now.
+    /// The pointer is locked now (asked for, on iPad).
     public private(set) var isLocked = false
+    /// The system holds the lock (iPadOS: the scene's `pointerLockState`; the Mac's lock is not refused).
+    public private(set) var granted = false
+
+    /// The pointer has to be hidden over the video by its style: the lock is asked for and the system has not granted it.
+    public var hidesPointer: Bool { isLocked && !granted }
 
     public init(backend: any PointerLockBackend) {
         self.backend = backend
@@ -34,6 +41,11 @@ public final class PointerLock {
     public func setEligible(_ value: Bool) {
         eligible = value
         apply()
+    }
+
+    /// The system granted the lock, or took it back.
+    public func setGranted(_ value: Bool) {
+        granted = value
     }
 
     /// The stream is over or its view is gone: nothing wants the mouse any more.

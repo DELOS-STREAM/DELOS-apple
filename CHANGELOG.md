@@ -173,6 +173,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- On iPad only the PC's cursor shows over a running stream: the iPad's own pointer is locked and hidden (the trackpad and mouse
+  move the PC's cursor relatively, as on the Mac), or hidden by its style where iPadOS refuses the lock (Slide Over, Stage
+  Manager windows). It comes back on the stream menu, the loader and the result overlay, after the stream and in the
+  background; the Mac's lock also lets go while the loader is up.
 - Moving the focus no longer jumps to the wrong row: the focus finder follows Android's (beams and weights), so Right on the
   library's filter button or at the end of the Artwork grid stays where it is instead of jumping to a button above or a cover
   below, and Up from every cover goes through the filter button to the navigation. A library without games, or one still

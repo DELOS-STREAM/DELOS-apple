@@ -532,6 +532,7 @@ of the attempt that ran.
 | Hardware keyboard (`GCKeyboard`) | Per-key handlers; HID usage → Windows virtual-key code (`KeyboardMapping`, Moonlight's table) with the `0x8000` prefix; the modifiers from the held Shift, Control, Alt (Option) and Command keys |
 | Mouse (`GCMouse`) | Relative motion (divided by 1.25, as Moonlight), left, right, middle and two side buttons, scroll in 1/120 notches (20 per unit) |
 | Touch | Android's default trackpad mode (`TouchTrackpad`): one finger moves the pointer by its motion in screen pixels, a tap shorter than 230 ms and 30 pixels clicks left, a two-finger tap clicks right, two fingers moving scroll (3 wheel units per pixel). Pointer touches are ignored while a mouse is connected |
+| Pointer lock (iPad) | While the stream runs and neither its menu, the loader nor the result overlay is shown (`StreamContent.capturesPointer`), `PointerLock` (DelosInput) asks for the lock: `StreamPointerLock.prefersLocked`, which the app's root view controller (`OrientationLockedContainer`, the only one iPadOS asks) returns as `prefersPointerLocked`, with `setNeedsUpdateOfPrefersPointerLocked()` on every window's root. The system then hides the pointer and `GCMouse` keeps giving the trackpad's and mouse's relative motion to the PC. Where iPadOS refuses the lock (the scene's `pointerLockState` is not locked: Slide Over, a Stage Manager window that is not full screen), a `UIPointerInteraction` on the video gives the pointer the hidden style instead. It lets go when the menu, the loader or the result overlay shows, the stream ends, the scene deactivates or goes to the background, or the video leaves the screen |
 
 The gamepad and keyboard handlers sit next to `MenuInput`'s (which sets the per-element and the keyboard-wide
 handlers), so both work; `commandCapture` decides who uses the commands.
@@ -556,7 +557,7 @@ Mac parts are behind `#if os(macOS)` in `App/` and in the package.
 | Video | `VideoSurface`'s AppKit host (`NSViewRepresentable`) holds the `AVSampleBufferDisplayLayer` on black, aspect fit. In a window it reports the screen's pixel size (`convertRectToBacking`) and `NSScreen.maximumFramesPerSecond`, and a display link (`NSView.displayLink`) asks the screen for its highest refresh rate, as on iPhone and iPad |
 | Display and Settings | `StreamDevice.current` reads `NSScreen.main` the same way. The audio session code is iOS-only (`AVAudioSession` does not exist on the Mac) |
 | Keyboard and mouse | `GameInput` (`GCKeyboard`, `GCMouse`) as on iPad; `GCMouse` gives relative motion without the system pointer. The Mac has no touch input |
-| Pointer lock | While the stream runs and its menu is closed, `PointerLock` (DelosInput) asks the AppKit backend to warp the pointer to the middle of the video, detach it from the mouse (`CGAssociateMouseAndMouseCursorPosition`) and hide it. It lets go when the menu opens, the stream ends or fails, the app is no longer the active app, the window is no longer key, or the window closes |
+| Pointer lock | While the stream runs and neither its menu, the loader nor the result overlay is shown, `PointerLock` (DelosInput) asks the AppKit backend to warp the pointer to the middle of the video, detach it from the mouse (`CGAssociateMouseAndMouseCursorPosition`) and hide it. It lets go when the menu, the loader or the result overlay shows, the stream ends, the app is no longer the active app, the window is no longer key, or the window closes |
 | Stream menu | L3 + R3 as everywhere; with a keyboard Control + Option + Shift + M (the M is kept from the PC and the pause lets go of the modifiers) or Escape held for one second (a quick Escape goes to the PC; the pause lets go of the held one). Both free the pointer by opening the menu |
 | Key sound | A local `NSEvent` monitor drops key-down events that the interface does not use, so AppKit does not beep for each key the game keyboard reads; Command shortcuts and keys typed into a text field pass |
 | Activity | During a stream a process activity keeps the display awake and App Nap off (the Mac's `isIdleTimerDisabled`); a Mac does not suspend a window that other windows cover, so the iOS rule to close the stream in the background is off |
@@ -1289,9 +1290,9 @@ has no such setting; both are in `Config/Info.plist`, which Xcode merges with th
 - GPU cost of the backgrounds (the shaders and the canvas ones) on a device.
 - How the sounds and haptics feel on a device.
 - A real stream: launch, resume and quit against a PC, start, video and audio with real data, input, rumble on a
-  controller, the 120 Hz display path, latency and termination. The owner runs streams. Also untried: a mouse on an
-  iPad (no pointer lock, which needs a view controller: the system pointer stays visible), the keyboard, the edge swipe
-  and the L3 + R3 shortcut on a device, and the Details of the result overlay opened.
+  controller, the 120 Hz display path, latency and termination. The owner runs streams. Also untried: a mouse or trackpad
+  on an iPad (the pointer lock, its refusal in Slide Over and Stage Manager, and `GCMouse`'s motion while locked), the
+  keyboard, the edge swipe and the L3 + R3 shortcut on a device, and the Details of the result overlay opened.
 - libopus on x86_64 (Intel Macs and simulators) was only compiled; the tests ran on arm64, where the NEON paths are
   used.
 - Pairing, the app list, box art, launch and quit against a real Sunshine, Apollo or Vibepollo host: the protocol is
