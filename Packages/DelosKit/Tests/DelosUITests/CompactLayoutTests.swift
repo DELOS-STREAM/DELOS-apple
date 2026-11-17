@@ -74,10 +74,10 @@ import Testing
 }
 
 @Suite struct AboutRowsTests {
-    @Test func aboutLeadsWithWhatDelosIsBasedOnAndReplayingTheWelcome() {
+    @Test func aboutLeadsWithTheVersionWhatDelosIsBasedOnAndReplayingTheWelcome() {
         let rows = AboutSetting.rows(.about)
-        #expect(rows.map(\.id) == [AboutSetting.basedID, AboutSetting.welcomeID])
-        #expect(rows[0].value == .info("Artemis · Moonlight"))
+        #expect(rows.map(\.id) == [AboutSetting.versionID, AboutSetting.basedID, AboutSetting.welcomeID])
+        #expect(rows[1].value == .info("Artemis · Moonlight"))
         #expect(AboutSetting.rows(.stream).isEmpty)
         #expect(AboutSetting.firstID == SettingsScreen.firstRow(.about))
     }

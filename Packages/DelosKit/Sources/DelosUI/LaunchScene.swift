@@ -90,6 +90,7 @@ enum LaunchText {
         case .av1: "AV1"
         case .hevc: "HEVC"
         case .h264: "H.264"
+        case .pyroWave: "PyroWave"
         }
         return "\(size.width) × \(size.height) · \(codec) · \(settings.fps) FPS"
     }

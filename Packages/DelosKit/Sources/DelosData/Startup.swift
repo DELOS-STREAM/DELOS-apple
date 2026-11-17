@@ -1,13 +1,23 @@
 import Foundation
 
 /// How DELOS starts for a profile (`Startup` of DELOS for Android): the default PC, which the start screen marks and
-/// focuses first. Android's "Skip the start screen" is not ported yet.
+/// focuses first, and "Skip the start screen", which connects to it right away.
 public struct Startup: Codable, Equatable, Sendable {
-    /// The id of the default PC; nil: none.
-    public var defaultPC: String?
+    /// The id of the default PC; nil: none. Without one there is nothing to skip to, so ``skipStart`` goes off with it.
+    public var defaultPC: String? { didSet { if defaultPC == nil { skipStart = false } } }
+    /// Connect straight to the default PC when DELOS starts (`ui_skip_start`).
+    public var skipStart = false
 
-    public init(defaultPC: String? = nil) {
+    public init(defaultPC: String? = nil, skipStart: Bool = false) {
         self.defaultPC = defaultPC
+        self.skipStart = defaultPC != nil && skipStart
+    }
+
+    /// Reads leniently: a startup stored before skipping existed has it off.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let pc = try? c.decodeIfPresent(String.self, forKey: .defaultPC)
+        self.init(defaultPC: pc, skipStart: (try? c.decodeIfPresent(Bool.self, forKey: .skipStart)) ?? false)
     }
 }
 

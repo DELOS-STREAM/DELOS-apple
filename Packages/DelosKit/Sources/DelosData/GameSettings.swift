@@ -1,9 +1,10 @@
 import DelosMedia
 import Foundation
 
-/// The settings one app overrides in a profile (`GameSettingsStore` of DELOS for Android, docs/PER_APP_SETTINGS.md): the
-/// stream settings that exist here. A setting that is nil follows the profile; one that is set is custom for the app,
-/// even when it equals the profile's value. The profile's own settings are never written.
+/// The settings one app overrides in a profile (`GameSettingsStore` of DELOS for Android, docs/PER_APP_SETTINGS.md): its
+/// `STREAM_KEYS` and `DISPLAY_KEYS`. A setting that is not set follows the profile; one that is set is custom for the
+/// app, even when it equals the profile's value. The profile's own settings are never written. Each codec also keeps the
+/// app's own bitrate (the codec bitrate slots), which never reach a stream.
 public struct GameSettingsOverride: Codable, Equatable, Sendable {
     /// What the app asks for as its resolution: the display's own, or a fixed one.
     public enum Resolution: Codable, Equatable, Sendable {
@@ -11,15 +12,41 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
         case fixed(StreamResolution)
     }
 
-    /// The overridable settings, in the order of the screen (Android's keys).
+    /// The overridable settings, in the order of the screen (Android's keys): the Stream tab, then the Display tab.
     public enum Key: String, CaseIterable, Sendable {
         case resolution = "list_resolution"
         case frameRate = "list_fps"
         case bitrate = "seekbar_bitrate_kbps"
         case codec = "video_format"
-        case hdr = "checkbox_enable_hdr"
+        case pyroWaveChroma = "list_pyrowave_chroma"
         case framePacing = "frame_pacing"
+        case asyncDecode = "checkbox_async_decode"
+        case gamepadMotionSensors = "checkbox_gamepad_motion_sensors"
+        case gamepadMotionFallback = "checkbox_gamepad_motion_fallback"
+        case forceDeviceMotion = "checkbox_force_device_motion"
+        case gyroSmoothing = "seekbar_gyro_smoothing"
+        /// Playing the app's audio on the PC as well (an override Android's list does not have).
         case hostAudio = "checkbox_host_audio"
+        case hdr = "checkbox_enable_hdr"
+        case fullRange = "checkbox_full_range"
+        case videoScaleMode = "list_video_scale_mode"
+        case vrr = "list_vrr"
+        case resolutionScaleFactor = "seekbar_resolution_scale_factor"
+        case useVirtualDisplay = "checkbox_use_virtual_display"
+        case enforceDisplayMode = "checkbox_enforce_display_mode"
+        case upscaler = "checkbox_sgsr"
+        case upscalerMode = "list_sgsr_quality"
+        case upscalerSharpness = "seekbar_sgsr_sharpness"
+        case upscalerSupersampling = "list_sgsr_supersampling_level"
+
+        /// The keys of the Display tab (`DISPLAY_KEYS`); the others are the Stream tab's.
+        public static let display: [Key] = [
+            .hdr, .fullRange, .videoScaleMode, .vrr, .resolutionScaleFactor, .useVirtualDisplay, .enforceDisplayMode,
+            .upscaler, .upscalerMode, .upscalerSharpness, .upscalerSupersampling,
+        ]
+
+        /// The catalog setting behind the key, nil for the ones with a field of their own.
+        public var setting: SettingKey? { SettingKey(rawValue: rawValue) }
     }
 
     public var resolution: Resolution?
@@ -29,6 +56,10 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
     public var hdr: Bool?
     public var framePacing: FramePacing?
     public var playAudioOnHost: Bool?
+    /// The catalog settings the app overrides (keys of ``Key`` with a ``Key/setting``).
+    public var values: [String: StoredSetting] = [:]
+    /// The app's bitrate for each codec (`ui_game_<PC>_<app>_ui_codec_bitrate_<codec>`).
+    public var codecBitrates: [String: Int] = [:]
 
     public init() {}
 
@@ -42,15 +73,18 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
         if hdr != nil { keys.insert(.hdr) }
         if framePacing != nil { keys.insert(.framePacing) }
         if playAudioOnHost != nil { keys.insert(.hostAudio) }
+        for name in values.keys { if let key = Key(rawValue: name) { keys.insert(key) } }
         return keys
     }
 
-    public var isEmpty: Bool { keys.isEmpty }
+    /// Nothing is custom and no codec keeps a bitrate.
+    public var isEmpty: Bool { keys.isEmpty && codecBitrates.isEmpty }
 
     /// How many settings are custom for this app.
     public var count: Int { keys.count }
 
-    /// [profile] with this app's settings laid over it: what a stream of the app uses.
+    /// [profile] with this app's settings laid over it: what a stream of the app uses. The codec bitrates are the app's
+    /// own, so a codec change on the App settings screen keeps them.
     public func merged(onto profile: StreamSettings) -> StreamSettings {
         var settings = profile
         switch resolution {
@@ -64,11 +98,13 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
         if let hdr { settings.hdr = hdr }
         if let framePacing { settings.framePacing = framePacing }
         if let playAudioOnHost { settings.playAudioOnHost = playAudioOnHost }
+        for (name, value) in values { if let key = SettingKey(rawValue: name) { settings.set(key, value) } }
+        settings.codecBitrates = codecBitrates
         return settings
     }
 
     /// Makes every setting of [after] that differs from [before] custom for this app: what one edit of the app's rows
-    /// changed (an unchanged one is not an override).
+    /// changed (an unchanged one is not an override). A bitrate that went back to following leaves the profile's.
     public mutating func record(from before: StreamSettings, to after: StreamSettings) {
         if after.resolution != before.resolution { resolution = after.resolution.map(Resolution.fixed) ?? .automatic }
         if after.fps != before.fps { fps = after.fps }
@@ -77,18 +113,26 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
         if after.hdr != before.hdr { hdr = after.hdr }
         if after.framePacing != before.framePacing { framePacing = after.framePacing }
         if after.playAudioOnHost != before.playAudioOnHost { playAudioOnHost = after.playAudioOnHost }
+        for key in Key.allCases {
+            guard let setting = key.setting, after.value(setting) != before.value(setting) else { continue }
+            values[key.rawValue] = after.value(setting)
+        }
+        codecBitrates = after.codecBitrates
     }
 
-    /// The setting follows the profile again.
+    /// The setting follows the profile again; the bitrate also forgets every codec's bitrate.
     public mutating func reset(_ key: Key) {
         switch key {
         case .resolution: resolution = nil
         case .frameRate: fps = nil
-        case .bitrate: bitrateKbps = nil
+        case .bitrate:
+            bitrateKbps = nil
+            codecBitrates = [:]
         case .codec: codec = nil
         case .hdr: hdr = nil
         case .framePacing: framePacing = nil
         case .hostAudio: playAudioOnHost = nil
+        default: values[key.rawValue] = nil
         }
     }
 
@@ -102,6 +146,8 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
         if hdr == nil { hdr = backup.hdr }
         if framePacing == nil { framePacing = backup.framePacing }
         if playAudioOnHost == nil { playAudioOnHost = backup.playAudioOnHost }
+        values.merge(backup.values) { current, _ in current }
+        codecBitrates.merge(backup.codecBitrates) { current, _ in current }
     }
 
     /// Reads leniently: a value written by another version that this one cannot read follows the profile.
@@ -122,6 +168,14 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
         hdr = value(.hdr)
         framePacing = value(.framePacing)
         playAudioOnHost = value(.playAudioOnHost)
+        var settings = StreamSettings()
+        for (name, setting) in (value(.values) as [String: StoredSetting]?) ?? [:] {
+            guard let key = Key(rawValue: name)?.setting else { continue }
+            settings.set(key, setting)
+        }
+        values = settings.values
+        codecBitrates = ((value(.codecBitrates) as [String: Int]?) ?? [:]).filter { VideoCodec(rawValue: $0.key) != nil }
+            .mapValues { min(max($0, StreamSettings.bitrateRange.lowerBound), StreamSettings.bitrateRange.upperBound) }
     }
 }
 
@@ -157,11 +211,15 @@ public struct GameSettingsStore: Sendable {
         defaults.set(data, forKey: name)
     }
 
-    /// The apps of the PC the profile overrides something for (the library's "custom" pill).
+    /// The apps of the PC the profile overrides something for (the library's "custom" pill); codec bitrates alone do not
+    /// count (`countGames` looks at the real keys only).
     public func customApps(profile: String, hostID: String) -> Set<Int> {
         let start = "\(Self.prefix)\(profile).\(hostID)."
         return Set(defaults.dictionaryRepresentation().keys.compactMap { name in
-            name.hasPrefix(start) ? Int(name.dropFirst(start.count)) : nil
+            guard name.hasPrefix(start), let appID = Int(name.dropFirst(start.count)),
+                  let data = defaults.data(forKey: name),
+                  let stored = try? JSONDecoder().decode(GameSettingsOverride.self, from: data), stored.count > 0 else { return nil }
+            return appID
         })
     }
 

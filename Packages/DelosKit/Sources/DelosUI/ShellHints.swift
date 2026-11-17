@@ -138,7 +138,7 @@ enum ShellHints {
         guard let row, row.enabled else { return false }
         switch row.value {
         case .slider, .choice: return true
-        case .toggle, .action, .appSettings, .info: return false
+        case .toggle, .action, .text, .appSettings, .info: return false
         }
     }
 

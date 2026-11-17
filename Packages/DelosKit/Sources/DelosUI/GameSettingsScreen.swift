@@ -176,7 +176,7 @@ struct GameSettingsScreen: View {
                     ) { focused in
                         SettingRowView(row: row, focused: focused, hostedPlate: true, entrance: min(index, Motion.staggerCap), onSlide: { value in
                             focus.focus(AnyHashable(row.id))
-                            model.slide(to: value)
+                            model.slide(row.id, to: value)
                         }, onStep: { direction in steppedByTouch(row, direction) }, onReset: { resetRow(row.id) })
                     }
                     .id(row.id)
@@ -267,7 +267,7 @@ struct GameSettingsScreen: View {
             activate(row)
         case .pick, .adjust:
             actions.feedback?.play(.open)
-            popup = RowPopupState.open(row) { value in model.slide(to: value) }
+            popup = RowPopupState.open(row) { value in model.slide(row.id, to: value) }
         case .error:
             actions.feedback?.play(.error)
         case .none:

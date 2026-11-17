@@ -25,8 +25,9 @@ import Testing
 
     @Test func theRowsAreTheStreamSettingsThatExistHereAndFollowTheProfile() {
         let (model, _, _) = make()
-        // The HDR row is there on a device with an HDR display and a Main10 decoder only; this one has neither
-        #expect(model.rows.map(\.id) == GameSettingsOverride.Key.allCases.map(\.rawValue).filter { $0 != StreamSettingsForm.hdr })
+        // HDR needs an HDR display and a Main10 decoder, the built-in gyroscope rows a device gyroscope; this one has neither
+        let hidden: Set = [StreamSettingsForm.hdr, "checkbox_gamepad_motion_fallback", "checkbox_force_device_motion"]
+        #expect(model.rows.map(\.id) == GameSettingsOverride.Key.allCases.map(\.rawValue).filter { !hidden.contains($0) })
         #expect(model.rows.allSatisfy { $0.customLine == nil && $0.note == "From profile" })
         #expect(model.overrides.isEmpty)
     }

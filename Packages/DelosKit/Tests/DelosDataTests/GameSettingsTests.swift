@@ -137,4 +137,49 @@ import Testing
         game.restoreMissing(from: decoded)
         #expect(game.hdr == true)
     }
+
+    @Test func theAppOverridesAndroidsKeys() {
+        // STREAM_KEYS and DISPLAY_KEYS of DELOS for Android, plus the host audio override
+        #expect(GameSettingsOverride.Key.allCases.map(\.rawValue) == [
+            "list_resolution", "list_fps", "seekbar_bitrate_kbps", "video_format", "list_pyrowave_chroma", "frame_pacing",
+            "checkbox_async_decode", "checkbox_gamepad_motion_sensors", "checkbox_gamepad_motion_fallback", "checkbox_force_device_motion",
+            "seekbar_gyro_smoothing", "checkbox_host_audio", "checkbox_enable_hdr", "checkbox_full_range", "list_video_scale_mode",
+            "list_vrr", "seekbar_resolution_scale_factor", "checkbox_use_virtual_display", "checkbox_enforce_display_mode",
+            "checkbox_sgsr", "list_sgsr_quality", "seekbar_sgsr_sharpness", "list_sgsr_supersampling_level",
+        ])
+    }
+
+    @Test func catalogOverridesLayOverTheProfileAndOnlyTheirKeys() throws {
+        var profile = StreamSettings()
+        profile.set(.vrr, .text("off"))
+        profile.set(.deadzone, .int(10))
+        var after = profile
+        after.set(.vrr, .text("on"))
+        after.set(.deadzone, .int(15))
+        var game = GameSettingsOverride()
+        game.record(from: profile, to: after)
+        // The deadzone is not a per-app setting
+        #expect(game.keys == [.vrr])
+        let merged = game.merged(onto: profile)
+        #expect(merged.text(.vrr) == "on" && merged.int(.deadzone) == 10)
+        let decoded = try JSONDecoder().decode(GameSettingsOverride.self, from: JSONEncoder().encode(game))
+        #expect(decoded == game)
+        game.reset(.vrr)
+        #expect(game.isEmpty)
+    }
+
+    @Test func resettingTheBitrateForgetsEveryCodecsBitrate() {
+        var game = GameSettingsOverride()
+        game.bitrateKbps = 90_000
+        game.codecBitrates = ["auto": 90_000, "pyrowave": 225_000]
+        // The codec bitrates alone are no custom setting
+        var slotsOnly = GameSettingsOverride()
+        slotsOnly.codecBitrates = ["auto": 1000]
+        #expect(slotsOnly.count == 0 && !slotsOnly.isEmpty)
+        let backup = game
+        game.reset(.bitrate)
+        #expect(game.isEmpty)
+        game.restoreMissing(from: backup)
+        #expect(game == backup)
+    }
 }

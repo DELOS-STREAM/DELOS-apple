@@ -23,10 +23,9 @@ import Testing
 
     @Test func unsupportedSystemSettingsNeverOfferAnInertLanguageAction() {
         #expect(AppLanguageSetting.rows(.about, supported: false).isEmpty)
-        #if os(iOS)
-        #expect(SettingsTab.availableCases == [.stream, .audio, .controls, .appearance, .covers, .devices, .about])
-        #else
-        #expect(SettingsTab.availableCases == [.stream, .audio, .controls, .appearance, .covers, .devices])
+        // About always has the version, so every tab shows everywhere
+        #expect(SettingsTab.availableCases == SettingsTab.allCases)
+        #if !os(iOS)
         #expect(AppLanguageSetting.rows(.about).isEmpty)
         #endif
     }

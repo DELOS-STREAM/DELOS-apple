@@ -25,11 +25,20 @@ struct ImpactContext: Equatable {
     var height: Int
     var fps: Double
     var bitrateMbps: Int
-    /// The stored value of the codec (`auto`, `forceav1`, `forceh265`, `neverh265`).
+    /// The stored value of the codec (`auto`, `forceav1`, `forceh265`, `neverh265`, `pyrowave`).
     var codec: String
     var hdr: Bool
-    /// The stored value of the frame pacing (`latency`, `balanced`, `cap-fps`, `smoothness`, `warp`, `warp2`).
+    /// The stored value of the frame pacing (`latency`, `balanced`, `cap-fps`, `smoothness`, `warp`, `warp2`, `fast-vsync`).
     var pacing: String
+    /// The upscaler (`checkbox_sgsr`), its mode (`list_sgsr_quality`), sharpness and 2x supersampling.
+    var upscaler = false
+    var mode = "standard"
+    var sharpness = 50
+    var twoTimes = false
+    /// PyroWave chroma 4:4:4 (`list_pyrowave_chroma`).
+    var chroma444 = false
+    /// PyroWave's recommended bitrate in kbps for these settings, nil without PyroWave.
+    var pyroKbps: Int?
 
     init(height: Int, fps: Double, bitrateMbps: Int, codec: String, hdr: Bool, pacing: String) {
         self.height = max(height, 1)
@@ -40,10 +49,23 @@ struct ImpactContext: Equatable {
         self.pacing = pacing
     }
 
-    /// The Mbps the host would be asked for with this codec, resolution and frame rate, if the table knows it: Moonlight's 60 FPS
-    /// table (20 / 40 / 80 Mbps at 1080p / 1440p / 4K, doubled for HEVC and AV1, tripled for H.264, capped at 150), a judgment
-    /// constant. Nil off 60 FPS and for a resolution the table lacks.
+    var pyro: Bool { codec == VideoCodec.pyroWave.rawValue }
+    var periodMs: Double { 1000 / fps }
+    var temporal: Bool { mode == "temporal" || mode == "temporal-quality" }
+    var temporalMs: Double { twoTimes ? ImpactTiming.sgsr2For4K : ImpactTiming.sgsr2For1440 }
+
+    /// The upscaler pass in ms for the current mode, nil where Android's docs have no measurement.
+    var upscalerMs: Double? {
+        guard upscaler else { return nil }
+        if mode == "sharpen" { return ImpactTiming.sharpen }
+        return temporal ? temporalMs : nil
+    }
+
+    /// The Mbps the host would be asked for with this codec, resolution and frame rate, if the table knows it: PyroWave's
+    /// recommendation, else Moonlight's 60 FPS table (20 / 40 / 80 Mbps at 1080p / 1440p / 4K, doubled for HEVC and AV1,
+    /// tripled for H.264, capped at 150), a judgment constant. Nil off 60 FPS and for a resolution the table lacks.
     var recommendedMbps: Int? {
+        if pyro { return pyroKbps.map { $0 / 1000 } }
         guard Int(fps) == 60 else { return nil }
         let base: Int
         switch height {
@@ -56,9 +78,18 @@ struct ImpactContext: Equatable {
     }
 }
 
+/// The upscaler passes Android measured (docs/SGSR2_VIDEO.md of DELOS for Android, Adreno 740): SGSR2 to 1440p and to 4K,
+/// and the sharpen pass. Used as the same budget estimate here.
+enum ImpactTiming {
+    static let sharpen = 0.31
+    static let sgsr2For1440 = 6.85
+    static let sgsr2For4K = 10.23
+}
+
 /// The impact of the stream setting [id] for the settings in effect, or nil for a setting without chips (`impact` of DELOS for
-/// Android; the upscaler and PyroWave rows have no counterpart here). Levels are qualitative estimates that follow the help texts
-/// and docs/STREAM_QUALITY.md of DELOS for Android.
+/// Android), and nil while the row does not apply (PyroWave chroma without PyroWave, the supersampling with Sharpen only).
+/// The upscaler rows are quiet while the upscaler is off. Levels are qualitative estimates that follow the help texts and
+/// docs/STREAM_QUALITY.md of DELOS for Android.
 func settingImpact(id: String, context c: ImpactContext) -> SettingImpact? {
     switch id {
     case StreamSettingsForm.resolution:
@@ -72,16 +103,21 @@ func settingImpact(id: String, context c: ImpactContext) -> SettingImpact? {
         return SettingImpact(gpu: big ? .medium : .low, latency: big ? .medium : .low, network: network)
     case StreamSettingsForm.frameRate:
         let low = c.fps <= 60
-        return SettingImpact(gpu: .low, latency: low ? .medium : .low, network: low ? .low : .medium)
+        let gpu: ImpactLevel = if let ms = c.upscalerMs { gpuLevel(ms, c.periodMs) } else if c.pyro { low ? .medium : .high } else { .low }
+        return SettingImpact(gpu: gpu, latency: low ? .medium : .low, network: c.pyro ? .high : low ? .low : .medium)
     case StreamSettingsForm.bitrate:
         return SettingImpact(gpu: .none, latency: c.bitrateMbps >= 150 ? .medium : .low, network: networkLevel(c.bitrateMbps))
     case StreamSettingsForm.codec:
         switch c.codec {
         case "neverh265": return SettingImpact(gpu: .low, latency: .low, network: .medium)
+        case "pyrowave": return SettingImpact(gpu: .high, latency: .low, network: .high)
         default: return SettingImpact(gpu: .low, latency: .low, network: .low)
         }
     case StreamSettingsForm.hdr:
-        return c.hdr ? SettingImpact(gpu: .low, latency: .none, network: .low) : .quiet
+        return c.hdr ? SettingImpact(gpu: .low, latency: .none, network: c.pyro ? .high : .low) : .quiet
+    case SettingKey.pyrowaveChroma.rawValue:
+        guard c.pyro else { return nil }
+        return SettingImpact(gpu: c.chroma444 && !c.hdr ? .high : .medium, latency: .low, network: .high)
     case StreamSettingsForm.framePacing:
         switch c.pacing {
         case "balanced", "cap-fps": return SettingImpact(gpu: .low, latency: .medium, network: .none)
@@ -90,6 +126,14 @@ func settingImpact(id: String, context c: ImpactContext) -> SettingImpact? {
         case "warp2": return SettingImpact(gpu: .high, latency: .low, network: .high)
         default: return SettingImpact(gpu: .low, latency: .low, network: .none)
         }
+    case SettingKey.upscaler.rawValue, SettingKey.upscalerMode.rawValue:
+        return c.upscaler ? upscalerMode(c) : .quiet
+    case SettingKey.upscalerSharpness.rawValue:
+        return !c.upscaler || c.sharpness == 0 ? .quiet : SettingImpact(gpu: .low, latency: .low, network: .none)
+    case SettingKey.upscalerSupersampling.rawValue:
+        guard c.upscaler else { return .quiet }
+        guard c.mode != "sharpen" else { return nil }
+        return c.temporal ? temporalImpact(c) : SettingImpact(gpu: c.twoTimes ? .medium : .low, latency: .low, network: .none)
     default:
         return nil
     }
@@ -98,12 +142,42 @@ func settingImpact(id: String, context c: ImpactContext) -> SettingImpact? {
 /// Low below 50 Mbps, Medium below 150, else High (the 4K60 knee of the link sits at 100 to 160).
 private func networkLevel(_ mbps: Int) -> ImpactLevel { mbps < 50 ? .low : mbps < 150 ? .medium : .high }
 
+/// A pass's share of the frame period: below 35 % Low, below 70 % Medium, else High.
+private func gpuLevel(_ ms: Double, _ periodMs: Double) -> ImpactLevel {
+    let share = ms / periodMs
+    return share < 0.35 ? .low : share < 0.70 ? .medium : .high
+}
+
+/// The upscaler mode row, and the on/off row while the upscaler is on.
+private func upscalerMode(_ c: ImpactContext) -> SettingImpact {
+    switch c.mode {
+    case "sharpen", "standard": SettingImpact(gpu: .low, latency: .low, network: .none)
+    case "high": SettingImpact(gpu: .medium, latency: .low, network: .none)
+    default: temporalImpact(c)
+    }
+}
+
+/// SGSR2: its pass over the frame period; a pass longer than the period queues frames (latency High). Quality costs one
+/// level more GPU than Normal.
+private func temporalImpact(_ c: ImpactContext) -> SettingImpact {
+    let level = gpuLevel(c.temporalMs, c.periodMs)
+    let gpu = c.mode == "temporal-quality" && level != .high ? ImpactLevel(rawValue: level.rawValue + 1) ?? .high : level
+    return SettingImpact(gpu: gpu, latency: c.temporalMs > c.periodMs ? .high : .medium, network: .none)
+}
+
 extension StreamSettingsForm {
     /// What the stream settings in effect cost, for the impact chips.
     var impactContext: ImpactContext {
-        ImpactContext(
+        var c = ImpactContext(
             height: effectiveResolution.height, fps: Double(settings.fps), bitrateMbps: effectiveBitrate / 1000,
             codec: settings.codec.rawValue, hdr: settings.hdr, pacing: settings.framePacing.rawValue)
+        c.upscaler = settings.bool(.upscaler)
+        c.mode = settings.text(.upscalerMode)
+        c.sharpness = settings.int(.upscalerSharpness)
+        c.twoTimes = settings.text(.upscalerSupersampling) == "2"
+        c.chroma444 = settings.text(.pyrowaveChroma) == "444"
+        c.pyroKbps = settings.pyroWaveRecommendedKbps(displayResolution: device.defaultResolution)
+        return c
     }
 }
 

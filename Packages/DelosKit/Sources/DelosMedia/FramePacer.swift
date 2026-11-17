@@ -14,11 +14,14 @@ public enum FramePacing: String, CaseIterable, Codable, Sendable {
     /// Lowest-latency presentation with twice/four times the configured host FPS.
     case warp
     case warp2
+    /// Fast V-Sync (`fast-vsync`): each frame at the first refresh after it is decoded, never faster than the display
+    /// refreshes; the display layer always waits for the refresh, so it needs no buffer of its own.
+    case fastVSync = "fast-vsync"
 
     /// The frames of buffer that absorb the network's jitter; 0 shows frames at once.
     var bufferFrames: Double {
         switch self {
-        case .latency, .warp, .warp2: 0
+        case .latency, .warp, .warp2, .fastVSync: 0
         case .balanced, .capFPS: 1
         case .smoothness: 2
         }
