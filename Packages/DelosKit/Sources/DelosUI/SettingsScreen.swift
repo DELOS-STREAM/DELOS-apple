@@ -66,7 +66,7 @@ struct SettingsScreen: View {
         switch tab {
         case .stream: StreamSettingsForm.resolution
         case .audio: StreamSettingsForm.hostAudio
-        case .controls: AppearanceForm.haptics
+        case .controls: StreamSettingsForm.rumbleEnabled
         case .appearance: AppearanceForm.theme
         case .covers: CoversForm.key
         case .devices: DevicesSetting.firstID
