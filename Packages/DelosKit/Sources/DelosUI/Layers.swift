@@ -51,6 +51,8 @@ struct DialogField {
     var maxLength = 24
     /// A secret (Android's `password`): the value is hidden.
     var secret = false
+    /// An address (Android's `KeyboardType.Uri`): no capitals, the URL keyboard.
+    var address = false
 }
 
 /// A small dialog (`DialogSpec`): title, note, fields and a confirm button. [onConfirm] gets the values and returns
@@ -208,7 +210,10 @@ struct LayerHost: View {
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture(perform: layers.dismiss)
-                    .transition(.opacity)
+                    // `Scrim`: fades in over 420 ms (ease), out over 240 ms
+                    .transition(.asymmetric(
+                        insertion: .opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: 0.42)),
+                        removal: .opacity))
                 switch layer {
                 case let .context(menu, anchor):
                     let tip = UnitPoint(x: layers.menuTip.x, y: layers.menuTip.y)
@@ -220,8 +225,11 @@ struct LayerHost: View {
                 case let .dialog(spec):
                     DialogLayer(layers: layers, spec: spec, navigator: navigator)
                         .id(layers.generation)
-                        .transition(reducedMotion ? .opacity
-                            : .opacity.combined(with: .scale(scale: Motion.dialogFromScale)).combined(with: .offset(y: 24)))
+                        // The card enters by itself (`DialogLayer`); it leaves with `dialogExit`
+                        .transition(.asymmetric(
+                            insertion: .identity,
+                            removal: reducedMotion ? .opacity
+                                : .opacity.combined(with: .scale(scale: Motion.dialogFromScale)).combined(with: .offset(y: 16))))
                 }
             }
         }
