@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- The stream menu's Overlay tile goes round Android's three statistics overlays: off, the full panel and the compact line at
+  the top center (frame rate, bandwidth, network and decoding delay, lost frames), with Off, On and Compact in its pill. The
+  profile keeps the last choice for its next streams. The line leaves out Android's Total delay and 1 % low, which neither
+  renderer reports.
 - HDR streaming: Settings → Stream gets Android's Enable HDR row (also an app setting) on devices whose display shows HDR and
   whose hardware decodes HEVC Main10 (a hardware-required VideoToolbox probe, not the per-codec check). With it on, the app
   offers HEVC Main10 (and AV1 Main 10 when AV1 is chosen), asks the host for HDR, passes the host's mastering display and

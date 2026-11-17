@@ -17,6 +17,8 @@ struct StreamScreen: View {
     let appID: Int
     /// The current profile's stream settings.
     let settings: StreamSettings
+    /// Keeps the statistics overlay the stream menu chose (the profile's, for its next streams).
+    let keepStatisticsOverlay: @MainActor (StatisticsOverlay) -> Void
     @Environment(HostStore.self) private var hosts
     @Environment(Navigator.self) private var navigator
     @Environment(Layers.self) private var layers: Layers?
@@ -29,10 +31,11 @@ struct StreamScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     #endif
 
-    init(hostID: String, appID: Int, settings: StreamSettings) {
+    init(hostID: String, appID: Int, settings: StreamSettings, keepStatisticsOverlay: @escaping @MainActor (StatisticsOverlay) -> Void = { _ in }) {
         self.hostID = hostID
         self.appID = appID
         self.settings = settings
+        self.keepStatisticsOverlay = keepStatisticsOverlay
     }
 
     var body: some View {
@@ -78,11 +81,12 @@ struct StreamScreen: View {
         // The display layer unless the debug switch asks for the Metal renderer (RendererChoice)
         let renderer = RendererChoice.current.makeRenderer(
             pacing: settings.framePacing, fps: settings.streamFPS(refreshRate: StreamDevice.current.maxFramesPerSecond))
-        let controller = StreamController(brightness: Self.deviceBrightness) { [hosts, hostID, appID, settings] in
+        let controller = StreamController(brightness: Self.deviceBrightness, statisticsOverlay: settings.statisticsOverlay) { [hosts, hostID, appID, settings] in
             LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer)
         }
         controller.leavingHold = .seconds(ExitLook.handoff(reduced: reducedMotion))
         controller.menuOpened = { [navigator] in navigator.cancelRepeats?() }
+        controller.statisticsChosen = keepStatisticsOverlay
         self.renderer = renderer
         self.controller = controller
         navigator.commandCapture = { [navigator] command in
@@ -259,8 +263,8 @@ struct StreamContent: View {
             case .connecting:
                 EmptyView()
             case .streaming:
-                if controller.statisticsEnabled, let statistics = controller.statistics {
-                    StreamStatsOverlay(statistics: statistics)
+                if controller.statisticsOverlay.isShown, let statistics = controller.statistics {
+                    StreamStatsOverlay(statistics: statistics, overlay: controller.statisticsOverlay)
                 }
                 if dockShown {
                     StreamMenu(focus: focus, controller: controller, open: controller.menuOpen)

@@ -46648,6 +46648,71 @@
         }
       }
     },
+    "stream_menu_overlay_compact": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kompaktní"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kompakt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compact"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compacta"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compact"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コンパクト"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "간단"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compacto"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Компактна"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "紧凑"
+          }
+        }
+      }
+    },
     "stream_menu_row_commands": {
       "extractionState": "manual",
       "localizations": {
@@ -49569,6 +49634,71 @@
           "stringUnit": {
             "state": "translated",
             "value": "带宽"
+          }
+        }
+      }
+    },
+    "stream_stats_compact_tail": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Síť %1$d ms  ·  Dekódování %2$@ ms  ·  Celkem %3$@ ms  ·  Ztraceno %4$@ %%"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Netzwerk %1$d ms  ·  Decode %2$@ ms  ·  Gesamt %3$@ ms  ·  Verloren %4$@ %%"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Network %1$d ms  ·  Decode %2$@ ms  ·  Total %3$@ ms  ·  Lost %4$@ %%"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Red %1$d ms  ·  Decodif. %2$@ ms  ·  Total %3$@ ms  ·  Perdidos %4$@ %%"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réseau %1$d ms  ·  Décodage %2$@ ms  ·  Total %3$@ ms  ·  Perdues %4$@ %%"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ネットワーク %1$d ms  ·  デコード %2$@ ms  ·  合計 %3$@ ms  ·  欠落 %4$@ %%"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "네트워크 %1$d ms  ·  디코딩 %2$@ ms  ·  전체 %3$@ ms  ·  손실 %4$@ %%"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rede %1$d ms  ·  Decodif. %2$@ ms  ·  Total %3$@ ms  ·  Perdidos %4$@ %%"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Мережа %1$d ms  ·  Декодування %2$@ ms  ·  Усього %3$@ ms  ·  Втрачено %4$@ %%"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网络 %1$d ms  ·  解码 %2$@ ms  ·  总计 %3$@ ms  ·  丢失 %4$@ %%"
           }
         }
       }

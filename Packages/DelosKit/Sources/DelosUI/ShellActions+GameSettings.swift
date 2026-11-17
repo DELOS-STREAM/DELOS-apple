@@ -21,4 +21,13 @@ extension ShellActions {
         let profile = profiles.current?.id ?? ""
         return gameOverrides(hostID: hostID, appID: appID).merged(onto: streams.load(profile: profile))
     }
+
+    /// Keeps the overlay the stream menu's Overlay tile chose in the current profile, so its next streams start with it
+    /// (Android writes it to the profile's preferences from `toggleHUD`). Not an app setting: every app of the profile follows it.
+    func keepStatisticsOverlay(_ overlay: StatisticsOverlay) {
+        guard let profile = profiles.current?.id else { return }
+        var settings = streams.load(profile: profile)
+        settings.statisticsOverlay = overlay
+        streams.save(settings, profile: profile)
+    }
 }

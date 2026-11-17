@@ -396,11 +396,18 @@ closes the menu, and B while connecting leaves.
 
 ### Stream statistics
 
-The stream menu's Overlay tile toggles the full statistics panel (`StreamStatsOverlay`): Android's top-left panel,
-stage-pixel sizes, tabular figures and two columns of labels and values. The panel uses the panel glass role with
-`glassOverMedia`, keeps clear of the stage's safe area and does not intercept touches. Its labels and the tile's
-On/Off state come from the Android String Catalog. It starts off; the choice lasts for the screen's retry/resume
-lifecycle.
+The stream menu's Overlay tile goes round Android's three overlays (`StatisticsOverlay`, `toggleHUD`): off, the full
+panel and the compact line, then off again; its pill says Off, On or Compact. `StreamStatsOverlay` draws the full panel
+(Android's top-left panel, stage-pixel sizes, tabular figures and two columns of labels and values) or the compact line
+(`CompactLine`: one capsule at the top center, 18 px text, 24 px beside and 8 px above and below it, 20 px under the
+top of the stage; a compact stage breaks it only after a separator, `StatisticsLine.keepingFiguresTogether`). Both use the
+panel glass role with `glassOverMedia`, keep clear of the stage's safe area and do not intercept touches. Their labels and
+the pill's words come from the Android String Catalog. The compact line is the frame rate, the bandwidth and the parts of
+Android's `stream_stats_compact_tail` whose reading the stream has (Network, Decode, Lost; the parts are told apart by
+their placeholder, so a language may reorder them); the Total part and the 1 % low are left out because neither renderer
+reports them. The choice is kept in the profile's `StreamSettings.statisticsOverlay` like Android keeps it in the
+profile's preferences, so the next streams of the profile start with it (it is not an app setting); a profile starts
+with the overlay off.
 
 `VideoOutput` records reassembled frames, payload bytes, frame numbers, HDR and the host's processing latency in
 `VideoStatistics`, with no allocation or formatting per frame. `StreamStatisticsSource` samples on its actor;
@@ -457,8 +464,8 @@ resumes the stream; the popover has a focus of its own and the dock's tile that 
 Left out of Android's menu, because the platform has no such action: Bitrate (the core cannot change the bitrate of a
 running stream), Upscaler and Supersampling (the renderer has none), Send and Get clipboard, Zoom, Mouse mode and Local
 mouse cursor (touch is the trackpad only), On-screen controls, Open Android keyboard, Touch sensitivity, Rumble feel, Gyro
-smoothing and the Compact overlay. The captions of Overlay, Keyboard and More are empty: Android's texts describe its own
-compact statistics, keyboard and rows, and no Android string fits. The L3 + R3 shortcut only opens the menu (Android also
+smoothing. The captions of Overlay, Keyboard and More are empty: Android's texts describe its own statistics, keyboard and
+rows, and no Android string fits. The L3 + R3 shortcut only opens the menu (Android also
 closes it with it: the input is paused while the menu is open).
 
 It opens as in DELOS for Android by default: L3 + R3 held together (`MenuShortcut`, Android's `ButtonShortcut`: the

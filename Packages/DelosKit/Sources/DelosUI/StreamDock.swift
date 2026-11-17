@@ -284,7 +284,7 @@ struct StreamMenu: View {
         switch item {
         case .resume: controller.closeMenu()
         case .keyboard: controller.toggleKeyboard()
-        case .overlay: controller.toggleStatistics()
+        case .overlay: controller.cycleStatistics()
         case .brightness, .more:
             if let page = item.page { controller.openMenuPage(page) }
         case .disconnect: Task { await controller.leave(quit: false, scene: true) }
@@ -297,7 +297,11 @@ struct StreamMenu: View {
         case .resume: DockTile.Spec(icon: Symbols.resume, label: L("stream_menu_tile_resume"))
         // The Delos keyboard of Android turns accent while it is up and has no On / Off pill
         case .keyboard: DockTile.Spec(icon: Symbols.keyboard, label: L("stream_menu_tile_keyboard"), on: controller.keyboardShown, showState: false)
-        case .overlay: DockTile.Spec(icon: Symbols.overlay, label: L("stream_menu_tile_overlay"), on: controller.statisticsEnabled)
+        // The pill says which overlay is up: Off, On (the full panel) or Compact
+        case .overlay:
+            DockTile.Spec(
+                icon: Symbols.overlay, label: L("stream_menu_tile_overlay"), on: controller.statisticsOverlay.isShown,
+                state: StreamMenuText.overlayState(controller.statisticsOverlay))
         case .brightness: DockTile.Spec(icon: Symbols.brightnessMedium, label: L("stream_menu_tile_brightness"))
         case .more: DockTile.Spec(icon: Symbols.moreHoriz, label: L("stream_menu_tile_more"))
         case .disconnect: DockTile.Spec(icon: Symbols.logout, label: L("stream_menu_tile_disconnect"))
@@ -440,6 +444,8 @@ private struct DockTile: View {
         var on: Bool?
         /// Whether a toggle shows its On / Off pill (the keyboard only turns accent).
         var showState = true
+        /// The pill's word where it is not On or Off (the Overlay's Compact).
+        var state: String?
     }
 
     let spec: Spec
@@ -478,7 +484,7 @@ private struct DockTile: View {
                             .scaleEffect(focused ? D.iconFocusScale : 1)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         if let on = spec.on, spec.showState {
-                            pill(on: on)
+                            pill(on: on, text: spec.state)
                                 .offset(x: -stage.px(D.pillRight), y: stage.px(D.pillTop))
                                 .fixedSize()
                         }
@@ -530,8 +536,9 @@ private struct DockTile: View {
         .animation(Motion.out(Motion.focus), value: focused)
     }
 
-    private func pill(on: Bool) -> some View {
-        Text(on ? L("common_on") : L("common_off"))
+    private func pill(on: Bool, text: String?) -> some View {
+        let word = text ?? (on ? L("common_on") : L("common_off"))
+        return Text(word)
             .font(DelosFonts.figtree(stage.tpx(D.pillSize), .bold))
             .tracking(stage.tpx(D.pillSize) * 0.02)
             .foregroundStyle((on ? colors.onAccent : colors.text2).color)
@@ -544,9 +551,9 @@ private struct DockTile: View {
                     .shadow(color: on ? colors.glow.color : .black.opacity(0.55), radius: stage.px(10), y: stage.px(8))
             }
             // A new text pops in from 0.6
-            .id(on)
+            .id(word)
             .transition(reducedMotion ? .identity : .scale(scale: Motion.popFromPill))
-            .animation(reducedMotion ? nil : Motion.spring(Motion.pillPop), value: on)
+            .animation(reducedMotion ? nil : Motion.spring(Motion.pillPop), value: word)
     }
 }
 

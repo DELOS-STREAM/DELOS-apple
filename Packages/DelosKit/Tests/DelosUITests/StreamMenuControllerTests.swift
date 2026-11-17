@@ -1,4 +1,5 @@
 import DelosCore
+import DelosData
 import DelosInput
 import Foundation
 import Testing
@@ -75,11 +76,12 @@ private let phone = StreamMenuCapabilities(keyboard: true, brightness: true)
 
 @MainActor
 private func streaming(
-    capabilities: StreamMenuCapabilities = phone, brightness: FakeBrightness? = nil, commands: [String] = []
+    capabilities: StreamMenuCapabilities = phone, brightness: FakeBrightness? = nil, commands: [String] = [],
+    overlay: StatisticsOverlay = .off
 ) async -> (StreamController, RunningSteps) {
     let steps = RunningSteps()
     steps.serverCommands = commands
-    let controller = StreamController(capabilities: capabilities, brightness: brightness) { steps }
+    let controller = StreamController(capabilities: capabilities, brightness: brightness, statisticsOverlay: overlay) { steps }
     controller.start(display: screen)
     for _ in 0..<500 where controller.phase != .streaming { try? await Task.sleep(for: .milliseconds(2)) }
     return (controller, steps)
@@ -225,6 +227,30 @@ private func streaming(
         let (desktop, _) = await streaming(capabilities: StreamMenuCapabilities(keyboard: false, brightness: false))
         desktop.toggleKeyboard()
         #expect(!desktop.keyboardShown)
+    }
+
+    @Test func theOverlayTileGoesRoundOffFullCompactAndTellsTheProfile() async {
+        let (controller, _) = await streaming()
+        var kept: [StatisticsOverlay] = []
+        controller.statisticsChosen = { kept.append($0) }
+        #expect(controller.statisticsOverlay == .off)
+        for _ in 0..<4 { controller.cycleStatistics() }
+        #expect(kept == [.full, .compact, .off, .full], "Android's order: off, full, compact, off")
+        #expect(controller.statisticsOverlay == .full)
+    }
+
+    @Test func aStreamStartsWithTheOverlayOfTheProfile() async {
+        let (compact, _) = await streaming(overlay: .compact)
+        #expect(compact.statisticsOverlay == .compact)
+        compact.cycleStatistics()
+        #expect(compact.statisticsOverlay == .off)
+    }
+
+    @Test func theOverlayTilesPillSaysOffOnOrCompact() {
+        #expect(StreamMenuText.overlayState(.off) == L("common_off"))
+        #expect(StreamMenuText.overlayState(.full) == L("common_on"))
+        #expect(StreamMenuText.overlayState(.compact) == L("stream_menu_overlay_compact"))
+        #expect(Set(StatisticsOverlay.allCases.map(StreamMenuText.overlayState)).count == 3)
     }
 
     @Test func aKeyCombinationClosesTheMenuAndReachesThePC() async {

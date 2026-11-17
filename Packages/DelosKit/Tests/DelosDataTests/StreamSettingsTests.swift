@@ -27,6 +27,25 @@ import Testing
         #expect(decoded == s)
     }
 
+    @Test func theStatisticsOverlayGoesOffFullCompactAndIsKeptByTheProfile() throws {
+        #expect(StreamSettings().statisticsOverlay == .off)
+        #expect(StatisticsOverlay.off.next == .full && StatisticsOverlay.full.next == .compact && StatisticsOverlay.compact.next == .off)
+        #expect(!StatisticsOverlay.off.isShown && StatisticsOverlay.full.isShown && StatisticsOverlay.compact.isShown)
+        var s = StreamSettings()
+        s.statisticsOverlay = .compact
+        #expect(try JSONDecoder().decode(StreamSettings.self, from: JSONEncoder().encode(s)).statisticsOverlay == .compact)
+        // Settings stored before the overlay had modes, or by a version that knew another mode, show none
+        #expect(try JSONDecoder().decode(StreamSettings.self, from: Data(#"{"fps":90}"#.utf8)).statisticsOverlay == .off)
+        let unknown = try JSONDecoder().decode(StreamSettings.self, from: Data(#"{"fps":90,"statisticsOverlay":"tiny"}"#.utf8))
+        #expect(unknown.statisticsOverlay == .off && unknown.fps == 90)
+        let suite = "delos.tests.\(UUID().uuidString)"
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        let store = StreamSettingsStore(suiteName: suite)
+        store.save(s, profile: "a")
+        #expect(store.load(profile: "a").statisticsOverlay == .compact)
+        #expect(store.load(profile: "b").statisticsOverlay == .off)
+    }
+
     @Test func settersClampToTheRanges() {
         var s = StreamSettings()
         s.bitrateKbps = 10

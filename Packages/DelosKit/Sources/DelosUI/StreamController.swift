@@ -1,4 +1,5 @@
 import DelosCore
+import DelosData
 import DelosInput
 import DelosMedia
 import Foundation
@@ -81,7 +82,8 @@ final class StreamController {
     /// `StreamLoader`).
     private(set) var progress = 0.0
     private(set) var menuOpen = false
-    private(set) var statisticsEnabled = false
+    /// What the statistics overlay shows: nothing, the full panel or the compact line (the Overlay tile goes round them).
+    private(set) var statisticsOverlay = StatisticsOverlay.off
     /// The popover of the stream menu: which page is open and what has the focus in it.
     let menu = StreamMenuState()
     /// What this device can do for the menu's tiles and pages (the brightness needs a device to set it on).
@@ -117,9 +119,10 @@ final class StreamController {
 
     init(
         capabilities: StreamMenuCapabilities = .platform, brightness: (any ScreenBrightness)? = nil,
-        makeSteps: @escaping @MainActor () -> any StreamSteps
+        statisticsOverlay: StatisticsOverlay = .off, makeSteps: @escaping @MainActor () -> any StreamSteps
     ) {
         self.makeSteps = makeSteps
+        self.statisticsOverlay = statisticsOverlay
         self.brightness = brightness
         self.capabilities = StreamMenuCapabilities(keyboard: capabilities.keyboard, brightness: capabilities.brightness && brightness != nil)
         if let brightness { brightnessPercent = Self.rounded(brightness.percent) }
@@ -258,6 +261,8 @@ final class StreamController {
     @ObservationIgnored private var menuOpenedAt = Date.distantPast
     /// Called when the menu opens: the screen cancels the repeats of the direction that is held.
     @ObservationIgnored var menuOpened: (@MainActor () -> Void)?
+    /// Called with the overlay the Overlay tile chose: the screen keeps it in the profile.
+    @ObservationIgnored var statisticsChosen: (@MainActor (StatisticsOverlay) -> Void)?
 
     /// Whether the menu has been open long enough for its commands to be the player's choices.
     func menuIsArmed(at now: Date = .now) -> Bool {
@@ -284,8 +289,10 @@ final class StreamController {
         menu.close()
     }
 
-    func toggleStatistics() {
-        statisticsEnabled.toggle()
+    /// The Overlay tile: off → full → compact → off (`toggleHUD` of DELOS for Android). The choice is kept for the next streams.
+    func cycleStatistics() {
+        statisticsOverlay = statisticsOverlay.next
+        statisticsChosen?(statisticsOverlay)
     }
 
     // MARK: Pages of the menu
