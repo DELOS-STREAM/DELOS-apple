@@ -194,11 +194,44 @@ public enum InputKind: Sendable, Hashable, CaseIterable {
     }
 }
 
-/// The glyph source of the interface: the kind of input used last (``InputKind``) and, for a controller, the glyph family
-/// (``PadFamily``) of the controller used last, else the first one connected, else ``PadFamily/generic``. It is evaluated
-/// again when a controller connects, disconnects or becomes the current one (the system moves `GCController.current` to
-/// whichever was used last) and when the interface notes an input of another kind (``note(_:)``: a touch, a key, the
-/// pointer). Every hint of the interface reads it, so one change redraws them all.
+/// What the input kind is made of: the last deliberate input and whether a gamepad is connected. Only a deliberate input
+/// changes the last one (``used(_:)``: a touch begins, a button is pressed, the stick passes ``MenuInput``'s threshold, a
+/// key is pressed, the pointer moves or clicks). A controller connecting, disconnecting or becoming the system's current
+/// one is no input (``controllersChanged(hasGamepad:)``): the system posts those on its own (the app becoming active, a
+/// pad waking up), and a touch followed by one of them must still be a touch.
+public struct InputKindState: Sendable, Equatable {
+    /// The kind of the last deliberate input; nil: none yet.
+    public private(set) var last: InputKind?
+    /// The kind of the last deliberate input that was not a controller's.
+    public private(set) var lastOther: InputKind?
+    /// A gamepad is connected.
+    public private(set) var hasController = false
+
+    public init() {}
+
+    /// The player used [input] on purpose.
+    public mutating func used(_ input: InputKind) {
+        last = input
+        if input != .controller { lastOther = input }
+    }
+
+    /// The controllers that are connected changed, or the system made another one the current one.
+    public mutating func controllersChanged(hasGamepad: Bool) {
+        hasController = hasGamepad
+    }
+
+    /// The kind the hints are drawn for (``InputKind/resolve(last:lastOther:hasController:fallback:)``).
+    public func kind(fallback: InputKind = .platformDefault) -> InputKind {
+        InputKind.resolve(last: last, lastOther: lastOther, hasController: hasController, fallback: fallback)
+    }
+}
+
+/// The glyph source of the interface: the kind of input used last (``InputKind``, kept by ``InputKindState``) and, for a
+/// controller, the glyph family (``PadFamily``) of the controller used last, else the first one connected, else
+/// ``PadFamily/generic``. The family is evaluated again when a controller connects, disconnects or becomes the current one
+/// (the system moves `GCController.current` to whichever was used last); the kind changes only when the interface notes a
+/// deliberate input (``note(_:)``: a touch, a key, the pointer, a controller's button or stick), or when the last
+/// controller goes away. Every hint of the interface reads it, so one change redraws them all.
 @MainActor
 @Observable
 public final class ControllerGlyphs {
@@ -209,9 +242,11 @@ public final class ControllerGlyphs {
     /// The system's symbol names for the menu buttons of the controller in use (nil: the system has none).
     public private(set) var menuSymbols: (left: String?, right: String?) = (nil, nil)
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
-    @ObservationIgnored private var last: InputKind?
-    @ObservationIgnored private var lastOther: InputKind?
-    @ObservationIgnored private var hasController = false
+    @ObservationIgnored private var state = InputKindState()
+    #if DEBUG
+    /// The demo harness pretends a gamepad is connected (`-DelosDemoInput controller`).
+    @ObservationIgnored private var debugPad = false
+    #endif
 
     init() {}
 
@@ -229,16 +264,12 @@ public final class ControllerGlyphs {
     public func start() {
         guard observers.isEmpty else { return }
         let center = NotificationCenter.default
-        // A controller that connects, or that the system makes the current one (it was used), is the input now
-        for name in [Notification.Name.GCControllerDidConnect, .GCControllerDidBecomeCurrent] {
-            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    self?.refresh()
-                    if self?.hasController == true { self?.note(.controller) }
-                }
-            })
-        }
-        for name in [Notification.Name.GCControllerDidDisconnect, .GCControllerDidStopBeingCurrent] {
+        // Only the family and whether a pad is there: none of these is an input. The system posts them on its own (a
+        // pad that wakes up or reconnects, the app becoming active), and a touch they follow must stay a touch
+        let names: [Notification.Name] = [
+            .GCControllerDidConnect, .GCControllerDidBecomeCurrent, .GCControllerDidDisconnect, .GCControllerDidStopBeingCurrent,
+        ]
+        for name in names {
             observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.refresh() }
             })
@@ -247,26 +278,31 @@ public final class ControllerGlyphs {
     }
 
     #if DEBUG
-    /// The demo harness (`-DelosDemoInput`): [kind] is the input from now on, whether a controller is connected or not.
+    /// The demo harness (`-DelosDemoInput`): [kind] is the input from now on, and for a controller a gamepad counts as
+    /// connected (the simulator has none), so a later touch or key still switches away from it.
     public func debugForce(_ kind: InputKind) {
-        last = kind
-        if kind != .controller { lastOther = kind }
-        hasController = kind == .controller
+        debugPad = kind == .controller
+        state.controllersChanged(hasGamepad: debugPad || state.hasController)
+        state.used(kind)
         evaluate()
     }
     #endif
 
-    /// The player used [input]: the hints show it from now on.
+    /// The player used [input] on purpose: the hints show it from now on.
     public func note(_ input: InputKind) {
-        last = input
-        if input != .controller { lastOther = input }
+        state.used(input)
         evaluate()
     }
 
     private func refresh() {
         let connected = GCController.controllers().filter { $0.extendedGamepad != nil }.map(PadDescriptor.init)
         let pad = Self.choosePad(current: GCController.current.map(PadDescriptor.init), connected: connected)
-        hasController = pad != nil
+        #if DEBUG
+        let hasGamepad = pad != nil || debugPad
+        #else
+        let hasGamepad = pad != nil
+        #endif
+        state.controllersChanged(hasGamepad: hasGamepad)
         let next = pad?.family ?? .generic
         if next != family { family = next }
         let symbols = (pad?.menuLeftSymbol, pad?.menuRightSymbol)
@@ -275,7 +311,7 @@ public final class ControllerGlyphs {
     }
 
     private func evaluate() {
-        let next = InputKind.resolve(last: last, lastOther: lastOther, hasController: hasController)
+        let next = state.kind()
         if next != kind { kind = next }
     }
 

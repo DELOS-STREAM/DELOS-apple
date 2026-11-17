@@ -1003,10 +1003,14 @@ virtual display), PyroWave chroma, gyro rows and the per-codec bitrate slots, no
 pointer, touch) and, for a controller, the glyph family (`PadFamily`). The hint bar, the dialogs' and menus' hints (all
 `ShellHints`), the toast's action and the back arrow read it, so one change redraws them all. Rules (Android ports the same):
 
-- **What sets the kind.** The last input wins: a touch begins (`touchesBegan` of a window-level recognizer that fails at
-  once, `InputKindProbe`; a direct touch is touch, an indirect pointer touch is pointer), the mouse moves, clicks or scrolls
-  (Mac: `NSEvent` monitor), a key `MenuInput` maps is pressed (keyboard), a controller button is pressed or the system makes
-  a controller the current one or one connects (controller). A keyboard connecting is no input.
+- **What sets the kind.** The last deliberate input wins (`InputKindState`): a touch begins (`touchesBegan` of a
+  window-level recognizer that fails at once, `InputKindProbe`; a direct touch is touch, an indirect pointer touch is
+  pointer), the pointer moves over the window (a hover recognizer; the Pencil's hover, with a height, is not the pointer) or
+  the mouse moves, clicks or scrolls (Mac: `NSEvent` monitor), a key `MenuInput` maps is pressed (keyboard), a controller
+  button `MenuInput` maps is pressed or the left stick passes half of its travel (controller). A controller or keyboard
+  connecting, disconnecting or becoming the system's current one is no input: the system posts those on its own (a pad that
+  wakes up, the app becoming active), and a touch before one of them stays a touch. Stick noise, the motion sensors and the
+  DualSense's touchpad are no input either.
 - **No input yet, or the controller left.** `InputKind.resolve`: a connected gamepad means controller, else the last
   non-controller kind, else the platform default (iPhone and iPad touch, Mac pointer, Apple TV controller). The Siri Remote
   is not a gamepad (no `extendedGamepad`). A controller that is gone cannot be the answer, so unplugging it brings back the

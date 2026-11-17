@@ -63,10 +63,13 @@ running) and a second, offline PC, generated covers, backgrounds and logos from 
 theme, HDR, length), and its own profile "Player", all in a separate defaults suite and a temporary directory: no network, no
 client identity, none of the app's own data. `-DelosScreen <name>` then opens `start` (default), `home`, `devices`, `profile`,
 `pair`, `create`, `artwork`, `appsettings` or `settings:<tab>`; `-DelosDemoApps <n>` sets the number of games (0: an empty library);
-`-DelosDemoInput controller|touch|keyboard` forces the kind of input the hints and the back arrow are drawn for;
+`-DelosDemoInput controller|touch|keyboard` sets the kind of input the hints and the back arrow start with (`controller` also
+counts a pad as connected, which the simulator lacks);
 `-DelosDemoCommands "w3 menu w1 down accept"` routes commands through the real router like a controller would (`up down left right
 accept back menu options toast toast-undo prevtab nexttab`, `wN` waits N seconds): `menu` opens the side menu, `options` a game's menu,
-`toast` (Y) the filter sheet. `sh tools/sim-walkthrough.sh ipad home /tmp/home.png -DelosDemoCommands "w3 menu"` builds, creates a
+`toast` (Y) the filter sheet. The input commands change only the kind of input: `touch` and `click` begin a touch of a finger or of
+the pointer through the recognizer the window holds (`InputKindProbe`), `pad` is a controller's button press (`-DelosDemoInput
+controller -DelosDemoCommands "w4 touch"` shows a touch with a pad connected). `sh tools/sim-walkthrough.sh ipad home /tmp/home.png -DelosDemoCommands "w3 menu"` builds, creates a
 fresh simulator, launches the demo on that screen, saves an upright screenshot and deletes the simulator. Not in the demo: a stream
 surface for the stream menu and the loader (they need a running stream).
 

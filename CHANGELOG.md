@@ -177,6 +177,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   move the PC's cursor relatively, as on the Mac), or hidden by its style where iPadOS refuses the lock (Slide Over, Stage
   Manager windows). It comes back on the stream menu, the loader and the result overlay, after the stream and in the
   background; the Mac's lock also lets go while the loader is up.
+- The last input is the current input again with a controller connected: a touch on the screen switches the hints and the
+  back arrow to touch, and they stay so until a controller button or the stick is used. A controller connecting or becoming
+  the system's current one no longer counts as an input, and the pointer moving over the window switches to the pointer
+  hints on iPad.
 - Moving the focus no longer jumps to the wrong row: the focus finder follows Android's (beams and weights), so Right on the
   library's filter button or at the end of the Artwork grid stays where it is instead of jumping to a button above or a cover
   below, and Up from every cover goes through the filter button to the navigation. A library without games, or one still
