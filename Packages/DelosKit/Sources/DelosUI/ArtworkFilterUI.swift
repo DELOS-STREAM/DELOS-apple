@@ -7,10 +7,16 @@ import SwiftUI
 
 // MARK: Gliding focus ring
 
-/// The frame (in ``ChipGlideHost``'s space) of the chip that has the focus.
+/// Where the chip that has the focus is (its frame in ``ChipGlideHost``'s space) and the scale it is at: the ring grows and
+/// shrinks with it (a press squeezes the element), on the same spring.
+private struct ChipGlideTarget: Equatable {
+    var frame: CGRect
+    var scale: Double
+}
+
 private struct ChipGlideKey: PreferenceKey {
-    static var defaultValue: CGRect? { nil }
-    static func reduce(value: inout CGRect?, nextValue: () -> CGRect?) { value = nextValue() ?? value }
+    static var defaultValue: ChipGlideTarget? { nil }
+    static func reduce(value: inout ChipGlideTarget?, nextValue: () -> ChipGlideTarget?) { value = nextValue() ?? value }
 }
 
 /// How a gliding ring looks: the scale the focused element grows to (its layout bounds times [scale]), the ring's width, and
@@ -52,29 +58,35 @@ struct ChipGlideHost<Content: View>: View {
         content()
             .environment(\.glideLook, look)
             .coordinateSpace(name: "chipGlide")
-            .backgroundPreferenceValue(ChipGlideKey.self) { frame in ChipGlideRing(target: frame, look: look) }
+            .backgroundPreferenceValue(ChipGlideKey.self) { target in ChipGlideRing(target: target, look: look) }
     }
 }
 
 private struct ChipGlideRing: View {
-    let target: CGRect?
+    let target: ChipGlideTarget?
     let look: GlideLook
-    @State private var previous: CGRect?
+    @State private var previous: ChipGlideTarget?
+    /// The scale the ring is drawn at: it starts at 1 with the element, which grows on its spring, so the ring hugs it all
+    /// the way instead of leading it at the full size.
+    @State private var scale = 1.0
+    @State private var faded = true
+    @State private var fade: Task<Void, Never>?
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduced
 
     var body: some View {
         Group {
-            if let frame = target ?? previous {
+            if let shown = target ?? previous {
+                let frame = shown.frame
                 // The ring sits a band of its own width outside the element as it grows, and is that wide
-                let grown = CGSize(width: frame.width * look.scale, height: frame.height * look.scale)
+                let grown = CGSize(width: frame.width * scale, height: frame.height * scale)
                 let outside = stage.px(2 * look.ring)
                 Capsule()
                     .strokeBorder(colors.accent.color, lineWidth: stage.px(look.ring))
                     .frame(width: grown.width + 2 * outside, height: grown.height + 2 * outside)
                     .position(x: frame.midX, y: frame.midY)
-                    .animation(reduced ? nil : .timingCurve(0.3, 1.22, 0.42, 1, duration: SettingsPlateGeometry.duration), value: target)
+                    .animation(reduced ? nil : .timingCurve(0.3, 1.22, 0.42, 1, duration: SettingsPlateGeometry.duration), value: target?.frame)
                     .opacity(target == nil ? 0 : 1)
                     .animation(
                         target == nil
@@ -83,7 +95,26 @@ private struct ChipGlideRing: View {
                         value: target != nil)
             }
         }
-        .onChange(of: target, initial: true) { _, frame in if let frame { previous = frame } }
+        .onChange(of: target, initial: true) { _, now in
+            guard let now else {
+                // The focus left the elements: after the fade the ring is gone, and the next focus starts it afresh
+                fade = Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(450))
+                    if !Task.isCancelled { faded = true }
+                }
+                return
+            }
+            fade?.cancel()
+            previous = now
+            if faded {
+                // A new focus: the ring appears at the element's size at rest and grows with it
+                faded = false
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { scale = 1 }
+            }
+            withAnimation(.focusScale(pressed: now.scale < 1, reduced: reduced)) { scale = now.scale }
+        }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -109,7 +140,11 @@ struct ChipFocus: ViewModifier {
         content
             .background {
                 GeometryReader { proxy in
-                    Color.clear.preference(key: ChipGlideKey.self, value: focused ? proxy.frame(in: .named("chipGlide")) : nil)
+                    Color.clear.preference(
+                        key: ChipGlideKey.self,
+                        value: focused ? ChipGlideTarget(
+                            frame: proxy.frame(in: .named("chipGlide")),
+                            scale: focusScale(focused: focused, pressed: pressed, focus: look.scale)) : nil)
                 }
             }
             .shadow(color: focused && look.glow ? colors.glow.color : .clear, radius: look.glow ? stage.px(25) : 0, y: stage.px(18))

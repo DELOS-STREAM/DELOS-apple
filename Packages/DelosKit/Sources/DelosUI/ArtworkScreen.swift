@@ -156,6 +156,36 @@ final class ArtworkModel {
     var total: Int? {
         if case .ready(_, _, let total) = choices { total } else { nil }
     }
+
+    /// The item that had the focus before the sheet opened, to return to it.
+    @ObservationIgnored private var origin: AnyHashable?
+
+    /// The filter sheet can open: there is a matched game and a key.
+    var canOpenSheet: Bool { match != nil && artwork.enabled && !sheetOpen }
+
+    /// Opens the filter sheet with a new focus of its own on its first option; the grid's focus stays where it is, and
+    /// [origin] is where it returns to.
+    func openSheet(returningTo origin: AnyHashable?) {
+        guard canOpenSheet else { return }
+        self.origin = origin
+        sheetFocus = FocusModel(initial: ArtworkFilterSheet.startID(kind: tab.kind, filters: filters))
+        sheetOpen = true
+    }
+
+    /// Closes the sheet and puts [focus] back where it was: a tile the filters removed (or the first choice, when they left
+    /// nothing) leaves it on the first thing that is there.
+    func closeSheet(restoring focus: FocusModel) {
+        guard sheetOpen else { return }
+        sheetOpen = false
+        let fallback = AnyHashable(empty?.firstFocus ?? ArtworkScreen.noneID)
+        let tileGone: Bool = {
+            guard let id = origin as? String else { return false }
+            if id == ArtworkScreen.noneID { return empty?.showsFirstChoice == false }
+            guard id.hasPrefix("art-"), let number = Int(id.dropFirst(4)) else { return false }
+            return !(images?.contains { $0.id == number } ?? false)
+        }()
+        focus.focus(tileGone ? fallback : origin ?? fallback)
+    }
 }
 
 /// The artwork of one game (the game's menu → Artwork; `ArtworkScreen` of DELOS for Android): a tab per kind (cover, wide
@@ -195,8 +225,6 @@ private struct ArtworkContent: View, Equatable {
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @State private var model: ArtworkModel
-    /// The item that had the focus before the sheet opened, to return to it.
-    @State private var origin: AnyHashable?
 
     init(hostID: String, app: HostApp, focus: FocusModel, navigator: Navigator, actions: ShellActions) {
         self.hostID = hostID
@@ -292,11 +320,10 @@ private struct ArtworkContent: View, Equatable {
             }
         }
         .onAppear {
-            navigator.commandCapture = { command in capture(command) }
+            navigator.takeInput(focus) { command in capture(command) }
         }
         .onDisappear {
-            navigator.commandCapture = nil
-            navigator.screenHints = ScreenHints()
+            navigator.releaseInput(focus)
         }
     }
 
@@ -350,28 +377,16 @@ private struct ArtworkContent: View, Equatable {
     }
 
     private func openSheet() {
-        guard model.match != nil, actions.artwork.enabled, !model.sheetOpen else { return }
+        guard model.canOpenSheet else { return }
         actions.layers.feedback?.play(.open)
-        origin = focus.focused
-        model.sheetFocus = FocusModel(initial: ArtworkFilterSheet.startID(kind: model.tab.kind, filters: model.filters))
         navigator.armInputGate()
-        withAnimation { model.sheetOpen = true }
+        withAnimation { model.openSheet(returningTo: focus.focused) }
     }
 
     private func closeSheet() {
         guard model.sheetOpen else { return }
         actions.layers.feedback?.play(.back)
-        withAnimation { model.sheetOpen = false }
-        // The focus goes back to where it was; a tile the filters removed (or the first choice, when they left nothing) leaves
-        // it on the first thing that is there
-        let fallback = AnyHashable(model.empty?.firstFocus ?? ArtworkScreen.noneID)
-        let tileGone: Bool = {
-            guard let id = origin as? String else { return false }
-            if id == ArtworkScreen.noneID { return model.empty?.showsFirstChoice == false }
-            guard id.hasPrefix("art-"), let number = Int(id.dropFirst(4)) else { return false }
-            return !(model.images?.contains { $0.id == number } ?? false)
-        }()
-        focus.focus(tileGone ? fallback : origin ?? fallback)
+        withAnimation { model.closeSheet(restoring: focus) }
     }
 
     private func resetFilters() {
@@ -381,41 +396,22 @@ private struct ArtworkContent: View, Equatable {
         actions.toasts.show(L("filters_art_reset_toast"), icon: Symbols.reset)
     }
 
-    /// L1 and R1 switch the tab; X searches for another name, Y opens the filter sheet. With the sheet open it has every
-    /// command: X resets, Y and B close it.
+    /// The controller's and keyboard's commands, before the focus gets them: what each does is ``ArtworkCommand``'s.
     private func capture(_ command: MenuCommand) -> Bool {
-        if model.sheetOpen { return captureSheet(command) }
-        switch command {
-        case .previousTab, .nextTab:
-            select(model.tab.step(command == .nextTab ? 1 : -1), sound: .move)
-            return true
-        case .options:
-            search()
-            return true
-        case .toastAction:
-            // A toast that has its own action keeps Y
-            guard actions.toasts.current?.action == nil else { return false }
-            openSheet()
-            return true
-        case .up, .down, .left, .right, .accept, .back, .menu:
-            return false
-        }
-    }
-
-    private func captureSheet(_ command: MenuCommand) -> Bool {
         let feedback = actions.layers.feedback
-        switch command {
-        case .back, .toastAction:
-            closeSheet()
-        case .options:
-            resetFilters()
-        case .accept:
+        let action = ArtworkCommand.route(command, sheetOpen: model.sheetOpen, toastOwnsY: actions.toasts.current?.action != nil)
+        switch action {
+        case .tab(let step): select(model.tab.step(step), sound: .move)
+        case .search: search()
+        case .openSheet: openSheet()
+        case .closeSheet: closeSheet()
+        case .resetFilters: resetFilters()
+        case .sheetAccept:
             guard !navigator.swallowsAccept() else { break }
             if let feedback { feedback.activate(model.sheetFocus.acceptCue) { model.sheetFocus.handle(.accept) } } else { model.sheetFocus.handle(.accept) }
-        case .up, .down, .left, .right:
-            if model.sheetFocus.handle(command) { feedback?.play(.move) }
-        case .previousTab, .nextTab, .menu:
-            break
+        case .sheetMove: if model.sheetFocus.handle(command) { feedback?.play(.move) }
+        case .nothing: break
+        case .pass: return false
         }
         return true
     }

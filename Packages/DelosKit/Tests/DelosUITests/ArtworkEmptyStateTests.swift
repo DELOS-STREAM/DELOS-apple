@@ -5,14 +5,14 @@ import Testing
 @testable import DelosUI
 
 /// A key store that always has the key.
-private struct FakeKey: SecretStorage {
+struct FakeKey: SecretStorage {
     func read(account: String) throws -> Data? { Data("key".utf8) }
     func write(_ data: Data, account: String) throws {}
     func delete(account: String) throws {}
 }
 
 /// A SteamGridDB with one game and three covers; a request with a style asks for the material style, which has none.
-private func fakeTransport() -> SteamGridDB.Transport {
+func fakeTransport() -> SteamGridDB.Transport {
     { request in
         let url = request.url!
         func reply(_ body: String) -> (Data, HTTPURLResponse) {
@@ -27,18 +27,21 @@ private func fakeTransport() -> SteamGridDB.Transport {
     }
 }
 
+/// A model of the fake game's Artwork screen, looked up and with its match.
+@MainActor func makeArtworkModel() async -> ArtworkModel {
+    let directory = FileManager.default.temporaryDirectory.appending(path: "delos-tests-\(UUID().uuidString)", directoryHint: .isDirectory)
+    let defaults = UserDefaults(suiteName: "delos-tests-\(UUID().uuidString)")!
+    let store = ArtworkStore(
+        secrets: FakeKey(), defaults: defaults, matches: directory,
+        cache: DiskCache(directory: directory.appending(path: "cache"), budget: 1 << 20, maxEntryBytes: 1 << 16), transport: fakeTransport())
+    let model = ArtworkModel(hostID: "pc", app: HostApp(id: 1, title: "Hades"), artwork: store)
+    await model.lookup { _ in }
+    return model
+}
+
 @MainActor
 @Suite struct ArtworkEmptyStateTests {
-    private func model() async -> ArtworkModel {
-        let directory = FileManager.default.temporaryDirectory.appending(path: "delos-tests-\(UUID().uuidString)", directoryHint: .isDirectory)
-        let defaults = UserDefaults(suiteName: "delos-tests-\(UUID().uuidString)")!
-        let store = ArtworkStore(
-            secrets: FakeKey(), defaults: defaults, matches: directory,
-            cache: DiskCache(directory: directory.appending(path: "cache"), budget: 1 << 20, maxEntryBytes: 1 << 16), transport: fakeTransport())
-        let model = ArtworkModel(hostID: "pc", app: HostApp(id: 1, title: "Hades"), artwork: store)
-        await model.lookup { _ in }
-        return model
-    }
+    private func model() async -> ArtworkModel { await makeArtworkModel() }
 
     @Test func noImageAndNoFilterIsBareAndKeepsTheFirstChoice() {
         #expect(ArtworkEmpty(images: 3, filters: ArtFilters()) == nil)

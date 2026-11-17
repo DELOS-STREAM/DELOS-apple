@@ -255,6 +255,43 @@ enum ArtworkSouth: Equatable, Sendable {
     }
 }
 
+/// What a command of the controller or keyboard does on the Artwork screen. L1 and R1 switch the tab, X (`.options`) searches
+/// for another name and Y (`.toastAction`) opens the filter sheet; the open sheet takes every command (its own focus is moved
+/// by the directions, A chooses, X resets, Y and B close it) so that nothing reaches the grid behind it.
+enum ArtworkCommand: Equatable {
+    case tab(Int)
+    case search
+    case openSheet
+    case closeSheet
+    case resetFilters
+    case sheetAccept
+    case sheetMove
+    /// Consumed, nothing happens (a command the open sheet has no use for).
+    case nothing
+    /// Not the screen's: the focus gets it.
+    case pass
+
+    /// [toastOwnsY]: a toast with its own action keeps Y.
+    static func route(_ command: MenuCommand, sheetOpen: Bool, toastOwnsY: Bool) -> ArtworkCommand {
+        if sheetOpen {
+            switch command {
+            case .back, .toastAction: return .closeSheet
+            case .options: return .resetFilters
+            case .accept: return .sheetAccept
+            case .up, .down, .left, .right: return .sheetMove
+            case .previousTab, .nextTab, .menu: return .nothing
+            }
+        }
+        switch command {
+        case .previousTab: return .tab(-1)
+        case .nextTab: return .tab(1)
+        case .options: return .search
+        case .toastAction: return toastOwnsY ? .pass : .openSheet
+        case .up, .down, .left, .right, .accept, .back, .menu: return .pass
+        }
+    }
+}
+
 /// The info strip under the grid (`InfoStrip`), in stage px: as high as its content needs (the text of tvOS, 24 pt at least,
 /// and of a big interface scale needs more than the design's 84), never less than that.
 enum ArtworkInfoLayout {

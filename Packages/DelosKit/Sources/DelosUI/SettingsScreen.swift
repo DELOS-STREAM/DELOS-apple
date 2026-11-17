@@ -110,14 +110,11 @@ struct SettingsScreen: View {
         .onChange(of: form.settings) { _, now in store.save(now, profile: profileID) }
         .onChange(of: appearance) { _, now in appearances.save(now, profile: profileID) }
         .onAppear {
-            navigator.commandCapture = { command in capture(command) }
+            navigator.takeInput(focus) { command in capture(command) }
             if focusedRow == nil { focus.focus(Self.firstRow(tab)) }
             SettingsSession.shared.tab = tab
         }
-        .onDisappear {
-            navigator.commandCapture = nil
-            navigator.screenHints = ScreenHints()
-        }
+        .onDisappear { navigator.releaseInput(focus) }
         .onChange(of: tab) { _, next in SettingsSession.shared.tab = next }
         .onChange(of: focus.focused, initial: true) { navigator.screenHints = ScreenHints(adjustable: ShellHints.adjustable(focusedRow)) }
     }
