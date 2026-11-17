@@ -98,6 +98,7 @@ struct CircleItem: View {
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
     @Environment(\.pressed) private var pressed
+    @Environment(\.glideRing) private var glide
 
     var body: some View {
         let side = diameter ?? (big ? 220.0 : 176.0)
@@ -114,14 +115,23 @@ struct CircleItem: View {
                 }
             }
             .frame(width: stage.px(side), height: stage.px(side))
+            // One ring glides between the circles of a row (`GlideRingHost`); a lone circle draws its own
+            .glideTarget(focused: focused)
             .background {
-                // Ring: 5 px wide, 5 px outside the circle
-                Circle()
-                    .strokeBorder(colors.accent.color, lineWidth: stage.px(5))
-                    .padding(-stage.px(10))
+                if glide == nil {
+                    // Ring: 5 px wide, 5 px outside the circle, the gap in the background color
+                    ZStack {
+                        Circle().strokeBorder(colors.bg.color, lineWidth: stage.px(5)).padding(-stage.px(5))
+                        Circle().strokeBorder(colors.accent.color, lineWidth: stage.px(5)).padding(-stage.px(10))
+                    }
+                    .opacity(focused ? 1 : 0)
+                }
+            }
+            // The glow of a round element, `FocusGlow(26, 70, -16)`: centered on the circle, not moved down
+            .background {
+                GlowDisc(radius: stage.px(side / 2), spread: -stage.px(16), blur: stage.px(70), color: colors.glow)
                     .opacity(focused ? 1 : 0)
             }
-            .shadow(color: focused ? colors.glow.color : .clear, radius: stage.px(35), y: stage.px(26))
             .animation(.focusRing(focused: focused), value: focused)
             .overlay(alignment: .topLeading) { if selected { checkBadge(side: side) } }
             .scaleEffect(focusScale(focused: focused, pressed: pressed, focus: 1.16))
@@ -132,6 +142,8 @@ struct CircleItem: View {
                     .foregroundStyle(colors.text.color)
                     .opacity(lit ? 1 : 0.55)
                     .offset(y: lit ? 0 : -stage.px(6))
+                    // `lit`: 420 ms ease-out, not the focus spring
+                    .animation(reduceMotion ? nil : Motion.out(Motion.focus), value: lit)
                     .lineLimit(1)
                 if let meta {
                     HStack(spacing: stage.px(8)) {
@@ -147,7 +159,7 @@ struct CircleItem: View {
         }
         .frame(width: stage.px(max(width ?? 220, side)))
         .animation(.focusScale(pressed: pressed, reduced: reduceMotion), value: CirclePress(focused: focused, pressed: pressed))
-        .animation(reduceMotion ? .easeOut(duration: 0.18) : .spring(response: 0.36, dampingFraction: 0.6), value: selected)
+        .animation(reduceMotion ? .timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000) : Motion.spring(Motion.pillPop), value: selected)
     }
 
     /// `.circle::before`: a 52 px circle in the secondary color with a check, centered on the circle's edge at the top
@@ -161,7 +173,7 @@ struct CircleItem: View {
         }
         .frame(width: stage.px(badge), height: stage.px(badge))
         .offset(x: stage.px(side - edge - badge / 2), y: stage.px(edge - badge / 2))
-        .transition(reduceMotion ? .opacity : .scale(scale: 0.4).combined(with: .opacity))
+        .transition(reduceMotion ? .opacity : .scale(scale: Motion.popFromPill).combined(with: .opacity))
     }
 }
 

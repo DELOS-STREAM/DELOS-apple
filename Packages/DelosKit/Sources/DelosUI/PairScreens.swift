@@ -138,6 +138,8 @@ struct CircleRow<Content: View>: View {
 
     var body: some View {
         let row = HStack(alignment: .top, spacing: stage.px(56)) { content() }.padding(stage.px(40))
+            // One focus ring glides between the circles (`GlideRingHost(FocusRing(5, 5), focusScale = 1.16)`)
+            .glideRingHost(focusScale: 1.16)
         ViewThatFits(in: .horizontal) {
             row
             FocusScroll(axis: .horizontal) { row }.scrollClipDisabled().focusable(false)
