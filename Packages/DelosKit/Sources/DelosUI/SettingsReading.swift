@@ -8,6 +8,8 @@ enum SettingsReadingMotion {
     static let gap = 56.0
     static let helpFirstPause = 3.0
     static let helpEndPause = 2.5
+    /// The compact dock's first pause (`AutoScrollingHelp.edgeFade`): time to read the text whole.
+    static let dockFirstPause = 8.0
 
     static func marqueeOffset(elapsed: Double, width: Double) -> Double {
         guard width > 0, elapsed >= startDelay else { return 0 }
@@ -73,14 +75,21 @@ struct MarqueeLabel: View {
     }
 }
 
-/// Passive help loops at reading speed; reduced motion leaves a still, manually scrollable panel.
+/// Passive help loops at reading speed; reduced motion leaves a still, manually scrollable panel (`AutoScrollingHelp`).
+/// [edgeFade] (stage px) is the compact dock's look: no padding above or below, and each edge fades only as far as the
+/// content continues behind it (nothing at rest at the top, growing with the first pixels scrolled), and the first
+/// pause is 8 s, to read the text whole.
 struct AutoScrollingHelp<Content: View>: View {
     let identity: String
+    /// The padding above and below the text, which is also the width of the fades at both ends (stage px).
+    var inset = 24.0
+    var edgeFade: Double?
     @ViewBuilder let content: () -> Content
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduced
     @State private var position = ScrollPosition(y: 0)
     @State private var extent = Extent()
+    @State private var offset = 0.0
 
     private struct Extent: Equatable, Hashable {
         var content = 0.0
@@ -98,20 +107,27 @@ struct AutoScrollingHelp<Content: View>: View {
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             content()
-                .padding(.vertical, stage.px(24))
+                .padding(.vertical, stage.px(edgeFade == nil ? inset : 0))
         }
         .scrollPosition($position)
         .scrollDisabled(!reduced)
         .onScrollGeometryChange(for: Extent.self) { geometry in
             Extent(content: geometry.contentSize.height, viewport: geometry.containerSize.height)
         } action: { _, value in extent = value }
+        .onScrollGeometryChange(for: Double.self) { geometry in
+            geometry.contentOffset.y
+        } action: { _, value in if edgeFade != nil { offset = value } }
         .mask {
+            // The fade at each edge: the whole [inset] at both ends of a text that overflows, or, in the dock, as much as
+            // is scrolled away behind the edge
+            let top: CGFloat = edgeFade.map { min(stage.px($0), CGFloat(max(offset, 0))) } ?? (extent.overflow > 0 ? stage.px(inset) : 0)
+            let bottom: CGFloat = edgeFade.map { min(stage.px($0), CGFloat(max(extent.overflow - offset, 0))) } ?? (extent.overflow > 0 ? stage.px(inset) : 0)
             VStack(spacing: 0) {
                 LinearGradient(colors: [.clear, .white], startPoint: .top, endPoint: .bottom)
-                    .frame(height: extent.overflow > 0 ? stage.px(24) : 0)
+                    .frame(height: top)
                 Color.white
                 LinearGradient(colors: [.white, .clear], startPoint: .top, endPoint: .bottom)
-                    .frame(height: extent.overflow > 0 ? stage.px(24) : 0)
+                    .frame(height: bottom)
             }
         }
         .task(id: Run(identity: identity, extent: extent, scale: stage.scale, reduced: reduced)) {
@@ -120,9 +136,11 @@ struct AutoScrollingHelp<Content: View>: View {
             withTransaction(reset) { position.scrollTo(y: 0) }
             guard extent.overflow > 0, !reduced else { return }
             let duration = SettingsReadingMotion.helpDuration(overflow: extent.overflow / stage.scale)
+            var firstPause = edgeFade == nil ? SettingsReadingMotion.helpFirstPause : SettingsReadingMotion.dockFirstPause
             do {
                 while !Task.isCancelled {
-                    try await Task.sleep(for: .seconds(SettingsReadingMotion.helpFirstPause))
+                    try await Task.sleep(for: .seconds(firstPause))
+                    firstPause = SettingsReadingMotion.helpFirstPause
                     withAnimation(.linear(duration: duration)) { position.scrollTo(y: extent.overflow) }
                     try await Task.sleep(for: .seconds(duration + SettingsReadingMotion.helpEndPause))
                     withAnimation(.linear(duration: duration)) { position.scrollTo(y: 0) }

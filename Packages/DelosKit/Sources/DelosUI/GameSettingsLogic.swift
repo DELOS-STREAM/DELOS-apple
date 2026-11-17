@@ -122,6 +122,35 @@ final class GameSettingsModel {
     private func save() { store.save(overrides, profile: profileID, hostID: hostID, appID: app.id) }
 }
 
+/// The tabs of the App settings screen (`GameSettingsStore.STREAM_KEYS` and `DISPLAY_KEYS` of DELOS for Android): the stream
+/// rows, and Display, which holds HDR here (the one display setting that exists). Display shows only where it has a row.
+enum GameSettingsTab: Hashable, CaseIterable, Sendable {
+    case stream, display
+
+    var label: String { L(self == .stream ? "settings_tab_stream" : "settings_tab_display") }
+    var icon: String { self == .stream ? Symbols.cast : Symbols.monitor }
+
+    /// The rows that belong to Display; every other row is a Stream row.
+    static let displayRows: Set<String> = [StreamSettingsForm.hdr]
+
+    func step(_ direction: Int, among tabs: [GameSettingsTab]) -> GameSettingsTab {
+        guard let index = tabs.firstIndex(of: self) else { return tabs.first ?? .stream }
+        return tabs[((index + direction) % tabs.count + tabs.count) % tabs.count]
+    }
+}
+
+extension GameSettingsModel {
+    func rows(_ tab: GameSettingsTab) -> [SettingRow] {
+        rows.filter { GameSettingsTab.displayRows.contains($0.id) == (tab == .display) }
+    }
+
+    /// The tabs to show: Stream, and Display where it has a row.
+    var tabs: [GameSettingsTab] { rows(.display).isEmpty ? [.stream] : [.stream, .display] }
+
+    /// How many settings of [tab] the app overrides (`customCount`).
+    func customCount(_ tab: GameSettingsTab) -> Int { rows(tab).filter { isCustom($0.id) }.count }
+}
+
 /// The banner chip and the panel's summary (`customSettingsLabel`, `customSummary`).
 enum GameSettingsText {
     /// How many settings are custom for the app, or that it follows the profile.
@@ -129,8 +158,8 @@ enum GameSettingsText {
         count <= 0 ? L("settings_game_follows_profile") : LPlural("settings_game_custom_count", count)
     }
 
-    /// The panel's text while no row is focused: what makes a setting custom, or how much of the app is.
-    static func summary(_ count: Int, app: String) -> String {
-        count == 0 ? L("settings_game_summary_none") : L("settings_game_only_this_game", app)
+    /// The panel's text while no row is focused: what makes a setting custom, or where the custom ones are.
+    static func summary(stream: Int, display: Int) -> String {
+        stream + display == 0 ? L("settings_game_summary_none") : L("settings_game_summary", stream, display)
     }
 }

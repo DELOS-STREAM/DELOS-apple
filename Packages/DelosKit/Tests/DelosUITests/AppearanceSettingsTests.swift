@@ -17,7 +17,7 @@ import Testing
         #expect(Set(SettingsTab.allCases.flatMap { form.rows($0) }.map(\.id)) == AppearanceForm.ids)
         for tab in SettingsTab.availableCases {
             let all = StreamSettingsForm(settings: StreamSettings(), device: device).rows(tab)
-                + form.rows(tab) + CoversForm(enabled: false, automatic: true, pcName: nil).rows(tab) + AppLanguageSetting.rows(tab)
+                + form.rows(tab) + CoversForm(enabled: false, automatic: true, pcName: nil).rows(tab) + DevicesSetting.rows(tab) + AppLanguageSetting.rows(tab)
             #expect(all.first?.id == SettingsScreen.firstRow(tab))
         }
     }
