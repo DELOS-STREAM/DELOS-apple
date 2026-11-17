@@ -87,10 +87,18 @@ enum ToastTiming {
     static let glowReach = 150.0
     /// The share of ``glowReach`` the halo has when the toast starts; it spreads to the full reach by the end.
     static let glowReachFrom = 0.45
-    /// The drop shadow: its opacity, reach and drop (stage pixels).
+    /// The drop shadow: its opacity at the edge, reach, drop and inset from the card (stage pixels).
     static let shadowPeak = 0.22
     static let shadowReach = 44.0
     static let shadowDrop = 14.0
+    static let shadowInset = 10.0
+
+    /// How strong the halo is at [t] (0 at the card's edge, 1 at its reach) as a fraction of its peak: a smoothstep, so
+    /// it starts and ends without a visible edge.
+    static func haloFalloff(_ t: Double) -> Double {
+        let s = 1 - min(max(t, 0), 1)
+        return s * s * (3 - 2 * s)
+    }
 
     /// The enter spring's position [ms] after the card started to enter: 0 at the start, 1 at rest, above 1 while it
     /// overshoots.

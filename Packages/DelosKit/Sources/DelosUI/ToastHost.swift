@@ -114,7 +114,7 @@ struct ToastHost: View {
             let now = timeline.date.timeIntervalSinceReferenceDate * 1000
             ZStack(alignment: .topTrailing) {
                 ForEach(stage.slots, id: \.payload.id) { slot in
-                    ToastCard(slot: slot, now: now, isLatest: slot === stage.slots.last) {
+                    ToastCard(slot: slot, now: now, isLatest: slot === stage.slots.last, ui: stagePx.textScale) {
                         if slot.payload.id == toasts.current?.id, now >= slot.startMs { toasts.runAction() }
                     }
                     .environment(\.stage, stagePx.zoomed(by: stagePx.textScale))
@@ -168,6 +168,8 @@ private struct ToastCard: View {
     let slot: ToastSlot<Toast>
     let now: Double
     let isLatest: Bool
+    /// The interface scale: halos are in plain stage pixels, the card's own sizes follow it.
+    let ui: Double
     let onTap: @MainActor () -> Void
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
@@ -185,21 +187,20 @@ private struct ToastCard: View {
         let glow = opacity * (1 - Motion.progress(age, delay: ToastTiming.glowAt, duration: max(1, slot.holdMs - ToastTiming.glowAt), Motion.ease))
         let spread = ToastTiming.glowReachFrom + (1 - ToastTiming.glowReachFrom) * Motion.progress(age, delay: 0, duration: max(1, slot.holdMs), Motion.easeOut)
         let shape = RoundedRectangle(cornerRadius: stage.px(Self.radius), style: .continuous)
+        let unit = stage.px(1) / ui
         let word = toast.kind.word
         card(toast, look: look, age: age, shape: shape, word: word)
             .opacity(opacity)
-            // The soft drop shadow and the kind-colored halo (no glass: an opaque card reads over any frame of a stream)
+            // The soft drop shadow and the kind-colored halo (no glass: an opaque card reads over any frame of a stream):
+            // drawn as the Android card draws them, in one-pixel-class rings that fade with the eased falloff
             .background {
-                shape.fill(Color.black.opacity(ToastTiming.shadowPeak * opacity))
-                    .blur(radius: stage.px(ToastTiming.shadowReach / 2))
-                    .offset(y: stage.px(ToastTiming.shadowDrop))
+                Canvas { context, size in
+                    drawHalos(&context, size: size, look: look, glow: glow, spread: spread, opacity: opacity)
+                }
+                .padding(-unit * (ToastTiming.glowReach + 4))
+                .allowsHitTesting(false)
             }
-            .background {
-                shape.strokeBorder(look.fill.opacity(ToastTiming.glowPeak * glow).color, lineWidth: stage.px(ToastTiming.glowReach * spread / 3))
-                    .padding(-stage.px(ToastTiming.glowReach * spread / 6))
-                    .blur(radius: stage.px(ToastTiming.glowReach * spread / 3))
-            }
-            .overlay { shape.inset(by: -stage.px(1)).stroke(look.fill.opacity(0.35 * glow).color, lineWidth: stage.px(1)) }
+            .overlay { shape.inset(by: -unit).stroke(look.fill.opacity(0.35 * glow).color, lineWidth: unit) }
             .scaleEffect(reduced || age < 0 ? 1 : Motion.lerp(ToastTiming.fromScale, 1, step), anchor: .trailing)
             .visualEffect { [slide = reduced || age < 0 ? nil : (stage.px(ToastTiming.slideExtra), stage.px(ToastTiming.exitSlide) * leaving)] content, proxy in
                 content.offset(x: slide.map { (proxy.size.width + $0.0) * (1 - step) + $0.1 } ?? 0)
@@ -233,7 +234,9 @@ private struct ToastCard: View {
                     CappedWidth(max: stage.px(toastTextMaxWidth(stageWidth: stage.width))) {
                         Text(toast.text)
                             .font(DelosFonts.figtree(stage.tpx(25), .semibold))
-                            .lineSpacing(stage.px(25 * 0.28))
+                            .tracking(stage.tpx(25) * 0.005)
+                            // Line height 1.28 em; Figtree's own is 1.2 em
+                            .lineSpacing(stage.tpx(25 * (1.28 - 1.2)))
                             .foregroundStyle(cardText.color)
                             .lineLimit(toastMaxLines)
                             .truncationMode(.tail)
@@ -272,6 +275,40 @@ private struct ToastCard: View {
         .overlay(alignment: .bottomLeading) { timerLine(age: age, gold: gold) }
         .clipShape(shape)
         .overlay { shape.strokeBorder(cardRing.color, lineWidth: stage.px(1)) }
+    }
+
+    /// The drop shadow and the glow behind the card, laid out as `drawBehind` of Android's card: [size] is the canvas, which
+    /// reaches beyond the card by the halo's margin on every side.
+    private func drawHalos(_ context: inout GraphicsContext, size: CGSize, look: (fill: RGBA, on: RGBA), glow: Double, spread: Double, opacity: Double) {
+        let unit = stage.px(1) / ui
+        let margin = unit * (ToastTiming.glowReach + 4)
+        let card = CGRect(x: margin, y: margin, width: size.width - 2 * margin, height: size.height - 2 * margin)
+        let radius = stage.px(Self.radius)
+        // The shadow: from the card inset by `shadowInset`, dropped by `shadowDrop`; filled inside, then fading out over its reach
+        if opacity > 0 {
+            let inset = unit * ToastTiming.shadowInset
+            let rect = card.insetBy(dx: inset, dy: inset).offsetBy(dx: 0, dy: unit * ToastTiming.shadowDrop)
+            let shadowRadius = max(radius - inset, 0)
+            context.fill(Path(roundedRect: rect, cornerRadius: shadowRadius), with: .color(.black.opacity(ToastTiming.shadowPeak * opacity)))
+            rings(&context, rect: rect, radius: shadowRadius, reach: unit * ToastTiming.shadowReach, peak: ToastTiming.shadowPeak * opacity, color: .black, ring: unit * 2)
+        }
+        // The glow: rings that fade with the eased falloff, the halo spreading while the toast is shown
+        if glow > 0 {
+            rings(&context, rect: card, radius: radius, reach: unit * ToastTiming.glowReach * spread, peak: ToastTiming.glowPeak * glow, color: look.fill.color, ring: unit * 2)
+        }
+    }
+
+    /// One-ring steps of a halo around [rect]: ring i has `peak` times the smoothstep falloff of its distance.
+    private func rings(_ context: inout GraphicsContext, rect: CGRect, radius: Double, reach: Double, peak: Double, color: Color, ring: Double) {
+        let steps = max(Int(reach / ring), 1)
+        for i in 1...steps {
+            let alpha = min(max(peak * ToastTiming.haloFalloff(Double(i) / Double(steps)), 0), 1)
+            if alpha < 0.004 { continue }
+            let o = Double(i) * ring - ring / 2
+            context.stroke(
+                Path(roundedRect: rect.insetBy(dx: -o, dy: -o), cornerRadius: radius + o),
+                with: .color(color.opacity(alpha)), lineWidth: ring * 1.1)
+        }
     }
 
     /// The light sweep: a soft band of white, tilted 12°, that crosses the card once right after it lands.
