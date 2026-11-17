@@ -60,8 +60,13 @@ struct StreamScreen: View {
                 if old == .streaming || old == .connecting { toasts?.show(L("stream_result_host_closed"), icon: Symbols.info) }
                 navigator.back()
             }
-            // The result overlay shows: OPEN
+            // The result overlay shows: OPEN, and the hint bar says Select and Back to library while it is up
             if case .failed = phase { layers?.feedback?.play(.open) }
+            if let controller, phase != .ended {
+                var failed = false
+                if case .failed = phase { failed = true }
+                navigator.setHints(ScreenHints(streamResult: failed), from: controller)
+            }
         }
         // The stream menu opens (the shortcut, a swipe, the remote): OPEN; it closes with BACK, played where it is closed
         .onChange(of: controller?.menuOpen) { _, open in
@@ -237,6 +242,9 @@ struct StreamContent: View {
     @Environment(\.reducedMotion) private var reducedMotion
     @Environment(HomeArt.self) private var art: HomeArt?
     @Environment(Layers.self) private var layers: Layers?
+    @Environment(HostStore.self) private var hosts: HostStore?
+    @Environment(Navigator.self) private var navigator: Navigator?
+    @Environment(Toasts.self) private var toasts: Toasts?
     /// The dock is mounted while the menu is open and for its exit after it closed.
     @State private var dockShown = false
     @State private var unmount: Task<Void, Never>?
@@ -305,7 +313,10 @@ struct StreamContent: View {
             case .failed(let text):
                 StreamResultLayer(
                     text: text, focus: focus,
-                    onRetry: { controller.retry() },
+                    onRetry: {
+                        StreamRetry.run(controller: controller, hosts: hosts, navigator: navigator, toasts: toasts, feedback: layers?.feedback,
+                                        hostID: hostID, appID: appID)
+                    },
                     onBack: { controller.dismiss() })
             }
             #if os(tvOS)

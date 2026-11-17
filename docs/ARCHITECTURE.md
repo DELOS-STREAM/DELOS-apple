@@ -439,8 +439,11 @@ the background in 0.25 s, the flat fade from 0.35 s over 0.2 s, the library at 0
 library.
 
 The result overlay is Android's `StreamResultLayer`: a sad face, the title, one sentence, Try again (focused first) and
-Back to library, and the technical text behind Details. B is Back to library. A launch the PC refused shows Android's
-`conn_*` message (resume foreign 470, app minimized 525, quit foreign 599, denied 403).
+Back to library, and the technical text behind Details. B is Back to library; the hint bar shows over it with Select and
+Back to library (Back on a cramped bar). A launch the PC refused shows Android's `conn_*` message (resume foreign 470,
+app minimized 525, quit foreign 599, denied 403). Try again first asks the PC (`StreamRetry`, Android's `retryStream`): it
+must answer as a paired PC within 4 s and list the game within 5 s. Otherwise the result closes with the ERROR cue and
+"<PC> cannot be reached" or "<game> is not available on <PC>"; a game the PC now lists under another id starts under it.
 
 During the stream the screen stays on (`isIdleTimerDisabled`), the system overlays are hidden and the system gestures
 deferred. `Navigator.commandCapture` gives the stream screen every controller and keyboard command first: while the
@@ -1027,7 +1030,13 @@ The screens (DelosUI, as DELOS for Android's `DeviceScreens.kt`, `PairScreens.kt
   the PC's box art or placeholder art; Running and Last played badges). The running game comes first, then the games
   started from DELOS from the most recent (`PlayedGames`). A opens the stream. A game's context menu has a header
   (the tile in the main color, Running or App, another game that runs) and Start, or Resume and Quit for the running
-  game, or Quit … and start and Resume … when another one runs (the stream quits it first).
+  game, or Quit … and start and Resume … when another one runs (the stream quits it first). A PC that is not (or no
+  longer) paired shows "No PC paired yet" (`HomeContent.noPC`), an offline one its title and the note on how to wake it.
+  The info row has the Virtual display chip on Desktop when the PC can make a virtual display of its own
+  (`HostRecord.virtualDisplay`, from `VirtualDisplayCapable`). A start checks the PC first (`GameStart`): with no paired
+  address the ERROR cue and "<PC> cannot be reached" stop it; a virtual display the settings want but the PC cannot make
+  (`checkbox_use_virtual_display`, its driver not ready) is said in a warning and the main display is streamed. Quit on
+  such a PC says "DELOS is still connecting to <PC>" (`home_quit_starting`).
 
 ### Devices
 

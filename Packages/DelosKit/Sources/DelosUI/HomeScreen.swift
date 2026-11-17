@@ -5,15 +5,20 @@ import SwiftUI
 
 /// What the library of a PC shows (`Library` of DELOS for Android, for one PC).
 enum HomeContent: Equatable {
+    /// The PC is not (or no longer) paired: there is no library to show (`Library.NoPc`).
+    case noPC
     /// The apps are being asked for the first time.
     case loading
     case offline
     case empty
     case apps([HostApp])
 
-    /// [apps]: the list as last loaded (nil: never); [loadFailed]: the last attempt to load it failed.
-    init(apps: [HostApp]?, loadFailed: Bool) {
-        if let apps, !loadFailed {
+    /// [paired]: the PC is a paired PC DELOS knows; [apps]: the list as last loaded (nil: never); [loadFailed]: the last
+    /// attempt to load it failed.
+    init(paired: Bool = true, apps: [HostApp]?, loadFailed: Bool) {
+        if !paired {
+            self = .noPC
+        } else if let apps, !loadFailed {
             self = apps.isEmpty ? .empty : .apps(apps)
         } else if loadFailed {
             self = .offline
@@ -98,7 +103,9 @@ struct HomeScreen: View {
     /// The focus the screen opens with: no item has it, so the covers, once loaded, give it to the first one.
     static let initialFocus = "first-app"
 
-    private var content: HomeContent { HomeContent(apps: hosts.apps[hostID], loadFailed: loadFailed) }
+    private var content: HomeContent {
+        HomeContent(paired: hosts.host(hostID)?.pin != nil, apps: hosts.apps[hostID], loadFailed: loadFailed)
+    }
 
     /// The games the library lists before the filter: the PC's, without the hidden ones, in the library's order.
     private var listed: [HostApp] {
@@ -119,8 +126,9 @@ struct HomeScreen: View {
         ZStack {
             Group {
                 switch content {
+                case .noPC: HomeMessage(icon: Symbols.devices, title: L("home_no_pc_title"), text: L("home_no_pc_note"))
                 case .loading: HomeMessage(icon: Symbols.loading, title: L("home_loading"), text: nil)
-                case .offline: HomeMessage(icon: Symbols.wifiOff, title: L("home_offline_title", name), text: nil)
+                case .offline: HomeMessage(icon: Symbols.wifiOff, title: L("home_offline_title", name), text: L("home_offline_note"))
                 case .empty: HomeMessage(icon: Symbols.sportsEsports, title: L("home_empty_title", name), text: L("home_empty_note"))
                 case .apps:
                     // Every game hidden: the library has nothing to show until the side menu's switch is on
@@ -430,6 +438,7 @@ struct GameLibrary: View {
         let end = metrics.rowEnd
         ZStack(alignment: .topLeading) {
             GameInfo(hostID: hostID, app: focused, pcName: host?.name ?? "", running: running == focused.id,
+                     virtualDisplay: VirtualDisplayChip.shows(app: focused, support: host?.virtualDisplay),
                      playtime: actions.playtime(hostID: hostID, appID: focused.id), metrics: metrics)
                 .padding(.leading, stage.px(metrics.infoStart))
                 .padding(.top, stage.px(metrics.titleTop))
@@ -649,6 +658,8 @@ private struct GameInfo: View {
     let app: HostApp
     let pcName: String
     let running: Bool
+    /// The Virtual display chip (``VirtualDisplayChip``).
+    let virtualDisplay: Bool
     let playtime: Playtime
     let metrics: HomeMetrics
     @Environment(GameMetadataModel.self) private var metadata
@@ -669,7 +680,7 @@ private struct GameInfo: View {
             GameTitle(hostID: hostID, app: app, metrics: metrics, width: metrics.infoWidth)
             Spacer().frame(height: stage.px(metrics.titleGap))
             InfoRow(playtime: playtime, height: metrics.infoHeight,
-                    hasFacts: running || hdr != nil || completion != nil,
+                    hasFacts: running || hdr != nil || completion != nil || virtualDisplay,
                     hasTags: !genres.isEmpty || !themes.isEmpty, above: metrics.blockAbove) {
                 if running { InfoChip(icon: Symbols.running, label: L("home_chip_running_on", pcName)) }
                 switch hdr {
@@ -681,12 +692,21 @@ private struct GameInfo: View {
                 if let completion {
                     InfoChip(icon: Symbols.completionTime, label: L("home_chip_hltb", TagLook.completionText(completion)))
                 }
+                if virtualDisplay { InfoChip(icon: Symbols.screenShare, label: L("home_chip_virtual_display")) }
             } tags: {
                 if !genres.isEmpty { GenrePill(genres: genres, gameColors: gameColors) }
                 if !themes.isEmpty { ThemePill(themes: themes, gameColors: gameColors) }
             }
             .frame(maxWidth: stage.px(metrics.infoWidth), alignment: .leading)
         }
+    }
+}
+
+/// The Virtual display chip of the info row (`virtualDisplay` in `GameInfo` of DELOS for Android): on Desktop, when the PC
+/// can stream to a virtual display of its own.
+enum VirtualDisplayChip {
+    static func shows(app: HostApp, support: VirtualDisplaySupport?) -> Bool {
+        BundledArtwork.kind(app) == .desktop && support?.capable == true
     }
 }
 

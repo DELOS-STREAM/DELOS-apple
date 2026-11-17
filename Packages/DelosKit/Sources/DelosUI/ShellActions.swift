@@ -256,10 +256,16 @@ final class ShellActions {
         return LibraryHiding.sideRow(count: LibraryHiding.count(apps, hidden: hidden), showing: hiding.showHidden, pcName: pcName)
     }
 
-    /// Quits [app] on the PC; [then] runs once it has quit (the other game of "Quit X and start Y" starts).
+    /// Quits [app] on the PC; [then] runs once it has quit (the other game of "Quit X and start Y" starts). A PC DELOS has
+    /// no address of yet says DELOS is still connecting to it (`QuitOutcome.STARTING`).
     private func quit(hostID: String, app: HostApp, then: (@MainActor () -> Void)? = nil) {
         let name = hosts.host(hostID)?.name ?? ""
         toasts.show(L("shell_game_quitting", app.title), icon: Symbols.powerSettingsNew)
+        guard GameStart.canReach(hosts.host(hostID)) else {
+            feedback?.play(.error)
+            toasts.show(L("home_quit_starting", name), icon: Symbols.error)
+            return
+        }
         Task {
             do {
                 try await hosts.quitApp(hostID)
@@ -276,8 +282,20 @@ final class ShellActions {
         }
     }
 
-    /// Starts (or resumes) [app]'s stream and remembers when it was started, for the library's order.
+    /// Starts (or resumes) [app]'s stream and remembers when it was started, for the library's order (`ShellGameActions.start`).
+    /// A PC DELOS cannot ask says so instead; a virtual display the settings want but the PC cannot make is said in a warning,
+    /// and the stream goes to the PC's main display.
     func play(hostID: String, app: HostApp) {
+        let host = hosts.host(hostID)
+        guard GameStart.canReach(host) else {
+            feedback?.play(.error)
+            toasts.show(L("shell_game_unreachable", host?.name ?? ""), icon: Symbols.wifiOff)
+            return
+        }
+        let wants = streamSettings(hostID: hostID, appID: app.id).bool(.useVirtualDisplay)
+        if GameStart.virtualDisplayMissing(wants: wants, support: host?.virtualDisplay) {
+            toasts.show(L("shell_game_virtual_display_missing", host?.name ?? ""), icon: Symbols.monitor, kind: .warning)
+        }
         if let profile = profiles.current?.id { played.markStarted(profile: profile, hostID: hostID, appID: app.id) }
         go { navigator.openStream(hostID: hostID, appID: app.id) }
     }
@@ -511,5 +529,21 @@ final class ShellActions {
         }
         toasts.show(L("profile_deleted", profile.name), icon: Symbols.delete, action: undo)
         go { another ? navigator.reset(to: .start, focus: startFocus()) : navigator.reset(to: .boot, focus: "begin") }
+    }
+}
+
+/// What a game's start checks first (`GameLauncher.prepare` and `startIntent` of DELOS for Android).
+enum GameStart {
+    /// DELOS can ask the PC at all: it is paired and an address of it is known (Android: the PC service is bound and the PC
+    /// has an active address).
+    static func canReach(_ host: HostRecord?) -> Bool {
+        guard let host, host.pin != nil else { return false }
+        return (host.activeAddress ?? host.localAddress ?? host.manualAddress) != nil
+    }
+
+    /// The settings want a virtual display (`checkbox_use_virtual_display`) but the PC cannot make one or its driver is not
+    /// ready: the main display is streamed instead, with a warning.
+    static func virtualDisplayMissing(wants: Bool, support: VirtualDisplaySupport?) -> Bool {
+        wants && !(support?.capable == true && support?.driverReady == true)
     }
 }

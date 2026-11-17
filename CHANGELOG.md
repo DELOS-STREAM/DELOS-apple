@@ -17,6 +17,13 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   the image is the one in use.
 - The Artwork screen of one of DELOS's own entries (Desktop, Remote Input and the others) shows its built-in artwork, a
   note that it cannot be changed and Back; such an app without a SteamGridDB game is asked "Choose what <app> looks like".
+- The library of a PC that is no longer paired says "No PC paired yet"; an offline PC's library says how to wake it.
+- The info row shows a Virtual display chip on Desktop when the PC can stream to a virtual display of its own.
+- Starting a game on a PC DELOS has no address of says it cannot be reached, a virtual display the settings want but
+  the PC cannot make is said in a warning (the main display is streamed), and Quit on such a PC says DELOS is still
+  connecting to it.
+- Try again on a failed stream first checks that the PC answers and still has the game, and otherwise returns to the
+  library saying why; the hint bar over the result shows Select and Back to library.
 - Pairing waits for the trusted paired state instead of a fixed delay, and manual-address entry reports a PC
   that was not added. The start screen retargets its initial PC focus as discovery changes. On compact stages,
   the profile chip shares the status line, clears the measured status cluster and truncates long names.
