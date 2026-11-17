@@ -359,7 +359,7 @@ struct GameLibrary: View {
             }
             .padding(.top, stage.px(layout.coverTop - Self.rowPad))
             .modifier(RowEdgeFade(back: ends.back ? 1 : 0, forward: ends.forward ? 1 : 0, width: stage.width, overdraw: stage.px(1000)))
-            .animation(.easeInOut(duration: 0.3), value: ends)
+            .animation(Motion.fastOutSlowIn(300), value: ends)
             .opacity(rowAlpha)
             .offset(x: stage.px(rowBounce))
             #if os(tvOS)
@@ -666,7 +666,7 @@ private struct Cover: View {
                         title: app.title, titleSize: wide ? 72 : 34, titleInset: wide ? 44 : 26, titleBottom: wide ? 40 : 26)
                 }
             }
-            .animation(.easeInOut(duration: 0.4), value: shown.map(ObjectIdentifier.init))
+            .animation(Motion.fastOutSlowIn(400), value: shown.map(ObjectIdentifier.init))
             if art.artwork.isBusy(hostID: hostID, appID: app.id) {
                 ProgressView()
                     .tint(.white)
@@ -703,9 +703,12 @@ private struct Cover: View {
         }
         .frame(width: stage.px(width), height: stage.px(GameLibrary.height))
         .clipShape(shape)
-        .overlay(shape.strokeBorder(colors.line.color, lineWidth: stage.px(1)))
-        // Android's TILE_FOCUS_SCALE; the wide first cover grows only to the left, so it never covers its neighbour
-        .focusLook(focused, scale: 1.055, ring: 5, glowBlur: 50, glowY: 18, corner: 26, anchor: wide ? .trailing : .center, sweep: true)
+        // The online pulse of the start screen, around the selected game (`focusPulse`), inside the scaled layer
+        .background { if focused { FocusPulse(corner: 26) } }
+        // Android's TILE_FOCUS_SCALE; the wide first cover grows only to the left, so it never covers its neighbour. The
+        // ring is `FocusRing(5, 5)` with the gap in the background color, the glow `FocusGlow(30, 80, -18)`
+        .focusLook(focused, scale: 1.055, ring: 5, glowBlur: 80, glowY: 30, corner: 26, anchor: wide ? .trailing : .center, sweep: true,
+                   glowSpread: -18, gap: 5)
         .task(id: "\(app.id)#\(art.artwork.version)") { await load() }
     }
 
@@ -731,6 +734,28 @@ private struct Cover: View {
         guard let box = await art.boxArt(hostID: hostID, appID: app.id, hosts: hosts) else { return }
         shown = box
         art.analyzeCover(key, cover ?? box)
+    }
+}
+
+/// The online pulse (`focusPulse`, `.online-ring`) of a rounded element: a 2 px outline in the third accent starts just
+/// outside the focus ring, grows outwards by 26 stage pixels and fades, every 2.4 s.
+private struct FocusPulse: View {
+    let corner: Double
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+    @Environment(\.reducedMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(paused: reduceMotion)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2.4) / 2.4
+            let wave = Motion.easeOut(t)
+            // From just outside the focus ring (5 px gap + 5 px ring) outwards
+            let offset = 10 + 26 * wave
+            RoundedRectangle(cornerRadius: stage.px(corner + offset + 1))
+                .strokeBorder(colors.accent2.opacity(0.7 * (1 - wave)).color, lineWidth: stage.px(2))
+                .padding(-stage.px(offset + 2))
+        }
+        .allowsHitTesting(false)
     }
 }
 

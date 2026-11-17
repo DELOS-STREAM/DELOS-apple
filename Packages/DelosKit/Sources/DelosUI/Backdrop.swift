@@ -29,12 +29,12 @@ struct Backdrop: View {
             .overlay {
                 HeroLayer(art: heroOn ? hero : nil, blur: appearance.heroBlur, reduced: appearance.reducedMotion || systemReduceMotion)
                     .opacity(heroOn ? Double(appearance.heroOpacity) / 100 : 0)
-                    .animation(.easeInOut(duration: 0.8), value: heroOn)
+                    .animation(Motion.fastOutSlowIn(800), value: heroOn)
             }
             .overlay {
                 HeroFade(bg: colors.bg)
                     .opacity(heroOn ? 1 : 0)
-                    .animation(.easeInOut(duration: 0.8), value: heroOn)
+                    .animation(Motion.fastOutSlowIn(800), value: heroOn)
             }
             .overlay { animated(gameColors: gameColors, pending: pending, heroActive: heroOn) }
             .clipped()
@@ -215,7 +215,7 @@ private struct HeroLayer: View {
                     .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.9), value: art)
+        .animation(Motion.fastOutSlowIn(900), value: art)
     }
 }
 
