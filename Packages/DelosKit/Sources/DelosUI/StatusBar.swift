@@ -318,7 +318,7 @@ struct TopBar: View {
                     CompactStatusBar(bar: self)
                 } else {
                     ZStack {
-                        HStack(spacing: stage.px(24)) {
+                        HStack(spacing: 0) {
                             BackButton(onBack: onBack)
                             if brand {
                                 HStack(spacing: stage.px(18)) {
@@ -343,7 +343,7 @@ struct TopBar: View {
     }
 }
 
-/// The back button at the start of the bar (iPhone, iPad and Mac).
+/// The back button at the start of the bar (iPhone, iPad and Mac), shown while no controller is the input.
 private struct BackButton: View {
     let onBack: (() -> Void)?
     @Environment(\.stage) private var stage
@@ -360,6 +360,8 @@ private struct BackButton: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(L("shell_hint_back"))
+            // A controller's B goes back: the arrow is for fingers, pointers and keyboards (the gap after it goes with it)
+            .inputKindVisibility(.withoutController, gap: 24)
         }
         #endif
     }
@@ -409,7 +411,7 @@ private struct CompactStatusBar: View {
     }
 
     private var left: some View {
-        HStack(spacing: stage.px(24)) {
+        HStack(spacing: 0) {
             BackButton(onBack: bar.onBack)
             if bar.brand {
                 HStack(spacing: stage.px(18)) {

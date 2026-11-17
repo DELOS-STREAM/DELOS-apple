@@ -105,8 +105,9 @@ public final class MenuInput {
     /// A press: the command at once, and for a direction the repeats while [source] holds it. A source that is already
     /// down (the keyboard's own key repeat reaches the app as more "down" events) is not a new press: one press moves
     /// the focus one step, and the repeats are this class's alone.
-    func press(_ command: MenuCommand, from source: AnyHashable) {
+    func press(_ command: MenuCommand, from source: AnyHashable, input: InputKind = .controller) {
         guard down.insert(source).inserted else { return }
+        ControllerGlyphs.shared.note(input)
         release(nil)
         handler(command, 0)
         guard Self.repeats(command) else { return }
@@ -209,7 +210,7 @@ public final class MenuInput {
             MainActor.assumeIsolated {
                 guard self?.emits(command) ?? false else { return }
                 let source = AnyHashable(["key", AnyHashable(key.rawValue)])
-                if pressed { self?.press(command, from: source) } else { self?.lift(source) }
+                if pressed { self?.press(command, from: source, input: .keyboard) } else { self?.lift(source) }
             }
         }
     }

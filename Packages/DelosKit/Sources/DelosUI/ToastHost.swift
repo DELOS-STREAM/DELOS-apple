@@ -246,13 +246,14 @@ private struct ToastCard: View {
                 }
                 if let action = toast.action {
                     HStack(spacing: stage.px(10)) {
-                        GlyphButton(.north, disc: cardText, ink: cardBottom)
+                        // Only a controller has a button for the action; a finger or a pointer presses the chip itself
+                        if ControllerGlyphs.shared.kind == .controller { GlyphButton(.north, disc: cardText, ink: cardBottom) }
                         Text(action.label)
                             .font(DelosFonts.figtree(stage.tpx(24), .heavy))
                             .foregroundStyle(mix(gold, RGBA(red: 1, green: 1, blue: 1), 0.45).color)
                             .lineLimit(1)
                     }
-                    .padding(.leading, stage.px(8))
+                    .padding(.leading, stage.px(ControllerGlyphs.shared.kind == .controller ? 8 : 22))
                     .padding(.vertical, stage.px(7))
                     .padding(.trailing, stage.px(22))
                     .background(Capsule().fill(gold.opacity(0.16).color))

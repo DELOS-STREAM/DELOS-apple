@@ -1,3 +1,4 @@
+import GameController
 import Testing
 @testable import DelosInput
 
@@ -71,7 +72,10 @@ import Testing
         #expect(PadFamily.nintendo.mark(.menuLeft) == .letter("\u{2212}"))
         #expect(PadFamily.nintendo.mark(.menuRight) == .letter("+"))
         #expect(PadFamily.xbox.mark(.menuLeft) == .view)
-        #expect(PadFamily.dualSense.mark(.menuRight) == .menu)
+        #expect(PadFamily.generic.mark(.menuRight) == .menu)
+        #expect(PadFamily.dualSense.mark(.menuLeft) == .create)
+        #expect(PadFamily.dualShock.mark(.menuLeft) == .create)
+        #expect(PadFamily.dualSense.mark(.menuRight) == .options)
         #expect(PadFamily.dualSense.mark(.touchpad) == .touchpad)
     }
 
@@ -81,5 +85,38 @@ import Testing
         }
         #expect(GlyphMark.cross.text == "\u{2715}")
         #expect(GlyphMark.view.text == nil)
+    }
+
+    @Test func theLastInputDecidesTheKind() {
+        // Nothing used yet: the platform's default, or the controller that is connected
+        #expect(InputKind.resolve(last: nil, lastOther: nil, hasController: false, fallback: .touch) == .touch)
+        #expect(InputKind.resolve(last: nil, lastOther: nil, hasController: true, fallback: .touch) == .controller)
+        // A touch, a key or the pointer wins over a connected controller until the controller is used again
+        for kind in [InputKind.touch, .keyboard, .pointer] {
+            #expect(InputKind.resolve(last: kind, lastOther: kind, hasController: true, fallback: .pointer) == kind)
+        }
+        #expect(InputKind.resolve(last: .controller, lastOther: .touch, hasController: true, fallback: .pointer) == .controller)
+        // The controller went away: back to what was used before it, else the default
+        #expect(InputKind.resolve(last: .controller, lastOther: .keyboard, hasController: false, fallback: .touch) == .keyboard)
+        #expect(InputKind.resolve(last: .controller, lastOther: nil, hasController: false, fallback: .touch) == .touch)
+    }
+
+    @MainActor @Test func notedInputsChangeTheKindLive() {
+        let glyphs = ControllerGlyphs()
+        let start = glyphs.kind
+        glyphs.note(.keyboard)
+        #expect(glyphs.kind == .keyboard)
+        glyphs.note(.touch)
+        #expect(glyphs.kind == .touch)
+        // A controller input with no controller connected (the test machine has none) is not a kind to show
+        glyphs.note(.controller)
+        #expect(glyphs.kind == (GCController.controllers().contains { $0.extendedGamepad != nil } ? .controller : .touch))
+        _ = start
+    }
+
+    @Test func theSystemNamesTheMenuButtons() {
+        let pad = PadDescriptor(profile: .dualSense, menuLeftSymbol: "square.and.arrow.up", menuRightSymbol: "line.3.horizontal")
+        #expect(pad.menuLeftSymbol == "square.and.arrow.up")
+        #expect(ControllerGlyphs.choosePad(current: nil, connected: [pad])?.menuRightSymbol == "line.3.horizontal")
     }
 }

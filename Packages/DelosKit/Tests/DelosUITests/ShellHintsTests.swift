@@ -3,7 +3,7 @@ import Testing
 @testable import DelosUI
 
 @MainActor @Suite struct ShellHintsTests {
-    private func buttons(_ context: ShellHints.Context) -> [HintButton] { ShellHints.hints(context).map(\.button) }
+    private func buttons(_ context: ShellHints.Context) -> [HintButton] { ShellHints.hints(context, kind: .controller).map(\.button) }
 
     @Test func theHomeScreenStartsMenuAndOptions() {
         var context = ShellHints.Context(screen: .home(hostID: "h"))
@@ -75,5 +75,33 @@ import Testing
         let none = HintFit.fitBar(noteWidths: [300, 200], noteGap: 20, items: items, hintGap: 10, available: 150)
         #expect(none.note == nil)
         #expect(none.details == [.full])
+    }
+
+    private func adapted(_ kind: InputKind, _ context: ShellHints.Context) -> [HintButton] {
+        ShellHints.adapt(ShellHints.hints(context, kind: .controller), to: kind).map(\.button)
+    }
+
+    @Test func touchAndPointerKeepOnlyThePrimaryAction() {
+        var context = ShellHints.Context(screen: .home(hostID: "h"))
+        context.hasContextMenu = true
+        #expect(adapted(.touch, context) == [.tap])
+        #expect(adapted(.pointer, context) == [.click])
+        let hints = ShellHints.adapt(ShellHints.hints(context, kind: .controller), to: .touch)
+        #expect(hints.first?.label == ShellHints.hints(context, kind: .controller).first?.label)
+    }
+
+    @Test func theKeyboardHasReturnEscapeAndTheArrows() {
+        var settings = ShellHints.Context(screen: .settings)
+        settings.screenHints.adjustable = true
+        #expect(adapted(.keyboard, settings) == [.key(.arrows), .key(.returnKey), .key(.escape)])
+        // No key for the tabs, search (Y) or the menu buttons
+        #expect(adapted(.keyboard, ShellHints.Context(screen: .home(hostID: "h"))) == [.key(.returnKey)])
+        #expect(adapted(.controller, settings) == buttons(settings))
+    }
+
+    @Test func theBackArrowIsForEveryInputButAController() {
+        for kind in InputKind.allCases { #expect(InputKindRule.withoutController.shows(kind) == (kind != .controller)) }
+        #expect(InputKindRule.withController.shows(.controller))
+        #expect(!InputKindRule.withController.shows(.touch))
     }
 }

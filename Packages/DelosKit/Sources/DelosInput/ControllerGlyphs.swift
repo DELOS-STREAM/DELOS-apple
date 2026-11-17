@@ -34,10 +34,14 @@ public enum GlyphRole: Sendable, Hashable, CaseIterable {
 public enum GlyphMark: Sendable, Hashable {
     case letter(String)
     case cross, circle, square, triangle
-    /// Two overlapping windows: View, Create, Share (`Glyph.MENU_LEFT` of Android).
+    /// Two overlapping windows: the Xbox View button (`Glyph.MENU_LEFT` of Android).
     case view
-    /// Three lines: Menu, Options (`Glyph.MENU_RIGHT` of Android).
+    /// Three lines: the Xbox Menu button (`Glyph.MENU_RIGHT` of Android).
     case menu
+    /// The PlayStation Create (DualSense) or Share (DualShock) button.
+    case create
+    /// The PlayStation Options button.
+    case options
     case touchpad
 
     /// The mark as text, for a sentence ("B cancels"); nil for the icons.
@@ -48,7 +52,7 @@ public enum GlyphMark: Sendable, Hashable {
         case .circle: "\u{25CB}"
         case .square: "\u{25A1}"
         case .triangle: "\u{25B3}"
-        case .view, .menu, .touchpad: nil
+        case .view, .menu, .create, .options, .touchpad: nil
         }
     }
 }
@@ -67,8 +71,18 @@ extension PadFamily {
         case .rightTrigger: shoulder(xbox: "RT", nintendo: "ZR", "R2")
         case .leftStick: .letter("L3")
         case .rightStick: .letter("R3")
-        case .menuLeft: self == .nintendo ? .letter("\u{2212}") : .view
-        case .menuRight: self == .nintendo ? .letter("+") : .menu
+        case .menuLeft:
+            switch self {
+            case .nintendo: .letter("\u{2212}")
+            case .dualSense, .dualShock: .create
+            case .generic, .xbox: .view
+            }
+        case .menuRight:
+            switch self {
+            case .nintendo: .letter("+")
+            case .dualSense, .dualShock: .options
+            case .generic, .xbox: .menu
+            }
         case .touchpad: .touchpad
         }
     }
@@ -98,11 +112,20 @@ public struct PadDescriptor: Sendable, Hashable {
     public var profile: Profile
     public var productCategory: String
     public var vendorName: String?
+    /// The system's SF Symbols names of the two menu buttons (`GCControllerElement.sfSymbolsName` of `buttonOptions`, the
+    /// left one, and `buttonMenu`, the right one): the system draws the buttons of the connected controller itself.
+    public var menuLeftSymbol: String?
+    public var menuRightSymbol: String?
 
-    public init(profile: Profile, productCategory: String = "", vendorName: String? = nil) {
+    public init(
+        profile: Profile, productCategory: String = "", vendorName: String? = nil, menuLeftSymbol: String? = nil,
+        menuRightSymbol: String? = nil
+    ) {
         self.profile = profile
         self.productCategory = productCategory
         self.vendorName = vendorName
+        self.menuLeftSymbol = menuLeftSymbol
+        self.menuRightSymbol = menuRightSymbol
     }
 
     public init(_ controller: GCController) {
@@ -113,7 +136,10 @@ public struct PadDescriptor: Sendable, Hashable {
         case .some: .other
         case .none: .none
         }
-        self.init(profile: profile, productCategory: controller.productCategory, vendorName: controller.vendorName)
+        self.init(
+            profile: profile, productCategory: controller.productCategory, vendorName: controller.vendorName,
+            menuLeftSymbol: controller.extendedGamepad?.buttonOptions?.sfSymbolsName,
+            menuRightSymbol: controller.extendedGamepad?.buttonMenu.sfSymbolsName)
     }
 
     /// The glyph family: the class of the gamepad first (the system knows DualSense, DualShock and Xbox pads by it), then
@@ -139,45 +165,118 @@ public struct PadDescriptor: Sendable, Hashable {
     var isGamepad: Bool { profile != .none }
 }
 
-/// The glyph family in use: the controller used last, else the first one connected, else ``PadFamily/generic``. It is
-/// evaluated again when a controller connects or disconnects and when another one becomes the current one (the system
-/// moves `GCController.current` to whichever was used last). Every hint of the interface reads it, so one change redraws
-/// them all.
+/// The kind of input the player used last: what the hints are drawn for.
+public enum InputKind: Sendable, Hashable, CaseIterable {
+    case controller, keyboard, pointer, touch
+
+    /// What a device without any input yet is taken to use: touch on iPhone and iPad, the pointer on a Mac, the controller
+    /// (the Siri Remote has the same buttons) on Apple TV.
+    public static var platformDefault: InputKind {
+        #if os(tvOS)
+        .controller
+        #elseif os(macOS)
+        .pointer
+        #else
+        .touch
+        #endif
+    }
+
+    /// The kind the hints are drawn for. [last]: the kind of the last input (nil: none yet); [lastOther]: the kind of the
+    /// last input that was not a controller's (what comes back when the controller goes away); [hasController]: a gamepad
+    /// is connected. The last input wins, except that a controller that is gone cannot be the answer.
+    public static func resolve(last: InputKind?, lastOther: InputKind?, hasController: Bool, fallback: InputKind = platformDefault) -> InputKind {
+        switch last {
+        case .controller?, nil:
+            if hasController { return .controller }
+            return lastOther ?? fallback
+        case let kind?: return kind
+        }
+    }
+}
+
+/// The glyph source of the interface: the kind of input used last (``InputKind``) and, for a controller, the glyph family
+/// (``PadFamily``) of the controller used last, else the first one connected, else ``PadFamily/generic``. It is evaluated
+/// again when a controller connects, disconnects or becomes the current one (the system moves `GCController.current` to
+/// whichever was used last) and when the interface notes an input of another kind (``note(_:)``: a touch, a key, the
+/// pointer). Every hint of the interface reads it, so one change redraws them all.
 @MainActor
 @Observable
 public final class ControllerGlyphs {
     public static let shared = ControllerGlyphs()
 
     public private(set) var family = PadFamily.generic
+    public private(set) var kind = InputKind.platformDefault
+    /// The system's symbol names for the menu buttons of the controller in use (nil: the system has none).
+    public private(set) var menuSymbols: (left: String?, right: String?) = (nil, nil)
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
+    @ObservationIgnored private var last: InputKind?
+    @ObservationIgnored private var lastOther: InputKind?
+    @ObservationIgnored private var hasController = false
 
-    private init() {}
+    init() {}
 
     /// The family for the controller used last ([current]) and the ones connected, in the order the system lists them.
     nonisolated public static func choose(current: PadDescriptor?, connected: [PadDescriptor]) -> PadFamily {
-        if let current, current.isGamepad { return current.family }
-        return connected.first(where: \.isGamepad)?.family ?? .generic
+        choosePad(current: current, connected: connected)?.family ?? .generic
+    }
+
+    nonisolated static func choosePad(current: PadDescriptor?, connected: [PadDescriptor]) -> PadDescriptor? {
+        if let current, current.isGamepad { return current }
+        return connected.first(where: \.isGamepad)
     }
 
     /// Starts following the controllers; calling it again does nothing.
     public func start() {
         guard observers.isEmpty else { return }
-        let names: [Notification.Name] = [
-            .GCControllerDidConnect, .GCControllerDidDisconnect, .GCControllerDidBecomeCurrent, .GCControllerDidStopBeingCurrent,
-        ]
-        for name in names {
-            observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+        let center = NotificationCenter.default
+        // A controller that connects, or that the system makes the current one (it was used), is the input now
+        for name in [Notification.Name.GCControllerDidConnect, .GCControllerDidBecomeCurrent] {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.refresh()
+                    if self?.hasController == true { self?.note(.controller) }
+                }
+            })
+        }
+        for name in [Notification.Name.GCControllerDidDisconnect, .GCControllerDidStopBeingCurrent] {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.refresh() }
             })
         }
         refresh()
     }
 
+    /// The player used [input]: the hints show it from now on.
+    public func note(_ input: InputKind) {
+        last = input
+        if input != .controller { lastOther = input }
+        evaluate()
+    }
+
     private func refresh() {
         let connected = GCController.controllers().filter { $0.extendedGamepad != nil }.map(PadDescriptor.init)
-        let next = Self.choose(current: GCController.current.map(PadDescriptor.init), connected: connected)
+        let pad = Self.choosePad(current: GCController.current.map(PadDescriptor.init), connected: connected)
+        hasController = pad != nil
+        let next = pad?.family ?? .generic
         if next != family { family = next }
+        let symbols = (pad?.menuLeftSymbol, pad?.menuRightSymbol)
+        if symbols != menuSymbols { menuSymbols = symbols }
+        evaluate()
+    }
+
+    private func evaluate() {
+        let next = InputKind.resolve(last: last, lastOther: lastOther, hasController: hasController)
+        if next != kind { kind = next }
     }
 
     public func mark(_ role: GlyphRole) -> GlyphMark { family.mark(role) }
+
+    /// The system's symbol for the PlayStation menu button at [role], when the connected controller names one.
+    public func systemSymbol(_ role: GlyphRole) -> String? {
+        switch (family, role) {
+        case (.dualSense, .menuLeft), (.dualShock, .menuLeft): menuSymbols.left
+        case (.dualSense, .menuRight), (.dualShock, .menuRight): menuSymbols.right
+        default: nil
+        }
+    }
 }
