@@ -537,6 +537,12 @@ private final class OscSink: StreamInputSink, @unchecked Sendable {
         lock.withLock { states.append((number, activeGamepadMask, state)) }
     }
     func sendMouseMove(deltaX: Int16, deltaY: Int16) throws(InputError) {}
+    func sendControllerMotion(number: UInt8, sensor: MotionSensor, x: Float, y: Float, z: Float) throws(InputError) {}
+    func sendControllerBattery(number: UInt8, state: BatteryState, percentage: UInt8) throws(InputError) {}
+    func sendControllerTouch(
+        number: UInt8, _ type: TouchEventType, pointerID: UInt32, x: Float, y: Float, pressure: Float) throws(InputError) {}
+    func sendScroll(clicks: Int8) throws(InputError) {}
+    func sendHorizontalScroll(clicks: Int8) throws(InputError) {}
     func sendMouseButton(_ button: MouseButton, pressed: Bool) throws(InputError) { lock.withLock { buttons += 1 } }
     func sendKey(code: Int16, pressed: Bool, modifiers: KeyModifiers, nonNormalized: Bool) throws(InputError) {}
     func sendText(_ text: String) throws(InputError) {}

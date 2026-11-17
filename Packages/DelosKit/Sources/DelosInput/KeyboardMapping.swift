@@ -82,13 +82,25 @@ public enum KeyboardMapping {
         Int16(bitPattern: keyPrefix | UInt16(virtualKey))
     }
 
-    /// The modifiers of the keys held (HID usages): Shift, Control, Alt (Option) and Meta (Command), left or right.
-    public static func modifiers(held: Set<Int>) -> KeyModifiers {
+    /// HID usage of the right Option (Alt) key.
+    public static let rightAlt = 0xE6
+    /// Windows' left Windows key (`VK_LWIN`), which the right Option key sends with ``ControllerOptions/rightAltAsMeta``.
+    public static let leftWindows: UInt8 = 0x5B
+
+    /// The virtual-key code of a HID usage with the right Option key as the Windows key when `rightAltAsMeta` is on
+    /// (`handleSpecialKeys` of DELOS for Android: "Remap Right Alt → Command (VK_LWIN) for Mac streaming").
+    public static func virtualKey(hidUsage usage: Int, rightAltAsMeta: Bool) -> UInt8? {
+        rightAltAsMeta && usage == rightAlt ? leftWindows : virtualKey(hidUsage: usage)
+    }
+
+    /// The modifiers of the keys held (HID usages): Shift, Control, Alt (Option) and Meta (Command), left or right; with
+    /// `rightAltAsMeta` the right Option key is Meta and only the left one is Alt.
+    public static func modifiers(held: Set<Int>, rightAltAsMeta: Bool = false) -> KeyModifiers {
         var modifiers: KeyModifiers = []
         if held.contains(0xE1) || held.contains(0xE5) { modifiers.insert(.shift) }
         if held.contains(0xE0) || held.contains(0xE4) { modifiers.insert(.control) }
-        if held.contains(0xE2) || held.contains(0xE6) { modifiers.insert(.alt) }
-        if held.contains(0xE3) || held.contains(0xE7) { modifiers.insert(.meta) }
+        if held.contains(0xE2) || (!rightAltAsMeta && held.contains(rightAlt)) { modifiers.insert(.alt) }
+        if held.contains(0xE3) || held.contains(0xE7) || (rightAltAsMeta && held.contains(rightAlt)) { modifiers.insert(.meta) }
         return modifiers
     }
 }

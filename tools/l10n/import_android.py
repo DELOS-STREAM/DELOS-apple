@@ -3,6 +3,7 @@
 
     python3 tools/l10n/import_android.py /path/to/DELOS            # write the catalog
     python3 tools/l10n/import_android.py /path/to/DELOS --check    # exit 1 if the catalog is not up to date
+    python3 tools/l10n/import_android.py /path/to/DELOS /path/to/android-worktree  # also strings of an unmerged Android branch
 
 The names listed in tools/l10n/keys.txt are looked up in app/src/main/res/values*/strings*.xml (strings, plurals and
 string arrays) of the Android checkout. The catalog keys are the Android names; item i of a string array is the name
@@ -122,8 +123,13 @@ def plural(forms: dict[str, str]) -> dict:
             "substitutions": {"count": {"argNum": 1, "formatSpecifier": "d", "variations": variations}}}
 
 
-def build(android: Path, keys: list[str]) -> tuple[dict, list[str]]:
+def build(android: Path, keys: list[str], extra: tuple[Path, ...] = ()) -> tuple[dict, list[str]]:
     resources = read_resources(android)
+    # Strings that exist only on an Android feature branch (not merged yet) come from its worktree: they fill gaps only
+    for root in extra:
+        for language, entries in read_resources(root).items():
+            for name, value in entries.items():
+                resources[language].setdefault(name, value)
     strings: dict[str, dict] = {}
     problems: list[str] = []
     for key in keys:
@@ -158,7 +164,8 @@ def main(argv: list[str]) -> int:
     if not argv or argv[0].startswith("-"):
         print(__doc__)
         return 2
-    catalog, problems = build(Path(argv[0]), read_keys())
+    roots = [Path(a) for a in argv if not a.startswith("-")]
+    catalog, problems = build(roots[0], read_keys(), tuple(roots[1:]))
     for problem in problems:
         print(f"import_android: {problem}", file=sys.stderr)
     text = render(catalog)

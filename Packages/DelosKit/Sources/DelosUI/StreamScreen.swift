@@ -36,6 +36,8 @@ struct StreamScreen: View {
     @State private var shutdownID: UUID?
     #if !os(macOS)
     @Environment(\.scenePhase) private var scenePhase
+    #else
+    @Environment(\.controlActiveState) private var controlActiveState
     #endif
 
     init(
@@ -86,8 +88,15 @@ struct StreamScreen: View {
             switch now {
             case .background: controller.enteredBackground()
             case .active: controller.returnedToForeground()
-            default: break
+            // The keyboard went elsewhere (the app switcher, Control Center): what is held comes up at the PC
+            case .inactive: controller.focusLost()
+            @unknown default: break
             }
+        }
+        #else
+        // The stream's window is no longer the key one (another app or window): what is held comes up at the PC
+        .onChange(of: controlActiveState) { _, now in
+            if now != .key && now != .active { controller?.focusLost() }
         }
         #endif
         #if os(iOS)
@@ -109,14 +118,28 @@ struct StreamScreen: View {
             brightness: Self.deviceBrightness, statisticsOverlay: settings.statisticsOverlay, playtime: playtime,
             menuButtons: ShortcutButton.parse(settings.streamMenuButtons), menuSwipe: settings.streamMenuSwipe,
             onScreenControls: makeOnScreenControls()
-        ) { [hosts, hostID, appID, settings] in
-            LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer)
+        ) { [hosts, hostID, appID, settings, toasts] in
+            LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer) { text, kind in
+                toasts?.show(text, durationMs: ToastTiming.streamShortMs, kind: kind)
+            }
         }
         controller.rumbleConfiguration = settings.rumble
+        controller.controllerOptions = ControllerOptions(settings: settings)
         controller.leavingHold = .seconds(ExitLook.handoff(reduced: reducedMotion))
         controller.menuOpened = { [navigator] in navigator.cancelRepeats?() }
         controller.statisticsChosen = keepStatisticsOverlay
         controller.onScreenOpacityChosen = keepOnScreenOpacity
+        controller.inputNotice = { [toasts] event in
+            switch event {
+            // DelosToast.SHORT and LONG of a stream (`ToastTiming.STREAM_SHORT_MS`, `STREAM_LONG_MS`)
+            case .mouseEmulation(let on):
+                toasts?.show(on ? L("stream_mouse_emulation_on") : L("stream_mouse_emulation_off"), icon: Symbols.info, durationMs: 4000)
+            case .controllerTypeChanged:
+                toasts?.show(L("toast_controller_type_changed"), icon: Symbols.info, durationMs: 6500)
+            case .keyCombo:
+                break
+            }
+        }
         self.renderer = renderer
         self.controller = controller
         navigator.takeInput(controller) { [navigator] command in
@@ -431,8 +454,11 @@ struct StreamContent: View {
         }
     }
 
+    /// The input released (Control + Alt + Shift + Z) or the local pointer shown (Control + Alt + Shift + C) frees the pointer
+    /// too (Android's `disableCapture` and `showCursor`, which both release the pointer capture).
     private var capturesPointer: Bool {
         Self.capturesPointer(phase: controller.phase, menuOpen: controller.menuOpen, loaderUp: director?.isActive == true)
+            && controller.inputGrabbed && !controller.localCursorVisible
     }
 
     /// The pointer is the stream's (locked and hidden, ``PointerLock``): the stream runs and neither its menu, the loader

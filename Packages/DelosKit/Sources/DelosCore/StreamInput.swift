@@ -129,6 +129,27 @@ public enum TouchEventType: UInt8, Sendable, CaseIterable {
     case cancelAll = 0x07
 }
 
+/// A motion sensor of a game controller (`LI_MOTION_TYPE_*`): the accelerometer reports m/s² including gravity, the
+/// gyroscope deg/s, both on SDL's axes (x right, y up out of the controller's face, z towards the player).
+public enum MotionSensor: UInt8, Sendable, CaseIterable {
+    case accelerometer = 0x01
+    case gyroscope = 0x02
+}
+
+/// The charge of a game controller's battery (`LI_BATTERY_STATE_*`).
+public enum BatteryState: UInt8, Sendable, CaseIterable {
+    case unknown = 0x00
+    case notPresent = 0x01
+    case discharging = 0x02
+    case charging = 0x03
+    /// Connected to power but not charging.
+    case notCharging = 0x04
+    case full = 0x05
+
+    /// The percentage sent when the level is not known (`LI_BATTERY_PERCENTAGE_UNKNOWN`).
+    public static let unknownPercentage = UInt8(LI_BATTERY_PERCENTAGE_UNKNOWN)
+}
+
 /// Packet counters of a received RTP stream since the connection started.
 public struct RTPStatistics: Sendable, Equatable {
     public var packets: UInt32
@@ -164,6 +185,29 @@ extension StreamSession {
             LiSendMultiControllerEvent(
                 number, activeGamepadMask, state.buttons.rawValue, state.leftTrigger, state.rightTrigger,
                 state.leftStickX, state.leftStickY, state.rightStickX, state.rightStickY))
+    }
+
+    /// One reading of a controller's motion sensor (see ``MotionSensor`` for units and axes). Send only while the host
+    /// asked for the sensor (`StreamEvent.motionEventState`).
+    public nonisolated func sendControllerMotion(
+        number: UInt8, sensor: MotionSensor, x: Float, y: Float, z: Float
+    ) throws(InputError) {
+        try check(LiSendControllerMotionEvent(number, sensor.rawValue, x, y, z))
+    }
+
+    /// The battery of controller `number`; `percentage` 0…100 or ``BatteryState/unknownPercentage``.
+    public nonisolated func sendControllerBattery(
+        number: UInt8, state: BatteryState, percentage: UInt8
+    ) throws(InputError) {
+        try check(LiSendControllerBatteryEvent(number, state.rawValue, percentage))
+    }
+
+    /// A touch on the touchpad of controller `number`, `x` and `y` normalized to 0…1 (origin top left). Throws
+    /// ``InputError/unsupportedByHost`` when the host does not take controller touches.
+    public nonisolated func sendControllerTouch(
+        number: UInt8, _ type: TouchEventType, pointerID: UInt32, x: Float, y: Float, pressure: Float
+    ) throws(InputError) {
+        try check(LiSendControllerTouchEvent(number, type.rawValue, pointerID, x, y, pressure))
     }
 
     public nonisolated func sendMouseMove(deltaX: Int16, deltaY: Int16) throws(InputError) {

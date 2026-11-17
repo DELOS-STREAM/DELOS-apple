@@ -24,6 +24,12 @@ private final class ControllerSink: StreamInputSink, @unchecked Sendable {
         lock.withLock { states.append(Sent(number: number, mask: activeGamepadMask, state: state)) }
     }
     func sendMouseMove(deltaX: Int16, deltaY: Int16) throws(InputError) {}
+    func sendControllerMotion(number: UInt8, sensor: MotionSensor, x: Float, y: Float, z: Float) throws(InputError) {}
+    func sendControllerBattery(number: UInt8, state: BatteryState, percentage: UInt8) throws(InputError) {}
+    func sendControllerTouch(
+        number: UInt8, _ type: TouchEventType, pointerID: UInt32, x: Float, y: Float, pressure: Float) throws(InputError) {}
+    func sendScroll(clicks: Int8) throws(InputError) {}
+    func sendHorizontalScroll(clicks: Int8) throws(InputError) {}
     func sendMouseButton(_ button: MouseButton, pressed: Bool) throws(InputError) {}
     func sendKey(code: Int16, pressed: Bool, modifiers: KeyModifiers, nonNormalized: Bool) throws(InputError) {}
     func sendText(_ text: String) throws(InputError) {}
@@ -35,21 +41,12 @@ private final class ControllerSink: StreamInputSink, @unchecked Sendable {
 /// The on-screen controls as controller 0 (`defaultContext` of DELOS for Android's `ControllerHandler`).
 @MainActor
 @Suite struct OnScreenControlsInputTests {
-    @Test func aSingleSourcePassesThroughTheFusion() {
+    @Test func theControlsAloneAreTheirOwnStateAndJoinAControllerZero() {
         let osc = ControllerState(buttons: [.a, .leftShoulder], leftTrigger: 0xFF, leftStickX: 32766, leftStickY: -12000)
-        #expect(ControllerState.fused([ControllerState(), osc]) == osc)
-        #expect(ControllerState.fused([osc, ControllerState()]) == osc)
-    }
-
-    @Test func twoSourcesFuseInAndroidsArithmetic() {
-        let pad = ControllerState(buttons: .b, leftTrigger: 0x80, leftStickX: 100)
-        let osc = ControllerState(buttons: .a, leftTrigger: 0xFF, leftStickX: -200)
-        let fused = ControllerState.fused([pad, osc])
-        #expect(fused.buttons == [.a, .b])
-        // 100 | maxByMagnitude(100, -200) = 100 | -200
-        #expect(fused.leftStickX == 100 | -200)
-        // As signed bytes 0x80 is -128 and 0xFF is -1: the larger magnitude, -128, is kept
-        #expect(fused.leftTrigger == 0x80)
+        // The fusion of a player's controllers (`GamepadMapping.fuse`) takes them in as one more source
+        #expect(GamepadMapping.fuse([osc]) == osc)
+        let fused = GamepadMapping.fuse([ControllerState(buttons: .b, leftStickX: 100), osc])
+        #expect(fused.buttons == [.a, .b, .leftShoulder] && fused.leftStickX == 32766 && fused.leftTrigger == 0xFF)
     }
 
     @Test func theControlsAreControllerZeroWhileTheyAreOn() {

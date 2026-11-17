@@ -1,5 +1,6 @@
 import DelosCore
 import DelosData
+import DelosHost
 import DelosInput
 import DelosMedia
 import Foundation
@@ -35,12 +36,19 @@ protocol StreamSteps: AnyObject {
     func stop() async
     /// Asks the PC to quit the app; false when it did not.
     func quitApp() async -> Bool
+    /// Vibepollo's live bitrate change of the running stream; returns the bitrate the host applied (``StreamBitrate``).
+    func setRuntimeBitrate(_ kbps: Int) async throws -> Int
+    /// The clipboard sync with the PC once ``launch(display:)`` knows it; nil before and without one.
+    var clipboard: ClipboardSync? { get }
 }
 
 extension StreamSteps {
     /// Attempts without a video renderer (including lifecycle tests) have no presentation telemetry.
     var statisticsSource: StreamStatisticsSource? { nil }
     var serverCommands: [String] { [] }
+    /// Without a PC that answers, a bitrate change is a command the host does not have (``BitrateFailure/unsupported``).
+    func setRuntimeBitrate(_ kbps: Int) async throws -> Int { throw HostError.httpStatus(404) }
+    var clipboard: ClipboardSync? { nil }
 }
 
 /// One stream on the screen (`DelosStreamActivity` with `StreamLoader` of DELOS for Android): launch, the connecting
@@ -86,6 +94,8 @@ final class StreamController {
     private(set) var statisticsOverlay = StatisticsOverlay.off
     /// The popover of the stream menu: which page is open and what has the focus in it.
     let menu = StreamMenuState()
+    /// The live bitrate of the stream (the Bitrate page's Apply, ``applyBitrate(_:)``).
+    let bitrate = StreamBitrate()
     /// What this device can do for the menu's tiles and pages (the brightness needs a device to set it on).
     let capabilities: StreamMenuCapabilities
     /// The screen's brightness in percent, in steps of 5 (the Brightness page's slider).
@@ -114,6 +124,16 @@ final class StreamController {
     /// How the stream menu opens besides a tap of Home (the profile's `ui_stream_menu_buttons` and `ui_stream_menu_swipe`).
     @ObservationIgnored private let menuButtons: Set<ShortcutButton>
     @ObservationIgnored private let menuSwipe: Bool
+    /// The profile's controller, keyboard and mouse settings for the stream's input.
+    @ObservationIgnored var controllerOptions = ControllerOptions()
+    /// Called with what the input asks the screen to show (``GameInput/Event``: the mouse emulation, a controller
+    /// announced as a generic one).
+    @ObservationIgnored var inputNotice: (@MainActor (GameInput.Event) -> Void)?
+    /// The keyboard and the mouse reach the PC (Control + Alt + Shift + Z releases them): the pointer is locked only then.
+    private(set) var inputGrabbed = true
+    /// The local pointer is shown over the stream (Control + Alt + Shift + C, `toggleMouseLocalCursor`): the pointer is
+    /// then not locked.
+    private(set) var localCursorVisible = false
     /// The app went to the background during the stream: the connection was closed and is opened again on return.
     @ObservationIgnored private(set) var suspended = false
     /// The leaving that runs (``leave(quit:)``).
@@ -252,6 +272,10 @@ final class StreamController {
             input?.rumbleTriggers(controller: controller, left: left, right: right)
         case let .adaptiveTriggers(controller, flags, typeLeft, typeRight, left, right):
             input?.adaptiveTriggers(controller: controller, flags: flags, typeLeft: typeLeft, typeRight: typeRight, left: left, right: right)
+        case let .motionEventState(controller, motionType, reportRateHz):
+            input?.motionEventState(controller: controller, motionType: motionType, reportRateHz: reportRateHz)
+        case let .controllerLED(controller, red, green, blue):
+            input?.controllerLED(controller: controller, red: red, green: green, blue: blue)
         default:
             break
         }
@@ -263,8 +287,10 @@ final class StreamController {
         loader.connected()
         progress = 1
         if let sink = steps.input, input == nil {
-            let input = GameInput(sink: sink, menuButtons: menuButtons) { [weak self] in self?.openMenu() }
+            let input = GameInput(sink: sink, menuButtons: menuButtons, options: controllerOptions) { [weak self] in self?.openMenu() }
             input.rumbleConfiguration = rumbleConfiguration
+            input.onEvent = { [weak self] event in self?.inputEvent(event) }
+            inputGrabbed = true
             input.start()
             // The scene is still opening over the picture: B, keys and touches are the loader's, not the game's
             input.paused = true
@@ -273,6 +299,31 @@ final class StreamController {
         }
         startStatistics()
         startPlaytime()
+        // Smart Clipboard Sync sends this device's clipboard once the stream runs (DelosStreamActivity.java:1808-1809)
+        steps.clipboard?.handleFocusChange(true, connected: true)
+    }
+
+    /// What the input asks for: the keyboard's own combinations (`StreamKeyHandler.Host` of DELOS for Android) are the
+    /// stream's, the rest the screen shows.
+    private func inputEvent(_ event: GameInput.Event) {
+        switch event {
+        case .keyCombo(.quit):
+            // Android's `quit()` finishes the stream activity: a disconnect, the game keeps running
+            Task { await leave(quit: false) }
+        case .keyCombo(.toggleInputGrab):
+            inputGrabbed = input?.inputGrabbed ?? true
+        case .keyCombo(.toggleLocalCursor):
+            inputGrabbed = input?.inputGrabbed ?? true
+            localCursorVisible.toggle()
+        case .mouseEmulation, .controllerTypeChanged:
+            inputNotice?(event)
+        }
+    }
+
+    /// The window lost the keyboard (another app or window): the keys down at the PC are released there
+    /// (`handleFocusChange` of DELOS for Android).
+    func focusLost() {
+        input?.releaseKeys()
     }
 
     /// Time counts from the moment the core is connected (video and audio flow), like Android's `connectionStarted`;
@@ -531,6 +582,22 @@ final class StreamController {
         input.setOnScreenControls(onScreen.enabled ? onScreen.state : nil)
     }
 
+    /// Apply of the Bitrate page (`applyBitrate`, StreamMenu.kt:308-331): asks the PC for [kbps] while the stream runs.
+    func applyBitrate(_ kbps: Int) {
+        let steps = self.steps
+        bitrate.apply(kbps, connected: { [weak self] in self?.phase == .streaming }, change: { try await steps.setRuntimeBitrate($0) })
+    }
+
+    /// Send clipboard of the More page (StreamMenu.kt:453): this device's clipboard to the PC, also a clip DELOS marked.
+    func sendClipboard() {
+        steps.clipboard?.send(force: true)
+    }
+
+    /// Get clipboard of the More page (StreamMenu.kt:454): the PC's clipboard to this device.
+    func getClipboard() {
+        steps.clipboard?.get()
+    }
+
     /// The Keyboard tile: the menu closes, then the on-screen keyboard comes up or goes away.
     func toggleKeyboard() {
         KeyboardTileLog.note("tile: Keyboard pressed; offered \(capabilities.keyboard), shown \(keyboardShown), menu open \(menuOpen)")
@@ -626,6 +693,8 @@ final class StreamController {
         case .connecting, .streaming:
             break
         }
+        // Disconnect brings the PC's clipboard along with Smart Clipboard Sync (DelosStreamActivity.java:2086-2091)
+        if !quit, phase == .streaming { steps.clipboard?.disconnecting() }
         stopStatistics()
         hideMenu()
         // No return from the background starts another attempt now; the one that ran is the one the PC quits

@@ -25,9 +25,17 @@ final class LiveStream: StreamSteps {
     private let settings: StreamSettings
     private var client: (HostClient, HostPin)?
     private var plan: (server: ServerInformation, configuration: StreamConfiguration)?
+    private let toast: @MainActor (String, ToastKind) -> Void
+    private(set) var clipboard: ClipboardSync?
 
-    /// - Parameter settings: the current profile's stream settings (Settings → Stream).
-    init(hosts: HostStore, hostID: String, appID: Int, settings: StreamSettings, renderer: any VideoRenderer) {
+    /// - Parameters:
+    ///   - settings: the current profile's stream settings (Settings → Stream).
+    ///   - toast: shows a toast over the stream (the clipboard sync's reports).
+    init(
+        hosts: HostStore, hostID: String, appID: Int, settings: StreamSettings, renderer: any VideoRenderer,
+        toast: @escaping @MainActor (String, ToastKind) -> Void = { _, _ in }
+    ) {
+        self.toast = toast
         self.hosts = hosts
         self.settings = settings
         self.hostID = hostID
@@ -84,6 +92,7 @@ final class LiveStream: StreamSteps {
             }
         }
         self.client = (client, pin)
+        clipboard = ClipboardSync(options: ClipboardSync.Options(settings), host: PairedClipboardHost(client: client, pin: pin), toast: toast)
         // The PC's commands for the menu's Commands page: asked in the background, the stream does not wait for them
         Task { [weak self] in
             guard let reply = try? await client.serverInfo(pin: pin), reply.source == .pinnedHTTPS else { return }
@@ -109,6 +118,13 @@ final class LiveStream: StreamSteps {
         } catch {
             return false
         }
+    }
+
+    /// Vibepollo's paired HTTPS command (`NvConnection.setRuntimeBitrate`, NvConnection.java:508-513) to the PC this
+    /// stream was launched on.
+    func setRuntimeBitrate(_ kbps: Int) async throws -> Int {
+        guard let (client, pin) = client else { throw HostError.unreachable("not launched") }
+        return try await client.setRuntimeBitrate(kbps, pin: pin)
     }
 
     // MARK: The PC's answers (NvConnection.startApp)
