@@ -177,6 +177,7 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- Down from the top navigation returns to the cover the focus went up from, not to the cover under the button.
 - The library's row of covers, the filter sheet's chip rows and every other row and list that follows the focus glide
   smoothly: one spring that every step retargets and that keeps its speed, driven at up to 120 frames a second, instead of
   SwiftUI's animated scroll, which restarted from rest after a still frame at every step (a held arrow or quick presses hopped

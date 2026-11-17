@@ -100,6 +100,10 @@ public final class FocusModel {
     @ObservationIgnored private var menus: [AnyHashable: @MainActor () -> ContextMenu?] = [:]
     @ObservationIgnored private var cues: [AnyHashable: Cue?] = [:]
     @ObservationIgnored private var flags: [AnyHashable: FocusFlag] = [:]
+    /// The restoring group of each item that is in one (``restoreFocus(in:items:)``) and the item of each group that had the
+    /// focus last.
+    @ObservationIgnored private var groups: [AnyHashable: AnyHashable] = [:]
+    @ObservationIgnored private var lastInGroup: [AnyHashable: AnyHashable] = [:]
 
     public init(initial: AnyHashable? = nil) {
         focused = initial
@@ -126,7 +130,27 @@ public final class FocusModel {
         guard focused != id else { return }
         if let old = focused { flags[old]?.on = false }
         focused = id
-        if let id { flags[id]?.on = true }
+        if let id {
+            flags[id]?.on = true
+            if let group = groups[id] { lastInGroup[group] = id }
+        }
+    }
+
+    /// Makes [items] a group that gives the focus back to the item of it that had the focus last whenever the focus enters
+    /// it from outside by a direction (the library row: Down from the top navigation returns to the cover the focus went
+    /// up from, not to the cover under the button). Calling it again replaces the group's items.
+    func restoreFocus(in group: AnyHashable, items: [AnyHashable]) {
+        groups = groups.filter { $0.value != group }
+        for item in items { groups[item] = group }
+        if let focused, groups[focused] == group { lastInGroup[group] = focused }
+    }
+
+    /// Where a move of the focus from [from] to [target] lands: the last focused item of [target]'s restoring group when the
+    /// move enters that group from outside and that item is still there, else [target].
+    func restored(_ target: AnyHashable, from: AnyHashable?) -> AnyHashable {
+        guard let group = groups[target], from.flatMap({ groups[$0] }) != group, let last = lastInGroup[group],
+              last != target, groups[last] == group, frames[last] != nil else { return target }
+        return last
     }
 
     /// While set, the focus is on the first item in reading order of those registered so far (``focusFirstItem()``).
@@ -247,7 +271,7 @@ public final class FocusModel {
         var others = frames
         others[focused] = nil
         guard let next = FocusGeometry.next(from: current, direction: direction, candidates: others) else { return false }
-        move(to: next)
+        move(to: restored(AnyHashable(next), from: focused))
         return true
     }
 }
@@ -499,9 +523,11 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
             .modifier(PreferredFocus(preferred: model.focused == AnyHashable(id) && !blocked, namespace: scope))
             .onChange(of: systemFocused) { _, now in
                 guard now else { return }
-                // The focus engine moved the focus (the model did not ask for it): the move cue
-                if model.focused != AnyHashable(id) { layers?.feedback?.play(.move) }
-                model.focus(AnyHashable(id))
+                // The focus engine moved the focus (the model did not ask for it): the move cue. Into a restoring group from
+                // outside, the group's last focused item takes it instead (``FocusModel/restored(_:from:)``)
+                let target = model.restored(AnyHashable(id), from: model.focused)
+                if model.focused != target { layers?.feedback?.play(.move) }
+                model.focus(target)
             }
             // The model moves the focus too (to the next step of a form, or the first item of a screen)
             .onChange(of: model.focused) { _, now in

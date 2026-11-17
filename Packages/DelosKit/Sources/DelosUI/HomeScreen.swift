@@ -624,7 +624,13 @@ private struct LibraryCovers: View, Equatable {
         .padding(.leading, start)
         .padding(.trailing, end)
         .padding(.vertical, pad)
+        // The row gives the focus back to the cover it had last when the focus comes from outside (Down from the top
+        // navigation), as a focus group of Android's lazy row does
+        .onChange(of: keys, initial: true) { _, now in focus.restoreFocus(in: Self.group, items: now) }
     }
+
+    /// The restoring focus group of the covers (``FocusModel/restoreFocus(in:items:)``).
+    static let group = "library-covers"
 }
 
 /// The focused game's logo or title and the info row under it (`GameInfo` of DELOS for Android).

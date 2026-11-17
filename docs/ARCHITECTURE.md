@@ -95,7 +95,10 @@ Android (after 500 ms, every 50 ms); the handler gets the number of the repeat (
 settings use to speed up a slider and to stop a held Up at the first row.
 `FocusItem` wraps a view for both engines.
 A `FocusItem` can name where a direction leads instead of the nearest item (`moves`): the avatar grid continues a
-row's end in the next row. Its `tap` is what a touch does when it is not what A does; it gets whether the item had the focus
+row's end in the next row. Items can form a restoring group (`FocusModel.restoreFocus(in:items:)`): a move that enters the
+group from outside lands on the group's item that had the focus last instead of the nearest one, so Down from the top
+navigation returns to the cover the focus went up from (on tvOS the system's move into the group is redirected the same way).
+Its `tap` is what a touch does when it is not what A does; it gets whether the item had the focus
 before the tap (a settings row's first tap only focuses it, the second changes it, `RowTouch`); a tap always focuses the item
 first.
 

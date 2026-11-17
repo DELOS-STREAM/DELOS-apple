@@ -60,6 +60,26 @@ import Testing
         }
     }
 
+    @Test func downFromTheTopNavigationReturnsToTheCoverTheFocusCameFrom() async {
+        let shell = await library()
+        shell.pressAll(.right, .right)
+        let cover = try! #require(shell.focused)
+        #expect(cover != "app-1")
+        shell.press(.up)
+        #expect(shell.focused?.hasPrefix("nav-") == true)
+        // Along the navigation and back down: the cover the focus went up from, not the one under the button
+        for _ in 0..<3 {
+            shell.press(.right)
+            shell.press(.down)
+            #expect(shell.focused == cover)
+            shell.press(.up)
+        }
+        // Within the row the covers still follow each other
+        shell.press(.down)
+        shell.press(.left)
+        #expect(shell.focused != cover && shell.focused?.hasPrefix("app-") == true)
+    }
+
     @Test func settingsProfileAndDevicesTakeEachOthersPlace() async {
         let shell = await library()
         shell.goToNavigation("nav-settings")
