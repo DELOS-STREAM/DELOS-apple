@@ -61,6 +61,8 @@ struct PortalOverlay: View {
     let portal: Portal
     let burst: Bool
     let focus: FocusModel
+    /// Whether it holds the tvOS focus itself (the exit scene's stream screen does that already).
+    var holdsFocus = true
     let onCancel: @MainActor () -> Void
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
@@ -79,8 +81,10 @@ struct PortalOverlay: View {
             core
             #if os(tvOS)
             // Menu reaches the app only through a focused view: this one holds the focus
-            FocusItem(id: "portal", model: focus, action: {}) { _ in Color.clear.frame(width: 2, height: 2) }
-                .onAppear { focus.focus("portal") }
+            if holdsFocus {
+                FocusItem(id: "portal", model: focus, action: {}) { _ in Color.clear.frame(width: 2, height: 2) }
+                    .onAppear { focus.focus("portal") }
+            }
             #endif
         }
         .ignoresSafeArea()

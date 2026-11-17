@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- The launch scene of Android: while a stream connects, the hyperspace tunnel (a Metal port of the AGSL shader) runs behind
+  the game's logo or title, the stream's resolution, codec and frame rate, the connection lines (each told at least
+  1.2 s) and the progress; once the first frame is presented the information fades and the tunnel opens over the picture
+  (2.2 s). Reduced motion shows a still scene and a 0.5 s fade. Leaving from the stream menu plays the exit scene: the
+  picture blurs and zooms while the portal says "Disconnecting" or "Quitting <game>", then the library returns. The
+  arrival effect on the picture itself is not ported; the look on a device and the shader's cost are not verified.
 - Connecting to a PC goes through the portal as on Android: a PC that sleeps is sent Wake-on-LAN (the portal says it is
   waking up, or, when the PC has no known MAC address, waits for you to turn it on), is asked again every 3 s for up to
   two minutes, and its library opens when it answers; B, a tap or a click cancels, and a PC that stays silent ends with

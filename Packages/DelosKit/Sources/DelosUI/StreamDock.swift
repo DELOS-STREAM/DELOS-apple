@@ -173,8 +173,8 @@ struct StreamMenu: View {
         switch id {
         case Self.resumeID: controller.closeMenu()
         case "stream-statistics": controller.toggleStatistics()
-        case "stream-disconnect": Task { await controller.leave(quit: false) }
-        default: Task { await controller.leave(quit: true) }
+        case "stream-disconnect": Task { await controller.leave(quit: false, scene: true) }
+        default: Task { await controller.leave(quit: true, scene: true) }
         }
     }
 

@@ -459,3 +459,57 @@ private let iPhone = DisplayInfo(pixelWidth: 1290, pixelHeight: 2796, maxFramesP
         }
     }
 }
+
+@MainActor
+extension StreamControllerTests {
+    @Test func aLeavingFromTheMenuKeepsTheExitSceneForItsHoldThenEnds() async {
+        let steps = FakeSteps()
+        let controller = StreamController { steps }
+        controller.leavingHold = .milliseconds(300)
+        controller.start(display: iPhone)
+        await eventually { steps.isConnecting }
+        steps.finishConnect()
+        await eventually { controller.phase == .streaming }
+        let began = ContinuousClock.now
+        let leaving = Task { await controller.leave(quit: true, scene: true) }
+        await eventually { if case .leaving = controller.phase { true } else { false } }
+        #expect(controller.leavingScene && controller.leavingQuit)
+        try? await Task.sleep(for: .milliseconds(100))
+        if case .leaving = controller.phase {} else { Issue.record("the scene ended before its hold") }
+        await leaving.value
+        #expect(controller.phase == .ended)
+        #expect(ContinuousClock.now - began >= .milliseconds(290))
+        #expect(steps.quits == 1)
+    }
+
+    @Test func aLeavingWithoutTheSceneEndsAsSoonAsTheStreamStopped() async {
+        let steps = FakeSteps()
+        let controller = StreamController { steps }
+        controller.leavingHold = .seconds(30)
+        controller.start(display: iPhone)
+        await eventually { steps.isConnecting }
+        steps.finishConnect()
+        await eventually { controller.phase == .streaming }
+        await controller.leave(quit: false)
+        #expect(controller.phase == .ended)
+        #expect(!controller.leavingScene && !controller.leavingQuit)
+    }
+
+    @Test func aFailedQuitShowsTheResultWithoutWaitingForTheScene() async {
+        let steps = FakeSteps()
+        steps.quitSucceeds = false
+        let controller = StreamController { steps }
+        controller.leavingHold = .seconds(30)
+        controller.start(display: iPhone)
+        await eventually { steps.isConnecting }
+        steps.finishConnect()
+        await eventually { controller.phase == .streaming }
+        await controller.leave(quit: true, scene: true)
+        if case .failed = controller.phase {} else { Issue.record("expected the result overlay") }
+    }
+
+    @Test func theNameOfTheGameAndThePCAreTheLaunchScenesWords() {
+        let controller = StreamController { FakeSteps() }
+        #expect(controller.appName == "Desktop" && controller.pcName == "Gaming-PC")
+    }
+}

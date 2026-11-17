@@ -21,6 +21,7 @@ struct StreamScreen: View {
     @Environment(Navigator.self) private var navigator
     @Environment(Layers.self) private var layers: Layers?
     @Environment(Toasts.self) private var toasts: Toasts?
+    @Environment(\.reducedMotion) private var reducedMotion
     @State private var controller: StreamController?
     @State private var renderer: (any VideoRenderer)?
     @State private var shutdownID: UUID?
@@ -37,7 +38,7 @@ struct StreamScreen: View {
     var body: some View {
         ZStack {
             if let controller, let renderer {
-                StreamContent(controller: controller, renderer: renderer, focus: navigator.focus)
+                StreamContent(controller: controller, renderer: renderer, focus: navigator.focus, hostID: hostID, appID: appID, settings: settings)
             }
         }
         .onAppear(perform: begin)
@@ -79,6 +80,7 @@ struct StreamScreen: View {
         let controller = StreamController { [hosts, hostID, appID, settings] in
             LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer)
         }
+        controller.leavingHold = .seconds(ExitLook.handoff(reduced: reducedMotion))
         self.renderer = renderer
         self.controller = controller
         navigator.commandCapture = { [navigator] command in
@@ -142,40 +144,66 @@ struct StreamScreen: View {
     }
 }
 
-/// What the stream screen shows in each phase.
+/// What the stream screen shows in each phase: the launch scene while it connects and opens (`StreamLoader` and
+/// `LaunchOverlay` of DELOS for Android), the video with the menu and the statistics, the exit scene while it is left
+/// from the menu (`StreamExit`) and the result overlay when it failed.
 struct StreamContent: View {
     let controller: StreamController
     let renderer: any VideoRenderer
     let focus: FocusModel
+    let hostID: String
+    let appID: Int
+    let settings: StreamSettings
     @Environment(\.stage) private var stage
+    @Environment(\.reducedMotion) private var reducedMotion
+    @Environment(HomeArt.self) private var art: HomeArt?
+    @Environment(Layers.self) private var layers: Layers?
     /// The dock is mounted while the menu is open and for its exit after it closed.
     @State private var dockShown = false
     @State private var unmount: Task<Void, Never>?
+    /// The launch scene's clock and choreography; a new one for each attempt.
+    @State private var director: LaunchDirector?
+    @State private var display: DisplayInfo?
+    @State private var logo: CGImage?
+    /// When the exit scene began, and what it says.
+    @State private var leavingSince: Date?
+    @State private var exitPortal: Portal?
 
     var body: some View {
         ZStack {
-            // Black under the video and the exit; the loader and the result overlay lie on DELOS's background
-            Color.black.ignoresSafeArea().opacity(showsBlack ? 1 : 0)
-                .preference(key: VideoCoversBackdrop.self, value: showsBlack)
-            VideoSurface(
-                renderer: renderer,
-                onDisplay: { controller.start(display: $0) },
-                onTouch: { id, phase, point, width, time in
-                    controller.touch(id, phase, at: point, width: width, time: time)
-                },
-                ignoresPointer: { controller.hasMouse },
-                capturesPointer: controller.phase == .streaming && !controller.menuOpen
-            )
-            .ignoresSafeArea()
-            .opacity(controller.phase == .streaming ? 1 : 0)
-            // The stream behind the menu is blurred (it follows the gradient behind the tiles)
-            .blur(radius: controller.menuOpen ? stage.px(StreamDockLayout.videoBlur) : 0)
-            .animation(
-                .timingCurve(0.25, 0.1, 0.25, 1, duration: (controller.menuOpen ? StreamDockLayout.gradientIn : StreamDockLayout.gradientOut) / 1000),
-                value: controller.menuOpen)
+            // Black under the video and the exit; the loader and the result overlay lie on DELOS's background. In the exit
+            // scene the picture blurs, zooms in a little and gives way to the background.
+            StreamExitMotion(since: exitScene ? leavingSince : nil, reducedMotion: reducedMotion) { cover in
+                ZStack {
+                    Color.black.ignoresSafeArea().opacity(pictureOpacity(cover))
+                        .preference(key: VideoCoversBackdrop.self, value: showsBlack)
+                    VideoSurface(
+                        renderer: renderer,
+                        onDisplay: { info in
+                            display = info
+                            controller.start(display: info)
+                        },
+                        onTouch: { id, phase, point, width, time in
+                            controller.touch(id, phase, at: point, width: width, time: time)
+                        },
+                        ignoresPointer: { controller.hasMouse },
+                        capturesPointer: controller.phase == .streaming && !controller.menuOpen
+                    )
+                    .ignoresSafeArea()
+                    .opacity(pictureOpacity(cover))
+                    // The stream behind the menu is blurred (it follows the gradient behind the tiles)
+                    .blur(radius: controller.menuOpen ? stage.px(StreamDockLayout.videoBlur) : 0)
+                    .animation(
+                        .timingCurve(0.25, 0.1, 0.25, 1, duration: (controller.menuOpen ? StreamDockLayout.gradientIn : StreamDockLayout.gradientOut) / 1000),
+                        value: controller.menuOpen)
+                }
+            }
+            if let director, director.isActive, launching {
+                LaunchLoader(director: director, card: card)
+            }
             switch controller.phase {
             case .connecting:
-                StreamLoader(greeting: controller.greeting, line: controller.line, progress: controller.progress)
+                EmptyView()
             case .streaming:
                 if controller.statisticsEnabled, let statistics = controller.statistics {
                     StreamStatsOverlay(statistics: statistics)
@@ -184,15 +212,15 @@ struct StreamContent: View {
                     StreamMenu(focus: focus, controller: controller, open: controller.menuOpen)
                         .environment(\.glassOverMedia, true)
                 }
-            case .leaving(let text):
-                StreamLoader(greeting: text, line: "", progress: nil)
+            case .leaving, .ended:
+                if exitScene, let exitPortal, let leavingSince {
+                    StreamExitScene(portal: exitPortal, since: leavingSince, reducedMotion: reducedMotion, focus: focus)
+                }
             case .failed(let text):
                 StreamResultLayer(
                     text: text, focus: focus,
                     onRetry: { controller.retry() },
                     onBack: { controller.dismiss() })
-            case .ended:
-                EmptyView()
             }
             #if os(tvOS)
             // Menu and Play/Pause reach the app only through a focused view: while nothing else is focusable (the
@@ -202,6 +230,14 @@ struct StreamContent: View {
                     .onAppear { focus.focus(Self.sinkID) }
             }
             #endif
+        }
+        .onAppear {
+            if director == nil { director = makeDirector() }
+        }
+        .task { await loadLogo() }
+        .task(id: controller.phase == .streaming) { await watchFirstFrame() }
+        .onChange(of: controller.line) { _, line in
+            if !line.isEmpty { director?.stage(line) }
         }
         .onChange(of: controller.menuOpen) { _, open in
             unmount?.cancel()
@@ -215,10 +251,73 @@ struct StreamContent: View {
                 }
             }
         }
-        .onChange(of: controller.phase) { _, _ in dockShown = controller.menuOpen }
+        .onChange(of: controller.phase) { old, phase in
+            dockShown = controller.menuOpen
+            switch phase {
+            case .connecting:
+                // Another attempt (Try again, back from the background): a new launch
+                if old != .connecting { director = makeDirector() }
+                leavingSince = nil
+                exitPortal = nil
+            case .streaming:
+                director?.gameRuns()
+            case .leaving(let text):
+                director?.stop()
+                guard controller.leavingScene else { break }
+                leavingSince = Date()
+                exitPortal = Portal(
+                    id: -1, icon: controller.leavingQuit ? Symbols.powerSettingsNew : Symbols.home, label: text,
+                    sub: controller.pcName, cancellable: false)
+                layers?.feedback?.play(.open)
+            case .failed, .ended:
+                director?.stop()
+            }
+        }
     }
 
     static let sinkID = "stream-sink"
+
+    /// A launch scene for a new attempt; its first line is the stage told so far, if any.
+    private func makeDirector() -> LaunchDirector {
+        LaunchDirector(line: controller.line.isEmpty ? nil : controller.line, reducedMotion: reducedMotion)
+    }
+
+    /// The launch scene's words.
+    private var card: LaunchCard {
+        LaunchCard(
+            title: controller.appName, logo: logo, parameters: LaunchText.parameters(settings: settings, display: display),
+            greeting: controller.greeting)
+    }
+
+    /// The launch scene is up while the stream connects and opens over the picture.
+    private var launching: Bool {
+        switch controller.phase {
+        case .connecting, .streaming: true
+        case .leaving, .failed, .ended: false
+        }
+    }
+
+    /// The exit scene of a leaving from the stream menu.
+    private var exitScene: Bool {
+        switch controller.phase {
+        case .leaving, .ended: controller.leavingScene
+        case .connecting, .streaming, .failed: false
+        }
+    }
+
+    /// How much of the picture (and the black under it) shows: all of it while the stream runs, what the exit scene has not
+    /// covered yet while it is left from the menu.
+    private func pictureOpacity(_ cover: Double) -> Double {
+        switch controller.phase {
+        case .streaming: 1
+        case .leaving, .ended: exitScene ? 1 - cover : 0
+        case .connecting, .failed: 0
+        }
+    }
+
+    /// Whether the picture covers the screen, so the animated background is not drawn: while the stream runs and while the
+    /// launch scene (opaque until it opens) is up.
+    private var showsBlack: Bool { controller.phase == .streaming || launching }
 
     /// Whether no other view of the stream screen can take the focus.
     private var holdsFocus: Bool {
@@ -229,10 +328,22 @@ struct StreamContent: View {
         }
     }
 
-    private var showsBlack: Bool {
-        switch controller.phase {
-        case .streaming, .leaving, .ended: true
-        case .connecting, .failed: false
+    /// The game's logo, if it has one, replaces the title in the launch scene.
+    private func loadLogo() async {
+        guard let art else { return }
+        logo = art.cachedImage(hostID: hostID, appID: appID, kind: .logo)
+        if logo == nil { logo = await art.image(hostID: hostID, appID: appID, kind: .logo) }
+    }
+
+    /// Tells the launch scene when the renderer has presented a frame (it waits for that, at most 3 s).
+    private func watchFirstFrame() async {
+        guard controller.phase == .streaming else { return }
+        while !Task.isCancelled {
+            if let counters = await renderer.presentationCounters(), counters.totalFrames > 0 {
+                director?.framePresented()
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(50))
         }
     }
 }
@@ -242,46 +353,6 @@ struct StreamContent: View {
 struct VideoCoversBackdrop: PreferenceKey {
     static let defaultValue = false
     static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
-}
-
-/// The loader while the stream connects (`StreamLoader` of DELOS for Android, without the launch tunnel and the game
-/// card, which come with the launch scene): "Calling up <PC>", the line of the current stage and the progress.
-private struct StreamLoader: View {
-    let greeting: String
-    let line: String
-    /// Nil: no bar (leaving).
-    let progress: Double?
-    @Environment(\.delosColors) private var colors
-    @Environment(\.stage) private var stage
-
-    var body: some View {
-        VStack(spacing: stage.px(28)) {
-            Text(greeting)
-                .font(DelosFonts.unbounded(stage.tpx(stage.compact ? 42 : 52)))
-                .foregroundStyle(colors.text.color)
-                .multilineTextAlignment(.center)
-            if !line.isEmpty {
-                Text(line)
-                    .font(DelosFonts.figtree(stage.tpx(28)))
-                    .foregroundStyle(colors.text2.color)
-                    .multilineTextAlignment(.center)
-                    .contentTransition(.opacity)
-                    .animation(.easeOut(duration: 0.25), value: line)
-            }
-            if let progress {
-                Capsule().fill(colors.surface2.color)
-                    .frame(width: stage.px(600), height: stage.px(8))
-                    .overlay(alignment: .leading) {
-                        Capsule()
-                            .fill(colors.accent.color)
-                            .frame(width: stage.px(600 * progress), height: stage.px(8))
-                            .animation(.easeOut(duration: 0.6), value: progress)
-                    }
-                    .padding(.top, stage.px(12))
-            }
-        }
-        .padding(.horizontal, stage.px(96))
-    }
 }
 
 /// The result overlay (`StreamResultLayer` of DELOS for Android): a sad face, the title, one sentence, Try again
