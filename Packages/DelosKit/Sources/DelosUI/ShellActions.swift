@@ -16,6 +16,8 @@ final class ShellActions {
     let connection: ConnectFlow
     private let playtimes = PlaytimeStore()
     private let played = PlayedGames()
+    let streams = StreamSettingsStore()
+    let gameSettings = GameSettingsStore()
 
     init(navigator: Navigator, hosts: HostStore, profiles: ProfileStore, toasts: Toasts, layers: Layers, artwork: ArtworkStore,
          metadata: GameMetadataModel) {
@@ -97,6 +99,7 @@ final class ShellActions {
         Task {
             let result = await hosts.unpairOnPC(hostID)
             if result == .unpaired {
+                gameSettings.remove(hostID: hostID)
                 if profiles.startup.defaultPC == hostID { profiles.setDefaultPC(nil) }
                 navigator.dropLibrary(of: hostID)
             } else {
@@ -112,6 +115,7 @@ final class ShellActions {
     private func remove(_ hostID: String) {
         guard let name = hosts.host(hostID)?.name else { return }
         hosts.remove(hostID)
+        gameSettings.remove(hostID: hostID)
         if profiles.startup.defaultPC == hostID { profiles.setDefaultPC(nil) }
         navigator.dropLibrary(of: hostID)
         toasts.show(L("devices_removed_toast", name), icon: Symbols.delete)
@@ -177,7 +181,7 @@ final class ShellActions {
 
     /// A game's menu in the library (`gameMenu`), depending on what runs on the PC: this game (resume, quit), another
     /// game (quit that one and start this one, or go back to it) or nothing (start). Choosing Quit is the confirmation.
-    /// Android's App settings waits for its feature; Metadata shows when a metadata service is configured.
+    /// Metadata shows when a metadata service is configured.
     func gameMenu(hostID: String, app: HostApp) -> ContextMenu? {
         guard let host = hosts.host(hostID) else { return nil }
         let running = host.runningAppID == 0 ? nil : hosts.apps[hostID]?.first { $0.id == host.runningAppID }
@@ -198,16 +202,18 @@ final class ShellActions {
             items = [MenuItem(icon: Symbols.playArrow, label: L("home_menu_start")) { start(app) }]
         }
         let hidden = isHidden(hostID: hostID, appID: app.id)
+        let custom = !gameOverrides(hostID: hostID, appID: app.id).isEmpty
         let other = running.flatMap { $0.id == app.id ? nil : L("home_header_other_running", $0.title) }
         let header = MenuHeader(
             status: running?.id == app.id ? L("home_header_running") : L("home_header_game"), running: running?.id == app.id,
-            meta: [other, hidden ? L("home_header_hidden") : nil].compactMap { $0 }.reduce(nil) { facts, next in
+            meta: [other, custom ? L("home_header_custom") : nil, hidden ? L("home_header_hidden") : nil].compactMap { $0 }.reduce(nil) { facts, next in
                 facts.map { L("home_meta_join", $0, next) } ?? next
             })
         items.append(MenuItem(icon: Symbols.photoLibrary, label: L("home_menu_artwork")) { [self] in openArtwork(hostID: hostID, app: app) })
         if metadata.offers(app) {
             items.append(MenuItem(icon: Symbols.metadata, label: L("home_menu_metadata")) { [self] in openMetadataMenu(hostID: hostID, app: app) })
         }
+        items.append(MenuItem(icon: Symbols.settings, label: L("home_menu_settings")) { [self] in openAppSettings(hostID: hostID, app: app) })
         items.append(
             hidden
                 ? MenuItem(icon: Symbols.visibility, label: L("home_menu_show")) { [self] in setHidden(false, hostID: hostID, app: app) }
@@ -226,7 +232,7 @@ final class ShellActions {
 
     /// The pills on [appID]'s cover.
     func marks(hostID: String, appID: Int) -> [CoverMark] {
-        isHidden(hostID: hostID, appID: appID) ? [.hidden] : []
+        (isHidden(hostID: hostID, appID: appID) ? [.hidden] : []) + (gameOverrides(hostID: hostID, appID: appID).isEmpty ? [] : [.custom])
     }
 
     /// Hides or shows [app] (`onHide` of `HomeScreen.kt`); hiding says where the game can be found again.

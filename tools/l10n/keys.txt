@@ -165,6 +165,8 @@ home_header_hidden
 home_meta_join
 home_menu_show
 home_menu_artwork
+home_menu_settings
+home_header_custom
 home_menu_hide
 home_hidden_toast
 home_tile_hidden_description
@@ -258,6 +260,30 @@ filters_art_style_official
 filters_art_style_white
 filters_art_style_black
 filters_art_style_custom
+
+# App settings (per-app stream settings)
+settings_game_follows_profile
+settings_game_custom_count
+settings_game_summary_none
+settings_game_value_on
+settings_game_value_off
+settings_game_undo
+settings_game_reset_row_toast
+settings_game_reset_all_toast
+settings_game_reset_all
+settings_game_reset_menu
+settings_game_from_profile
+settings_game_profile_line
+settings_game_eyebrow
+settings_game_panel_title
+settings_game_custom_title
+settings_game_profile_value_button
+settings_game_profile_value_touch
+settings_game_currently
+settings_game_only_this_game
+settings_game_saved_note
+row_reset_to_profile
+row_reset
 
 # Toasts and dialogs
 toast_kind_info

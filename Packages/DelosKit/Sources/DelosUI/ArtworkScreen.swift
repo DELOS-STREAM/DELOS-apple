@@ -389,7 +389,7 @@ private struct ShoulderBadge: View {
 // MARK: Toolbar
 
 /// A toolbar pill (`PillButton` with `compact = true`): 64 px high.
-private struct ToolbarPill: View {
+struct ToolbarPill: View {
     let label: String
     let icon: String
     let focused: Bool

@@ -422,8 +422,13 @@ public struct DelosRoot: View {
             if let app = hosts.apps[hostID]?.first(where: { $0.id == appID }) {
                 ArtworkScreen(hostID: hostID, app: app, focus: entry.focus, navigator: navigator, actions: actions)
             }
+        case .appSettings(let hostID, let appID):
+            if let app = hosts.apps[hostID]?.first(where: { $0.id == appID }) {
+                GameSettingsScreen(
+                    hostID: hostID, app: app, focus: entry.focus, navigator: navigator, actions: actions, profileID: profiles.current?.id ?? "")
+            }
         case .stream(let hostID, let appID):
-            StreamScreen(hostID: hostID, appID: appID, settings: streamSettings.load(profile: profiles.current?.id ?? ""))
+            StreamScreen(hostID: hostID, appID: appID, settings: actions.streamSettings(hostID: hostID, appID: appID))
         case .settings:
             SettingsScreen(
                 profileID: profiles.current?.id ?? "", appearance: $appearance, focus: entry.focus, navigator: navigator,
@@ -447,8 +452,12 @@ public struct DelosRoot: View {
             )
     }
 
+    /// The library's game background shows behind the library and behind the settings of one of its apps.
     private var showsLibrary: Bool {
-        if case .home = navigator.current { true } else { false }
+        switch navigator.current {
+        case .home, .appSettings: true
+        default: false
+        }
     }
 
     /// The top navigation of the screen [entry] shows, if it has one.
