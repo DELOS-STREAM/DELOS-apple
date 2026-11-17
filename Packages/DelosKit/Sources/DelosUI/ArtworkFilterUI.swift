@@ -7,9 +7,10 @@ import SwiftUI
 
 // MARK: Gliding focus ring
 
-/// Where the chip that has the focus is (its frame in ``ChipGlideHost``'s space) and the scale it is at: the ring grows and
-/// shrinks with it (a press squeezes the element), on the same spring.
+/// Which element has the focus, where its layout bounds are (in ``ChipGlideHost``'s space, without its focus scale) and the
+/// scale it is at: the ring grows and shrinks with it (a press squeezes the element), on the same spring.
 private struct ChipGlideTarget: Equatable {
+    var id: UUID
     var frame: CGRect
     var scale: Double
 }
@@ -62,10 +63,68 @@ struct ChipGlideHost<Content: View>: View {
     }
 }
 
+/// Where the gliding ring is (`RowGlideMotion` of DELOS for Android): on the focused element's bounds as they are now, plus a
+/// carry (what the ring still trails each edge by) that runs out on the glide curve. Not an animation of the ring's frame: an
+/// element that moves while the ring glides to it (its row scrolls it into view) takes the ring along, instead of every moved
+/// frame starting the glide anew, and at rest the ring is exactly on the element.
+struct RingGlide: Equatable {
+    /// What the ring trails the element's left, top, right and bottom edge by when the glide starts (points).
+    var left = 0.0, top = 0.0, right = 0.0, bottom = 0.0
+    /// When the glide started (seconds since the reference date).
+    var start = 0.0
+
+    static let duration = Motion.rowFocus / 1000
+    /// The prototype's `--ease-glide` (`Motion.Glide`): it overshoots a little.
+    static let curve = CubicBezier(0.3, 1.22, 0.42, 1)
+
+    /// A glide that starts at [time] with the ring at [from] and ends on [to].
+    init(from: CGRect, to: CGRect, at time: Double) {
+        left = from.minX - to.minX
+        top = from.minY - to.minY
+        right = from.maxX - to.maxX
+        bottom = from.maxY - to.maxY
+        start = time
+    }
+
+    /// No glide: the ring is on the element.
+    init() {}
+
+    /// The ring's bounds (before the focus scale) at [time], while the element is at [frame].
+    func rect(on frame: CGRect, at time: Double) -> CGRect {
+        let rest = 1 - Self.curve((time - start) / Self.duration)
+        let minX = frame.minX + left * rest, minY = frame.minY + top * rest
+        let maxX = frame.maxX + right * rest, maxY = frame.maxY + bottom * rest
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
+}
+
+/// The ring around [rect] grown around its center to [scale] times its size, its stroke's middle [outset] beyond that. Only
+/// the scale animates (the element's spring); the bounds are those of the moment.
+private struct GlideRingShape: Shape {
+    var rect: CGRect
+    var scale: Double
+    var outset: Double
+
+    var animatableData: Double {
+        get { scale }
+        set { scale = newValue }
+    }
+
+    func path(in _: CGRect) -> Path {
+        let dx = rect.width * (scale - 1) / 2 + outset, dy = rect.height * (scale - 1) / 2 + outset
+        return Capsule().path(in: rect.insetBy(dx: -dx, dy: -dy))
+    }
+}
+
 private struct ChipGlideRing: View {
     let target: ChipGlideTarget?
     let look: GlideLook
-    @State private var previous: ChipGlideTarget?
+    /// The element the ring is on (kept while the ring fades, so a quick next focus glides from there).
+    @State private var holder: ChipGlideTarget?
+    @State private var glide = RingGlide()
+    /// The ring is gliding: the timeline redraws it every frame until the glide is over.
+    @State private var gliding = false
+    @State private var glides = 0
     /// The scale the ring is drawn at: it starts at 1 with the element, which grows on its spring, so the ring hugs it all
     /// the way instead of leading it at the full size.
     @State private var scale = 1.0
@@ -77,23 +136,27 @@ private struct ChipGlideRing: View {
 
     var body: some View {
         Group {
-            if let shown = target ?? previous {
-                let frame = shown.frame
-                // The ring sits a band of its own width outside the element as it grows, and is that wide
-                let grown = CGSize(width: frame.width * scale, height: frame.height * scale)
-                let outside = stage.px(2 * look.ring)
-                Capsule()
-                    .strokeBorder(colors.accent.color, lineWidth: stage.px(look.ring))
-                    .frame(width: grown.width + 2 * outside, height: grown.height + 2 * outside)
-                    .position(x: frame.midX, y: frame.midY)
-                    .animation(reduced ? nil : .timingCurve(0.3, 1.22, 0.42, 1, duration: SettingsPlateGeometry.duration), value: target?.frame)
-                    .opacity(target == nil ? 0 : 1)
-                    .animation(
-                        target == nil
-                            ? .timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000).delay(0.07)
-                            : .timingCurve(0.25, 0.1, 0.25, 1, duration: 0.12),
-                        value: target != nil)
+            if let holder {
+                TimelineView(.animation(paused: !gliding)) { context in
+                    // The ring lies a gap of its own width outside the element as it grows, and is that wide; at rest it is
+                    // on the element's bounds themselves
+                    GlideRingShape(
+                        rect: gliding ? glide.rect(on: holder.frame, at: context.date.timeIntervalSinceReferenceDate) : holder.frame,
+                        scale: scale, outset: stage.px(1.5 * look.ring))
+                        .stroke(colors.accent.color, lineWidth: stage.px(look.ring))
+                }
+                .opacity(target == nil ? 0 : 1)
+                .animation(
+                    target == nil
+                        ? .timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000).delay(0.07)
+                        : .timingCurve(0.25, 0.1, 0.25, 1, duration: 0.12),
+                    value: target != nil)
             }
+        }
+        .task(id: glides) {
+            guard gliding else { return }
+            try? await Task.sleep(for: .seconds(RingGlide.duration))
+            if !Task.isCancelled { gliding = false }
         }
         .onChange(of: target, initial: true) { _, now in
             guard let now else {
@@ -105,7 +168,18 @@ private struct ChipGlideRing: View {
                 return
             }
             fade?.cancel()
-            previous = now
+            if let from = holder, from.id != now.id {
+                if faded || reduced {
+                    glide = RingGlide()
+                } else {
+                    // From where the ring is drawn now (mid-glide too) to the new element
+                    let time = Date.timeIntervalSinceReferenceDate
+                    glide = RingGlide(from: glide.rect(on: from.frame, at: time), to: now.frame, at: time)
+                    gliding = true
+                    glides += 1
+                }
+            }
+            holder = now
             if faded {
                 // A new focus: the ring appears at the element's size at rest and grows with it
                 faded = false
@@ -125,8 +199,8 @@ private struct ChipScaleState: Equatable {
     let pressed: Bool
 }
 
-/// The focus look of an element in a ``ChipGlideHost``: it reports its frame to the host's ring, grows by the host's scale
-/// and, above its neighbours, has the pills' glow; the ring is the host's, not its own.
+/// The focus look of an element in a ``ChipGlideHost``: it reports its layout bounds to the host's ring, grows by the host's
+/// scale and, above its neighbours, has the pills' glow; the ring is the host's, not its own.
 struct ChipFocus: ViewModifier {
     let focused: Bool
     @Environment(\.glideLook) private var host
@@ -134,23 +208,28 @@ struct ChipFocus: ViewModifier {
     @Environment(\.pressed) private var pressed
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
+    /// Who the element is to the ring: a new one is glided to, the same one followed.
+    @State private var id = UUID()
 
     func body(content: Content) -> some View {
         let look = host ?? .chip
         content
+            .shadow(color: focused && look.glow ? colors.glow.color : .clear, radius: look.glow ? stage.px(25) : 0, y: stage.px(18))
+            .animation(.focusRing(focused: focused), value: focused)
+            .scaleEffect(focusScale(focused: focused, pressed: pressed, focus: look.scale))
+            .animation(.focusScale(pressed: pressed, reduced: reduced), value: ChipScaleState(focused: focused, pressed: pressed))
+            // Read outside the scale: inside it the frame grew with the element's spring, so the ring got a new target on
+            // every frame of it (each one starting the glide again: it arrived in a few frames) and at rest was the focus scale
+            // too big, as it scales the bounds itself
             .background {
                 GeometryReader { proxy in
                     Color.clear.preference(
                         key: ChipGlideKey.self,
                         value: focused ? ChipGlideTarget(
-                            frame: proxy.frame(in: .named("chipGlide")),
+                            id: id, frame: proxy.frame(in: .named("chipGlide")),
                             scale: focusScale(focused: focused, pressed: pressed, focus: look.scale)) : nil)
                 }
             }
-            .shadow(color: focused && look.glow ? colors.glow.color : .clear, radius: look.glow ? stage.px(25) : 0, y: stage.px(18))
-            .animation(.focusRing(focused: focused), value: focused)
-            .scaleEffect(focusScale(focused: focused, pressed: pressed, focus: look.scale))
-            .animation(.focusScale(pressed: pressed, reduced: reduced), value: ChipScaleState(focused: focused, pressed: pressed))
             .zIndex(focused ? 1 : 0)
     }
 }
