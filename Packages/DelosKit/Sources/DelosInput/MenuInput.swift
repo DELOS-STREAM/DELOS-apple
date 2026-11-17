@@ -46,6 +46,12 @@ public final class MenuInput {
     private var stickDirection: [ObjectIdentifier: MenuCommand] = [:]
     /// The direction that is held (and who holds it: a button, a stick or a key) and its repeats.
     private var held: (source: AnyHashable, repeating: Task<Void, Never>)?
+    /// Every source that is down now. A second "down" of a source that has not come up is the system's own key repeat
+    /// (or a device that reports twice), not a new press: it would start the repeats again and move the focus a step
+    /// ahead of them.
+    private var down: Set<AnyHashable> = []
+    private let repeatAfter: Duration
+    private let repeatEvery: Duration
 
     /// - Parameters:
     ///   - only: the commands to emit; nil: all of them.
@@ -53,6 +59,19 @@ public final class MenuInput {
     public init(only: Set<MenuCommand>? = nil, handler: @escaping @MainActor (MenuCommand, _ repeatCount: Int) -> Void) {
         self.only = only
         self.handler = handler
+        repeatAfter = Self.repeatAfter
+        repeatEvery = Self.repeatEvery
+    }
+
+    /// For tests: the repeat timing of a hold.
+    init(
+        only: Set<MenuCommand>? = nil, repeatAfter: Duration, repeatEvery: Duration,
+        handler: @escaping @MainActor (MenuCommand, _ repeatCount: Int) -> Void
+    ) {
+        self.only = only
+        self.handler = handler
+        self.repeatAfter = repeatAfter
+        self.repeatEvery = repeatEvery
     }
 
     private func emits(_ command: MenuCommand) -> Bool { only?.contains(command) ?? true }
@@ -80,29 +99,46 @@ public final class MenuInput {
         observers.forEach(NotificationCenter.default.removeObserver)
         observers.removeAll()
         release(nil)
+        down.removeAll()
     }
 
-    /// A press: the command at once, and for a direction the repeats while [source] holds it.
-    private func press(_ command: MenuCommand, from source: AnyHashable) {
+    /// A press: the command at once, and for a direction the repeats while [source] holds it. A source that is already
+    /// down (the keyboard's own key repeat reaches the app as more "down" events) is not a new press: one press moves
+    /// the focus one step, and the repeats are this class's alone.
+    func press(_ command: MenuCommand, from source: AnyHashable) {
+        guard down.insert(source).inserted else { return }
         release(nil)
         handler(command, 0)
         guard Self.repeats(command) else { return }
+        let (after, every) = (repeatAfter, repeatEvery)
         let repeating = Task { [weak self] in
-            var delay = Self.repeatAfter
+            var delay = after
             var count = 1
             while true {
                 do { try await Task.sleep(for: delay) } catch { return }
                 guard let self else { return }
                 self.handler(command, count)
                 count += 1
-                delay = Self.repeatEvery
+                delay = every
             }
         }
         held = (source, repeating)
     }
 
+    /// [source] came up: it can be pressed again, and the repeats it held end.
+    func lift(_ source: AnyHashable) {
+        down.remove(source)
+        release(source)
+    }
+
     /// Ends the repeats of a held direction: the stream menu opens while the player may still hold one.
     public func cancelRepeats() { release(nil) }
+
+    /// Forgets what is down: the app lost the keyboard (another app, a locked screen), so an "up" may never come.
+    public func forgetDown() {
+        release(nil)
+        down.removeAll()
+    }
 
     /// Ends the repeats of [source] (nil: of whoever holds a direction).
     private func release(_ source: AnyHashable?) {
@@ -147,8 +183,9 @@ public final class MenuInput {
                 let next = Self.stickCommand(x: x, y: y, previous: previous)
                 self.stickDirection[id] = next
                 guard next != previous else { return }
-                let source = AnyHashable(["stick", AnyHashable(id)])
-                if let next { self.press(next, from: source) } else { self.release(source) }
+                // One source for each direction: turning from one to another lifts the first and presses the second
+                if let previous { self.lift(Self.stickSource(id, previous)) }
+                if let next { self.press(next, from: Self.stickSource(id, next)) }
             }
         }
     }
@@ -157,9 +194,13 @@ public final class MenuInput {
         let source = AnyHashable([AnyHashable(controller), AnyHashable("\(command)")])
         return { [weak self] _, _, pressed in
             MainActor.assumeIsolated {
-                if pressed { self?.press(command, from: source) } else { self?.release(source) }
+                if pressed { self?.press(command, from: source) } else { self?.lift(source) }
             }
         }
+    }
+
+    private static func stickSource(_ controller: ObjectIdentifier, _ direction: MenuCommand) -> AnyHashable {
+        AnyHashable([AnyHashable("stick"), AnyHashable(controller), AnyHashable("\(direction)")])
     }
 
     private func attach(_ keyboard: GCKeyboard) {
@@ -168,7 +209,7 @@ public final class MenuInput {
             MainActor.assumeIsolated {
                 guard self?.emits(command) ?? false else { return }
                 let source = AnyHashable(["key", AnyHashable(key.rawValue)])
-                if pressed { self?.press(command, from: source) } else { self?.release(source) }
+                if pressed { self?.press(command, from: source) } else { self?.lift(source) }
             }
         }
     }

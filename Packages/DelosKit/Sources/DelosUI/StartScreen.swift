@@ -119,6 +119,7 @@ public struct DelosRoot: View {
     @Namespace private var focusScope
     @Environment(\.resetFocus) private var resetFocus
     #endif
+    @Environment(\.scenePhase) private var scenePhase
 
     public init() {
         let profiles = ProfileStore()
@@ -264,6 +265,10 @@ public struct DelosRoot: View {
         .onMoveCommand { routeMove($0) }
         #endif
         .onAppear(perform: startInput)
+        // The keys that scroll or move the system focus (arrows, Space, Page, Home, End) are the interface's alone
+        .ownsMenuKeys(typing: navigator.isEditingText)
+        // An "up" of a key may never come after the app lost the keyboard
+        .onChange(of: scenePhase) { _, now in if now != .active { input?.forgetDown() } }
     }
 
     /// Whether Menu is ours: a layer or the side menu is open, or there is a screen to go back to. At the first screen it

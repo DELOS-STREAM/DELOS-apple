@@ -21,6 +21,7 @@ struct GameSettingsScreen: View {
     @State private var model: GameSettingsModel
     @State private var picker: (id: String, focus: FocusModel)?
     @State private var rowFrames: [String: CGRect] = [:]
+    @State private var pace = ScrollPace()
     /// The row last focused, which Reset all gives the focus back to.
     @State private var lastRow: String?
     @Environment(\.modalFocus) private var inheritedModal
@@ -141,12 +142,13 @@ struct GameSettingsScreen: View {
                 .padding(.horizontal, stage.px(18))
                 .padding(.top, stage.px(14))
                 .padding(.bottom, stage.px(140))
+                .focusDrivenScroll()
             }
             .focusable(false)
             .scrollClipDisabled()
             .onChange(of: focus.focused) { _, now in
                 guard let id = now as? String, rows.contains(where: { $0.id == id }) else { return }
-                withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(id) }
+                withAnimation(pace.animation(.easeOut(duration: 0.3))) { proxy.scrollTo(id) }
             }
         }
         .frame(maxWidth: .infinity)
