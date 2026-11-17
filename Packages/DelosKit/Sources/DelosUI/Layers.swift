@@ -20,6 +20,10 @@ enum HeaderTint {
     case accent
     /// The game's main color.
     case color(RGBA)
+    /// A game's: its cover's main color once worked out, the theme's accent while the interface does not take the games' colors
+    /// or the cover is grey, the placeholder art's hue while the game has no cover, a neutral chip for the short time between
+    /// a cover's decoding and its colors (`gameHeaderTint` and `HeaderTint.Pending` of DELOS for Android).
+    case cover(hostID: String, appID: Int, placeholderHue: Double)
 }
 
 /// What a menu says about its subject above its title (`MenuHeader`): an icon tile in the subject's color, a [status]
@@ -190,25 +194,62 @@ final class Layers {
     static func rowID(_ index: Int) -> AnyHashable { AnyHashable("menu-row-\(index)") }
 }
 
+/// The scrim under a layer (`Scrim` of DELOS for Android): it fades in over ``Motion/scrim`` ms and out over
+/// ``Motion/exit`` ms with CSS `ease`; a tap on it closes the layer. The context menu's is the [light] one that only dims
+/// (4, 8, 16 at 26 %); every other layer's is the theme's scrim token, and the screen beneath it blurs
+/// (``LayerBackdropBlur``).
+struct LayerScrim: View {
+    var light = false
+    let onTap: @MainActor () -> Void
+    @Environment(\.delosColors) private var colors
+
+    var body: some View {
+        Rectangle()
+            .fill(light ? RGBA(red: 4 / 255, green: 8 / 255, blue: 16 / 255, alpha: 0.26).color : colors.scrim.color)
+            .ignoresSafeArea()
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onTap)
+            .transition(.asymmetric(
+                insertion: .opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.scrim / 1000)),
+                removal: .opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.exit / 1000))))
+    }
+}
+
+/// The screen under a layer's scrim blurs by 6 stage pixels (`Modifier.backdropBlur(haze, 6f, scrim)` of `Scrim`), with the
+/// scrim's fades.
+struct LayerBackdropBlur: ViewModifier {
+    let active: Bool
+    @Environment(\.stage) private var stage
+
+    func body(content: Content) -> some View {
+        content
+            .blur(radius: active ? stage.px(6) : 0)
+            .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: (active ? Motion.scrim : Motion.exit) / 1000), value: active)
+    }
+}
+
+extension Layers {
+    /// Whether the layer blurs the screen under its scrim: every layer but the context menu's light one.
+    var blursScreen: Bool {
+        guard let layer else { return false }
+        if case .context = layer { return false }
+        return true
+    }
+}
+
 /// Shows the open layer over the screen (Android's `Scrim`, `ContextMenuLayer` and `DialogLayer` in the shell): a light
 /// scrim under a context menu, the darker scrim under a dialog; a tap on the scrim closes the layer. The menu shrinks
 /// back into its caret's tip, a dialog settles in from a slight scale and leaves the same way.
 struct LayerHost: View {
     let layers: Layers
     let navigator: Navigator
-    @Environment(\.delosColors) private var colors
     @Environment(\.reducedMotion) private var reducedMotion
 
     var body: some View {
         ZStack {
             if let layer = layers.layer {
                 let isMenu = if case .context = layer { true } else { false }
-                Rectangle()
-                    .fill(isMenu ? RGBA(red: 4 / 255, green: 8 / 255, blue: 16 / 255, alpha: 0.26).color : colors.scrim.color)
-                    .ignoresSafeArea()
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: layers.dismiss)
-                    .transition(.opacity)
+                LayerScrim(light: isMenu, onTap: layers.dismiss)
                 switch layer {
                 case let .context(menu, anchor):
                     let tip = UnitPoint(x: layers.menuTip.x, y: layers.menuTip.y)
@@ -216,15 +257,47 @@ struct LayerHost: View {
                         .id(layers.generation)
                         .transition(.asymmetric(
                             insertion: .identity,
-                            removal: reducedMotion ? .opacity : .opacity.combined(with: .scale(scale: Motion.popFromScale, anchor: tip))))
+                            removal: reducedMotion ? Self.fade(Motion.exit)
+                                : Self.fade(Motion.exit).combined(with: .scale(scale: Motion.popFromScale, anchor: tip).animation(Self.easeIn(Motion.exit)))))
                 case let .dialog(spec):
                     DialogLayer(layers: layers, spec: spec, navigator: navigator)
                         .id(layers.generation)
-                        .transition(reducedMotion ? .opacity
-                            : .opacity.combined(with: .scale(scale: Motion.dialogFromScale)).combined(with: .offset(y: 24)))
+                        .transition(.asymmetric(
+                            insertion: reducedMotion ? Self.fade(Motion.fade)
+                                : Self.fade(Motion.fade)
+                                    .combined(with: .scale(scale: Motion.dialogFromScale).animation(Motion.out(Motion.popIn)))
+                                    .combined(with: SlideByHeight(fraction: 1 / 25).animation(Motion.out(Motion.popIn))),
+                            removal: reducedMotion ? Self.fade(Motion.exit)
+                                : Self.fade(Motion.exit)
+                                    .combined(with: .scale(scale: Motion.dialogFromScale).animation(Self.easeIn(Motion.exit)))
+                                    .combined(with: SlideByHeight(fraction: 1 / 25).animation(Self.easeIn(Motion.exit)))))
                 }
             }
         }
         .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.exit / 1000), value: layers.generation)
+    }
+
+    private static func fade(_ ms: Double) -> AnyTransition {
+        .opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: ms / 1000))
+    }
+
+    /// `--ease-in` over [ms] milliseconds: what leaves.
+    static func easeIn(_ ms: Double) -> Animation { .timingCurve(0.5, 0, 0.75, 0, duration: ms / 1000) }
+}
+
+/// An element moves down by a fraction of its own height while it enters and leaves (`slideInVertically { it / 25 }`).
+struct SlideByHeight: Transition {
+    let fraction: Double
+
+    func body(content: Content, phase: TransitionPhase) -> some View {
+        content.visualEffect { view, proxy in
+            view.offset(y: phase.isIdentity ? 0 : proxy.size.height * fraction)
+        }
+    }
+}
+
+extension Transition {
+    func animation(_ animation: Animation) -> AnyTransition {
+        AnyTransition(self).animation(animation)
     }
 }

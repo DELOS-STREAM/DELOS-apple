@@ -24,8 +24,24 @@ struct GameArt: Equatable {
         let hue = Double(Int(Self.javaHash(app.title) & 0x7fff_ffff) % 360)
         self.hue = hue
         hue2 = (hue + 35).truncatingRemainder(dividingBy: 360)
-        icon = Symbols.sportsEsports
+        icon = Self.builtInIcon(app) ?? Symbols.sportsEsports
         self.image = image
+    }
+
+    /// The placeholder's icon of DELOS's own entries (`appArt`: `BundledArtwork.kind`), nil for a game.
+    static func builtInIcon(_ app: HostApp) -> String? {
+        switch app.uuid?.lowercased() {
+        case "9a1c5a25-58fe-40e0-b9aa-7d3f00000006": return Symbols.remoteInput
+        case "9a1c5a25-58fe-40e0-b9aa-7d3f00000005": return Symbols.remoteMonitor
+        default: break
+        }
+        switch app.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "desktop": return Symbols.desktopApp
+        case "remote input": return Symbols.remoteInput
+        case "remote monitor": return Symbols.remoteMonitor
+        case "steam big picture", "steam bigpicture": return Symbols.steam
+        default: return nil
+        }
     }
 
     static func key(_ hostID: String, _ appID: Int) -> String { "\(hostID)/\(appID)" }

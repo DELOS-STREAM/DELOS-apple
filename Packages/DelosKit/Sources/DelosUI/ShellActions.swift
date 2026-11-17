@@ -206,12 +206,19 @@ final class ShellActions {
         let hidden = isHidden(hostID: hostID, appID: app.id)
         let custom = !gameOverrides(hostID: hostID, appID: app.id).isEmpty
         let other = running.flatMap { $0.id == app.id ? nil : L("home_header_other_running", $0.title) }
+        // The tile takes the game's main color (`gameHeaderTint`); the facts start with "last played" for the badged cover
+        let lastPlayed = hosts.apps[hostID]?.first?.id == app.id && self.lastPlayed(hostID: hostID) == app.id
         let header = MenuHeader(
-            status: running?.id == app.id ? L("home_header_running") : L("home_header_game"), running: running?.id == app.id,
-            meta: [other, custom ? L("home_header_custom") : nil, hidden ? L("home_header_hidden") : nil].compactMap { $0 }.reduce(nil) { facts, next in
-                facts.map { L("home_meta_join", $0, next) } ?? next
-            })
-        items.append(MenuItem(icon: Symbols.photoLibrary, label: L("home_menu_artwork")) { [self] in openArtwork(hostID: hostID, app: app) })
+            status: running?.id == app.id ? L("home_header_running") : L("home_header_game"),
+            tint: .cover(hostID: hostID, appID: app.id, placeholderHue: GameArt(hostID: hostID, app: app).hue), running: running?.id == app.id,
+            meta: [lastPlayed ? L("home_header_last_played") : nil, other, custom ? L("home_header_custom") : nil, hidden ? L("home_header_hidden") : nil]
+                .compactMap { $0 }.reduce(nil) { facts, next in
+                    facts.map { L("home_meta_join", $0, next) } ?? next
+                })
+        // DELOS's own entries (Desktop, Remote Input, ...) have bundled artwork and no metadata: no entry for either
+        if !GameMetadataModel.isBuiltIn(app) {
+            items.append(MenuItem(icon: Symbols.photoLibrary, label: L("home_menu_artwork")) { [self] in openArtwork(hostID: hostID, app: app) })
+        }
         if metadata.offers(app) {
             items.append(MenuItem(icon: Symbols.metadata, label: L("home_menu_metadata")) { [self] in openMetadataMenu(hostID: hostID, app: app) })
         }

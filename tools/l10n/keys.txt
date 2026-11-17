@@ -162,6 +162,7 @@ home_header_game
 home_header_running
 home_header_other_running
 home_header_hidden
+home_header_last_played
 home_meta_join
 home_menu_show
 home_menu_artwork

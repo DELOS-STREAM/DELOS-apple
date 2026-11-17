@@ -169,9 +169,13 @@ struct TextPill: View {
 extension View {
     /// The focus look of a pill: it grows by [scale], gets a ring of [ring] stage pixels as far outside it, and a glow of
     /// [glowBlur] (CSS box-shadow blur) moved down by [glowY]; no glow when [glowBlur] is 0. [corner] makes the ring a
-    /// rounded rectangle around a shape with that corner radius (a cover) instead of a pill.
-    func focusLook(_ focused: Bool, scale: Double, ring: Double, glowBlur: Double, glowY: Double, corner: Double? = nil, anchor: UnitPoint = .center, sweep: Bool = false) -> some View {
-        modifier(FocusLook(focused: focused, scale: scale, ring: ring, glowBlur: glowBlur, glowY: glowY, corner: corner, anchor: anchor, sweep: sweep))
+    /// rounded rectangle around a shape with that corner radius (a cover) instead of a pill. [gap] (stage pixels) is the
+    /// band between the element and its ring, filled with the background color as `drawFocusRing` of DELOS for Android does
+    /// (nil: transparent, as many pills have it); [glowSpread] is the box-shadow's spread (negative: smaller than the element).
+    func focusLook(_ focused: Bool, scale: Double, ring: Double, glowBlur: Double, glowY: Double, corner: Double? = nil, anchor: UnitPoint = .center, sweep: Bool = false,
+        glowSpread: Double = 0, gap: Double? = nil) -> some View {
+        modifier(FocusLook(focused: focused, scale: scale, ring: ring, glowBlur: glowBlur, glowY: glowY, corner: corner, anchor: anchor, sweep: sweep,
+                           glowSpread: glowSpread, gap: gap))
     }
 }
 
@@ -204,6 +208,8 @@ private struct FocusLook: ViewModifier {
     /// The point that stays put while the item grows (the wide first cover grows to the left only).
     let anchor: UnitPoint
     let sweep: Bool
+    var glowSpread = 0.0
+    var gap: Double?
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
@@ -212,14 +218,55 @@ private struct FocusLook: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background {
-                Group {
-                    if let corner {
-                        RoundedRectangle(cornerRadius: stage.px(corner + 2 * ring)).strokeBorder(colors.accent.color, lineWidth: stage.px(ring))
-                    } else {
-                        Capsule().strokeBorder(colors.accent.color, lineWidth: stage.px(ring))
+                // The glow with its spread: the element's shape grown by the spread, blurred (CSS blur 2 sigma) and moved down; not
+                // under the element itself, whose glass would show it through
+                if glowSpread != 0, glowBlur > 0 {
+                    ZStack {
+                        if let corner {
+                            RoundedRectangle(cornerRadius: max(stage.px(corner + glowSpread), 0), style: .continuous).fill(colors.glow.color)
+                        } else {
+                            Capsule().fill(colors.glow.color)
+                        }
+                    }
+                    .padding(-stage.px(glowSpread))
+                    .blur(radius: stage.px(glowBlur / 2))
+                    .offset(y: stage.px(glowY))
+                    .opacity(focused ? 1 : 0)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mask {
+                        ZStack {
+                            Rectangle().fill(.white).padding(-stage.px(400))
+                            if let corner {
+                                RoundedRectangle(cornerRadius: stage.px(corner), style: .continuous).fill(.black).blendMode(.destinationOut)
+                            } else {
+                                Capsule().fill(.black).blendMode(.destinationOut)
+                            }
+                        }
+                        .compositingGroup()
                     }
                 }
-                .padding(-stage.px(2 * ring))
+            }
+            .background {
+                let gap = gap ?? ring
+                ZStack {
+                    // `box-shadow: 0 0 0 gap bg, 0 0 0 gap+width accent`: the band between element and ring is the background's
+                    if self.gap != nil {
+                        if let corner {
+                            RoundedRectangle(cornerRadius: stage.px(corner + gap)).strokeBorder(colors.bg.color, lineWidth: stage.px(gap))
+                                .padding(-stage.px(gap))
+                        } else {
+                            Capsule().strokeBorder(colors.bg.color, lineWidth: stage.px(gap)).padding(-stage.px(gap))
+                        }
+                    }
+                    Group {
+                        if let corner {
+                            RoundedRectangle(cornerRadius: stage.px(corner + gap + ring)).strokeBorder(colors.accent.color, lineWidth: stage.px(ring))
+                        } else {
+                            Capsule().strokeBorder(colors.accent.color, lineWidth: stage.px(ring))
+                        }
+                    }
+                    .padding(-stage.px(gap + ring))
+                }
                 .opacity(focused ? 1 : 0)
             }
             .overlay {
@@ -227,7 +274,7 @@ private struct FocusLook: ViewModifier {
                     if let corner { SweepLight(shape: RoundedRectangle(cornerRadius: stage.px(corner)), focused: focused) } else { SweepLight(shape: Capsule(), focused: focused) }
                 }
             }
-            .shadow(color: focused && glowBlur > 0 ? colors.glow.color : .clear, radius: stage.px(glowBlur / 2), y: stage.px(glowY))
+            .shadow(color: focused && glowBlur > 0 && glowSpread == 0 ? colors.glow.color : .clear, radius: stage.px(glowBlur / 2), y: stage.px(glowY))
             .animation(.focusRing(focused: focused), value: focused)
             .scaleEffect(focusScale(focused: focused, pressed: pressed, focus: scale), anchor: anchor)
             .zIndex(focused ? 1 : 0)

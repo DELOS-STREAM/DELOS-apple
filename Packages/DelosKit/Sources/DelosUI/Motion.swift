@@ -44,9 +44,13 @@ enum Motion {
     static let ease = CubicBezier(0.25, 0.1, 0.25, 1)
 
     static let exit = 240.0
+    /// A scrim fading in (`Motion.SCRIM`).
+    static let scrim = 420.0
     /// Focus: the spring of a scale, a ring, a lifted element (`Motion.FOCUS`).
     static let focus = 420.0
     /// The focus ring's alpha arriving and leaving.
+    /// The focus ring gliding to the next element (`Motion.RING`).
+    static let ring = 560.0
     static let ringIn = 140.0
     static let ringOut = 110.0
     /// Regular and Fill glyphs of an icon cross-fade this long.
@@ -85,6 +89,8 @@ enum Motion {
 
     /// The prototype's `--ease-spring` over [ms] milliseconds, as a SwiftUI animation (overshoots a little).
     static func spring(_ ms: Double) -> Animation { .timingCurve(0.34, 1.56, 0.64, 1, duration: ms / 1000) }
+    /// Compose's default `tween(ms)` easing, FastOutSlowIn (`CubicBezierEasing(.4, 0, .2, 1)`), over [ms] milliseconds.
+    static func fastOutSlowIn(_ ms: Double) -> Animation { .timingCurve(0.4, 0, 0.2, 1, duration: ms / 1000) }
     /// The prototype's `--ease-out` over [ms] milliseconds.
     static func out(_ ms: Double) -> Animation { .timingCurve(0.16, 1, 0.3, 1, duration: ms / 1000) }
 

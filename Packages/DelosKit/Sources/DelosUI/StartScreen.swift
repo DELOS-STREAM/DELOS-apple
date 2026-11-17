@@ -201,18 +201,20 @@ public struct DelosRoot: View {
                             // The interface scale zooms the whole bar
                             .modifier(ZoomedBar())
                     }
-                    if let sideMenu {
-                        SideMenu(
-                            profile: profiles.current, pc: connectedPC, focus: sideMenu, appearance: appearance, onStep: { id, direction in _ = quickStep(id, by: direction) },
-                            onSettings: {
-                                closeSideMenu(sound: nil)
-                                go { navigator.openFromNavigation(.settings, focus: SettingsScreen.initialFocus) }
-                            },
-                            hidden: actions.hiddenRow(pcName: connectedPC?.name),
-                            onClose: { closeSideMenu(sound: .back) })
-                    }
                 }
                 .modifier(PortalBackdropBlur(active: actions.connection.portal.map { !$0.arriving } ?? false))
+                // The scrim of the side menu or a dialog blurs the screen under it
+                .modifier(LayerBackdropBlur(active: sideMenu != nil || layers.blursScreen))
+                if sideMenu != nil { LayerScrim(onTap: { closeSideMenu(sound: .back) }) }
+                if let sideMenu {
+                    SideMenu(
+                        profile: profiles.current, pc: connectedPC, focus: sideMenu, appearance: appearance, onStep: { id, direction in _ = quickStep(id, by: direction) },
+                        onSettings: {
+                            closeSideMenu(sound: nil)
+                            go { navigator.openFromNavigation(.settings, focus: SettingsScreen.initialFocus) }
+                        },
+                        hidden: actions.hiddenRow(pcName: connectedPC?.name))
+                }
                 LayerHost(layers: layers, navigator: navigator)
                 ZStack {
                     if let portal = actions.connection.portal {

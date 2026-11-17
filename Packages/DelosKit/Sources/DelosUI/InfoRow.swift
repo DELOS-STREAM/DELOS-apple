@@ -134,7 +134,7 @@ private struct StatRow: View {
         .fixedSize()
         .frame(height: stage.px(height))
         // A soft dark shadow: all the readability the texts get, no plate behind them
-        .shadow(color: .black.opacity(0.6), radius: 3, y: 1)
+        .shadow(color: .black.opacity(0.6), radius: 4.5, y: 2)
     }
 }
 

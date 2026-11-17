@@ -95,7 +95,18 @@ private struct CardGlass: View {
                 .clipShape(shape)
                 .allowsHitTesting(false)
             }
-            .overlay { shape.stroke(.white.opacity(0.11), lineWidth: stage.px(1)) }
+            // The rim is the inside half of a double-width stroke (the outline clips it) and the card's top edge is lit: what the
+            // card has and the card moved down 1.5 px has not is a crescent of 26 % white
+            .overlay { shape.stroke(.white.opacity(0.11), lineWidth: stage.px(2)).clipShape(shape).allowsHitTesting(false) }
+            .overlay {
+                shape.fill(.white.opacity(0.26))
+                    .mask {
+                        shape.fill(.white)
+                            .overlay { shape.fill(.black).offset(y: stage.px(1.5)).blendMode(.destinationOut) }
+                            .compositingGroup()
+                    }
+                    .allowsHitTesting(false)
+            }
             .background { shape.fill(.black.opacity(0.66)).blur(radius: stage.px(45)).offset(y: stage.px(40)).padding(stage.px(20)) }
             // Taps on the card (between the rows) stay on it; a tap beside it reaches the scrim
             .contentShape(shape)
@@ -266,6 +277,22 @@ private struct MenuCardHeader: View {
     let onBack: @MainActor () -> Void
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
+    @Environment(HomeArt.self) private var art
+    @Environment(\.matchGameColors) private var matchGameColors
+    /// The last color the tile had (the placeholder's, while the cover's is being worked out).
+    @State private var held: RGBA?
+
+    /// `gameHeaderTint`: nil while the cover's colors are being worked out.
+    private func coverTint(hostID: String, appID: Int, hue: Double) -> RGBA? {
+        guard matchGameColors else { return colors.accent }
+        let key = GameArt.key(hostID, appID)
+        let known = art.coverColors[key] != nil
+        let hasCover = known || art.cachedImage(hostID: hostID, appID: appID, kind: .cover) != nil || art.artwork.lookupExpected
+        if !hasCover { return hsl(hue, 70, 52) }
+        guard known else { return nil }
+        guard let cover = art.coverColors[key] ?? nil, let main = cover.hues.first, let saturation = cover.saturations.first else { return colors.accent }
+        return hsl(main, saturation * 80, 52)
+    }
 
     var body: some View {
         let eyebrow = submenu ? parent?.label : menu.header?.status
@@ -317,25 +344,34 @@ private struct MenuCardHeader: View {
             .padding(.bottom, stage.px(14))
             Rectangle().fill(.white.opacity(0.10)).frame(height: stage.px(1)).padding(.bottom, stage.px(4))
         }
+        // The header is the first element of the card's entrance (`staggerEntrance(0, Motion.MENU_DELAY)`)
+        .staggerEntrance(index: 0, base: Motion.menuDelay)
     }
 
-    /// The subject's tile: its color at 85 % with a faint sheen and a controller in the readable glyph color.
+    /// The subject's tile: its color at 85 % with a faint sheen and a controller in the readable glyph color. A color still
+    /// being worked out shows the neutral chip and fades in once; a known one is there from the first frame.
     private func tile(_ tint: HeaderTint) -> some View {
-        let fill: RGBA = switch tint {
+        let known: RGBA? = switch tint {
         case .accent: colors.accent
         case .color(let color): color
+        case .cover(let hostID, let appID, let hue): coverTint(hostID: hostID, appID: appID, hue: hue)
         }
+        // A cover that arrives while the menu is open keeps the placeholder's color until its own is worked out
+        let fill = known ?? held ?? RGBA(red: 1, green: 1, blue: 1, alpha: 0.1 / 0.85)
         let shape = RoundedRectangle(cornerRadius: stage.px(14), style: .continuous)
-        return SymbolView(symbol: Symbols.sportsEsports, size: 34, color: onColor(fill), filled: true)
+        let glyph = known == nil && held == nil ? colors.text : onColor(fill)
+        return SymbolView(symbol: Symbols.sportsEsports, size: 34, color: glyph, filled: true)
             .frame(width: stage.px(52), height: stage.px(78))
             .background {
                 shape.fill(fill.opacity(0.85).color)
+                    .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: fill)
                     .overlay {
                         LinearGradient(stops: [.init(color: .white.opacity(0.22), location: 0), .init(color: .white.opacity(0), location: 0.6)],
                                        startPoint: .top, endPoint: .bottom).clipShape(shape)
                     }
                     .overlay { shape.strokeBorder(.white.opacity(0.16), lineWidth: stage.px(1)) }
             }
+            .onChange(of: known, initial: true) { _, now in if let now { held = now } }
     }
 }
 

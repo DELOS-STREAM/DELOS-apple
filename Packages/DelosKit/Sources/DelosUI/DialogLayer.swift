@@ -44,11 +44,13 @@ struct DialogLayer: View {
             Text(spec.title)
                 .font(DelosFonts.unbounded(stage.tpx(38)))
                 .foregroundStyle(colors.text.color)
+                .staggerEntrance(index: 0, base: Motion.menuDelay)
             Text(spec.note)
                 .font(DelosFonts.figtree(stage.tpx(24)))
                 .lineSpacing(stage.px(24 * 0.4))
                 .foregroundStyle(colors.text2.color)
                 .fixedSize(horizontal: false, vertical: true)
+                .staggerEntrance(index: 1, base: Motion.menuDelay)
             ForEach(spec.fields.indices, id: \.self) { index in
                 DialogFieldView(
                     field: spec.fields[index], value: $values[index], index: index, typing: $typing, focus: layers.focus,
@@ -56,6 +58,7 @@ struct DialogLayer: View {
                 ) {
                     if index == spec.fields.count - 1 { confirm() } else { layers.focus.focus(Self.fieldID(index + 1)) }
                 }
+                .staggerEntrance(index: index + 2, base: Motion.menuDelay)
             }
             HStack(spacing: stage.px(stage.compact ? 20 : 24)) {
                 FocusItem(id: Self.confirmID, model: layers.focus, action: confirm) { focused in
@@ -66,6 +69,7 @@ struct DialogLayer: View {
                 }
             }
             .padding(.top, stage.px(8))
+            .staggerEntrance(index: spec.fields.count + 2, base: Motion.menuDelay)
         }
         .multilineTextAlignment(.center)
         .padding(stage.px(padding))
