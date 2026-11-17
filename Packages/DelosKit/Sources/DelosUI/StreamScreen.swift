@@ -364,7 +364,7 @@ struct StreamContent: View {
 
     /// A launch scene for a new attempt; its first line is the stage told so far, if any.
     private func makeDirector() -> LaunchDirector {
-        LaunchDirector(line: controller.line.isEmpty ? nil : controller.line, reducedMotion: reducedMotion)
+        LaunchDirector(line: controller.line.isEmpty ? nil : controller.line, reducedMotion: reducedMotion, renderer: renderer)
     }
 
     /// The launch scene's words.

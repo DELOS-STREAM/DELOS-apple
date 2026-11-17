@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- The stream arrives at the end of the launch scene: while the tunnel opens, the live picture waits zoomed to 118 %
+  and blurred, then springs in to 100 % with a short squash, wave and RGB split, and ends exactly on the plain picture.
+  It is drawn by the Metal renderer on the live frames; with reduced motion, and with the display layer where Metal
+  is unavailable, the picture is shown as it is. Not verified on a device.
 - Controller hints use the same approved complete Xbox, DualSense, DualShock 4 and Joy-Con font glyphs as Android,
   with physical button positions preserved and no extra disc or connected-pad SF Symbols override. Both font files
   are byte-identical to Android; the shared library also includes Mac keyboard, mouse and trackpad symbols.
