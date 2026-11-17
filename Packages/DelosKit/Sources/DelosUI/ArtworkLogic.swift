@@ -1,4 +1,5 @@
 import DelosData
+import DelosInput
 import Foundation
 
 /// The tab of each kind on the Artwork screen (`ArtTab` of DELOS for Android), with the columns of its grid (the
@@ -216,6 +217,10 @@ enum ArtworkEmpty: Equatable {
 
     static let resetID = "art-none-reset"
     static let changeID = "art-none-change"
+    /// The glyphs on the two buttons: the button that does the same. Reset has none: X is the search by name on this screen
+    /// (it resets the filters only inside the open sheet), so A is its button; Change filters is Y, which opens the sheet.
+    static let resetGlyph: GlyphRole? = nil
+    static let changeGlyph: GlyphRole? = .north
 
     /// Nil: the list has images.
     init?(images: Int, filters: ArtFilters) {
@@ -228,6 +233,26 @@ enum ArtworkEmpty: Equatable {
 
     /// The item the focus starts on.
     var firstFocus: String { self == .filtered ? Self.resetID : ArtworkScreen.noneID }
+}
+
+/// What A does on the focused item of the Artwork screen, which the hint bar's A button says (``ScreenHints/artworkSouth``).
+/// The buttons of the whole screen are fixed, as on Android: X searches for another name (it resets the filters only in the
+/// open sheet) and Y opens the sheet. So an item that resets the filters, such as the empty state's Reset, is not marked with
+/// X, and the hint bar names what A does on it.
+enum ArtworkSouth: Equatable, Sendable {
+    case useImage, select, searchName, filter, resetFilters, changeFilters
+
+    /// What A does on the item with this id.
+    static func of(_ focused: AnyHashable?) -> ArtworkSouth {
+        guard let id = focused as? String else { return .useImage }
+        switch id {
+        case ArtworkScreen.searchID: return .searchName
+        case ArtworkScreen.filterID: return .filter
+        case ArtworkFilterStrip.resetID, ArtworkEmpty.resetID: return .resetFilters
+        case ArtworkEmpty.changeID: return .changeFilters
+        default: return id.hasPrefix("art-tab-") || id.hasPrefix("art-chip-") ? .select : .useImage
+        }
+    }
 }
 
 /// The labels of the filter sheet and the strip (`ArtType.label`, `ArtSort.label`/`chip`/`first`, `ActiveFilter.label`).

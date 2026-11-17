@@ -262,6 +262,7 @@ private struct ArtworkContent: View, Equatable {
                 .padding(.trailing, stage.px(right - left))
                 .offset(y: stage.px(infoTop))
             ArtworkSheetLayer(model: model, left: left, right: right, top: 280 + top, onReset: resetFilters, onClose: closeSheet)
+            ArtworkHintSync(model: model, focus: focus, navigator: navigator)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .modifier(SheetModalFocus(model: model))
@@ -324,7 +325,7 @@ private struct ArtworkContent: View, Equatable {
     private func select(_ next: ArtworkTab, sound: Cue) {
         guard next != model.tab else { return }
         actions.layers.feedback?.play(sound)
-        if model.sheetOpen { model.sheetOpen = false; navigator.screenHints = ScreenHints() }
+        if model.sheetOpen { model.sheetOpen = false }
         model.tab = next
     }
 
@@ -344,14 +345,12 @@ private struct ArtworkContent: View, Equatable {
         model.sheetFocus = FocusModel(initial: ArtworkFilterSheet.startID(kind: model.tab.kind, filters: model.filters))
         navigator.armInputGate()
         withAnimation { model.sheetOpen = true }
-        navigator.screenHints = ScreenHints(sheetOpen: true)
     }
 
     private func closeSheet() {
         guard model.sheetOpen else { return }
         actions.layers.feedback?.play(.back)
         withAnimation { model.sheetOpen = false }
-        navigator.screenHints = ScreenHints()
         // The focus goes back to where it was; a tile the filters removed (or the first choice, when they left nothing) leaves
         // it on the first thing that is there
         let fallback = AnyHashable(model.empty?.firstFocus ?? ArtworkScreen.noneID)
@@ -408,6 +407,21 @@ private struct ArtworkContent: View, Equatable {
             break
         }
         return true
+    }
+}
+
+/// Tells the hint bar what the screen's buttons do now: whether the filter sheet is open and what A does on the focused item.
+/// A view of its own: it reads the focus, which the screen's body must not.
+private struct ArtworkHintSync: View {
+    let model: ArtworkModel
+    let focus: FocusModel
+    let navigator: Navigator
+
+    var body: some View {
+        let hints = ScreenHints(sheetOpen: model.sheetOpen, artworkSouth: ArtworkSouth.of(focus.focused))
+        Color.clear
+            .frame(width: 0, height: 0)
+            .onChange(of: hints, initial: true) { _, now in navigator.screenHints = now }
     }
 }
 
@@ -706,10 +720,10 @@ private struct NoImages: View {
                 .frame(maxWidth: stage.px(min(820, stage.width - 160)))
             HStack(spacing: stage.px(16)) {
                 FocusItem(id: ArtworkEmpty.resetID, model: focus, clickCue: nil, action: onReset) { focused in
-                    ToolbarPill(label: L("filters_art_reset"), icon: Symbols.reset, focused: focused, glyph: .west)
+                    ToolbarPill(label: L("filters_art_reset"), icon: Symbols.reset, focused: focused, glyph: ArtworkEmpty.resetGlyph)
                 }
                 FocusItem(id: ArtworkEmpty.changeID, model: focus, clickCue: nil, action: onChange) { focused in
-                    ToolbarPill(label: L("filters_art_change"), icon: Symbols.filter, focused: focused, glyph: .north)
+                    ToolbarPill(label: L("filters_art_change"), icon: Symbols.filter, focused: focused, glyph: ArtworkEmpty.changeGlyph)
                 }
             }
         }
