@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 @testable import DelosUI
 
@@ -42,5 +43,72 @@ import Testing
         #expect(ring.shown == nil)
         ring.moved("a", CGRect(x: 10, y: 10, width: 50, height: 50))
         #expect(ring.shown == CGRect(x: 10, y: 10, width: 50, height: 50))
+    }
+}
+
+/// Where the side menu sits and how it arrives (`SideMenuLayer` and `sideEnter` / `sideExit` of DELOS for Android).
+@MainActor @Suite struct SideMenuStyleTests {
+    private func stage(_ w: Double, _ h: Double, safe: EdgeInsets = EdgeInsets()) -> Stage {
+        Stage(size: CGSize(width: w, height: h), safeArea: safe)
+    }
+
+    @Test func theEdgePanelIsDockedLeftAndFullHeightAt680StagePixels() {
+        let sizes: [(Double, Double)] = [(1920, 1080), (2560, 1440), (1024, 768), (932, 430), (2732, 2048)]
+        for size in sizes {
+            let s = stage(size.0, size.1)
+            let frame = SideMenuStyle(device: .phone, stage: s).frame(s)
+            #expect(frame.minX == 0 && frame.minY == 0)
+            #expect(frame.width == 680 && frame.height == s.height)
+            #expect(abs(s.px(frame.width) - 680 * s.scale) < 1e-9)
+        }
+    }
+
+    @Test func theEdgePanelReachesUnderTheSafeAreaAndItsContentKeepsClear() {
+        let s = stage(2732, 2048, safe: EdgeInsets(top: 24, leading: 59, bottom: 20, trailing: 0))
+        let style = SideMenuStyle(device: .mac, stage: s)
+        let frame = style.frame(s)
+        #expect(frame.minX == 0 && frame.minY == 0 && frame.height == s.height)
+        #expect(frame.width == 680 + s.safe.leading)
+        #expect(style.contentInsets(s).leading == 40 + s.safe.leading && style.contentInsets(s).top == 48 + s.safe.top)
+    }
+
+    @Test func theBoxFloatsWithTheSameGapOnThreeSides() {
+        let safe = EdgeInsets(top: 24, leading: 20, bottom: 20, trailing: 20)
+        let sizes: [(Double, Double)] = [(2752, 2064), (2064, 2752), (1920, 1080)]
+        for size in sizes {
+            let s = stage(size.0, size.1, safe: safe)
+            let style = SideMenuStyle(device: .pad, stage: s)
+            #expect(style.kind == .box)
+            let frame = style.frame(s)
+            #expect(frame.width == 680)
+            #expect(abs(frame.minX - (s.safe.leading + SideMenuStyle.inset)) < 1e-9)
+            #expect(abs(frame.minY - (s.safe.top + SideMenuStyle.inset)) < 1e-9)
+            #expect(abs(s.height - frame.maxY - (s.safe.bottom + SideMenuStyle.inset)) < 1e-9)
+        }
+    }
+
+    @Test func theBoxIsForTheIPadAndTheTVOnly() {
+        let wide = stage(1920, 1080), phone = stage(932, 430), narrow = stage(320, 700)
+        #expect(SideMenuStyle(device: .tv, stage: wide).kind == .box)
+        #expect(SideMenuStyle(device: .pad, stage: wide).kind == .box)
+        #expect(SideMenuStyle(device: .pad, stage: narrow).kind == .edge)
+        #expect(SideMenuStyle(device: .phone, stage: phone).kind == .edge)
+        #expect(SideMenuStyle(device: .phone, stage: wide).kind == .edge)
+        #expect(SideMenuStyle(device: .mac, stage: wide).kind == .edge)
+    }
+
+    @Test func aTVStageKeepsTheBoxInsideItsTitleSafeArea() {
+        let s = stage(1920, 1080, safe: Stage.tvTitleSafeArea)
+        let frame = SideMenuStyle(device: .tv, stage: s).frame(s)
+        #expect(frame.minX > s.safe.leading && frame.minY > s.safe.top && frame.maxY < s.height - s.safe.bottom)
+    }
+
+    @Test func thePanelSlidesInFromATenthOfItsWidthToTheLeft() {
+        let s = stage(1920, 1080)
+        #expect(SideMenu.slideShift(s) == -68)
+        #expect(abs(SideMenu.slideShift(stage(2560, 1440)) - -68 * stage(2560, 1440).scale) < 1e-9)
+        // `AnyTransition` is opaque: both motions must at least build
+        _ = SideMenu.transition(reducedMotion: false, stage: s)
+        _ = SideMenu.transition(reducedMotion: true, stage: s)
     }
 }

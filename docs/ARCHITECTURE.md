@@ -122,7 +122,7 @@ capsule; Settings, Profile and Devices take each other's place on the stack; the
 row reaches them. On those screens and on the start screen (`hasSideMenu`), the left menu button opens the side menu
 (`SideMenu`, Android's `SideMenuLayer`): the profile and the connected PC at the top and All settings; it takes every
 command while it is open, and B, the menu button or a tap beside it closes it. The quick settings (theme, background, sounds, haptics) are in it; the rows scroll
-(`FocusScroll` with edge fades) where the stage is too short, the panel is 680 px wide (glass, `panel` role) and arrives from
+(`FocusScroll` with edge fades) where the stage is too short, the panel is 680 px wide (glass, `panel` role), docked to the left edge at full height (`SideMenuStyle`: on iPad and Apple TV it is a floating box instead, with continuous 40 px corners and a 32 px gap to the left, top and bottom edges and the safe area; an Apple-only presentation decision, Android keeps its edge panel; iPhone, a narrow iPad window and Mac keep the edge panel) and arrives from
 a tenth of its width to its left (`sideEnter`: 560 ms ease-out with a 280 ms fade; it leaves over 240 ms ease-in; only
 fading with reduced motion) under the root's scrim (`LayerScrim`: the scrim token, fading in over 420 ms, out over 240 ms),
 while the screen behind it blurs by 6 stage pixels (`LayerBackdropBlur`, also behind dialogs; the context menu's scrim only
