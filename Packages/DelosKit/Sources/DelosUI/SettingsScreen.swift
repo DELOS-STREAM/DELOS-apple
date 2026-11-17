@@ -324,6 +324,8 @@ struct SettingsScreen: View {
             appearance = next.appearance
         } else if id == StreamSettingsForm.bitrate {
             form.setBitrate(value)
+        } else if id == StreamSettingsForm.rumbleStrength {
+            form.settings.rumble.deviceStrength = value
         }
     }
 

@@ -106,7 +106,7 @@ let package = Package(
         .target(name: "DelosHost", dependencies: ["DelosCore"], swiftSettings: strict),
         .target(name: "DelosMedia", dependencies: ["DelosCore", "COpus"], swiftSettings: strict),
         .target(name: "DelosInput", dependencies: ["DelosCore"], swiftSettings: strict),
-        .target(name: "DelosData", dependencies: ["DelosHost", "DelosMedia"], swiftSettings: strict),
+        .target(name: "DelosData", dependencies: ["DelosHost", "DelosMedia", "DelosInput"], swiftSettings: strict),
         .target(
             name: "DelosUI",
             dependencies: ["DelosData", "DelosInput", "DelosMedia"],

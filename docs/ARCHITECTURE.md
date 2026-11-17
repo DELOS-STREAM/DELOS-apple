@@ -1359,3 +1359,28 @@ scrolls); the slider card 1040 x 300 with 96 px ◀ ▶ buttons (a hold repeats 
 separator, Mbit/s for the bitrate, rounded to the grid and clamped; text that is no number is dropped with the error cue). The
 controller keeps its behavior: left and right step the row; in the open popover up, down and A work the options, left and right the
 slider, B closes it. Not verified on a device: the look, the keyboard lifting the card, a hold on the buttons.
+
+## Game rumble
+
+`StreamSettings.rumble` stores `RumbleConfiguration` per profile. `StreamSettingsStore.didSave` notifies the active
+stream; `StreamController.rumbleConfiguration` updates `GameInput` and its physical outputs immediately.
+The Controls rows offer Original, Soft, Kick-start and Pulsing, rumble on/off, device fallback, forced device
+vibration and 1–200% device strength. Interface haptics are independent.
+
+`RumbleChannel` preserves eight-bit motor truncation, weighted single-motor mixing, immediate zero cancellation,
+100 ms kick settling and fractional smoothing. `ControllerHaptics` uses CoreHaptics looping patterns for continuous
+output and 20 ms on / 20 ms off pulses. Steady output and silence require no polling task; only kick/smoothing
+transitions schedule a settling task. Pause, disconnect and stream stop release motors and adaptive triggers.
+Only player zero may use device vibration. Device fallback does not duplicate a supported controller's rumble
+unless forced device vibration is enabled.
+
+`AdaptiveTriggerEffect` decodes positional feedback (0x21), weapon (0x25), positional vibration (0x26), legacy
+feedback/weapon (0x01/0x02), and off (0x00/0x05). The packet field reference is
+[dualsensectl](https://github.com/nowrep/dualsensectl/blob/main/main.c).
+GameController does not expose raw HID effects for bow, galloping or machine modes. Those requests stop the
+affected trigger, set `adaptiveTriggerUnsupported`, and emit a diagnostic. CoreHaptics failures expose
+`RumbleProblem.failed`; a failed pulse pattern retries plain amplitude.
+
+Verification: `RumbleProfilesTests` covers shaping, mixing, timed settling, cancellation, device routing and packet
+validation. `RumbleSettingsTests` covers persisted settings, legacy decoding and disabled dependencies.
+Real controller motors, Taptic playback, adaptive-trigger feel and effects on media playback are not verified.

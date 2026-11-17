@@ -41,6 +41,18 @@ public final class GameInput {
     private var heldMouseButtons: Set<MouseButton> = []
     private var mouseRemainder = (x: 0.0, y: 0.0)
     private var scrollRemainder = (x: 0.0, y: 0.0)
+    private let deviceHaptics = ControllerHaptics()
+    public var rumbleConfiguration = RumbleConfiguration() {
+        didSet {
+            pads.values.forEach { $0.haptics.configuration = rumbleConfiguration }
+            deviceHaptics.configuration = rumbleConfiguration
+            if !rumbleConfiguration.deviceFallback && !rumbleConfiguration.deviceEnabled { deviceHaptics.stop() }
+        }
+    }
+    public var rumbleProblem: RumbleProblem? {
+        deviceHaptics.problem ?? pads.values.lazy.compactMap { $0.haptics.problem }.first
+    }
+    public var adaptiveTriggerUnsupported: Bool { pads.values.contains { $0.haptics.adaptiveTriggerUnsupported } }
     private var running = false
     /// Counts down while Escape is held (``MenuKeyShortcut``).
     private var escapeHold: Task<Void, Never>?
@@ -83,6 +95,8 @@ public final class GameInput {
         didSet {
             guard paused, !oldValue else { return }
             releaseAll()
+            deviceHaptics.stop()
+            pads.values.forEach { $0.haptics.stop() }
         }
     }
 
@@ -114,6 +128,7 @@ public final class GameInput {
     public func stop() {
         guard running else { return }
         releaseAll()
+        deviceHaptics.stop()
         running = false
         observers.forEach(NotificationCenter.default.removeObserver)
         observers.removeAll()
@@ -129,11 +144,23 @@ public final class GameInput {
     // MARK: Rumble
 
     public func rumble(controller number: UInt16, low: UInt16, high: UInt16) {
-        pad(number)?.haptics.rumble(low: low, high: high)
+        guard running, !paused else { return }
+        let pad = pad(number)
+        pad?.haptics.rumble(low: low, high: high)
+        let supports = pad.map { ControllerHaptics.capabilities(of: $0.controller).rumble } ?? false
+        if rumbleConfiguration.usesDevice(controllerCanRumble: supports, controllerNumber: number) {
+            deviceHaptics.rumble(low: low, high: high)
+        }
     }
 
     public func rumbleTriggers(controller number: UInt16, left: UInt16, right: UInt16) {
+        guard running, !paused else { return }
         pad(number)?.haptics.rumbleTriggers(left: left, right: right)
+    }
+
+    public func adaptiveTriggers(controller number: UInt16, flags: UInt8, typeLeft: UInt8, typeRight: UInt8, left: [UInt8], right: [UInt8]) {
+        guard running, !paused else { return }
+        pad(number)?.haptics.adaptiveTriggers(flags: flags, typeLeft: typeLeft, typeRight: typeRight, left: left, right: right)
     }
 
     private func pad(_ number: UInt16) -> Pad? {
@@ -153,6 +180,7 @@ public final class GameInput {
         let id = ObjectIdentifier(controller)
         guard pads[id] == nil, let gamepad = controller.extendedGamepad, let number = slots.number(for: id) else { return }
         let pad = Pad(controller: controller, number: number)
+        pad.haptics.configuration = rumbleConfiguration
         pads[id] = pad
         for element in controller.physicalInputProfile.allElements {
             element.preferredSystemGestureState = .disabled
@@ -169,6 +197,7 @@ public final class GameInput {
     private func detach(_ id: ObjectIdentifier) {
         guard let pad = pads.removeValue(forKey: id) else { return }
         pad.haptics.stop()
+        if pad.number == 0 { deviceHaptics.stop() }
         pad.controller.extendedGamepad?.valueChangedHandler = nil
         for element in pad.controller.physicalInputProfile.allElements {
             element.preferredSystemGestureState = .enabled

@@ -49,6 +49,10 @@ struct StreamScreen: View {
         }
         .onAppear(perform: begin)
         .onDisappear(perform: end)
+        .onReceive(NotificationCenter.default.publisher(for: StreamSettingsStore.didSave)) { notification in
+            guard let profileID, notification.object as? String == profileID else { return }
+            controller?.rumbleConfiguration = StreamSettingsStore().load(profile: profileID).rumble
+        }
         .onChange(of: controller?.phase) { old, phase in
             if phase == .ended {
                 // The PC ended the session on its own (a stream that was leaving or failed is not "closed by the PC")
@@ -91,6 +95,7 @@ struct StreamScreen: View {
         let controller = StreamController(brightness: Self.deviceBrightness, statisticsOverlay: settings.statisticsOverlay, playtime: playtime) { [hosts, hostID, appID, settings] in
             LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer)
         }
+        controller.rumbleConfiguration = settings.rumble
         controller.leavingHold = .seconds(ExitLook.handoff(reduced: reducedMotion))
         controller.menuOpened = { [navigator] in navigator.cancelRepeats?() }
         controller.statisticsChosen = keepStatisticsOverlay
