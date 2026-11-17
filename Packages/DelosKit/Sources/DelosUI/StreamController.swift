@@ -24,6 +24,8 @@ protocol StreamSteps: AnyObject {
     /// Where input goes once the stream runs; nil without a real session.
     var input: (any StreamInputSink)? { get }
     var statisticsSource: StreamStatisticsSource? { get }
+    /// The names of the PC's server commands (Vibepollo and Apollo configure them); a command's number is its position.
+    var serverCommands: [String] { get }
     /// Asks the PC and launches the app, or resumes it when it already runs.
     func launch(display: DisplayInfo) async throws(LaunchFailure)
     /// Connects the streaming core; returns once video and audio flow.
@@ -37,6 +39,7 @@ protocol StreamSteps: AnyObject {
 extension StreamSteps {
     /// Attempts without a video renderer (including lifecycle tests) have no presentation telemetry.
     var statisticsSource: StreamStatisticsSource? { nil }
+    var serverCommands: [String] { [] }
 }
 
 /// One stream on the screen (`DelosStreamActivity` with `StreamLoader` of DELOS for Android): launch, the connecting
@@ -76,6 +79,14 @@ final class StreamController {
     private(set) var progress = 0.0
     private(set) var menuOpen = false
     private(set) var statisticsEnabled = false
+    /// The popover of the stream menu: which page is open and what has the focus in it.
+    let menu = StreamMenuState()
+    /// What this device can do for the menu's tiles and pages (the brightness needs a device to set it on).
+    let capabilities: StreamMenuCapabilities
+    /// The screen's brightness in percent, in steps of 5 (the Brightness page's slider).
+    private(set) var brightnessPercent = 100
+    /// The on-screen keyboard is wanted over the stream (the Keyboard tile): it is raised while the menu is closed.
+    private(set) var keyboardShown = false
     private(set) var statistics: StreamStatistics?
 
     @ObservationIgnored private let makeSteps: @MainActor () -> any StreamSteps
@@ -97,8 +108,18 @@ final class StreamController {
     /// The leaving that runs (``leave(quit:)``).
     @ObservationIgnored private var leaving: Task<Void, Never>?
 
-    init(makeSteps: @escaping @MainActor () -> any StreamSteps) {
+    @ObservationIgnored private let brightness: (any ScreenBrightness)?
+    /// The brightness the player chose in this stream: it is set again when the app comes back from the background.
+    @ObservationIgnored private var brightnessChosen: Int?
+
+    init(
+        capabilities: StreamMenuCapabilities = .platform, brightness: (any ScreenBrightness)? = nil,
+        makeSteps: @escaping @MainActor () -> any StreamSteps
+    ) {
         self.makeSteps = makeSteps
+        self.brightness = brightness
+        self.capabilities = StreamMenuCapabilities(keyboard: capabilities.keyboard, brightness: capabilities.brightness && brightness != nil)
+        if let brightness { brightnessPercent = Self.rounded(brightness.percent) }
         steps = makeSteps()
         greeting = L("stream_loader_greeting", steps.pcName)
     }
@@ -217,7 +238,7 @@ final class StreamController {
         guard !suspended, phase == .connecting || phase == .streaming else { return }
         stopStatistics()
         stopInput()
-        menuOpen = false
+        hideMenu()
         phase = .failed(text)
     }
 
@@ -250,12 +271,160 @@ final class StreamController {
 
     func closeMenu() {
         guard menuOpen else { return }
-        menuOpen = false
+        hideMenu()
         input?.paused = false
+    }
+
+    /// The menu is gone, with the page that was open in it.
+    private func hideMenu() {
+        menuOpen = false
+        menu.close()
     }
 
     func toggleStatistics() {
         statisticsEnabled.toggle()
+    }
+
+    // MARK: Pages of the menu
+
+    /// What a page shows (`PageRows` of DELOS for Android's stream menu), for the actions this device has.
+    func menuContent(_ page: MenuPage) -> StreamMenuContent {
+        switch page {
+        case .main:
+            return .rows([])
+        case .more:
+            return .rows([
+                StreamMenuRow(
+                    id: MenuRowID.keys.rawValue, icon: Symbols.keyboardCommandKey, label: L("stream_menu_row_send_keys"), value: .action,
+                    help: L("stream_help_send_keys"), activate: { [self] in openMenuPage(.keys) }),
+                StreamMenuRow(
+                    id: MenuRowID.commands.rawValue, icon: Symbols.terminal, label: L("stream_menu_row_commands"), value: .action,
+                    help: L("stream_help_commands"), activate: { [self] in openMenuPage(.commands) }),
+                StreamMenuRow(
+                    id: MenuRowID.taskManager.rawValue, icon: Symbols.taskManager, label: L("stream_menu_row_task_manager"), value: .action,
+                    help: L("stream_help_task_manager"), activate: { [self] in send(SpecialKeys.taskManager) }),
+            ])
+        case .brightness:
+            return .rows([
+                StreamMenuRow(
+                    id: MenuRowID.brightness.rawValue, icon: Symbols.brightnessMedium, label: L("stream_menu_row_screen_brightness"),
+                    value: .slider(value: brightnessPercent, range: Self.brightnessRange, step: Self.brightnessStep, unit: " %"),
+                    help: L("stream_help_screen_brightness"), activate: {}, set: { [self] in setBrightness($0) })
+            ])
+        case .keys:
+            let pills = SpecialKeys.all.enumerated().map { index, option in
+                let label = StreamMenuText.specialKey(option.label)
+                return StreamMenuPill(
+                    id: "\(index)", label: label, help: L("stream_help_format_keys", label), run: { [self] in send(option.combo) })
+            }
+            return .pills(pills, empty: nil)
+        case .commands:
+            let commands = steps.serverCommands
+            let pills = commands.enumerated().map { index, name in
+                StreamMenuPill(
+                    id: "\(index)", label: name,
+                    help: L("stream_help_format_command", name.count > 36 ? String(name.prefix(35)) + "\u{2026}" : name),
+                    run: { [self] in runServerCommand(index) })
+            }
+            return .pills(pills, empty: commands.isEmpty ? L("stream_menu_no_commands") : nil)
+        }
+    }
+
+    /// The tile's page opens in the popover; its own tile again closes the popover, another tile's page replaces it.
+    func openMenuPage(_ page: MenuPage) {
+        guard menuOpen else { return }
+        if menu.page == page {
+            dismissPopover()
+            return
+        }
+        menu.open(page, focusing: menuContent(page).ids.first ?? StreamMenuState.backID)
+    }
+
+    /// B (or the back circle): one level up, to the row that opened the page or to its tile; on the dock it resumes.
+    func menuBack() {
+        guard menuOpen else { return }
+        guard let exit = StreamMenuNavigation.afterBack(menu.page) else {
+            closeMenu()
+            return
+        }
+        go(exit)
+    }
+
+    /// A tap outside the popover closes it and never resumes the stream.
+    func dismissPopover() {
+        guard menuOpen, let exit = StreamMenuNavigation.afterDismiss(menu.page) else { return }
+        go(exit)
+    }
+
+    private func go(_ exit: PageExit) {
+        menu.go(exit, focusing: exit.focusRow.map { StreamMenuState.rowID($0.rawValue) })
+    }
+
+    /// Left (-1) or right (+1) on the focused row of the popover: a slider steps (faster the longer the key is held). False
+    /// when the focused item adjusts nothing, so the focus moves instead.
+    @discardableResult
+    func adjustFocusedRow(_ direction: Int, repeatCount: Int = 0) -> Bool {
+        let focusedID = menu.focus.focused?.base as? String
+        guard case let .rows(rows) = menuContent(menu.page),
+            let row = rows.first(where: { StreamMenuState.rowID($0.id) == focusedID }),
+            row.enabled, let set = row.set,
+            let next = row.stepped(direction, steps: row.acceleration(repeatCount: repeatCount))
+        else { return false }
+        set(next)
+        return true
+    }
+
+    // MARK: Actions of the menu pages
+
+    static let brightnessRange = 5...100
+    static let brightnessStep = 5
+
+    private static func rounded(_ percent: Int) -> Int {
+        min(max(Int((Double(percent) / Double(brightnessStep)).rounded()) * brightnessStep, brightnessRange.lowerBound), brightnessRange.upperBound)
+    }
+
+    func setBrightness(_ percent: Int) {
+        guard let brightness else { return }
+        let value = Self.rounded(percent)
+        brightnessPercent = value
+        brightnessChosen = value
+        brightness.set(value)
+    }
+
+    /// Gives the screen's own brightness back (the stream is left or the app goes to the background).
+    func restoreBrightness() {
+        brightness?.restore()
+    }
+
+    /// A key combination to the PC; the menu closes first.
+    func send(_ combo: KeyCombo) {
+        closeMenu()
+        input?.send(combo)
+    }
+
+    func runServerCommand(_ index: Int) {
+        closeMenu()
+        input?.runServerCommand(index)
+    }
+
+    /// The Keyboard tile: the menu closes, then the on-screen keyboard comes up or goes away.
+    func toggleKeyboard() {
+        guard capabilities.keyboard else { return }
+        closeMenu()
+        keyboardShown.toggle()
+    }
+
+    /// The system took the keyboard away (its own hide button).
+    func keyboardDismissed() {
+        keyboardShown = false
+    }
+
+    func typed(_ text: String) {
+        input?.type(text)
+    }
+
+    func typedBackspace() {
+        input?.backspace()
     }
 
     private func startStatistics() {
@@ -295,7 +464,9 @@ final class StreamController {
         guard phase == .connecting || phase == .streaming, !suspended else { return nil }
         stopStatistics()
         suspended = true
-        menuOpen = false
+        hideMenu()
+        keyboardShown = false
+        restoreBrightness()
         stopInput()
         phase = .connecting
         progress = 0
@@ -307,6 +478,7 @@ final class StreamController {
     func returnedToForeground() {
         guard suspended else { return }
         suspended = false
+        if let brightnessChosen { brightness?.set(brightnessChosen) }
         steps = makeSteps()
         run()
     }
@@ -329,7 +501,7 @@ final class StreamController {
             break
         }
         stopStatistics()
-        menuOpen = false
+        hideMenu()
         // No return from the background starts another attempt now; the one that ran is the one the PC quits
         suspended = false
         let steps = self.steps
