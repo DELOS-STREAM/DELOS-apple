@@ -221,8 +221,9 @@ public actor MetadataStore {
 }
 
 /// At most two title resolutions at once, matching Android's network gate. Waiters are cancellation-aware.
-private actor MetadataRequestGate {
-    private var permits = 2
+actor MetadataRequestGate {
+    private var permits: Int
+    init(permits: Int = 2) { self.permits = permits }
     private var waiters: [(UUID, CheckedContinuation<Void, Error>)] = []
     func withPermit<T: Sendable>(_ body: @Sendable () async throws -> T) async throws -> T {
         try await acquire()

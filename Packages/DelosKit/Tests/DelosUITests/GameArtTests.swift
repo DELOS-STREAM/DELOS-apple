@@ -324,3 +324,37 @@ import Testing
         #expect(SteamGridDBError.downloadHTTP(404).text == "HTTP 404")
     }
 }
+
+@Suite struct MemoryCacheTests {
+    private func image(_ side: Int) -> CGImage {
+        let context = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0,
+                                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        return context.makeImage()!
+    }
+
+    @Test func theLimitIsInBytesNotInCount() {
+        // 10×10 images cost 400 bytes each: three fit in 1200
+        var cache = MemoryCache<CGImage>(costLimit: 1200) { $0.width * $0.height * 4 }
+        for index in 0..<5 { cache["k\(index)"] = image(10) }
+        #expect(cache.totalCost == 1200)
+        #expect(cache["k0"] == nil && cache["k1"] == nil)
+        #expect(cache["k4"] != nil)
+    }
+
+    @Test func aBigImageDropsSeveralSmallOnesAndATooBigOneIsNotKept() {
+        var cache = MemoryCache<CGImage>(costLimit: 1200) { $0.width * $0.height * 4 }
+        for index in 0..<3 { cache["k\(index)"] = image(10) }
+        cache["big"] = image(17)   // 1156 bytes
+        #expect(cache["big"] != nil && cache["k0"] == nil && cache["k2"] == nil)
+        cache["huge"] = image(18)   // 1296 bytes
+        #expect(cache["huge"] == nil)
+        #expect(cache.totalCost <= 1200)
+    }
+
+    @Test func replacingAKeyReplacesItsCost() {
+        var cache = MemoryCache<CGImage>(costLimit: 1200) { $0.width * $0.height * 4 }
+        cache["a"] = image(10)
+        cache["a"] = image(5)
+        #expect(cache.totalCost == 100)
+    }
+}

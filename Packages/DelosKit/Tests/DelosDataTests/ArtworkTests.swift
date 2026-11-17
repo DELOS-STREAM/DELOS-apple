@@ -373,3 +373,45 @@ private func image(_ id: Int, _ file: String) -> String { #"{"id":\#(id),"url":"
             .previewURL.lastPathComponent == "x.png")
     }
 }
+
+/// A body that counts how many downloads run at once.
+private actor Concurrency {
+    private(set) var running = 0
+    private(set) var peak = 0
+    private(set) var starts = 0
+    func enter() { running += 1; starts += 1; peak = max(peak, running) }
+    func leave() { running -= 1 }
+}
+
+@Suite struct ArtworkDownloadTests {
+    private func files(_ tag: String) -> (ArtworkFiles, DiskCache) {
+        let cache = DiskCache(directory: temporaryDirectory(), budget: 1_000_000, maxEntryBytes: 1000)
+        return (ArtworkFiles(matches: temporaryDirectory(), cache: cache), cache)
+    }
+
+    @Test func tilesAskingForTheSameImageShareOneDownloadAndTheNumberOfDownloadsIsBounded() async {
+        let (files, _) = files("a")
+        let counter = Concurrency()
+        let fetch: @Sendable () async throws -> Data = {
+            await counter.enter()
+            try await Task.sleep(for: .milliseconds(40))
+            await counter.leave()
+            return Data(count: 10)
+        }
+        await withTaskGroup(of: Void.self) { group in
+            // 10 tiles of one image, and 12 different images
+            for _ in 0..<10 { group.addTask { _ = await files.boxArt(hostID: "h", appID: 0, fetch: fetch) } }
+            for id in 1...12 { group.addTask { _ = await files.boxArt(hostID: "h", appID: id, fetch: fetch) } }
+        }
+        #expect(await counter.starts == 13)
+        #expect(await counter.peak <= ArtworkFiles.parallelDownloads)
+    }
+
+    @Test func aPlainHTTPImageAddressIsRefused() async throws {
+        let fake = FakeSteamGridDB(["/a.png": (200, "x")])
+        let client = SteamGridDB(key: "k", transport: fake.transport)
+        await #expect(throws: SteamGridDBError.insecureURL) { try await client.download(URL(string: "http://cdn.example/a.png")!, limit: 10) }
+        #expect(fake.count("a.png") == 0)
+        #expect(try SteamGridDB.parseImages(Data(list(#"{"id":1,"url":"http://cdn.example/a.png"}"#).utf8)).isEmpty)
+    }
+}

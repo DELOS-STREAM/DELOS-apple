@@ -50,8 +50,8 @@ final class HomeArt {
     private(set) var heroColors: [String: GameColors?] = [:]
 
     @ObservationIgnored let artwork: ArtworkStore
-    @ObservationIgnored private var images = MemoryCache<CGImage>(limit: 64)
-    @ObservationIgnored private var renders = MemoryCache<CGImage>(limit: 24)
+    @ObservationIgnored private var images = MemoryCache<CGImage>(imageBytes: 96 * 1024 * 1024)
+    @ObservationIgnored private var renders = MemoryCache<CGImage>(imageBytes: 64 * 1024 * 1024)
     /// The image each game's cover colors were taken from.
     @ObservationIgnored private var coverSources: [String: ObjectIdentifier] = [:]
 
@@ -162,29 +162,46 @@ final class HomeArt {
     }
 }
 
-/// A small least-recently-used memory cache.
+/// A small least-recently-used memory cache limited by cost (decoded images: bytes), not by count. A value dearer than
+/// the whole limit is not kept.
 struct MemoryCache<Value> {
-    let limit: Int
-    private var values: [String: Value] = [:]
+    let costLimit: Int
+    private let cost: (Value) -> Int
+    private var values: [String: (value: Value, cost: Int)] = [:]
     private var order: [String] = []
+    private(set) var totalCost = 0
 
-    init(limit: Int) {
-        self.limit = limit
+    init(costLimit: Int, cost: @escaping (Value) -> Int) {
+        self.costLimit = costLimit
+        self.cost = cost
     }
 
     subscript(key: String) -> Value? {
         mutating get {
-            guard let value = values[key] else { return nil }
+            guard let entry = values[key] else { return nil }
             order.removeAll { $0 == key }
             order.append(key)
-            return value
+            return entry.value
         }
         set {
             order.removeAll { $0 == key }
-            values[key] = newValue
-            guard newValue != nil else { return }
+            if let old = values.removeValue(forKey: key) { totalCost -= old.cost }
+            guard let newValue else { return }
+            let price = cost(newValue)
+            guard price <= costLimit else { return }
+            values[key] = (newValue, price)
+            totalCost += price
             order.append(key)
-            while order.count > limit { values[order.removeFirst()] = nil }
+            while totalCost > costLimit, !order.isEmpty {
+                if let dropped = values.removeValue(forKey: order.removeFirst()) { totalCost -= dropped.cost }
+            }
         }
+    }
+}
+
+extension MemoryCache where Value == CGImage {
+    /// A cache of decoded images: a bitmap costs width × height × 4 bytes.
+    init(imageBytes: Int) {
+        self.init(costLimit: imageBytes) { $0.width * $0.height * 4 }
     }
 }
