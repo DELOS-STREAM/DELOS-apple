@@ -20,6 +20,10 @@ enum HeaderTint {
     case accent
     /// The game's main color.
     case color(RGBA)
+    /// A game's: its cover's main color once worked out, the theme's accent while the interface does not take the games' colors
+    /// or the cover is grey, the placeholder art's hue while the game has no cover, a neutral chip for the short time between
+    /// a cover's decoding and its colors (`gameHeaderTint` and `HeaderTint.Pending` of DELOS for Android).
+    case cover(hostID: String, appID: Int, placeholderHue: Double)
 }
 
 /// What a menu says about its subject above its title (`MenuHeader`): an icon tile in the subject's color, a [status]
