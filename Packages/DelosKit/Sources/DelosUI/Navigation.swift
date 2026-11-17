@@ -46,6 +46,14 @@ public enum Screen: Hashable, Sendable {
     /// Whether the left menu button opens the side menu here (Android's `Screen.sideMenu`: the main screens and the start
     /// screen).
     var hasSideMenu: Bool { showsNavigation || self == .start }
+
+    /// Whether the focused game's blurred background fills the screen behind this one (`heroShown = shell.screen == Screen.Home`
+    /// of Android's `Shell.kt`): the library only. The app settings have their own blurred banner at the top and nothing else
+    /// behind them; the library's background there was a second, tilting copy of the same art that faded out as the
+    /// library went away.
+    var showsGameBackground: Bool {
+        if case .home = self { true } else { false }
+    }
 }
 
 /// Where the interface is: a back stack of screens, each with its own ``FocusModel``, so going back returns to the item

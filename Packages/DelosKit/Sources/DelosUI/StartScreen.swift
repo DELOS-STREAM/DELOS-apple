@@ -474,13 +474,8 @@ public struct DelosRoot: View {
             )
     }
 
-    /// The library's game background shows behind the library and behind the settings of one of its apps.
-    private var showsLibrary: Bool {
-        switch navigator.current {
-        case .home, .appSettings: true
-        default: false
-        }
-    }
+    /// The library's game background shows behind the library only (``Screen/showsGameBackground``).
+    private var showsLibrary: Bool { navigator.current.showsGameBackground }
 
     /// The library's row of covers is on the screen (the hint bar centres itself below it).
     private var showsLibraryRow: Bool {
