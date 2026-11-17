@@ -88,13 +88,19 @@ private struct ChipFocus: ViewModifier {
 
 // MARK: Pieces
 
-/// A selectable chip (`FilterChip`): filled with the accent while chosen, glass otherwise; the gliding ring marks the cursor.
-struct ArtChip: View {
+/// A selectable chip (`FilterChip`): filled with the accent while chosen, a flat surface otherwise (the sheet it sits on is
+/// glass already: twenty more glass layers on it, over the grid, cost the sheet its smoothness); the gliding ring marks the
+/// cursor.
+struct ArtChip: View, Equatable {
     let label: String
     let selected: Bool
     let focused: Bool
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
+
+    nonisolated static func == (a: ArtChip, b: ArtChip) -> Bool {
+        a.label == b.label && a.selected == b.selected && a.focused == b.focused
+    }
 
     var body: some View {
         Text(label)
@@ -108,7 +114,7 @@ struct ArtChip: View {
                 if selected {
                     Capsule().fill(colors.accent.color)
                 } else {
-                    GlassShape(Capsule(), tint: colors.surface).overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
+                    Capsule().fill(colors.surface2.color).overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
                 }
             }
             .modifier(ChipFocus(focused: focused))
@@ -352,7 +358,7 @@ struct ArtworkFilterSheet: View {
 
     private func chip(_ label: String, selected: Bool, key: String, action: @escaping () -> Void) -> some View {
         FocusItem(id: Self.optionID(key), model: focus, action: action) { focused in
-            ArtChip(label: label, selected: selected, focused: focused)
+            ArtChip(label: label, selected: selected, focused: focused).equatable()
         }
     }
 
