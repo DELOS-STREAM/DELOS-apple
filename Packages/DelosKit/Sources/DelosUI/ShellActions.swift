@@ -231,6 +231,8 @@ final class ShellActions {
 
     /// Hidden games of the current profile and the side menu's switch that shows them.
     let hiding = HiddenLibrary()
+    /// The library filter of each PC (Y on the home screen).
+    let libraryFilters = LibraryFilters()
 
     func isHidden(hostID: String, appID: Int) -> Bool {
         hiding.ids(profile: profiles.current?.id, hostID: hostID).contains(appID)
@@ -363,7 +365,9 @@ final class ShellActions {
         let name = hosts.host(hostID)?.name ?? ""
         if !quiet { toasts.show(L("settings_native_downloading_toast", name), icon: Symbols.download) }
         do {
-            let found = try await artwork.downloadAll(hostID: hostID, apps: apps.map { ($0.id, $0.title) }, refresh: refresh)
+            // DELOS's own entries have bundled artwork and are never looked up
+            let found = try await artwork.downloadAll(
+                hostID: hostID, apps: apps.filter { BundledArtwork.kind($0) == nil }.map { ($0.id, $0.title) }, refresh: refresh)
             guard !quiet else { return }
             toasts.show(found == 0 && !refresh ? L("settings_native_artwork_complete_toast") : LPlural("settings_native_artwork_ready_toast", found),
                         icon: Symbols.checkCircle)

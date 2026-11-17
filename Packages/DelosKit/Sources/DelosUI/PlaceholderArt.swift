@@ -1,3 +1,4 @@
+import CoreText
 import SwiftUI
 
 /// Procedural art for a game without artwork (`PlaceholderArt` of DELOS for Android, the prototype's `.art`): a dark
@@ -17,6 +18,9 @@ struct PlaceholderArt: View {
     var titleSize = 34.0
     var titleInset = 26.0
     var titleBottom = 26.0
+    /// A small cover (a compact stage's): the title is set smaller, down to 0.4 of [titleSize], until its longest word fits
+    /// a line, so no word is broken (`titleFit`).
+    var titleFit = false
     @Environment(\.stage) private var stage
 
     var body: some View {
@@ -34,8 +38,12 @@ struct PlaceholderArt: View {
                     .frame(width: size.width, alignment: .trailing)
                     .offset(x: -stage.px(glyphRight), y: size.height * glyphTop)
                 if let title {
+                    let full = stage.tpx(titleSize)
+                    let fitted = titleFit
+                        ? full * PlaceholderTitle.factor(widest: PlaceholderTitle.widestWord(title, size: full), room: size.width - 2 * stage.px(titleInset))
+                        : full
                     Text(title)
-                        .font(DelosFonts.unbounded(stage.tpx(titleSize)))
+                        .font(DelosFonts.unbounded(fitted))
                         .foregroundStyle(.white)
                         .lineSpacing(0)
                         .shadow(color: .black.opacity(0.45), radius: stage.px(12), y: stage.px(4))
@@ -65,5 +73,23 @@ struct PlaceholderArt: View {
         let cx = center.x * size.width, cy = center.y * size.height
         let r = max(hypot(cx, cy), hypot(size.width - cx, cy), hypot(cx, size.height - cy), hypot(size.width - cx, size.height - cy))
         return RadialGradient(stops: stops, center: center, startRadius: 0, endRadius: max(r, 1))
+    }
+}
+
+/// How a small cover's title shrinks so its longest word fits a line (`titleFit` of `PlaceholderArt`).
+enum PlaceholderTitle {
+    /// The factor of the full size: 3 % of the room stay free (the word laid out smaller is a pixel or two wider than the
+    /// measurement scaled down), never under 0.4 and never above 1.
+    static func factor(widest: Double, room: Double) -> Double {
+        widest <= 0 ? 1 : min(max((room * 0.97 - 1) / widest, 0.4), 1)
+    }
+
+    /// The width of the longest word of [title] set in Unbounded at [size] points on one line.
+    static func widestWord(_ title: String, size: Double) -> Double {
+        let font = CTFontCreateWithName("Unbounded" as CFString, size, nil)
+        return title.split(separator: " ").map { word in
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: String(word), attributes: [NSAttributedString.Key(kCTFontAttributeName as String): font]))
+            return CTLineGetTypographicBounds(line, nil, nil, nil)
+        }.max() ?? 0
     }
 }

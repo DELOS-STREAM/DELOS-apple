@@ -24,13 +24,8 @@ final class GameMetadataModel {
 
     static func key(_ title: String) -> String { MetadataPolicy.literalKey(title) }
 
-    /// DELOS's own entries (Remote Input and Remote Monitor by their UUID, the others by name) have no metadata.
-    static func isBuiltIn(_ app: HostApp) -> Bool {
-        let uuid = app.uuid?.lowercased()
-        if uuid == "9a1c5a25-58fe-40e0-b9aa-7d3f00000006" || uuid == "9a1c5a25-58fe-40e0-b9aa-7d3f00000005" { return true }
-        return ["desktop", "remote input", "remote monitor", "steam big picture", "steam bigpicture"]
-            .contains(app.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
-    }
+    /// DELOS's own entries (Desktop, Remote Input, ...) have no metadata.
+    static func isBuiltIn(_ app: HostApp) -> Bool { BundledArtwork.kind(app) != nil }
 
     /// Whether the game can have metadata at all (the Metadata menu entry shows for these only).
     func offers(_ app: HostApp) -> Bool { enabled && !Self.isBuiltIn(app) }
@@ -43,16 +38,59 @@ final class GameMetadataModel {
         let key = Self.key(app.title)
         guard !key.isEmpty, asked.insert(key).inserted else { return }
         let title = app.title
-        Task {
-            let cached = await store.state(for: title)
-            if states[key] == nil { states[key] = cached }
-            do {
-                states[key] = try await store.lookup(title: title)
-            } catch {
-                asked.remove(key)
-            }
+        Task { await load(key: key, title: title) }
+    }
+
+    private func load(key: String, title: String) async {
+        let cached = await store.state(for: title)
+        if states[key] == nil { states[key] = cached }
+        do {
+            states[key] = try await store.lookup(title: title)
+        } catch {
+            asked.remove(key)
         }
     }
+
+    /// The whole library's information (`ensureLibrary` of DELOS for Android): every stored record is published first, so
+    /// the filter and its genre list are complete at once, then the ones that are due are refreshed, a few at a time.
+    func ensureLibrary(_ apps: [HostApp]) async {
+        let games = apps.filter(offers)
+        for app in games {
+            let key = Self.key(app.title)
+            guard !key.isEmpty, states[key] == nil else { continue }
+            let cached = await store.state(for: app.title)
+            guard !Task.isCancelled else { return }
+            if states[key] == nil { states[key] = cached }
+        }
+        var todo: [(key: String, title: String)] = []
+        for app in games {
+            let key = Self.key(app.title)
+            if !key.isEmpty, asked.insert(key).inserted { todo.append((key, app.title)) }
+        }
+        var started = 0
+        await withTaskGroup(of: Void.self) { group in
+            while started < min(Self.libraryConcurrency, todo.count) {
+                let (key, title) = todo[started]
+                started += 1
+                group.addTask { await self.load(key: key, title: title) }
+            }
+            while await group.next() != nil {
+                guard !Task.isCancelled else {
+                    group.cancelAll()
+                    break
+                }
+                guard started < todo.count else { continue }
+                let (key, title) = todo[started]
+                started += 1
+                group.addTask { await self.load(key: key, title: title) }
+            }
+        }
+        // What was not asked about because the screen went away is asked about next time
+        for item in todo[started...] { asked.remove(item.key) }
+    }
+
+    /// How many games the library's refresh asks about at once.
+    static let libraryConcurrency = 3
 
     /// A refresh, reset or match the user asked for. The state afterwards is the store's; a thrown error is the caller's.
     func perform(_ app: HostApp, _ operation: @Sendable (MetadataStore, String) async throws -> GameMetadataState) async throws -> GameMetadataState {

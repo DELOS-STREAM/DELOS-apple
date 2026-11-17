@@ -1,5 +1,6 @@
 import DelosData
 import DelosHost
+import DelosInput
 import SwiftUI
 
 /// What the library of a PC shows (`Library` of DELOS for Android, for one PC).
@@ -79,29 +80,69 @@ struct HomeScreen: View {
     @Environment(Layers.self) private var layers
     @Environment(HostStore.self) private var hosts
     @Environment(HomeArt.self) private var art
+    @Environment(GameMetadataModel.self) private var metadata
+    @Environment(Navigator.self) private var navigator
+    @Environment(\.stage) private var stage
+    @Environment(\.reducedMotion) private var reducedMotion
     @State private var loadFailed = false
+    /// The library filter's sheet (Y or the filter button): its focus is new each time it opens.
+    @State private var sheetOpen = false
+    @State private var sheetFocus = FocusModel()
+    /// The item that had the focus before the sheet opened, to return to it.
+    @State private var origin: AnyHashable?
+    /// The library has games and information about them to filter by: Y and the button are there.
+    @State private var offered = false
 
     /// The focus the screen opens with: no item has it, so the covers, once loaded, give it to the first one.
     static let initialFocus = "first-app"
 
+    private var content: HomeContent { HomeContent(apps: hosts.apps[hostID], loadFailed: loadFailed) }
+
+    /// The games the library lists before the filter: the PC's, without the hidden ones, in the library's order.
+    private var listed: [HostApp] {
+        if case .apps(let apps) = content { actions.libraryOrder(hostID: hostID, apps: apps) } else { [] }
+    }
+
+    /// This PC's filter; without a metadata service there is nothing to filter by.
+    private var filters: MetadataFilters {
+        metadata.enabled ? actions.libraryFilters.filters(hostID: hostID) : MetadataFilters()
+    }
+
     var body: some View {
         let name = hosts.host(hostID)?.name ?? ""
-        Group {
-            switch HomeContent(apps: hosts.apps[hostID], loadFailed: loadFailed) {
-            case .loading: HomeMessage(icon: Symbols.loading, title: L("home_loading"), text: nil)
-            case .offline: HomeMessage(icon: Symbols.wifiOff, title: L("home_offline_title", name), text: nil)
-            case .empty: HomeMessage(icon: Symbols.sportsEsports, title: L("home_empty_title", name), text: L("home_empty_note"))
-            case .apps(let apps):
-                let shown = actions.libraryOrder(hostID: hostID, apps: apps)
-                // Every game hidden: the library has nothing to show until the side menu's switch is on
-                if shown.isEmpty {
-                    HomeMessage(icon: Symbols.sportsEsports, title: L("home_empty_title", name), text: L("home_empty_note"))
-                } else {
-                    GameLibrary(hostID: hostID, apps: shown, focus: focus, actions: actions)
+        let listed = self.listed
+        let filters = self.filters
+        let visible = LibraryFilter.apply(filters, to: listed) { metadata.data(for: $0) }
+        let metrics = HomeMetrics(stage: stage)
+        let offeredNow = metadata.enabled && !listed.isEmpty
+        ZStack {
+            Group {
+                switch content {
+                case .loading: HomeMessage(icon: Symbols.loading, title: L("home_loading"), text: nil)
+                case .offline: HomeMessage(icon: Symbols.wifiOff, title: L("home_offline_title", name), text: nil)
+                case .empty: HomeMessage(icon: Symbols.sportsEsports, title: L("home_empty_title", name), text: L("home_empty_note"))
+                case .apps:
+                    // Every game hidden: the library has nothing to show until the side menu's switch is on
+                    if listed.isEmpty {
+                        HomeMessage(icon: Symbols.sportsEsports, title: L("home_empty_title", name), text: L("home_empty_note"))
+                    } else if visible.isEmpty {
+                        FilteredLibraryEmpty(focus: focus, onReset: resetFilters)
+                    } else {
+                        GameLibrary(hostID: hostID, apps: visible, focus: focus, actions: actions,
+                                    titleWidth: metrics.infoWidth - (offeredNow ? LibraryFilterButton.reserve(compact: stage.compact) : 0))
+                    }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // The screen under the sheet blurs like under every layer
+            .modifier(LayerBackdropBlur(active: sheetOpen))
+            if offeredNow {
+                filterButton(filters: filters, metrics: metrics)
+            }
+            sheet(filters: filters, listed: listed)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .environment(\.modalFocus, sheetOpen ? sheetFocus : nil)
         .task(id: hostID) {
             art.hero = nil
             await hosts.refresh(hostID)
@@ -114,10 +155,138 @@ struct HomeScreen: View {
             }
             await actions.downloadArtwork(hostID: hostID, refresh: false, quiet: true)
         }
-        .onChange(of: HomeContent(apps: hosts.apps[hostID], loadFailed: loadFailed)) { _, now in
+        // The whole library's information, so the filter and its genre list are complete (the focused game is asked for by the row)
+        .task(id: "\(hostID)#\(metadata.enabled)#\(listed.map(\.id))") {
+            guard metadata.enabled else { return }
+            await metadata.ensureLibrary(listed)
+        }
+        .onChange(of: content) { _, now in
             // Without games there is no game background
             if case .apps = now {} else { art.hero = nil }
         }
+        .onChange(of: offeredNow, initial: true) { _, now in
+            offered = now
+            if !now, sheetOpen { closeSheet(silently: true) }
+        }
+        .onChange(of: filters.active) { was, now in
+            // Reset disables itself once nothing is filtered; if it had the focus, the focus goes back to the first option
+            if was, !now, sheetOpen, sheetFocus.focused == AnyHashable(LibraryFilterIDs.reset) {
+                sheetFocus.focus(LibraryFilterIDs.start(filters, genres: LibraryFilter.genres(listed.map { metadata.data(for: $0) })))
+            }
+        }
+        .onChange(of: ScreenFilter(label: offeredNow ? LibraryFilter.hintLabel(filters) : nil, open: sheetOpen), initial: true) { _, now in
+            navigator.screenHints = ScreenHints(sheetOpen: now.open, filterLabel: now.label)
+        }
+        .onAppear { navigator.commandCapture = { command in capture(command) } }
+        .onDisappear {
+            navigator.commandCapture = nil
+            navigator.screenHints = ScreenHints()
+        }
+    }
+
+    /// What the hint bar needs of the filter: Y's label (nil: no filter here) and whether the sheet is open.
+    private struct ScreenFilter: Equatable {
+        let label: String?
+        let open: Bool
+    }
+
+    // MARK: Filter button and sheet
+
+    /// The filter button at the title row's end: touch and the focus reach the filter as well as Y.
+    private func filterButton(filters: MetadataFilters, metrics: HomeMetrics) -> some View {
+        FocusItem(id: LibraryFilterIDs.button, model: focus, clickCue: nil, action: { openSheet() }) { focused in
+            LibraryFilterButton(count: filters.activeCount, focused: focused)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .padding(.top, stage.px(metrics.titleTop + max(metrics.titleBox - LibraryFilterButton.height, 0) / 2))
+        .padding(.trailing, stage.px((metrics.compact ? HomeCompact.side : 150) + stage.safe.trailing))
+        // Behind an open context menu it dims with the info block
+        .opacity(CoverTone.info(menuOpen: { if case .context = layers.layer { true } else { false } }()))
+        .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: layers.generation)
+    }
+
+    @ViewBuilder private func sheet(filters: MetadataFilters, listed: [HostApp]) -> some View {
+        if sheetOpen {
+            let games = listed.map { metadata.data(for: $0) }
+            let matching = games.indices.count { filters.matches(games[$0], builtIn: BundledArtwork.kind(listed[$0]) != nil) }
+            LayerScrim(onTap: { closeSheet() })
+            LibraryFilterSheet(
+                state: LibraryFilterState(filters: filters, games: games, matching: matching), focus: sheetFocus,
+                onChange: { actions.libraryFilters.set($0, hostID: hostID) }, onReset: resetFilters, onClose: { closeSheet() })
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(popTransition)
+        }
+    }
+
+    /// The sheet settles in from a slight scale and leaves the same way (`dialogEnter` / `dialogExit`).
+    private var popTransition: AnyTransition {
+        if reducedMotion {
+            return .asymmetric(
+                insertion: .opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000)),
+                removal: .opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.exit / 1000)))
+        }
+        return .asymmetric(
+            insertion: .opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000))
+                .combined(with: .scale(scale: Motion.dialogFromScale).animation(Motion.out(Motion.popIn)))
+                .combined(with: SlideByHeight(fraction: 1 / 25).animation(Motion.out(Motion.popIn))),
+            removal: .opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.exit / 1000))
+                .combined(with: .scale(scale: Motion.dialogFromScale).animation(LayerHost.easeIn(Motion.exit)))
+                .combined(with: SlideByHeight(fraction: 1 / 25).animation(LayerHost.easeIn(Motion.exit))))
+    }
+
+    private func openSheet() {
+        guard offered, !sheetOpen else { return }
+        let games = listed.map { metadata.data(for: $0) }
+        actions.layers.feedback?.play(.open)
+        origin = focus.focused
+        sheetFocus = FocusModel(initial: LibraryFilterIDs.start(filters, genres: LibraryFilter.genres(games)))
+        navigator.armInputGate()
+        withAnimation { sheetOpen = true }
+    }
+
+    private func closeSheet(silently: Bool = false) {
+        guard sheetOpen else { return }
+        if !silently { actions.layers.feedback?.play(.back) }
+        withAnimation { sheetOpen = false }
+        // The focus goes back to where it was; a cover the filter removed leaves it on the game that took its place
+        var stillThere = true
+        if let id = origin as? String, id.hasPrefix("app-") {
+            stillThere = LibraryFilter.apply(filters, to: listed) { metadata.data(for: $0) }.contains { GameLibrary.id($0) == id }
+        }
+        if stillThere, let origin { focus.focus(origin) }
+    }
+
+    private func resetFilters() {
+        guard filters.active else { return }
+        actions.layers.feedback?.play(.select)
+        actions.libraryFilters.set(MetadataFilters(), hostID: hostID)
+    }
+
+    /// Y opens the filter; with the sheet open it has every command: X resets, Y and B close it. A toast that has its own
+    /// action keeps Y.
+    private func capture(_ command: MenuCommand) -> Bool {
+        if sheetOpen { return captureSheet(command) }
+        guard command == .toastAction, offered, actions.toasts.current?.action == nil else { return false }
+        openSheet()
+        return true
+    }
+
+    private func captureSheet(_ command: MenuCommand) -> Bool {
+        let feedback = actions.layers.feedback
+        switch command {
+        case .back, .toastAction:
+            closeSheet()
+        case .options:
+            resetFilters()
+        case .accept:
+            guard !navigator.swallowsAccept() else { break }
+            if let feedback { feedback.activate(sheetFocus.acceptCue) { sheetFocus.handle(.accept) } } else { sheetFocus.handle(.accept) }
+        case .up, .down, .left, .right:
+            if sheetFocus.handle(command) { feedback?.play(.move) }
+        case .previousTab, .nextTab, .menu:
+            break
+        }
+        return true
     }
 }
 
@@ -235,6 +404,9 @@ private struct RowEdgeFade: ViewModifier, Animatable {
     /// The stage's width in stage pixels.
     let width: Double
     let overdraw: Double
+    /// The right fade: opaque up to [endSolid] from the edge, clear from [endClear] (stage pixels).
+    var endSolid = RowFade.endSolid
+    var endClear = RowFade.endClear
 
     nonisolated var animatableData: AnimatablePair<Double, Double> {
         get { AnimatablePair(back, forward) }
@@ -244,7 +416,7 @@ private struct RowEdgeFade: ViewModifier, Animatable {
     func body(content: Content) -> some View {
         let stops = RowFade.stops(
             width: width, startClear: 0, startSolid: RowFade.start * back,
-            endSolid: RowFade.endSolid * forward, endClear: RowFade.endClear * forward)
+            endSolid: endSolid * forward, endClear: endClear * forward)
         content.mask {
             LinearGradient(
                 stops: stops.map { .init(color: .black.opacity($0.opacity), location: $0.location) },
@@ -271,6 +443,8 @@ struct GameLibrary: View {
     let apps: [HostApp]
     let focus: FocusModel
     let actions: ShellActions
+    /// The width the title may take: the info row's, less what stands at its end (the filter button).
+    let titleWidth: Double
     @Environment(HostStore.self) private var hosts
     @Environment(HomeArt.self) private var art
     @Environment(GameMetadataModel.self) private var metadata
@@ -288,24 +462,7 @@ struct GameLibrary: View {
     @State private var rowBounce = 0.0
     @State private var wrap: Task<Void, Never>?
 
-    static let tile = 300.0, height = 450.0, gap = 44.0
-    /// The wide first cover: three covers and the two gaps between them.
-    static let wide = 3 * tile + 2 * gap
-    /// Room above and below the covers for the focus scale, the ring and the glow, which the scroll view would cut.
-    static let rowPad = 40.0
-    static let focusScale = 1.055
-
-    /// Where cover [index] starts in the row, stage pixels from the first one.
-    static func itemStart(_ index: Int) -> Double {
-        index == 0 ? 0 : wide + gap + Double(index - 1) * (tile + gap)
-    }
-
-    /// The room after the last cover (`CoverGeometry.endPadding`): the focused wide first cover grows only to the left, so
-    /// it ends closer to the edge than the others, which grow evenly; the last cover, focused, is as far from the right
-    /// edge as the first one, focused, is from the left one (about 104 px for the first cover's 150 px).
-    static func endPadding(start: Double) -> Double {
-        start - wide * (focusScale - 1) + tile * (focusScale - 1) / 2
-    }
+    static let focusScale = CoverGeometry.focusScale
 
     /// A or a tap on [app] opens its menu (another game runs on the PC) instead of starting it.
     private func offersChoices(_ app: HostApp) -> Bool {
@@ -324,23 +481,24 @@ struct GameLibrary: View {
         // Before the library takes the focus, the game it will take it with is the one shown
         let current = focusedIndex ?? LibraryFocus.initial(apps: ids, focused: nil, remembered: actions.homeGame(hostID: hostID))
         let focused = apps[current]
-        let layout = HomeLayout(scale: stage.textScale, safeTop: stage.safe.top, stageHeight: stage.height)
+        let metrics = HomeMetrics(stage: stage)
+        let covers = metrics.covers
         let host = hosts.host(hostID)
         let running = host.flatMap { $0.runningAppID == 0 ? nil : $0.runningAppID }
         let last = actions.lastPlayed(hostID: hostID)
-        let start = 150 + stage.safe.leading
-        let end = Self.endPadding(start: 150 + stage.safe.trailing)
+        let start = metrics.rowStart(safeLeading: stage.safe.leading)
+        let end = metrics.rowEnd
         let keys = apps.map { AnyHashable(Self.id($0)) }
         ZStack(alignment: .topLeading) {
             GameInfo(hostID: hostID, app: focused, pcName: host?.name ?? "", running: running == focused.id,
-                     playtime: actions.playtime(hostID: hostID, appID: focused.id), layout: layout)
-                .padding(.leading, stage.px(start))
-                .padding(.top, stage.px(layout.titleTop))
+                     playtime: actions.playtime(hostID: hostID, appID: focused.id), metrics: metrics, titleWidth: titleWidth)
+                .padding(.leading, stage.px(metrics.infoStart))
+                .padding(.top, stage.px(metrics.titleTop))
                 // Behind an open context menu the info block dims to 40 %
                 .opacity(CoverTone.info(menuOpen: menuOpen))
                 .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: menuOpen)
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: stage.px(Self.gap)) {
+                HStack(spacing: stage.px(covers.gap)) {
                     ForEach(Array(apps.enumerated()), id: \.element.id) { index, app in
                         let badge: CoverBadge? = app.id == running ? .running : index == 0 && app.id == last ? .lastPlayed : nil
                         FocusItem(
@@ -351,14 +509,14 @@ struct GameLibrary: View {
                             action: { actions.activate(hostID: hostID, app: app, focus: focus) }
                         ) { isFocused in
                             Cover(hostID: hostID, app: app, wide: index == 0, focused: isFocused, menuOpen: menuOpen, badge: badge,
-                                  marks: actions.marks(hostID: hostID, appID: app.id))
+                                  marks: actions.marks(hostID: hostID, appID: app.id), geometry: covers)
                         }
                         .staggerEntrance()
                     }
                 }
                 .padding(.leading, stage.px(start))
                 .padding(.trailing, stage.px(end))
-                .padding(.vertical, stage.px(Self.rowPad))
+                .padding(.vertical, stage.px(metrics.rowPad))
                 .focusDrivenScroll()
             }
             .entranceScope()
@@ -373,8 +531,10 @@ struct GameLibrary: View {
             } action: { _, now in
                 ends = now
             }
-            .padding(.top, stage.px(layout.coverTop - Self.rowPad))
-            .modifier(RowEdgeFade(back: ends.back ? 1 : 0, forward: ends.forward ? 1 : 0, width: stage.width, overdraw: stage.px(1000)))
+            .padding(.top, stage.px(metrics.coverTop - metrics.rowPad))
+            .modifier(RowEdgeFade(
+                back: ends.back ? 1 : 0, forward: ends.forward ? 1 : 0, width: stage.width, overdraw: stage.px(1000),
+                endSolid: metrics.fadeSolid, endClear: metrics.fadeClear))
             .animation(Motion.fastOutSlowIn(300), value: ends)
             .opacity(rowAlpha)
             .offset(x: stage.px(rowBounce))
@@ -434,7 +594,7 @@ struct GameLibrary: View {
 
     /// Scrolls the row so cover [index] stands at its start: animated, or at once with reduced motion or no [animation].
     private func scroll(to index: Int, animation: Animation?) {
-        let x = stage.px(Self.itemStart(index))
+        let x = stage.px(HomeMetrics(stage: stage).covers.itemStart(index))
         if let animation, !reduceMotion {
             withAnimation(animation) { position.scrollTo(x: x) }
         } else {
@@ -463,7 +623,8 @@ struct GameLibrary: View {
                 guard !Task.isCancelled else { return }
                 withAnimation(.easeOut(duration: 0.26)) { rowAlpha = 1 }
             }
-            let distance = abs(Self.itemStart(target) - Self.itemStart(min(source, apps.count - 1)))
+            let covers = HomeMetrics(stage: stage).covers
+            let distance = abs(covers.itemStart(target) - covers.itemStart(min(source, apps.count - 1)))
             scroll(to: target, animation: .timingCurve(0.45, 0.05, 0.8, 0.65, duration: 0.36))
             try? await Task.sleep(for: .milliseconds(360))
             guard !Task.isCancelled else { return }
@@ -478,6 +639,8 @@ struct GameLibrary: View {
 
     /// The game background's image: the SteamGridDB hero, else the cover, else the PC's box art.
     private func heroImage(_ app: HostApp) async -> CGImage? {
+        // DELOS's own entries have bundled artwork; a game has SteamGridDB's, else the PC's box art
+        if BundledArtwork.kind(app) != nil { return await art.image(hostID: hostID, app: app, kind: .hero) }
         if art.artwork.enabled {
             if let hero = await art.image(hostID: hostID, appID: app.id, kind: .hero) { return hero }
             if let cover = await art.image(hostID: hostID, appID: app.id, kind: .cover) { return cover }
@@ -495,7 +658,9 @@ private struct GameInfo: View {
     let pcName: String
     let running: Bool
     let playtime: Playtime
-    let layout: HomeLayout
+    let metrics: HomeMetrics
+    /// The width the title may take: the info row's, less what stands at the title's end (the filter button).
+    let titleWidth: Double
     @Environment(GameMetadataModel.self) private var metadata
     @Environment(HomeArt.self) private var art
     @Environment(\.matchGameColors) private var matchGameColors
@@ -511,11 +676,11 @@ private struct GameInfo: View {
         // The colors of the animated background: the cover's, the game background's while those are unknown
         let gameColors = matchGameColors ? art.gameColors(GameArt.key(hostID, app.id)) : nil
         VStack(alignment: .leading, spacing: 0) {
-            GameTitle(hostID: hostID, app: app, box: layout.titleBox)
-            Spacer().frame(height: stage.px(layout.titleGap))
-            InfoRow(playtime: playtime, height: layout.infoHeight,
+            GameTitle(hostID: hostID, app: app, metrics: metrics, width: titleWidth)
+            Spacer().frame(height: stage.px(metrics.titleGap))
+            InfoRow(playtime: playtime, height: metrics.infoHeight,
                     hasFacts: running || hdr != nil || completion != nil,
-                    hasTags: !genres.isEmpty || !themes.isEmpty) {
+                    hasTags: !genres.isEmpty || !themes.isEmpty, above: metrics.blockAbove) {
                 if running { InfoChip(icon: Symbols.running, label: L("home_chip_running_on", pcName)) }
                 switch hdr {
                 case .hdr: NativeHDRChip()
@@ -530,18 +695,19 @@ private struct GameInfo: View {
                 if !genres.isEmpty { GenrePill(genres: genres, gameColors: gameColors) }
                 if !themes.isEmpty { ThemePill(themes: themes, gameColors: gameColors) }
             }
-            .frame(maxWidth: stage.px(1620), alignment: .leading)
+            .frame(maxWidth: stage.px(metrics.infoWidth), alignment: .leading)
         }
     }
 }
 
 /// The SteamGridDB logo in the title box (fitted, at the start), else the name in a gradient from the text color into
 /// the game background's main color; the space is kept while the logo is being looked for. Both enter by sliding in
-/// from 32 px to the left over 800 ms.
+/// from 32 px to the left over 800 ms. DELOS's own entries have no logo: they show their name.
 private struct GameTitle: View {
     let hostID: String
     let app: HostApp
-    let box: Double
+    let metrics: HomeMetrics
+    let width: Double
     @Environment(HomeArt.self) private var art
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
@@ -556,11 +722,12 @@ private struct GameTitle: View {
                 Image(decorative: logo, scale: 1)
                     .resizable()
                     .scaledToFit()
-                    .frame(maxWidth: stage.px(900), maxHeight: stage.px(box - 2 * HomeLayout.logoPad), alignment: .leading)
+                    .frame(maxWidth: stage.px(min(metrics.logoWidth(stageWidth: stage.width), width)),
+                           maxHeight: stage.px(metrics.titleBox - 2 * metrics.logoPad), alignment: .leading)
                     .accessibilityLabel(app.title)
                     .modifier(TitleEntrance(key: key + "/logo", reduced: reduceMotion))
             } else if resolved {
-                let size = app.title.count > 22 ? 56.0 : app.title.count > 13 ? 68 : 84
+                let size = metrics.titleSize(length: app.title.count)
                 let placeholder = GameArt(hostID: hostID, app: app)
                 Text(app.title)
                     .font(DelosFonts.unbounded(stage.tpx(size), .bold))
@@ -570,12 +737,19 @@ private struct GameTitle: View {
                         stops: [.init(color: colors.text.color, location: 0.25),
                                 .init(color: hsl(art.heroHue(key) ?? placeholder.hue2, 70, 58).color, location: 1)],
                         startPoint: .top, endPoint: .bottom))
-                    .padding(.trailing, stage.px(150))
+                    .padding(.trailing, stage.px(metrics.compact ? HomeCompact.side : 150))
+                    .frame(maxWidth: stage.px(width), alignment: .leading)
                     .modifier(TitleEntrance(key: key, reduced: reduceMotion))
             }
         }
-        .frame(height: stage.px(box), alignment: .leading)
+        .frame(height: stage.px(metrics.titleBox), alignment: .leading)
         .task(id: "\(key)#\(art.artwork.version)") {
+            // Bundled entries keep their name as the logo
+            if BundledArtwork.kind(app) != nil {
+                logo = nil
+                resolved = true
+                return
+            }
             let cached = art.cachedImage(hostID: hostID, appID: app.id, kind: .logo)
             logo = cached
             resolved = cached != nil || !art.artwork.enabled
@@ -648,6 +822,8 @@ private struct Cover: View {
     let badge: CoverBadge?
     /// The icon-only pills of the top-right corner (hidden, custom settings).
     var marks: [CoverMark] = []
+    /// The covers' size: the prototype's, or a compact stage's.
+    var geometry = CoverGeometry.standard
     @Environment(HostStore.self) private var hosts
     @Environment(HomeArt.self) private var art
     @Environment(\.delosColors) private var colors
@@ -658,26 +834,30 @@ private struct Cover: View {
     static let lookupGiveUp = Duration.seconds(20)
 
     var body: some View {
-        let width = wide ? GameLibrary.wide : GameLibrary.tile
+        let width = wide ? geometry.wide : geometry.tile
         let tone = CoverTone.of(focused: focused, menuOpen: menuOpen)
-        let shape = RoundedRectangle(cornerRadius: stage.px(26))
+        let shape = RoundedRectangle(cornerRadius: stage.px(geometry.corner))
         let placeholder = GameArt(hostID: hostID, app: app)
         ZStack(alignment: .topLeading) {
             shape.fill(colors.surface2.color)
             ZStack {
                 if let shown {
                     Image(decorative: shown, scale: 1).resizable().scaledToFill()
-                        .frame(width: stage.px(width), height: stage.px(GameLibrary.height))
+                        .frame(width: stage.px(width), height: stage.px(geometry.height))
                         // The idle and menu filters (`IdleCoverFilter`, `menuDimCoverFilter`); the placeholder art has none
                         .saturation(tone.saturation)
                         .colorMultiply(Color(white: tone.brightness))
                         .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: menuOpen)
                         .transition(.opacity)
                 } else {
+                    // A compact stage's small covers set the placeholder's title smaller (the wide one at most 40 %, the others at most
+                    // 20 %, then fitted to their longest word), with the cover's own inset
+                    let s = geometry.scale
                     PlaceholderArt(
                         hue: placeholder.hue, hue2: placeholder.hue2, icon: placeholder.icon,
-                        glyphSize: wide ? 420 : 320, glyphRight: wide ? 40 : -36, glyphTop: wide ? 0.04 : 0.24,
-                        title: app.title, titleSize: wide ? 72 : 34, titleInset: wide ? 44 : 26, titleBottom: wide ? 40 : 26)
+                        glyphSize: (wide ? 420 : 320) * s, glyphRight: (wide ? 40 : -36) * s, glyphTop: wide ? 0.04 : 0.24,
+                        title: app.title, titleSize: (wide ? 72 : 34) * min(max(s, wide ? 0.6 : 0.8), 1),
+                        titleInset: (wide ? 44 : 26) * s, titleBottom: (wide ? 40 : 26) * s, titleFit: s < 1)
                 }
             }
             .animation(Motion.fastOutSlowIn(400), value: shown.map(ObjectIdentifier.init))
@@ -714,13 +894,13 @@ private struct Cover: View {
                 .padding(stage.px(18))
             }
         }
-        .frame(width: stage.px(width), height: stage.px(GameLibrary.height))
+        .frame(width: stage.px(width), height: stage.px(geometry.height))
         .clipShape(shape)
         // The online pulse of the start screen, around the selected game (`focusPulse`), inside the scaled layer
-        .background { if focused { FocusPulse(corner: 26) } }
+        .background { if focused { FocusPulse(corner: geometry.corner) } }
         // Android's TILE_FOCUS_SCALE; the wide first cover grows only to the left, so it never covers its neighbour. The
         // ring is `FocusRing(5, 5)` with the gap in the background color, the glow `FocusGlow(30, 80, -18)`
-        .focusLook(focused, scale: 1.055, ring: 5, glowBlur: 80, glowY: 30, corner: 26, anchor: wide ? .trailing : .center, sweep: true,
+        .focusLook(focused, scale: 1.055, ring: 5, glowBlur: 80, glowY: 30, corner: geometry.corner, anchor: wide ? .trailing : .center, sweep: true,
                    glowSpread: -18, gap: 5)
         .task(id: "\(app.id)#\(art.artwork.version)") { await load() }
     }
@@ -728,6 +908,14 @@ private struct Cover: View {
     private func load() async {
         let key = GameArt.key(hostID, app.id)
         let artwork = art.artwork
+        // DELOS's own entries have bundled artwork and nothing to look up: the placeholder stays while it decodes
+        if BundledArtwork.kind(app) != nil {
+            let cover = await art.image(hostID: hostID, app: app, kind: .cover)
+            guard let tile = wide ? await art.image(hostID: hostID, app: app, kind: .wide) : cover else { return }
+            shown = tile
+            art.analyzeCover(key, cover ?? tile)
+            return
+        }
         var cover: CGImage?
         if artwork.enabled {
             cover = await art.image(hostID: hostID, appID: app.id, kind: .cover)
@@ -805,19 +993,55 @@ private struct HomeMessage: View {
     @Environment(\.stage) private var stage
 
     var body: some View {
+        // A compact stage keeps the message off the edges and sets its icon and headline smaller
         VStack(spacing: stage.px(22)) {
-            SymbolView(symbol: icon, size: 110, color: colors.accent, filled: true)
+            SymbolView(symbol: icon, size: stage.compact ? 84 : 110, color: colors.accent, filled: true)
             Text(title)
-                .font(DelosFonts.unbounded(stage.tpx(52)))
+                .font(DelosFonts.unbounded(stage.tpx(stage.compact ? 42 : 52)))
                 .foregroundStyle(colors.text.color)
             if let text {
                 Text(text)
                     .font(DelosFonts.figtree(stage.tpx(26)))
+                    .lineSpacing(stage.tpx(26) * 0.45)
                     .foregroundStyle(colors.text2.color)
             }
         }
         .multilineTextAlignment(.center)
+        .padding(.horizontal, stage.compact ? stage.px(48) : 0)
         .staggerEntrance(index: 0, base: Motion.menuDelay)
+    }
+}
+
+/// The library when the filter lets no game through (`FilteredLibraryEmpty` of DELOS for Android): what happened, how to
+/// change the filter, and a button that resets it. It has the focus; the game background is gone.
+private struct FilteredLibraryEmpty: View {
+    let focus: FocusModel
+    let onReset: () -> Void
+    @Environment(HomeArt.self) private var art
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+
+    var body: some View {
+        VStack(spacing: stage.px(22)) {
+            Text(L("metadata_filtered_title"))
+                .font(DelosFonts.figtree(stage.tpx(38)))
+                .foregroundStyle(colors.text.color)
+            Text(L("metadata_filtered_note", "Y"))
+                .font(DelosFonts.figtree(stage.tpx(24)))
+                .foregroundStyle(colors.text2.color)
+            FocusItem(id: LibraryFilterIDs.emptyReset, model: focus, action: onReset) { focused in
+                PillButton(label: L("metadata_filtered_reset"), icon: Symbols.reset, focused: focused)
+            }
+            .padding(.top, stage.px(8))
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: stage.px(900))
+        .padding(.horizontal, stage.compact ? stage.px(48) : 0)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            art.hero = nil
+            focus.focus(LibraryFilterIDs.emptyReset)
+        }
     }
 }
 

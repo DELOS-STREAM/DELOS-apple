@@ -28,21 +28,8 @@ struct GameArt: Equatable {
         self.image = image
     }
 
-    /// The placeholder's icon of DELOS's own entries (`appArt`: `BundledArtwork.kind`), nil for a game.
-    static func builtInIcon(_ app: HostApp) -> String? {
-        switch app.uuid?.lowercased() {
-        case "9a1c5a25-58fe-40e0-b9aa-7d3f00000006": return Symbols.remoteInput
-        case "9a1c5a25-58fe-40e0-b9aa-7d3f00000005": return Symbols.remoteMonitor
-        default: break
-        }
-        switch app.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "desktop": return Symbols.desktopApp
-        case "remote input": return Symbols.remoteInput
-        case "remote monitor": return Symbols.remoteMonitor
-        case "steam big picture", "steam bigpicture": return Symbols.steam
-        default: return nil
-        }
-    }
+    /// The placeholder's icon of DELOS's own entries (`appArt`), nil for a game.
+    static func builtInIcon(_ app: HostApp) -> String? { BundledArtwork.kind(app)?.icon }
 
     static func key(_ hostID: String, _ appID: Int) -> String { "\(hostID)/\(appID)" }
 
@@ -97,6 +84,23 @@ final class HomeArt {
               let image = await Self.decode(data, maxPixels: kind == .logo ? 1200 : kind == .hero ? 2560 : 1500) else { return nil }
         images[key] = image
         return image
+    }
+
+    /// The image of [kind] for [app]: DELOS's own entries (Desktop, Remote Input, ...) have bundled artwork, a game its
+    /// SteamGridDB image; nil when there is none (the logo of a bundled entry is its name).
+    func image(hostID: String, app: HostApp, kind: ArtKind) async -> CGImage? {
+        guard let bundled = BundledArtwork.kind(app) else { return await image(hostID: hostID, appID: app.id, kind: kind) }
+        let key = "bundled/\(bundled.rawValue)/\(kind.rawValue)"
+        if let image = images[key] { return image }
+        guard let image = await BundledArtwork.image(bundled, kind, maxPixels: kind == .hero ? 2560 : 1500) else { return nil }
+        images[key] = image
+        return image
+    }
+
+    /// The same without waiting, for what is in memory already.
+    func cachedImage(hostID: String, app: HostApp, kind: ArtKind) -> CGImage? {
+        if let bundled = BundledArtwork.kind(app) { return images["bundled/\(bundled.rawValue)/\(kind.rawValue)"] }
+        return cachedImage(hostID: hostID, appID: app.id, kind: kind)
     }
 
     /// The PC's box art of an app, from the cache or the PC.

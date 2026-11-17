@@ -41,6 +41,18 @@ private struct QuietProviders: MetadataProviders {
         #expect(!on.offers(HostApp(id: 4, title: "Anything", uuid: "9a1c5a25-58fe-40e0-b9aa-7d3f00000005")))
     }
 
+    @Test func theWholeLibraryIsAskedAboutExceptTheBuiltInEntries() async {
+        let on = model(available: true)
+        let apps = [HostApp(id: 1, title: "Desktop")] + (2...8).map { HostApp(id: $0, title: "Game \($0)") }
+        await on.ensureLibrary(apps)
+        #expect(on.states.count == 7)
+        #expect(on.states[GameMetadataModel.key("Desktop")] == nil)
+        #expect(apps.dropFirst().allSatisfy { on.states[GameMetadataModel.key($0.title)] != nil })
+        // A second pass asks again about nothing
+        await on.ensureLibrary(apps)
+        #expect(on.states.count == 7)
+    }
+
     @Test func aSeededStateIsFoundByTheLiteralTitle() {
         let on = model(available: true)
         on.seed("The Witcher 3", GameMetadataState(data: GameMetadata(steamTags: ["RPG"]), resolved: true))

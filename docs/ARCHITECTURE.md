@@ -779,6 +779,14 @@ so the name is not searched again, and its images start over. A thumbnail is dow
 kept in the same cache. Not ported: the filter sheet (type, style, size, sort) and animated images (the store asks
 for still images only, and nothing here plays an animation), and the companion screen.
 
+### Bundled artwork
+
+DELOS's own entries (`BundledArtwork.kind(_:)`: Remote Input and Remote Monitor by UUID, Desktop, Steam Big Picture and the others
+by name) show the fixed images in `Sources/DelosUI/Artwork/<entry>/{cover,wide,hero}.jpg` (Android's, see
+[THIRD_PARTY.md](THIRD_PARTY.md#bundled-artwork)) instead of SteamGridDB's or the PC's: `HomeArt.image(hostID:app:kind:)` decodes
+them like any other image and the library's cover, game background and header colors use them. Their logo is the rendered name.
+`downloadArtwork` leaves them out, they have no metadata and no Artwork entry in their menu.
+
 ### Hiding games
 
 Hide app / Show app in the game menu keep the app ids per profile and per PC (`HiddenGames`, UserDefaults,
@@ -967,6 +975,36 @@ pointer, touch) and, for a controller, the glyph family (`PadFamily`). The hint 
   bottom edge. On the library that is the row's bottom with the focus ring (`HomeLayout.coverTop + coverHeight +
   ringReach`), on the other screens the same line at the design distance (87 px above the bottom on a 1080 px stage, since
   the row is bottom anchored), and never lower than the glyphs clear the bottom safe edge.
+### The library filter
+
+`LibraryFilters` (DelosUI, `@Observable`, UserDefaults) keeps each PC's `MetadataFilters` (genre, theme, HDR support,
+duration), the one Android keeps for all. `LibraryFilter.apply` lets the games through that `MetadataFilters.matches` accepts;
+DELOS's own entries pass only while nothing is filtered. The home screen (`HomeScreen`) asks `GameMetadataModel.ensureLibrary`
+for the whole library when it opens (the cached records first, then the due ones three at a time) so the chips are
+complete, shows the library through the filter and, while the service is configured and the library has games, offers the
+filter: Y (`MenuCommand.toastAction`, which a toast with its own action keeps), the filter button at the end of the title
+row (icon only on a compact stage) or a tap. `LibraryFilterSheet` is Android's `FilterModal`: a glass panel (1240 stage
+pixels, the compact stage's margin of 48) with a title and the live count, a section per criterion with one row of chips
+that scrolls sideways (the genre and theme chips with their icon and the number of games), and Reset (X) and Done (Y, B)
+under them; the sections scroll when they do not fit and the focused one is brought into view. The choices apply at
+once, the focus starts on the selected genre, one focus ring glides over all chips, the screen behind the sheet blurs
+under the layers' scrim. The sheet is the screen's own (like the Artwork screen's): `HomeScreen` captures the commands
+while it is open (`navigator.commandCapture`), tells the hint bar through `ScreenHints.filterLabel` and `sheetOpen`, and
+puts the library's focus back on the cover it had if the filter did not remove it. A filter that leaves nothing shows
+`FilteredLibraryEmpty` (Android's `FilteredLibraryEmpty`: what happened, Y changes it, a button resets it). The library
+note on the hint bar counts "27 of 55 apps on <PC>" while a filter is on.
+
+### Home on a compact stage
+
+A compact stage (narrower than 1500 stage pixels, or squarish) lays the home out top-down (`HomeCompact.layout`, port of
+`HomeCompactLayout.kt`, tested on the same six handheld stages): the status bar, the title box (64 to 160 high, centred
+between the bar and the info row), the info row, the covers and the hint bar, with gaps of at least 16, 16, 24 and 28 that
+share what is left over. The cover scale is the smallest of what the height leaves after the comfortable gaps, 40 % of the
+stage's height and the width rule that shows a third of a second cover; it is never under 0.45 (0.30 where the gaps and the
+floor do not fit together). `CoverGeometry` carries the scale to the covers, their gap (never under what a focused cover's
+growth and ring need), corner, start and end padding; the row fades over 72 stage pixels at its right end. On a stage under
+863 pixels the streaming-time block stands above the badges (`InfoRow(above:)`). `HomeMetrics` picks this or the standard
+`HomeLayout` for the stage shown.
 
 ## The library row
 
@@ -1174,6 +1212,10 @@ has no such setting; both are in `Config/Info.plist`, which Xcode merges with th
 
 ### Not verified
 
+- The library filter and the compact home on a device, a controller and tvOS: the screens were looked at on an iPhone
+  simulator with a debug-only fake PC (never committed) in `-DelosStage` windows, driven by launch arguments; Y, X, B and
+  the focus in the sheet are covered by unit tests of the logic only. The metadata the chips are built from was a fake: the
+  real service's genre and theme lists were not seen.
 - Hiding games, the Artwork screen and App settings on a controller, the Siri Remote and a real PC (the simulator
   screens were looked at with a debug-only fake); SteamGridDB's real answers (style, score, author and date fields), choosing
   an image against the live service, and a stream that takes the app's overrides.

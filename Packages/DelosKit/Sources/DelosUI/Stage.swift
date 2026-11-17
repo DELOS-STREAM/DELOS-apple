@@ -164,7 +164,7 @@ public struct StageReader<Content: View>: View {
     }
 
     /// Debug builds: `-DelosStage <width>x<height>` lays the interface out in a window of that size in points, centered in
-    /// the real one, to look at a compact or tall stage on a screen that has none.
+    /// the real one, to look at a compact or tall stage on a screen that has none (without the real screen's safe area).
     private static func debugSize(in size: CGSize) -> CGSize {
         #if DEBUG
         if let text = UserDefaults.standard.string(forKey: "DelosStage") {
@@ -186,7 +186,10 @@ public struct StageReader<Content: View>: View {
                     .frame(width: size.width, height: size.height)
                     .clipped()
                     .frame(width: proxy.size.width, height: proxy.size.height)
-                    .environment(\.stage, Stage(size: size, safeArea: Stage.safeArea(system: safeArea, minimum: Stage.platformMinimumSafeArea), textScale: textScale))
+                    // A debug window (`-DelosStage`) is not at the screen's edges: the real cutout is not its safe area
+                    .environment(\.stage, Stage(
+                        size: size, safeArea: size == proxy.size ? Stage.safeArea(system: safeArea, minimum: Stage.platformMinimumSafeArea) : EdgeInsets(),
+                        textScale: textScale))
             }
             .ignoresSafeArea()
         }

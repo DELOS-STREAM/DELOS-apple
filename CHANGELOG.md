@@ -9,6 +9,18 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- The library filter of Android on the home screen (when `DelosMetadataURL` is configured): Y, or the new filter button beside
+  the title, opens a glass sheet with chips for genre and theme (with the number of games each holds), HDR support and
+  duration, the live count and Reset (X) and Done. The filter is kept per PC, the hint bar says how many criteria are on
+  ("Filter • 2 active") and the library note counts the games shown, and a filter that lets nothing through shows
+  Android's empty state with a button that resets it. The whole library's cached metadata is read when it opens, so the
+  chips are complete at once. The look on a device and on tvOS is not verified.
+- Home on a compact stage (a narrow or squarish window, an iPad in a split view) lays itself out top-down as on Android's
+  handhelds: the covers scale with the stage and a second game always peeks in, the title box is centred between the status bar
+  and the info row, the streaming-time block stands above the badges on a very narrow stage, and the small covers' placeholder
+  titles shrink to fit their longest word.
+- The artwork of DELOS's own entries (Desktop, Remote Input, Remote Monitor, Steam Big Picture) is bundled, copied from
+  Android: their cover, wide cover and background show without SteamGridDB, which never looks them up.
 - HDR streaming: Settings → Stream gets Android's Enable HDR row (also an app setting) on devices whose display shows HDR and
   whose hardware decodes HEVC Main10 (a hardware-required VideoToolbox probe, not the per-codec check). With it on, the app
   offers HEVC Main10 (and AV1 Main 10 when AV1 is chosen), asks the host for HDR, passes the host's mastering display and
