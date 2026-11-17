@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Pairing waits for the trusted paired state instead of a fixed delay, and manual-address entry reports a PC
+  that was not added. The start screen retargets its initial PC focus as discovery changes. On compact stages,
+  the profile chip shares the status line, clears the measured status cluster and truncates long names.
+  Avatar fallback glyphs use the smaller grid size.
+
 - Game rumble has Original, Soft, Kick-start and Pulsing feels, live profile updates, an optional device
   vibration fallback and a strength control. DualSense feedback, weapon and positional vibration trigger effects
   use GameController; unsupported effects release the trigger rather than leaving resistance stuck.

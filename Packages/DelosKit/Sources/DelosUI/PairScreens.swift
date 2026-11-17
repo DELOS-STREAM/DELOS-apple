@@ -276,13 +276,10 @@ struct PinScreen: View {
 
     private func pair() async {
         // A PC that was just added may take a moment to show up (`awaitPc(…, 5_000)` of Android's `PinScreen`)
-        var known = hosts.host(hostID)
-        for _ in 0..<50 where known == nil {
-            try? await Task.sleep(for: .milliseconds(100))
-            guard !Task.isCancelled else { return }
-            known = hosts.host(hostID)
-        }
-        guard let host = known else {
+        let clock = SystemConnectClock()
+        _ = await PairStateWait.until(timeout: 5, clock: clock) { hosts.host(hostID) != nil }
+        guard !Task.isCancelled else { return }
+        guard let host = hosts.host(hostID) else {
             onFailed(PairFailure.notFound.text(pcName: ""))
             return
         }
@@ -305,7 +302,8 @@ struct PinScreen: View {
         }
         accepted = true
         feedback?.play(.select)
-        try? await Task.sleep(for: .milliseconds(900))
+        // The trusted paired state, not a fixed delay, gates the connect portal. Already paired returns immediately.
+        _ = await PairStateWait.until(timeout: 8, clock: clock) { hosts.host(hostID)?.pin != nil }
         guard !Task.isCancelled else { return }
         onPaired()
     }
@@ -358,5 +356,21 @@ struct Spinner: View {
             .padding(stage.px(2))
             .frame(width: stage.px(30), height: stage.px(30))
         }
+    }
+}
+
+/// Bounded polling of state published by the host store, using a monotonic injectable clock.
+@MainActor
+enum PairStateWait {
+    static func until(timeout: Double, clock: any ConnectClock, condition: () -> Bool) async -> Bool {
+        let deadline = clock.now() + timeout
+        while !Task.isCancelled {
+            if condition() { return true }
+            let remaining = deadline - clock.now()
+            guard remaining > 0 else { return false }
+            do { try await clock.sleep(seconds: min(0.1, remaining)) }
+            catch { return false }
+        }
+        return false
     }
 }
