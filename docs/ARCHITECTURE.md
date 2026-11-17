@@ -424,20 +424,42 @@ Live stream values and presentation-delay behavior on physical Apple devices are
 
 ### The stream menu
 
-The dock (`StreamMenu`, `StreamDockLayout`) is Android's: 150 px glass tiles with a 42 px radius, 40 px apart, the
-tiles' top 452 stage px above the bottom edge, one 186 px ring that glides (560 ms) and breathes (2.6 s), a dark ramp
-over the stream, which is blurred by 50 px. Its tiles rise 90 px from .8 one after the other (100 ms + 42 ms each, 620 ms,
-the spring) and leave the last first (46 px, .92, 240 ms); one clock drives them all, and reduced motion keeps the fades
-only. Left on the first tile goes to the last and back. Only the four actions exist; the name, hints and captions wait
-for the other tiles.
+The menu is Android's "Console tiles" (`docs/gui/STREAM_MENU.md` of DELOS for Android), one for one where the platform has
+the action. `StreamMenu` (`StreamDock.swift`) is the dock: 150 px glass tiles with a 42 px radius, 40 px apart, the tiles'
+top 452 stage px above the bottom edge, one 186 px ring that glides (560 ms) and breathes (2.6 s), a dark ramp over the
+stream, which is blurred by 50 px, the game's name (Unbounded 36) and the A / B hints above the row's left end, and under
+the tiles the complete help of the focused tile (the caption, three lines, a new text slides up out of a blur). Its tiles
+rise 90 px from .8 one after the other (100 ms + 42 ms each, 620 ms, the spring) and leave the last first (46 px, .92,
+240 ms); one clock drives them all, and reduced motion keeps the fades only. The row wraps: Right on the last tile goes to
+the first and Left on the first to the last (a held direction never reaches the menu, so it never wraps onto Quit by
+repeat). A row that does not fit a narrow stage keeps the tile size and scrolls with the focus.
+
+The tiles are Resume, Keyboard (iPhone and iPad: the system keyboard over the stream, what is typed goes to the PC as text,
+Return, Tab and Backspace as keys), Overlay (statistics), Brightness (iPhone and iPad: the screen's brightness for the
+length of the stream, given back when it ends or the app leaves the screen), More, Disconnect and Quit app. Brightness and
+More open a popover (`StreamPopover.swift`): a frosted card above the tile that opened it with a 60 x 24 caret in one
+outline, a header with a back circle and the title, 72 px rows on one gliding plate (a slider takes left and right, a held
+key steps it faster), and under the rows the help of the focused row. The dock sinks 160 px and dims while it is open, the
+card grows from .86 around the caret's tip, and another tile's page morphs the card (x, width, caret and height follow
+their targets with a spring). More holds Send keys (Android's fourteen built-in combinations as pills), Commands (the PC's
+server commands, asked from the host in the background when the stream starts) and Task manager (Ctrl + Shift + Esc). B
+goes from a page to the row or tile that opened it and then resumes; a tap outside the popover closes it and never
+resumes the stream; the popover has a focus of its own and the dock's tile that opened it keeps its look. The model is
+`StreamMenuModel.swift` (tiles, pages, popover geometry), the state `StreamMenuState.swift` and `StreamController`.
+
+Left out of Android's menu, because the platform has no such action: Bitrate (the core cannot change the bitrate of a
+running stream), Upscaler and Supersampling (the renderer has none), Send and Get clipboard, Zoom, Mouse mode and Local
+mouse cursor (touch is the trackpad only), On-screen controls, Open Android keyboard, Touch sensitivity, Rumble feel, Gyro
+smoothing and the Compact overlay. The captions of Overlay, Keyboard and More are empty: Android's texts describe its own
+compact statistics, keyboard and rows, and no Android string fits. The L3 + R3 shortcut only opens the menu (Android also
+closes it with it: the input is paused while the menu is open).
 
 It opens as in DELOS for Android by default: L3 + R3 held together (`MenuShortcut`, Android's `ButtonShortcut`: the
 button that completes the shortcut is kept from the PC, the menu opens when both are let go), or a swipe from the
 left edge of the touch screen (`MenuSwipe`: a touch starting in the left 4 % belongs to the swipe and does not reach
 the PC; 12 % of the width to the right opens the menu). Android swipes up from the bottom edge, but on iPhone and iPad
 that edge belongs to the system's home gesture. A hardware keyboard opens it with Control + Option + Shift + M or by
-holding Escape for a second (`MenuKeyShortcut`, [the Mac app](#the-mac-app)). The menu is minimal: Resume, Overlay
-(statistics), Disconnect and Quit app from Android's dock.
+holding Escape for a second (`MenuKeyShortcut`, [the Mac app](#the-mac-app)).
 While it is open, `GameInput` sends nothing and releases every held button, key and mouse button at the PC.
 When the app goes to the background during a stream, iOS suspends it and the connection would break; the stream is
 closed at once instead (as Disconnect: the game keeps running on the PC), the loader shows, and on return the same game
