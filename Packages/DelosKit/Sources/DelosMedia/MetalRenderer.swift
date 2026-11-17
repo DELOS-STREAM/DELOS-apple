@@ -153,7 +153,7 @@ final class MetalDisplayLinkTicker: NSObject, CAMetalDisplayLinkDelegate, @unche
 }
 
 /// Retags the layer's colour space from the render thread: the layer is touched on the main queue only.
-private final class LayerRetagger: @unchecked Sendable {
+final class LayerRetagger: @unchecked Sendable {
     private weak var layer: CAMetalLayer?
 
     init(_ layer: CAMetalLayer) {
@@ -161,6 +161,16 @@ private final class LayerRetagger: @unchecked Sendable {
     }
 
     func apply(_ conversion: ColorConversion) {
-        DispatchQueue.main.async { [self] in layer?.colorspace = CGColorSpace(name: conversion.layerColorSpaceName) }
+        DispatchQueue.main.async { [self] in
+            if let layer { Self.configure(layer, conversion: conversion) }
+        }
+    }
+
+    /// PQ/HLG stay encoded in the shader; Core Animation interprets the matching color-space tag exactly once.
+    @MainActor
+    static func configure(_ layer: CAMetalLayer, conversion: ColorConversion) {
+        layer.pixelFormat = conversion.isHDR ? .rgba16Float : .bgra8Unorm
+        layer.wantsExtendedDynamicRangeContent = conversion.isHDR
+        layer.colorspace = CGColorSpace(name: conversion.layerColorSpaceName)
     }
 }

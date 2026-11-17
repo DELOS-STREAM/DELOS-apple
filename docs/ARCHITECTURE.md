@@ -210,6 +210,13 @@ so `VideoOutput` and `VideoSamples` are unchanged:
 | `MetalFrameDrawer` | The pixel buffer's planes become textures through a `CVMetalTextureCache` (no copy), `VideoShaders.metal` converts Y'CbCr to RGB and the picture is fitted into the drawable on black. `ColorConversion` reads range and bit depth from the pixel format and the matrix and transfer function from the buffer's attachments; BT.601, BT.709 and BT.2020 matrices, limited and full range, 8 and 10 bits. The transfer function stays as encoded and the layer is tagged with the matching colour space (BT.709, BT.2020, PQ, HLG): tone mapping and linearising for HDR start in the shader, where `VideoUniforms.transfer` is already passed |
 | `MetalPipeline` | The three of them without the layer and the display link: the core's thread enqueues, VideoToolbox's delivers pictures, the display link's thread draws, behind one short lock. The replay tests drive it with a virtual clock and virtual refreshes |
 
+For an observed PQ or HLG picture, `LayerRetagger` uses an `rgba16Float` drawable and enables the Metal layer's
+extended dynamic range with the matching BT.2100 transfer tag; returning to SDR restores `bgra8Unorm` and turns EDR
+off. The shader keeps the encoded transfer values: applying an EOTF again under a PQ/HLG layer tag would transform
+them twice. `HDRRenderingTests` checks this layer configuration and actual offscreen 10-bit BT.2020 PQ/HLG drawing
+against the CPU reference in a floating-point texture. This is an output-path foundation, not an HDR stream offer:
+display/Main10 capability gating, host HDR requests and host mastering metadata are not connected by this change.
+
 `RendererChoice` picks the renderer. The display layer stays the default. The debug switch `-DelosRenderer metal` (a
 launch argument or a `defaults` value; `layer` names the default; release builds ignore it) selects the Metal renderer,
 with the profile's frame pacing mode and frame rate:
