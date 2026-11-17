@@ -300,7 +300,7 @@ private struct LibraryChipFocus: ViewModifier {
                     Color.clear.preference(key: LibraryChipGlideKey.self, value: focused ? proxy.frame(in: .named("libraryChipGlide")) : nil)
                 }
             }
-            .scaleEffect(focusScale(focused: focused, pressed: pressed, focus: ArtChipLook.focusScale))
+            .scaleEffect(focusScale(focused: focused, pressed: pressed, focus: GlideLook.chip.scale))
             .animation(.focusScale(pressed: pressed, reduced: reduced), value: [focused, pressed])
             .zIndex(focused ? 1 : 0)
     }
@@ -329,10 +329,10 @@ private struct LibraryChipGlideRing: View {
     var body: some View {
         Group {
             if let frame = target ?? previous {
-                let grown = CGSize(width: frame.width * ArtChipLook.focusScale, height: frame.height * ArtChipLook.focusScale)
-                let outside = stage.px(2 * ArtChipLook.ring)
+                let grown = CGSize(width: frame.width * GlideLook.chip.scale, height: frame.height * GlideLook.chip.scale)
+                let outside = stage.px(2 * GlideLook.chip.ring)
                 Capsule()
-                    .strokeBorder(colors.accent.color, lineWidth: stage.px(ArtChipLook.ring))
+                    .strokeBorder(colors.accent.color, lineWidth: stage.px(GlideLook.chip.ring))
                     .frame(width: grown.width + 2 * outside, height: grown.height + 2 * outside)
                     .position(x: frame.midX, y: frame.midY)
                     .animation(reduced ? nil : .timingCurve(0.3, 1.22, 0.42, 1, duration: SettingsPlateGeometry.duration), value: target)

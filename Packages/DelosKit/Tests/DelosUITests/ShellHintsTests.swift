@@ -42,7 +42,7 @@ import Testing
     private func artworkHint(_ button: GlyphRole, focused: String?, sheetOpen: Bool = false) -> String? {
         var context = ShellHints.Context(screen: .artwork(hostID: "h", appID: 1))
         context.screenHints = ScreenHints(sheetOpen: sheetOpen, artworkSouth: ArtworkSouth.of(focused))
-        return ShellHints.hints(context).first { $0.button == .pad(button) }?.label
+        return ShellHints.hints(context, kind: .controller).first { $0.button == .pad(button) }?.label
     }
 
     @Test func theArtworkScreenKeepsXForTheSearchAndOnlyTheSheetResets() {
