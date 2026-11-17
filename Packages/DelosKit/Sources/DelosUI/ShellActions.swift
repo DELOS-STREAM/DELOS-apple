@@ -193,9 +193,11 @@ final class ShellActions {
                 MenuItem(icon: Symbols.powerSettingsNew, label: L("home_menu_quit"), danger: true) { [self] in quit(hostID: hostID, app: app) },
             ]
         } else if let running {
-            // The stream quits the running game before it starts this one
+            // The menu is the confirmation: only its first row quits the running game, and it opens on the other one
             items = [
-                MenuItem(icon: Symbols.swapGame, label: L("home_menu_quit_and_start", running.title), danger: true) { start(app) },
+                MenuItem(icon: Symbols.swapGame, label: L("home_menu_quit_and_start", running.title), danger: true) { [self] in
+                    quit(hostID: hostID, app: running) { start(app) }
+                },
                 MenuItem(icon: Symbols.resume, label: L("home_menu_resume_other", running.title)) { start(running) },
             ]
         } else {
@@ -248,13 +250,14 @@ final class ShellActions {
         return LibraryHiding.sideRow(count: LibraryHiding.count(apps, hidden: hidden), showing: hiding.showHidden, pcName: pcName)
     }
 
-    private func quit(hostID: String, app: HostApp) {
+    /// Quits [app] on the PC; [then] runs once it has quit (the other game of "Quit X and start Y" starts).
+    private func quit(hostID: String, app: HostApp, then: (@MainActor () -> Void)? = nil) {
         let name = hosts.host(hostID)?.name ?? ""
         toasts.show(L("shell_game_quitting", app.title), icon: Symbols.powerSettingsNew)
         Task {
             do {
                 try await hosts.quitApp(hostID)
-                toasts.show(L("home_quit_done", app.title), icon: Symbols.checkCircle)
+                if let then { then() } else { toasts.show(L("home_quit_done", app.title), icon: Symbols.checkCircle) }
             } catch {
                 feedback?.play(.error)
                 let text = switch error {

@@ -470,7 +470,6 @@ private let iPhone = DisplayInfo(pixelWidth: 1290, pixelHeight: 2796, maxFramesP
     @Test func theHostsLaunchAnswersMapLikeNvConnection() {
         #expect(LiveStream.resumeFailure(HostError.hostStatus(code: 470, message: nil)) == .resumeForeign(code: 470))
         #expect(LiveStream.resumeFailure(HostError.hostStatus(code: 525, message: nil)) == .appMinimized)
-        #expect(LiveStream.quitFailure(HostError.hostStatus(code: 599, message: "x")) == .quitForeign(code: 599))
         #expect(LiveStream.resumeFailure(HostError.refused) == .resumeFailed(detail: String(describing: HostError.refused)))
         #expect(LiveStream.detail(HostError.hostStatus(code: 500, message: "Busy")) == "Busy (500)")
     }
@@ -535,5 +534,15 @@ extension StreamControllerTests {
     @Test func theNameOfTheGameAndThePCAreTheLaunchScenesWords() {
         let controller = StreamController { FakeSteps() }
         #expect(controller.appName == "Desktop" && controller.pcName == "Gaming-PC")
+    }
+}
+
+@Suite struct LaunchChoiceTests {
+    @Test func aLaunchNeverQuitsAnotherRunningApp() {
+        #expect(LaunchChoice.of(app: 7, running: 0) == .launch)
+        #expect(LaunchChoice.of(app: 7, running: 7) == .resume)
+        #expect(LaunchChoice.of(app: 7, running: 9) == .otherAppRunning)
+        #expect(StreamText.launchFailure(.otherAppRunning, pcName: "PC", appName: "A").sentence
+            == "Another app is already running · quit it from Delos first")
     }
 }
