@@ -152,7 +152,9 @@ card keeps 48 px from every edge.
 
 The order of the shell, from below (`DelosRoot` in `StartScreen.swift`, Android's `Shell`): the backdrop, the screen, the top bar
 (these blur under a layer's scrim), the scrim, the side menu or layer, the hint bar (crisp and above the layers, as on Android),
-the portal, the toasts.
+the portal, the toasts. The library's filter sheet is a layer of Android's shell, so while it is open the home screen is
+raised above the bar and the backdrop and the bar blur like the screen; the Artwork screen's sheet stays under the bar, as
+Android's `FilterSheetLayer` is part of its screen.
 
 ### Toasts
 
