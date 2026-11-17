@@ -219,7 +219,7 @@ struct GameSettingsScreen: View {
         case .choice(_, _, let selected):
             actions.feedback?.play(.open)
             picker = (row.id, FocusModel(initial: ChoicePicker.optionID(selected ?? 0)))
-        case .slider, .action, .appSettings:
+        case .slider, .action, .appSettings, .info:
             break
         }
     }

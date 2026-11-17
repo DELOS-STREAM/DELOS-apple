@@ -51,8 +51,8 @@ Debug builds read launch arguments for screenshots of each background, theme and
 `-DelosBattery <percent>` (a battery for the status bar, which a simulator lacks; `c` after the number: charging, such
 as `40c`) and, once a profile exists, `-DelosSettings <tab>` (`stream`, `audio`, `controls` or `appearance`), which
 opens Settings on that tab, focused on its first row or on `-DelosFocus <row id>` (Android's key, such as
-`ui_palette`). With an
-installed app:
+`ui_palette`). `-DelosScreen create` (or `profile`, once a profile exists) opens that screen, to look at its layout, and `-DelosStage <width>x<height>` lays the interface out in a window of that many points
+(`-DelosStage 400x700`: a compact stage) centered on the screen. With an installed app:
 
 ```sh
 xcrun simctl launch <UDID> io.github.meitoncz.delos.debug -DelosBackground nebula -DelosTheme light -DelosSettings appearance

@@ -121,8 +121,9 @@ The screens of Android's top navigation (`Screen.main`: the library, Settings, P
 capsule; Settings, Profile and Devices take each other's place on the stack; the buttons are items of the shown screen's focus, so Up from the library or the first settings
 row reaches them. On those screens and on the start screen (`hasSideMenu`), the left menu button opens the side menu
 (`SideMenu`, Android's `SideMenuLayer`): the profile and the connected PC at the top and All settings; it takes every
-command while it is open, and B, the menu button or a tap beside it closes it. Android's quick settings in the side
-menu (theme, background, sounds, haptics) are not ported yet. Android has no touch way to the side menu; on the start
+command while it is open, and B, the menu button or a tap beside it closes it. The quick settings (theme, background, sounds, haptics) are in it; the rows scroll
+(`FocusScroll` with edge fades) where the stage is too short, the panel is 680 px wide and arrives from a tenth of its width
+to its left (only fading with reduced motion). The top navigation wraps from the last button to the first. Android has no touch way to the side menu; on the start
 screen the profile chip opens the profiles menu (as on Android), so touch reaches Profile and Settings through a PC's
 library and its top navigation.
 
@@ -605,9 +606,14 @@ choice and reads "Automatic · 1920x884" (`videoformat_auto` and the display's r
 `settings_screen_dot_join`). Optimize game settings (GeForce Experience's `sops`) is no setting: DELOS for Android always
 sends it off, and so does `StreamPlan`.
 
-`SettingsScreen` (DelosUI) is Android's settings screen on a stage that is not compact: the title at (150, 124), the
+`SettingsScreen` (DelosUI) is Android's settings screen: on a stage that is not compact the title at (150, 124), the
 tabs between their L1 and R1 badges at y 206, centred, the rows from y 312 and the 520 px description panel 56 px to
-their right. `StreamSettingsForm` makes the rows (`SettingRow`: Android's key, tab, section, icon, label, value, help)
+their right. A compact stage (`SettingsLayout`) drops the title, puts the tabs at y 128 (only the selected one keeps its
+label, as on every stage under 1760 px wide), the list at y 202 with 48 px margins and the help as a dock under it
+(`HelpDockLayout`: a quarter of the stage, room for three whole rows above it). The list's edges fade while rows lie beyond
+them (`scrollEdgeFades`, 14/90 px, 24/40 px compact). Centered screens (Create, Profile) are a `CenterColumn`: on a compact
+stage it keeps clear of the status and hint bars, its gaps shrink with `Stage.compactScale`, and what is too tall scrolls
+with the focus kept in view and its edges fading; the avatar grid takes as many columns as fit. `StreamSettingsForm` makes the rows (`SettingRow`: Android's key, tab, section, icon, label, value, help)
 from the settings and the device (`StreamDevice`: the screen's native pixels and highest rate, `DecoderSupport`) and
 applies every change, so the view only draws; the help is `SettingsHelp.details` (the chosen value and its line, a
 blank line, `help_<key>`). Where Android's help names something not ported (Warp modes for the frame rate, the stream
@@ -672,8 +678,10 @@ when selection, size, motion preference or view lifetime changes. `PolishMotionT
 plate target, session memory, and localized announcement text/priority.
 
 
-Not ported yet: the Display, Covers and Devices tabs, the rest of About, the other rows of Audio and Controls, search, the impact
-chips, the compact layout (the help dock under the list), and
+About also has Based on (an info row, `SettingValue.info`) and Replay the welcome (the boot screen again above Settings; Create then ends
+at the start screen); Covers' Choose artwork row only says where the game menu's Artwork screen is. Not ported yet: the Display and Devices
+tabs, the rest of About (version: its text says Android; updates; diagnostics, issue #71), the other rows of Audio and Controls, search, the impact
+chips, and
 Android's link guidance rows.
 
 ## Profiles and the first run

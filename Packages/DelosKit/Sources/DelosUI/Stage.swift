@@ -119,6 +119,15 @@ public struct Stage: Equatable, Sendable {
 
     public var compact: Bool { shape == .compact }
 
+    /// The lowest ``compactScale`` (`Compact.MIN_SCALE` of DELOS for Android).
+    public static let minCompactScale = 0.62
+
+    /// The one scale of the non-text elements on a compact stage (covers, discs, avatars, gaps): the stage's height against
+    /// the 1080 of the design, never under ``minCompactScale``; exactly 1 on every other shape. Text keeps its size.
+    public var compactScale: Double {
+        compact ? min(max(height / Self.designHeight, Self.minCompactScale), 1) : 1
+    }
+
     /// A size in stage pixels, in points.
     public func px(_ value: Double) -> CGFloat { CGFloat(value * scale) }
 
@@ -154,15 +163,30 @@ public struct StageReader<Content: View>: View {
         self.content = content()
     }
 
+    /// Debug builds: `-DelosStage <width>x<height>` lays the interface out in a window of that size in points, centered in
+    /// the real one, to look at a compact or tall stage on a screen that has none.
+    private static func debugSize(in size: CGSize) -> CGSize {
+        #if DEBUG
+        if let text = UserDefaults.standard.string(forKey: "DelosStage") {
+            let parts = text.split(separator: "x").compactMap { Double($0) }
+            if parts.count == 2, parts[0] > 0, parts[1] > 0 { return CGSize(width: min(parts[0], size.width), height: min(parts[1], size.height)) }
+        }
+        #endif
+        return size
+    }
+
     public var body: some View {
         ZStack {
             // Measures the safe area: this layer respects it, the content below ignores it
             Color.clear
                 .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { safeArea = $0 }
             GeometryReader { proxy in
+                let size = Self.debugSize(in: proxy.size)
                 content
+                    .frame(width: size.width, height: size.height)
+                    .clipped()
                     .frame(width: proxy.size.width, height: proxy.size.height)
-                    .environment(\.stage, Stage(size: proxy.size, safeArea: Stage.safeArea(system: safeArea, minimum: Stage.platformMinimumSafeArea), textScale: textScale))
+                    .environment(\.stage, Stage(size: size, safeArea: Stage.safeArea(system: safeArea, minimum: Stage.platformMinimumSafeArea), textScale: textScale))
             }
             .ignoresSafeArea()
         }

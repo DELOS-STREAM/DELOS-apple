@@ -68,6 +68,8 @@ enum SettingValue: Equatable {
     case action(label: String?)
     /// Shows the effective app language and opens its system Settings page, not an in-app picker.
     case appSettings(language: String)
+    /// Shows a fact and does nothing (`RowValue.Info` of DELOS for Android): the app's origin.
+    case info(String)
 }
 
 /// One row of Settings: the key of the same setting in DELOS for Android, where it is, what it shows and its help.
@@ -372,6 +374,30 @@ struct StreamSettingsForm: Equatable {
         default: 50
         }
         return min(wanted, max(1, steps / 40))
+    }
+}
+
+/// Android's About → Delos rows that mean something here: what DELOS is based on, and replaying the welcome (the boot
+/// screen again; profiles and paired PCs are kept). The version row is left out: its text says "Delos for Android".
+/// The update rows and the diagnostics belong to Android's distribution and to issue #71.
+enum AboutSetting {
+    static let basedID = "about_based"
+    static let welcomeID = "about_welcome"
+    /// A product name: Android does not translate the section either.
+    static let section = "Delos"
+
+    static var firstID: String { basedID }
+
+    static func rows(_ tab: SettingsTab) -> [SettingRow] {
+        guard tab == .about else { return [] }
+        return [
+            SettingRow(
+                id: basedID, tab: .about, section: section, icon: Symbols.accountTree, label: L("settings_native_based_title"),
+                value: .info("Artemis · Moonlight"), help: L("settings_native_based_description")),
+            SettingRow(
+                id: welcomeID, tab: .about, section: section, icon: Symbols.replay, label: L("settings_native_welcome_title"),
+                value: .action(label: nil), help: L("settings_native_welcome_description")),
+        ]
     }
 }
 

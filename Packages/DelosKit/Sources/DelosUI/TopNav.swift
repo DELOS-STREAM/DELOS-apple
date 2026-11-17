@@ -34,10 +34,19 @@ struct TopNav: View {
         ]
     }
 
+    /// Left from the first button goes to the last, right from the last to the first (the navigation is a cycle).
+    /// On tvOS the system focus engine decides and does not wrap.
+    nonisolated static func wrap(_ index: Int, of ids: [String]) -> [FocusDirection: AnyHashable] {
+        guard ids.count > 1 else { return [:] }
+        if index == 0 { return [.left: AnyHashable(ids[ids.count - 1])] }
+        if index == ids.count - 1 { return [.right: AnyHashable(ids[0])] }
+        return [:]
+    }
+
     var body: some View {
         HStack(spacing: stage.px(gap)) {
-            ForEach(buttons) { button in
-                FocusItem(id: button.id, model: focus, action: button.action) { focused in
+            ForEach(Array(buttons.enumerated()), id: \.element.id) { index, button in
+                FocusItem(id: button.id, model: focus, moves: Self.wrap(index, of: buttons.map(\.id)), action: button.action) { focused in
                     buttonView(button, focused: focused)
                 }
             }
@@ -85,7 +94,7 @@ struct TopNav: View {
 }
 
 /// The side menu (`SideMenuLayer` of DELOS for Android), which the left menu button (View, Select, Create) opens on the
-/// start screen and the screens of the top navigation: a 620 px glass panel from the left with the profile and the
+/// start screen and the screens of the top navigation: a 680 px panel from the left with the profile and the
 /// connected PC at its top, the quick settings (``QuickSettings``: theme, background, interface sounds, haptics; A or a tap
 /// steps one, left and right step it either way) and All settings. A tap beside the panel, B or the menu button again closes it.
 struct SideMenu: View {
@@ -103,7 +112,12 @@ struct SideMenu: View {
     let onClose: @MainActor () -> Void
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
+    @Environment(\.reducedMotion) private var reduceMotion
 
+    /// The panel's width in stage pixels (the safe area on its left comes on top).
+    static let width = 680.0
+    /// How far the focused row's scale, ring and glow reach beyond the rows' place at the sides and above and below.
+    static let glowSide = 40.0, glowVertical = 56.0
     static let settingsID = "side-settings"
     static let hiddenID = "side-hidden"
 
@@ -121,41 +135,57 @@ struct SideMenu: View {
                 .onTapGesture(perform: onClose)
             VStack(alignment: .leading, spacing: stage.px(10)) {
                 header
-                ForEach(QuickSettings.rows(appearance)) { row in
-                    FocusItem(id: row.id, model: focus, action: { onStep(row.id, 1) }) { focused in
-                        SettingRowView(row: row, focused: focused, compact: true)
+                    .staggerEntrance()
+                // What does not fit scrolls, with its edges fading: the focus brings a row into view
+                FocusScroll(axis: .vertical, fades: (Self.glowVertical + 16, Self.glowVertical + 40)) {
+                    VStack(alignment: .leading, spacing: stage.px(10)) {
+                        ForEach(QuickSettings.rows(appearance)) { row in
+                            FocusItem(id: row.id, model: focus, action: { onStep(row.id, 1) }) { focused in
+                                SettingRowView(row: row, focused: focused, compact: true)
+                            }
+                            .staggerEntrance()
+                        }
+                        FocusItem(id: Self.settingsID, model: focus, action: onSettings) { focused in
+                            SettingRowView(
+                                row: SettingRow(
+                                    id: Self.settingsID, tab: .stream, section: "", icon: Symbols.settings, label: L("shell_side_all_settings"),
+                                    value: .action(label: nil), help: ""),
+                                focused: focused, compact: true)
+                        }
+                        .staggerEntrance()
+                        if let hidden {
+                            FocusItem(id: Self.hiddenID, model: focus, action: { onStep(Self.hiddenID, 1) }) { focused in
+                                SettingRowView(
+                                    row: SettingRow(
+                                        id: Self.hiddenID, tab: .stream, section: "", icon: Symbols.visibility, label: L("shell_side_show_hidden"),
+                                        value: .toggle(hidden.showing), help: "", note: hidden.note),
+                                    focused: focused, compact: true)
+                            }
+                            .staggerEntrance()
+                        }
                     }
+                    .padding(.horizontal, stage.px(14 + Self.glowSide))
+                    .padding(.vertical, stage.px(18 + Self.glowVertical))
                 }
-                FocusItem(id: Self.settingsID, model: focus, action: onSettings) { focused in
-                    SettingRowView(
-                        row: SettingRow(
-                            id: Self.settingsID, tab: .stream, section: "", icon: Symbols.settings, label: L("shell_side_all_settings"),
-                            value: .action(label: nil), help: ""),
-                        focused: focused, compact: true)
-                }
-                if let hidden {
-                    FocusItem(id: Self.hiddenID, model: focus, action: { onStep(Self.hiddenID, 1) }) { focused in
-                        SettingRowView(
-                            row: SettingRow(
-                                id: Self.hiddenID, tab: .stream, section: "", icon: Symbols.visibility, label: L("shell_side_show_hidden"),
-                                value: .toggle(hidden.showing), help: "", note: hidden.note),
-                            focused: focused, compact: true)
-                    }
-                }
-                Spacer()
+                .focusable(false)
+                .padding(.horizontal, -stage.px(Self.glowSide))
+                .padding(.vertical, -stage.px(Self.glowVertical))
+                .frame(maxHeight: .infinity)
             }
+            .entranceScope()
             .padding(.top, stage.px(48 + stage.safe.top))
             .padding(.bottom, stage.px(48))
             .padding(.leading, stage.px(40 + stage.safe.leading))
             .padding(.trailing, stage.px(40))
-            .frame(width: stage.px(620 + stage.safe.leading))
+            .frame(width: stage.px(Self.width + stage.safe.leading))
             .frame(maxHeight: .infinity)
             .background {
                 Rectangle().fill(colors.surface3.color)
                     .overlay(alignment: .trailing) { Rectangle().fill(colors.line.color).frame(width: stage.px(1)) }
                     .ignoresSafeArea()
             }
-            .transition(.move(edge: .leading).combined(with: .opacity))
+            // From a tenth of its width left of its place, fading in over 280 ms; with reduced motion it only fades
+            .transition(reduceMotion ? .opacity : .offset(x: -stage.px(Self.width) / 10).combined(with: .opacity.animation(.easeOut(duration: 0.28))))
         }
     }
 

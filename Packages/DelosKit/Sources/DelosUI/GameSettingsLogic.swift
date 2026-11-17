@@ -70,6 +70,7 @@ final class GameSettingsModel {
             (value % divisor == 0 ? String(value / divisor) : String(format: "%.1f", Double(value) / Double(divisor))) + unit
         case .action(let label): label ?? ""
         case .appSettings(let language): language
+        case .info(let text): text
         }
     }
 

@@ -309,10 +309,10 @@ import Testing
     @Test func theCoversRowsNeedAKey() {
         var form = CoversForm(enabled: false, automatic: true, pcName: nil)
         var rows = form.rows(.covers)
-        #expect(rows.map(\.id) == ["covers_sgdb_key", "covers_sgdb_auto", "covers_sgdb_missing", "covers_sgdb_refresh"])
+        #expect(rows.map(\.id) == ["covers_sgdb_key", "covers_sgdb_auto", "covers_sgdb_missing", "covers_sgdb_refresh", "covers_sgdb_choose"])
         #expect(rows.allSatisfy { $0.section == "SteamGridDB" })
         #expect(rows[0].value == .action(label: "Not set") && rows[0].enabled)
-        #expect(rows.dropFirst().allSatisfy { !$0.enabled })
+        #expect(rows.dropFirst().dropLast().allSatisfy { !$0.enabled })
         #expect(rows[2].help == "Fetches artwork for the apps of the current PC that have none.")
         form = CoversForm(enabled: true, automatic: false, pcName: "Meiton-PC")
         rows = form.rows(.covers)

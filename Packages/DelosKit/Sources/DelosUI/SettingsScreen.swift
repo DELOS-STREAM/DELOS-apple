@@ -10,7 +10,8 @@ import AppKit
 
 /// Settings (`SettingsScreen` of DELOS for Android) on a stage that is not compact: the title, the tabs between their
 /// L1 and R1 badges, the rows of the selected tab and, on the right, the description panel with the focused row's help.
-/// Search, the impact chips and the compact layout with the help dock under the list are not ported yet.
+/// On a compact stage the title goes, the tabs keep only the selected label and the help is a dock under the list.
+/// Search and the impact chips are not ported.
 /// About contains only the system app-language action on iPhone and iPad. The appearance rows change the current
 /// profile's ``Appearance``, which the whole interface shows at once, and store it.
 ///
@@ -64,7 +65,7 @@ struct SettingsScreen: View {
         case .controls: AppearanceForm.haptics
         case .appearance: AppearanceForm.theme
         case .covers: CoversForm.key
-        case .about: AppLanguageSetting.supportsAppSettings ? AppLanguageSetting.id : GameDataSetting.firstID
+        case .about: AboutSetting.firstID
         }
     }
 
@@ -76,31 +77,53 @@ struct SettingsScreen: View {
     }
 
     private var rows: [SettingRow] {
-        form.rows(tab) + appearanceForm.rows(tab) + coversForm.rows(tab) + AppLanguageSetting.rows(tab) + GameDataSetting.rows(tab)
+        form.rows(tab) + appearanceForm.rows(tab) + coversForm.rows(tab) + AboutSetting.rows(tab) + AppLanguageSetting.rows(tab) + GameDataSetting.rows(tab)
     }
     private var focusedRow: SettingRow? { rows.first { focus.focused == AnyHashable($0.id) } }
 
     var body: some View {
-        let left = 150 + stage.safe.leading, right = 150 + stage.safe.trailing
+        let compact = stage.compact
+        let left = SettingsLayout.margin(stage) + stage.safe.leading, right = SettingsLayout.margin(stage) + stage.safe.trailing
+        let bottom = SettingsLayout.bottom(scale: stage.textScale) + stage.safe.bottom
         ZStack(alignment: .topLeading) {
-            Text(L("settings_screen_title"))
-                .font(DelosFonts.unbounded(stage.tpx(46)))
-                .foregroundStyle(colors.text.color)
-                .offset(x: stage.px(left), y: stage.px(124 + stage.safe.top))
-            SettingsTabs(selected: tab, focus: focus) { next in select(next, sound: .select, keepFocus: true) }
+            // A compact stage drops the title: the status bar and the selected tab say where this is
+            if !compact {
+                Text(L("settings_screen_title"))
+                    .font(DelosFonts.unbounded(stage.tpx(46)))
+                    .foregroundStyle(colors.text.color)
+                    .offset(x: stage.px(left), y: stage.px(124 + stage.safe.top))
+            }
+            SettingsTabs(selected: tab, focus: focus, collapse: compact || stage.width < SettingsLayout.fullTabsMinWidth) { next in
+                select(next, sound: .select, keepFocus: true)
+            }
                 .frame(height: stage.px(66))
                 .frame(maxWidth: .infinity)
                 .tvFocusSection()
-                .offset(y: stage.px(206 + stage.safe.top))
-            HStack(alignment: .top, spacing: stage.px(56)) {
-                list
-                DescriptionPanel(tab: tab, row: focusedRow)
-                    .frame(width: stage.px(520))
+                .offset(y: stage.px((compact ? SettingsLayout.compactTabsY : SettingsLayout.tabsY) + stage.safe.top))
+            if compact {
+                // The list takes the full width; the help is a dock under it, so the focused row and its help are on screen together
+                VStack(spacing: stage.px(HelpDockLayout.listGap)) {
+                    list
+                    CompactHelpDock(tab: tab, row: focusedRow)
+                        .frame(height: stage.px(HelpDockLayout.height(
+                            stageHeight: stage.height, rowsTop: SettingsLayout.compactListTop + stage.safe.top + 14 + SettingsLayout.sectionHeading,
+                            bottom: bottom, rowHeight: SettingsLayout.compactRow)))
+                }
+                .padding(.leading, stage.px(left))
+                .padding(.trailing, stage.px(right))
+                .padding(.top, stage.px(SettingsLayout.compactListTop + stage.safe.top))
+                .padding(.bottom, stage.px(bottom))
+            } else {
+                HStack(alignment: .top, spacing: stage.px(56)) {
+                    list
+                    DescriptionPanel(tab: tab, row: focusedRow)
+                        .frame(width: stage.px(520))
+                }
+                .padding(.leading, stage.px(left))
+                .padding(.trailing, stage.px(right))
+                .padding(.top, stage.px(SettingsLayout.listTop + stage.safe.top))
+                .padding(.bottom, stage.px(bottom))
             }
-            .padding(.leading, stage.px(left))
-            .padding(.trailing, stage.px(right))
-            .padding(.top, stage.px(312 + stage.safe.top))
-            .padding(.bottom, stage.px(96 + stage.safe.bottom))
             if let picker, let row = rows.first(where: { $0.id == picker.id }), case let .choice(_, options, selected) = row.value {
                 ChoicePicker(
                     title: row.label, options: options, selected: selected, focus: picker.focus,
@@ -137,7 +160,7 @@ struct SettingsScreen: View {
                         FocusItem(
                             id: row.id, model: focus, action: { activate(row) }, tap: { tapped(row) }
                         ) { focused in
-                            SettingRowView(row: row, focused: focused, hostedPlate: true) { value in
+                            SettingRowView(row: row, focused: focused, compact: stage.compact, hostedPlate: true) { value in
                                 focus.focus(AnyHashable(row.id))
                                 slide(row.id, to: value)
                             }
@@ -161,6 +184,9 @@ struct SettingsScreen: View {
             }
             .focusable(false)
             .scrollClipDisabled()
+            .scrollEdgeFades(
+                top: stage.compact ? SettingsLayout.compactFadeTop : SettingsLayout.fadeTop,
+                bottom: stage.compact ? SettingsLayout.compactFadeBottom : SettingsLayout.fadeBottom)
             .onChange(of: focus.focused) { _, now in
                 guard let id = now as? String, rows.contains(where: { $0.id == id }) else { return }
                 withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(id) }
@@ -225,6 +251,8 @@ struct SettingsScreen: View {
         case CoversForm.key: actions.openSteamGridDBKeyDialog()
         case CoversForm.missing: Task { await actions.downloadArtwork(hostID: actions.libraryHostID, refresh: false) }
         case CoversForm.refresh: Task { await actions.downloadArtwork(hostID: actions.libraryHostID, refresh: true) }
+        case AboutSetting.welcomeID: actions.replayWelcome()
+        case AboutSetting.basedID, CoversForm.choose: return
         case _ where GameDataSetting.website(row.id) != nil:
             if let url = GameDataSetting.website(row.id) { openURL(url) }
         default:
@@ -280,7 +308,7 @@ struct SettingsScreen: View {
         case .appSettings, .action:
             feedback?.play(.open)
             activate(row)
-        case .slider:
+        case .slider, .info:
             break
         }
     }
@@ -351,6 +379,8 @@ private struct SectionHeading: View {
 private struct SettingsTabs: View {
     let selected: SettingsTab
     let focus: FocusModel
+    /// Only the selected tab keeps its label, so the whole row stays on a narrow stage (``SettingsLayout/fullTabsMinWidth``).
+    var collapse = false
     let onSelect: (SettingsTab) -> Void
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
@@ -389,15 +419,19 @@ private struct SettingsTabs: View {
         let on = tab == selected
         return HStack(spacing: stage.px(12)) {
             SymbolView(symbol: tab.icon, size: 30, color: on ? colors.onAccent : colors.text2, filled: on)
-            Text(tab.label)
-                .font(DelosFonts.figtree(stage.tpx(22), .semibold))
-                .foregroundStyle((on ? colors.onAccent : colors.text2).color)
+            if on || !collapse {
+                Text(tab.label)
+                    .font(DelosFonts.figtree(stage.tpx(22), .semibold))
+                    .foregroundStyle((on ? colors.onAccent : colors.text2).color)
+                    .lineLimit(1)
+            }
         }
-        .padding(.horizontal, stage.px(22))
+        .padding(.horizontal, stage.px(collapse && !on ? 18 : 22))
         .frame(height: stage.px(66))
         .background {
             if on { Capsule().fill(colors.accent.color).matchedGeometryEffect(id: "pill", in: pill) }
         }
+        .accessibilityLabel(tab.label)
         .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
     }
 }
@@ -506,6 +540,11 @@ struct SettingRowView: View {
             labelled(label, arrows: arrows)
         case .appSettings(let language):
             labelled(language, arrows: arrows)
+        case .info(let text):
+            MarqueeLabel(text: text, active: focused)
+                .font(DelosFonts.figtree(stage.tpx(23)))
+                .foregroundStyle(colors.text2.color)
+                .frame(maxWidth: stage.px(360), alignment: .trailing)
         }
     }
 
@@ -618,6 +657,96 @@ private struct SettingSlider: View {
     private func label(_ number: Int) -> String {
         let text = number % divisor == 0 ? "\(number / divisor)" : String(format: "%.1f", locale: .current, Double(number) / Double(divisor))
         return text + unit
+    }
+}
+
+/// What the settings screen places, in stage pixels (`SettingsLayout` of DELOS for Android).
+enum SettingsLayout {
+    static let titleX = 150.0, tabsY = 206.0, listTop = 312.0
+    /// Under this stage width the labelled tabs do not fit: only the selected tab keeps its label.
+    static let fullTabsMinWidth = 1760.0
+    /// A compact stage: the side margin floor, the tab row 24 px under the status bar and the list under it.
+    static let compactMargin = 48.0, compactTabsY = 128.0, compactListTop = 202.0
+    /// What a section's heading takes above its first row.
+    static let sectionHeading = 44.0
+    /// A compact row's height.
+    static let compactRow = 80.0
+    /// The list's edge fades; the compact list's are shorter, so the focused plate's glow ends above them.
+    static let fadeTop = 14.0, fadeBottom = 90.0, compactFadeTop = 24.0, compactFadeBottom = 40.0
+
+    static func margin(_ stage: Stage) -> Double { stage.compact ? compactMargin : titleX }
+
+    /// The room kept free at the bottom for the hint bar, which grows with the interface scale ([scale]: 1 = 100 %).
+    static func bottom(scale: Double) -> Double { 96 + (scale - 1) * 92 }
+}
+
+/// The help dock under a compact settings list (`HelpDockLayout` of DELOS for Android).
+enum HelpDockLayout {
+    static let minHeight = 210.0, maxHeight = 270.0
+    /// A stage shorter than this trades dock height for list rows, down to ``shortMinHeight``.
+    static let shortStage = 800.0, shortMinHeight = 168.0, rowPeek = 30.0
+    static let listGap = 16.0, bodyGap = 14.0, rowGap = 10.0
+    static let padX = 24.0, padY = 14.0, disc = 48.0, titleGap = 14.0, fade = 36.0
+
+    /// About a quarter of the stage's height.
+    static func height(stageHeight: Double) -> Double { min(max(stageHeight * 0.25, minHeight), maxHeight) }
+
+    /// The dock under a list whose first row may start at [rowsTop], over the hint bar's [bottom]: the quarter of the
+    /// stage less what three whole rows [rowHeight] high need above it, never under ``minHeight`` (a short stage: two
+    /// rows and a peek of the third, down to ``shortMinHeight``).
+    static func height(stageHeight: Double, rowsTop: Double, bottom: Double, rowHeight: Double) -> Double {
+        if stageHeight < shortStage {
+            let twoRowsAndPeek = 2 * rowHeight + 2 * rowGap + rowPeek
+            return max(min(height(stageHeight: stageHeight), stageHeight - rowsTop - bottom - listGap - twoRowsAndPeek), shortMinHeight)
+        }
+        let threeRows = 3 * rowHeight + 2 * rowGap
+        return max(min(height(stageHeight: stageHeight), stageHeight - rowsTop - bottom - listGap - threeRows), minHeight)
+    }
+}
+
+/// The help under a compact list: the focused row's icon on an accent disc and its name, over the help, which scrolls
+/// by itself when it is long.
+private struct CompactHelpDock: View {
+    let tab: SettingsTab
+    let row: SettingRow?
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: stage.px(HelpDockLayout.bodyGap)) {
+            HStack(spacing: stage.px(HelpDockLayout.titleGap)) {
+                ZStack {
+                    Circle().fill(colors.accent.color)
+                    SymbolView(symbol: row?.icon ?? tab.icon, size: 28, color: colors.onAccent, filled: true)
+                }
+                .frame(width: stage.px(HelpDockLayout.disc), height: stage.px(HelpDockLayout.disc))
+                Text(row?.label ?? tab.label)
+                    .font(DelosFonts.unbounded(stage.tpx(22)))
+                    .foregroundStyle(colors.text.color)
+                    .lineLimit(1)
+            }
+            AutoScrollingHelp(identity: "\(row?.id ?? String(describing: tab)):\(row?.help ?? tab.help)") {
+                VStack(alignment: .leading, spacing: stage.px(10)) {
+                    Text(row?.help ?? tab.help)
+                        .font(DelosFonts.figtree(stage.tpx(22)))
+                        .lineSpacing(stage.tpx(22 * 0.45))
+                        .foregroundStyle(colors.text2.color)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if row?.enabled == false {
+                        Text(L("settings_screen_unavailable"))
+                            .font(DelosFonts.figtree(stage.tpx(18)))
+                            .foregroundStyle(colors.text3.color)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, stage.px(HelpDockLayout.padX))
+        .padding(.vertical, stage.px(HelpDockLayout.padY))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background {
+            RoundedRectangle(cornerRadius: stage.px(28)).fill(colors.surface.color)
+                .overlay(RoundedRectangle(cornerRadius: stage.px(28)).strokeBorder(colors.line.color, lineWidth: stage.px(1)))
+        }
     }
 }
 

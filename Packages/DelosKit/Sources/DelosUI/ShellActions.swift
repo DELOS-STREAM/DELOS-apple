@@ -444,7 +444,7 @@ final class ShellActions {
         }
         _ = profiles.create(name: name, avatar: avatar)
         toasts.show(L("shell_welcome", name), icon: Symbols.wavingHand, kind: .success)
-        let landing = FirstRunLanding.after(fromBoot: navigator.stack.first?.screen == .boot, pairedPCs: !hosts.paired.isEmpty)
+        let landing = FirstRunLanding.after(fromBoot: navigator.stack.contains { $0.screen == .boot }, pairedPCs: !hosts.paired.isEmpty)
         go {
             switch landing {
             case .pair:
@@ -454,6 +454,12 @@ final class ShellActions {
             case .back: navigator.back()
             }
         }
+    }
+
+    /// Settings → About → "Replay the welcome": the boot screen again above Settings (B returns to it). Profiles and paired
+    /// PCs are kept; going on creates one more profile and ends at the start screen.
+    func replayWelcome() {
+        go { navigator.push(.boot, focus: "begin") }
     }
 
     /// "Skip to home" on the boot screen (shown only when PCs are paired already): a default profile, then straight

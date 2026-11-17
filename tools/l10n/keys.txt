@@ -661,3 +661,12 @@ settings_native_steam_title
 settings_native_steam_description
 settings_native_hltb_title
 settings_native_hltb_description
+
+# Settings: About and Covers info rows
+settings_native_based_title
+settings_native_based_description
+settings_native_welcome_title
+settings_native_welcome_description
+settings_native_choose_artwork_title
+settings_native_choose_artwork_value
+settings_native_choose_artwork_description

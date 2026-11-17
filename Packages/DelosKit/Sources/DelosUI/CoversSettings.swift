@@ -3,8 +3,7 @@ import Foundation
 
 /// The rows of Settings → Covers (the SteamGridDB rows of `nativeSettings` in DELOS for Android): the API key (a dialog;
 /// the value says whether one is added), Download automatically, Download missing artwork and Download all artwork
-/// again; the last three need a key. Android's "Choose artwork" row points to the game menu's Artwork screen, which is
-/// not ported.
+/// again; the last three need a key. "Choose artwork" only tells where the game menu's Artwork screen is.
 struct CoversForm: Equatable {
     /// SteamGridDB has a key.
     var enabled: Bool
@@ -16,6 +15,7 @@ struct CoversForm: Equatable {
     static let automaticID = "covers_sgdb_auto"
     static let missing = "covers_sgdb_missing"
     static let refresh = "covers_sgdb_refresh"
+    static let choose = "covers_sgdb_choose"
     static let ids: Set<String> = [key, automaticID, missing, refresh]
 
     func rows(_ tab: SettingsTab) -> [SettingRow] {
@@ -38,6 +38,11 @@ struct CoversForm: Equatable {
             SettingRow(
                 id: Self.refresh, tab: .covers, section: section, icon: Symbols.refresh, label: L("settings_native_refresh_artwork_title"),
                 value: .action(label: nil), help: L("settings_native_refresh_artwork_description"), enabled: enabled),
+            // Choosing artwork is done per game, in its menu (the Artwork screen): the row says where
+            SettingRow(
+                id: Self.choose, tab: .covers, section: section, icon: Symbols.imageChoose,
+                label: L("settings_native_choose_artwork_title"), value: .info(L("settings_native_choose_artwork_value")),
+                help: L("settings_native_choose_artwork_description")),
         ]
     }
 }
