@@ -84,12 +84,12 @@ private func game(genres: [Int] = [], themes: [Int] = [], hdr: NativeHDR = .unkn
 
     @Test func theHintBarOffersYWhileTheLibraryHasSomethingToFilter() {
         var context = ShellHints.Context(screen: .home(hostID: "h"))
-        #expect(ShellHints.hints(context).map(\.button) == [.pad(.south), .pad(.menuLeft)])
+        #expect(ShellHints.hints(context, kind: .controller).map(\.button) == [.pad(.south), .pad(.menuLeft)])
         context.screenHints.filterLabel = "Filter"
-        #expect(ShellHints.hints(context).map(\.button) == [.pad(.south), .pad(.north), .pad(.menuLeft)])
-        #expect(ShellHints.hints(context).map(\.label)[1] == "Filter")
+        #expect(ShellHints.hints(context, kind: .controller).map(\.button) == [.pad(.south), .pad(.north), .pad(.menuLeft)])
+        #expect(ShellHints.hints(context, kind: .controller).map(\.label)[1] == "Filter")
         context.screenHints.sheetOpen = true
-        #expect(ShellHints.hints(context).map(\.button) == [.pad(.south), .pad(.west), .pad(.north), .pad(.east)])
+        #expect(ShellHints.hints(context, kind: .controller).map(\.button) == [.pad(.south), .pad(.west), .pad(.north), .pad(.east)])
     }
 }
 
