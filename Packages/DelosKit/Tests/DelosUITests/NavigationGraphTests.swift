@@ -189,7 +189,7 @@ import Testing
                 Case(name: "side menu hidden-row=\(hidden)", initial: QuickSettings.ids[0], minItems: hidden ? 6 : 5, scrolled: { _ in d.size.height < 600 }), on: d,
                 build: { _ in FocusModel(initial: QuickSettings.ids[0]) }
             ) { fx, focus in
-                SideMenu(profile: fx.profiles.current, pc: (name: "Meiton-PC", online: true), focus: focus, appearance: Appearance(), onStep: { _, _ in },
+                SideMenu(profile: fx.profiles.current, pc: SidePC(name: "Meiton-PC", state: .online), focus: focus, appearance: Appearance(), onStep: { _, _ in },
                          onSettings: {}, hidden: hidden ? SideMenu.HiddenRow(showing: false, note: "2 hidden on Meiton-PC") : nil)
             })
         }

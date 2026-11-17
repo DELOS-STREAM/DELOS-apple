@@ -185,6 +185,9 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- The side menu's header shows the connected PC with a live dot and state (online, streaming, connecting, asleep,
+  offline) under the profile name, and a card with the profile's whole streaming time (every game on every PC) and its
+  last stream, in the library's stat-block style.
 - Feedback and motion: a tap or a click plays the same cue and squeezes the element (.97) as A
 - The stream menu opens with a tap of a controller's Home button, and holding Home for half a second sends Guide to the
   PC while it is held; the Home button's system overlay stays off during a stream. L3 + R3 no longer open the menu by

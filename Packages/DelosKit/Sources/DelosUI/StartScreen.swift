@@ -255,7 +255,7 @@ public struct DelosRoot: View {
                     Group {
                         LayerScrim(progress: sideProgress, onTap: { router.closeSideMenu(sound: .back) })
                         SideMenu(
-                            profile: profiles.current, pc: connectedPC, focus: sideMenu, appearance: appearance, onStep: { id, direction in _ = quickStep(id, by: direction) },
+                            profile: profiles.current, pc: sidePC, playtime: router.sidePlaytime, focus: sideMenu, appearance: appearance, onStep: { id, direction in _ = quickStep(id, by: direction) },
                             onSettings: {
                                 router.closeSideMenu(sound: nil)
                                 go { navigator.openFromNavigation(.settings, focus: SettingsScreen.initialFocus) }
@@ -515,14 +515,21 @@ public struct DelosRoot: View {
         return { actions.skipBoot() }
     }
 
-    /// The PC whose library is open below the current screen, for the side menu.
-    private var connectedPC: (name: String, online: Bool)? {
+    /// The PC whose library is open below the current screen, for the status bar's pill and the side menu.
+    private var connectedHost: HostRecord? {
         for entry in navigator.stack.reversed() {
-            if case .home(let hostID) = entry.screen, let host = hosts.host(hostID) {
-                return (host.name, host.reachability == .online)
-            }
+            if case .home(let hostID) = entry.screen, let host = hosts.host(hostID) { return host }
         }
         return nil
+    }
+
+    private var connectedPC: (name: String, online: Bool)? {
+        connectedHost.map { ($0.name, $0.reachability == .online) }
+    }
+
+    /// The side menu header's PC: its name and live state.
+    private var sidePC: SidePC? {
+        connectedHost.map { SidePC(name: $0.name, state: .of($0, connecting: actions.connection.isActive)) }
     }
 
     /// A quick setting of the side menu stepped (the side menu's rows): applied at once and kept with the current

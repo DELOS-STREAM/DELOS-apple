@@ -243,13 +243,16 @@ struct GlowDisc: View {
 }
 
 /// The side menu (`SideMenuLayer` of DELOS for Android), which the left menu button (View, Select, Create) opens on the
-/// start screen and the screens of the top navigation: a 680 px panel from the left with the profile and the
-/// connected PC at its top, the quick settings (``QuickSettings``: theme, background, interface sounds, haptics; A or a tap
-/// steps one, left and right step it either way) and All settings. A tap beside the panel, B or the menu button again closes it.
+/// start screen and the screens of the top navigation: a 680 px panel from the left with its header (``SideMenuHeader``:
+/// the profile, the connected PC's live state and the profile's streaming time), the quick settings (``QuickSettings``:
+/// theme, background, interface sounds, haptics; A or a tap steps one, left and right step it either way) and All settings.
+/// A tap beside the panel, B or the menu button again closes it.
 struct SideMenu: View {
     let profile: Profile?
-    /// The PC whose library is open: its name and whether it is online.
-    let pc: (name: String, online: Bool)?
+    /// The PC whose library is open: its name and live state (nil: not connected).
+    let pc: SidePC?
+    /// The profile's whole streaming time and last stream, summed up in the header.
+    var playtime: Playtime = .none
     let focus: FocusModel
     /// The current profile's appearance, whose values the quick settings show.
     let appearance: Appearance
@@ -286,7 +289,7 @@ struct SideMenu: View {
         // be centered by the root's stack)
         return ZStack(alignment: .topLeading) {
             VStack(alignment: .leading, spacing: stage.px(10)) {
-                header
+                SideMenuHeader(profile: profile, pc: pc, playtime: playtime)
                     .staggerEntrance()
                 // What does not fit scrolls, with its edges fading: the focus brings a row into view. The scroll view reaches
                 // the glow's room beyond the rows, which is clear while rows continue behind that edge (`SideMenuLayer`)
@@ -407,32 +410,6 @@ struct SideMenu: View {
 
     private static func fade(_ ms: Double) -> AnyTransition {
         .opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: ms / 1000))
-    }
-
-    private var header: some View {
-        HStack(spacing: stage.px(20)) {
-            if let profile { AvatarBadge(avatar: .of(profile.avatar), size: 72, iconSize: 40) }
-            VStack(alignment: .leading, spacing: stage.px(2)) {
-                Text(profile?.name ?? "DELOS")
-                    .font(DelosFonts.unbounded(stage.tpx(28)))
-                    .foregroundStyle(colors.text.color)
-                    .lineLimit(1)
-                Text(status)
-                    .font(DelosFonts.figtree(stage.tpx(20)))
-                    .foregroundStyle(colors.text3.color)
-                    .lineLimit(1)
-            }
-        }
-        .padding(.horizontal, stage.px(12))
-        .padding(.bottom, stage.px(24))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .bottom) { Rectangle().fill(colors.line.color).frame(height: stage.px(1)) }
-        .padding(.bottom, stage.px(14))
-    }
-
-    private var status: String {
-        guard let pc else { return L("shell_side_not_connected") }
-        return pc.online ? L("shell_side_connected", pc.name) : L("shell_side_offline", pc.name)
     }
 }
 

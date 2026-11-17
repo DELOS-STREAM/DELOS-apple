@@ -92,7 +92,7 @@ struct HarnessRoot: View {
                         .id(ObjectIdentifier(entry.focus))
                 }
                 if let sideMenu = router.sideMenu {
-                    SideMenu(profile: fx.profiles.current, pc: (name: "Meiton-PC", online: true), focus: sideMenu, appearance: appearance,
+                    SideMenu(profile: fx.profiles.current, pc: SidePC(name: "Meiton-PC", state: .online), playtime: router.sidePlaytime, focus: sideMenu, appearance: appearance,
                              onStep: { _, _ in }, onSettings: {}, hidden: fx.actions.hiddenRow(pcName: "Meiton-PC"))
                 }
                 LayerHost(layers: fx.layers, navigator: navigator)

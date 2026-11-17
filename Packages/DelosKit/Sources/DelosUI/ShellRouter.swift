@@ -1,3 +1,4 @@
+import DelosData
 import DelosInput
 import Observation
 import SwiftUI
@@ -12,6 +13,8 @@ import SwiftUI
 final class ShellRouter {
     /// The side menu's focus while it is open.
     private(set) var sideMenu: FocusModel?
+    /// The current profile's whole streaming time, read each time the side menu opens (its header's summary).
+    private(set) var sidePlaytime = Playtime.none
     /// The focus of the portal while it is up: nothing under it takes the focus, and B is the only command that passes.
     let portalFocus = FocusModel(initial: "portal")
 
@@ -69,6 +72,7 @@ final class ShellRouter {
         // A touch drag owns the menu until it has settled
         guard !sideDrag.engaged else { return }
         feedback?.play(.open)
+        sidePlaytime = actions.profilePlaytime()
         animate(0.56) { sideMenu = FocusModel(initial: QuickSettings.ids[0]) }
     }
 
@@ -97,7 +101,10 @@ final class ShellRouter {
         withTransaction(instant) {
             drag.progress = start
             drag.engaged = true
-            if opening, sideMenu == nil { sideMenu = FocusModel(initial: QuickSettings.ids[0]) }
+            if opening, sideMenu == nil {
+                sidePlaytime = actions.profilePlaytime()
+                sideMenu = FocusModel(initial: QuickSettings.ids[0])
+            }
         }
     }
 
