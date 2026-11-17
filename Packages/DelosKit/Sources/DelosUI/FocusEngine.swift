@@ -185,6 +185,19 @@ public final class FocusModel {
         return (menu, frame)
     }
 
+    /// Waits until [id]'s frame stops moving (the focus scrolled it into view: the library row glides the focused cover to
+    /// its place), at most [limit]; a menu opened at once would stand where the item was before the scroll.
+    func settled(_ id: AnyHashable, limit: Duration = .milliseconds(900)) async {
+        let clock = ContinuousClock(), end = clock.now + limit
+        var last = frames[id], still = 0
+        while clock.now < end, still < 4 {
+            try? await Task.sleep(for: .milliseconds(16))
+            let now = frames[id]
+            still = now == last ? still + 1 : 0
+            last = now
+        }
+    }
+
     /// Handles a command: moves the focus or activates the focused item. Returns false when nothing happened.
     @discardableResult
     public func handle(_ command: MenuCommand) -> Bool {
@@ -475,10 +488,20 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
             .environment(\.pressed, pressed)
             .id(id)
         if menu != nil {
-            // A long press is the touch way to the context menu; simultaneous, so a scroll view around still scrolls
+            // A long press is the touch way to the context menu; simultaneous, so a scroll view around still scrolls. An item
+            // that had no focus is scrolled into view first: the menu opens where the item comes to rest.
             item.simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in
-                model.focus(AnyHashable(id))
-                layers?.openContextMenu(of: model)
+                let key = AnyHashable(id), hadFocus = model.focused == key
+                model.focus(key)
+                if hadFocus {
+                    layers?.openContextMenu(of: model)
+                } else {
+                    Task { @MainActor in
+                        await model.settled(key)
+                        guard model.focused == key else { return }
+                        layers?.openContextMenu(of: model)
+                    }
+                }
             })
         } else {
             item
