@@ -57,12 +57,16 @@ struct PlaytimeTexts: Equatable {
 }
 
 /// The info row under the title (`InfoBar` of DELOS for Android): the streaming-time block at its start, then 30 px
-/// of air and the badges. The block gives up the last-streamed column, then the long unit, when the row is too narrow.
-struct InfoRow<Badges: View>: View {
+/// of air and the badges (the facts, a divider and the tags). The block gives up the last-streamed column, then the long
+/// unit, when the row is too narrow; the badges scroll in the room it leaves when they do not fit.
+struct InfoRow<Facts: View, Tags: View>: View {
     let playtime: Playtime
     /// Stage pixels: the block's height at the interface scale.
     let height: Double
-    @ViewBuilder let badges: () -> Badges
+    let hasFacts: Bool
+    let hasTags: Bool
+    @ViewBuilder let facts: () -> Facts
+    @ViewBuilder let tags: () -> Tags
     @Environment(\.stage) private var stage
 
     var body: some View {
@@ -73,8 +77,8 @@ struct InfoRow<Badges: View>: View {
                 StatRow(texts: texts, fit: .statOnly, height: height)
                 StatRow(texts: texts, fit: .short, height: height)
             }
-            HStack(spacing: stage.px(12)) { badges() }
-                .fixedSize()
+            .layoutPriority(1)
+            BadgeStrip(hasFacts: hasFacts, hasTags: hasTags, facts: facts, tags: tags)
         }
         .frame(height: stage.px(height))
     }

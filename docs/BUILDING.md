@@ -29,7 +29,8 @@ is in tracked configuration. An xcconfig treats `//` as a comment: write the URL
 bridge. The endpoint must implement the DELOS metadata Worker's `/v1/igdb/games`, `/v1/pcgw/*` and `/v1/steam/tags`
 routes. Provider credentials stay at the Worker; no new Apple Keychain item is needed.
 
-This is a data-layer port only. No library screen starts metadata lookups yet. Its fixture tests use injected fake
+With the address empty the app starts no metadata lookup and shows no metadata entry anywhere. With it, the library asks
+for the focused game ([Game metadata](ARCHITECTURE.md#game-metadata)). Fixture tests use injected fake
 transports/providers, never the configured endpoint or the owner's paired PC.
 
 ## Building and running

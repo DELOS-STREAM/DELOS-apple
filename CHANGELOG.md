@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Game metadata in the library, when `DelosMetadataURL` is configured: the info row shows the HDR chip, HowLongToBeat's
+  time and one pill of genres and one of themes (Steam's user tags first, IGDB otherwise, in the game's colors), the game
+  menu gets Metadata (search and change the match, refresh, reset) and Settings → About lists the data providers. Without
+  the address nothing changes and nothing is requested. Lookups against the real services are not verified.
 - Pairing with a one-time code: the menu of a PC that is not paired yet offers "Pair with a PIN" and "Pair with a
   one-time code"; the latter asks for the PIN and passphrase made in the PC's web UI and says when the code was wrong.
 - A second video renderer next to the display layer: it decodes with VideoToolbox, keeps the pictures in a small queue

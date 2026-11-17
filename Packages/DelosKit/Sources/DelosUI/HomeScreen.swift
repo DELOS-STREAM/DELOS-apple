@@ -251,6 +251,7 @@ struct GameLibrary: View {
     let actions: ShellActions
     @Environment(HostStore.self) private var hosts
     @Environment(HomeArt.self) private var art
+    @Environment(GameMetadataModel.self) private var metadata
     @Environment(Layers.self) private var layers
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
@@ -398,6 +399,8 @@ struct GameLibrary: View {
             scroll(to: index, animation: nil)
         }
         .onDisappear { wrap?.cancel() }
+        // The focused game's information is looked up (the store decides from its cache whether it is due)
+        .task(id: focused.id) { metadata.ensure(focused) }
         // The game background follows the focus with a short delay, so it does not flicker while scrolling fast
         .task(id: "\(GameArt.key(hostID, focused.id))#\(art.artwork.version)") {
             let image = await heroImage(focused)
@@ -471,14 +474,39 @@ private struct GameInfo: View {
     let running: Bool
     let playtime: Playtime
     let layout: HomeLayout
+    @Environment(GameMetadataModel.self) private var metadata
+    @Environment(HomeArt.self) private var art
+    @Environment(\.matchGameColors) private var matchGameColors
     @Environment(\.stage) private var stage
 
     var body: some View {
+        // Up to two genres and two themes: Steam's user tags when the game has them, else IGDB's lists; the facts first
+        let data = metadata.data(for: app)
+        let genres = GameTags.topGenres(data?.candidate?.genres.filter { !$0.name.isEmpty } ?? [], steamTags: data?.steamTags ?? [])
+        let themes = GameTags.topThemes(data?.candidate?.themes.filter { !$0.name.isEmpty } ?? [], steamTags: data?.steamTags ?? [])
+        let hdr = data?.hdrBadge
+        let completion = data?.completionSeconds.map(CompletionLength.init(seconds:))
+        // The colors of the animated background: the cover's, the game background's while those are unknown
+        let gameColors = matchGameColors ? art.gameColors(GameArt.key(hostID, app.id)) : nil
         VStack(alignment: .leading, spacing: 0) {
             GameTitle(hostID: hostID, app: app, box: layout.titleBox)
             Spacer().frame(height: stage.px(layout.titleGap))
-            InfoRow(playtime: playtime, height: layout.infoHeight) {
+            InfoRow(playtime: playtime, height: layout.infoHeight,
+                    hasFacts: running || hdr != nil || completion != nil,
+                    hasTags: !genres.isEmpty || !themes.isEmpty) {
                 if running { InfoChip(icon: Symbols.running, label: L("home_chip_running_on", pcName)) }
+                switch hdr {
+                case .hdr: NativeHDRChip()
+                case .sdr: InfoChip(icon: Symbols.sdr, label: "SDR")
+                case .unknown: InfoChip(icon: Symbols.hdrUnknown, label: L("metadata_hdr_unverified"))
+                case nil: EmptyView()
+                }
+                if let completion {
+                    InfoChip(icon: Symbols.completionTime, label: L("home_chip_hltb", TagLook.completionText(completion)))
+                }
+            } tags: {
+                if !genres.isEmpty { GenrePill(genres: genres, gameColors: gameColors) }
+                if !themes.isEmpty { ThemePill(themes: themes, gameColors: gameColors) }
             }
             .frame(maxWidth: stage.px(1620), alignment: .leading)
         }
@@ -684,7 +712,7 @@ private struct Cover: View {
 }
 
 /// An info pill (icon and label) in the glass style (`Chip` of DELOS for Android).
-private struct InfoChip: View {
+struct InfoChip: View {
     let icon: String
     let label: String
     @Environment(\.delosColors) private var colors

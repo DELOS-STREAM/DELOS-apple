@@ -21,6 +21,9 @@ public actor MetadataStore {
         self.now = now
     }
 
+    /// Whether a metadata service is configured; without one every lookup answers "unavailable" and nothing is requested.
+    public nonisolated var available: Bool { providers.available }
+
     /// Returns cached state without starting a network request. Call again after a completed operation for its state.
     public func state(for title: String) async -> GameMetadataState {
         let key = Self.key(title)

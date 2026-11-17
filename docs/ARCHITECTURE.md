@@ -630,7 +630,7 @@ games never looked up when it loads; a cover waits for the lookup (up to 20 s) b
 
 ## Game metadata
 
-`MetadataStore` is a standalone actor in DelosData, not yet wired into the library. `lookup(title:force:builtIn:)`
+`MetadataStore` is an actor in DelosData; `GameMetadataModel` (DelosUI) is the library's view of it (below). `lookup(title:force:builtIn:)`
 returns a `GameMetadataState`; `state(for:)` reads its cached state without fetching. `search`, `select` and `reset`
 support later manual matching. Lookup by normalized literal host title coalesces concurrent work; manual operations
 queue behind it. Cancellation cancels a shared lookup. At most two title resolutions run concurrently. Known built-in
@@ -654,6 +654,32 @@ Every request is paced (IGDB 260 ms, PCGW 1050 ms, Steam 650 ms, HLTB 500 ms), u
 spaced under actor reentrancy. An empty or invalid `DelosMetadataURL` prevents *all* provider requests, including HLTB.
 Provider credentials remain on the Worker; existing artwork Keychain storage is unchanged. Errors contain no
 configured URLs, query strings or response bodies.
+
+### In the library
+
+`GameMetadataModel` (`@MainActor @Observable`, DelosUI) holds a state per literal title key. `ensure(_:)` reads the
+stored state, then asks the store to look the game up once per session (a refresh is due by the store's own policy);
+the focused game is asked for, covers that were never focused never cost a request. DELOS's own entries (Desktop,
+Remote Input and Remote Monitor by name or UUID, Steam Big Picture) have no metadata. `MetadataStore.available` is
+false without a configured Worker: then nothing is looked up and the model offers nothing, so the info row, the game
+menu and Settings look exactly as they did before metadata existed.
+
+The info row is `InfoRow(facts:tags:)` as Android's `InfoBar`: the streaming-time block, then the badges, scrolling
+back and forth in the room the block leaves (with an edge fade; still with reduced motion) when they do not fit. The
+facts come first: the running chip, the HDR chip (`GameMetadata.hdrBadge`: gradient HDR, SDR, or "HDR/SDR unverified"
+only after a lookup that finished without a PCGamingWiki failure), `HLTB <time>` (`CompletionLength`: minutes below an
+hour, half hours to 100 hours, whole hours beyond; the plural is chosen by the hours rounded up). After a divider come
+one pill of up to two genres and one of up to two themes (`GameTags`, port of `GameTags.kt` and `SteamTags.kt`: Steam's
+user tags first, IGDB's ranking fills and decides alone for a game without Steam tags). The genre pill is tinted with
+the game's main color and the theme pill with its second one, fainter, when "Match the app's colors" is on; otherwise
+with the palette's accent colors. A game without data shows no placeholder chips.
+
+The game menu's Metadata entry (only when a Worker is configured) opens Android's three entries in a menu of its own:
+Search IGDB / change match (a list of six matches per page with Previous and More, a dialog for another name),
+Refresh and Reset. Each reports in a toast; a refresh that finds no IGDB match says so instead of reporting success.
+Settings → About gets Android's Game data section (IGDB, PCGamingWiki, Steam, HowLongToBeat: each opens its website,
+as Android's rows do); the tab shows on tvOS and the Mac too once a Worker is configured. Android has no provider
+switches and no refresh row in Settings, so none exist here.
 
 PCGW reads only the Video template, preserves nested wiki syntax while locating its fields, and does not equate
 modded/retrofit, console-only or broken HDR with native PC HDR. HLTB discovers the current website search path,
@@ -723,9 +749,8 @@ Android does; waking has its own row.
 
 Not ported yet: the default PC's Skip the start screen, the Devices screen's link test,
 the connect portal that wakes and waits, waking an asleep PC on A, the companion screen; in the library the compact layout, recording
-the streaming time (the stream screen does not add to `PlaytimeStore` yet), game metadata (IGDB genres and themes,
-HowLongToBeat, HDR chips through the metadata Worker), the game menu's Artwork, Metadata, App settings and Hide, the
-game's colors in its menu tile, hidden games, wrap-around in the row and per-game settings.
+the streaming time (the stream screen does not add to `PlaytimeStore` yet), the game menu's Artwork, App settings and
+Hide, the metadata filters (Android's filter modal and its empty-library message), the game's colors in its menu tile, hidden games, wrap-around in the row and per-game settings.
 
 ## The library row
 

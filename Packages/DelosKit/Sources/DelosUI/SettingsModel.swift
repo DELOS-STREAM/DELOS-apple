@@ -10,8 +10,9 @@ import Foundation
 enum SettingsTab: CaseIterable, Hashable, Sendable {
     case stream, audio, controls, appearance, covers, about
 
-    /// About has only the app-language action so far; do not expose an empty tab on unsupported platforms.
-    static let availableCases: [SettingsTab] = AppLanguageSetting.supportsAppSettings
+    /// About has the app-language action (iPhone and iPad) and the game data providers (with a metadata service); do not
+    /// expose an empty tab where it has neither.
+    static let availableCases: [SettingsTab] = AppLanguageSetting.supportsAppSettings || GameDataSetting.configured
         ? allCases : allCases.filter { $0 != .about }
 
     var label: String {
