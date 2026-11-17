@@ -7,7 +7,7 @@ import SwiftUI
 struct VideoSurface {
     let renderer: any VideoRenderer
     let onDisplay: @MainActor (DisplayInfo) -> Void
-    var onTouch: @MainActor (_ id: Int, _ phase: StreamController.TouchPhase, _ point: CGPoint, _ width: CGFloat, _ time: TimeInterval) -> Void = { _, _, _, _, _ in }
+    var onTouch: @MainActor (_ id: Int, _ phase: StreamController.TouchPhase, _ point: CGPoint, _ area: StreamController.TouchArea, _ time: TimeInterval) -> Void = { _, _, _, _, _ in }
     /// Whether a touch of the system pointer (a mouse or trackpad) is ignored: the mouse's own input already moves the
     /// PC's pointer.
     var ignoresPointer: @MainActor () -> Bool = { false }
@@ -98,7 +98,7 @@ private final class ScenePointerBackend: PointerLockBackend {
 final class VideoHostView: UIView {
     private let renderer: any VideoRenderer
     var onDisplay: @MainActor (DisplayInfo) -> Void = { _ in }
-    var onTouch: @MainActor (Int, StreamController.TouchPhase, CGPoint, CGFloat, TimeInterval) -> Void = { _, _, _, _, _ in }
+    var onTouch: @MainActor (Int, StreamController.TouchPhase, CGPoint, StreamController.TouchArea, TimeInterval) -> Void = { _, _, _, _, _ in }
     var ignoresPointer: @MainActor () -> Bool = { false }
     var onText: @MainActor (String) -> Void = { _ in }
     var onBackspace: @MainActor () -> Void = {}
@@ -250,13 +250,20 @@ final class VideoHostView: UIView {
 
     private func report(_ touches: Set<UITouch>, _ phase: StreamController.TouchPhase) {
         let scale = window?.windowScene?.screen.nativeScale ?? contentScaleFactor
+        let area = StreamController.TouchArea(
+            width: bounds.width * scale, height: bounds.height * scale, gestureInset: gestureInset * scale, scale: scale)
         for touch in touches {
             if touch.type == .indirectPointer, ignoresPointer() { continue }
             let point = touch.location(in: self)
-            onTouch(
-                ObjectIdentifier(touch).hashValue, phase, CGPoint(x: point.x * scale, y: point.y * scale),
-                bounds.width * scale, touch.timestamp)
+            onTouch(ObjectIdentifier(touch).hashValue, phase, CGPoint(x: point.x * scale, y: point.y * scale), area, touch.timestamp)
         }
+    }
+
+    /// The points at the bottom of this view that the system keeps for its home gesture (the home indicator's safe area).
+    private var gestureInset: CGFloat {
+        guard let window else { return 0 }
+        let bottom = convert(bounds, to: window).maxY
+        return max(0, bottom - (window.bounds.height - window.safeAreaInsets.bottom))
     }
 }
 

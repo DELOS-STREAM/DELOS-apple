@@ -33,6 +33,7 @@ struct SettingsScreen: View {
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.openURL) private var openURL
+    @Environment(Layers.self) private var layers: Layers?
     @State private var form: StreamSettingsForm
     @State private var tab: SettingsTab
     /// The popover that is open on a row (its options, or its slider), and the focus inside the options.
@@ -84,7 +85,8 @@ struct SettingsScreen: View {
     private var rows: [SettingRow] { rows(for: tab) }
 
     private func rows(for tab: SettingsTab) -> [SettingRow] {
-        form.rows(tab) + appearanceForm.rows(tab) + coversForm.rows(tab) + DevicesSetting.rows(tab) + AboutSetting.rows(tab) + AppLanguageSetting.rows(tab)
+        form.rows(tab) + appearanceForm.rows(tab) + form.streamMenuRows(tab) + coversForm.rows(tab) + DevicesSetting.rows(tab)
+            + AboutSetting.rows(tab) + AppLanguageSetting.rows(tab)
             + GameDataSetting.rows(tab)
     }
 
@@ -302,12 +304,17 @@ struct SettingsScreen: View {
         }
     }
 
-    /// Steps row [id] of the stream settings, of the appearance (which changes live) or of Covers.
+    /// Steps row [id] of the stream settings, of the appearance (which changes live) or of Covers. A step of the stream menu's
+    /// buttons records new ones.
     @discardableResult
     private func step(_ id: String, by direction: Int) -> Bool {
         if id == CoversForm.automaticID {
             actions.artwork.automatic.toggle()
             return true
+        }
+        if id == StreamSettingsForm.menuButtons {
+            recordMenuButtons()
+            return false
         }
         guard AppearanceForm.ids.contains(id) else { return form.step(id, by: direction) }
         var next = appearanceForm
@@ -362,10 +369,19 @@ struct SettingsScreen: View {
             var next = appearanceForm
             next.pick(id, option: index)
             appearance = next.appearance
+        } else if id == StreamSettingsForm.menuButtons, index == 1 {
+            closePopup()
+            recordMenuButtons()
+            return
         } else {
             form.pick(id, option: index)
         }
         closePopup()
+    }
+
+    /// "Record buttons": the recording layer takes every controller button until the buttons held together are let go.
+    private func recordMenuButtons() {
+        layers?.openButtonCapture { buttons in form.setMenuButtons(buttons) }
     }
 
     private func closePopup() {

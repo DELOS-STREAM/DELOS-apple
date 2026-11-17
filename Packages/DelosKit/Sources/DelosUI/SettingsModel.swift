@@ -1,11 +1,12 @@
 import DelosCore
 import DelosData
 import enum DelosMedia.FramePacing
+import enum DelosInput.ShortcutButton
 import Foundation
 
 /// A tab of Settings (`SettingsTab` of DELOS for Android), as far as its rows are ported, in Android's order: Stream
 /// (resolution, frame rate, bitrate, codec), Audio (playing audio on the PC, interface sounds), Controls (interface
-/// haptics), Appearance (``AppearanceForm``), Covers (``CoversForm``: SteamGridDB), Devices (``DevicesSetting``: the
+/// haptics, the stream menu's buttons and swipe), Appearance (``AppearanceForm``), Covers (``CoversForm``: SteamGridDB), Devices (``DevicesSetting``: the
 /// paired PCs and pairing a new one) and About (the system app-language action on iPhone/iPad).
 enum SettingsTab: CaseIterable, Hashable, Sendable {
     case stream, audio, controls, appearance, covers, devices, about
@@ -139,6 +140,22 @@ struct StreamSettingsForm: Equatable {
     static let hdr = "checkbox_enable_hdr"
     static let framePacing = "frame_pacing"
     static let hostAudio = "checkbox_host_audio"
+    static let menuButtons = "ui_stream_menu_buttons"
+    static let menuSwipe = "ui_stream_menu_swipe"
+
+    /// The stream menu's rows of Settings → Controls (`ui_stream_menu_buttons`, `ui_stream_menu_swipe`), which follow the
+    /// interface rows there.
+    func streamMenuRows(_ tab: SettingsTab) -> [SettingRow] {
+        tab == .controls ? [menuButtonsRow, menuSwipeRow] : []
+    }
+
+    /// The buttons that open the stream menu, none by default.
+    var menuButtonsChosen: Set<ShortcutButton> { ShortcutButton.parse(settings.streamMenuButtons) }
+
+    /// The buttons the recording returned.
+    mutating func setMenuButtons(_ buttons: Set<ShortcutButton>) {
+        settings.streamMenuButtons = ShortcutButton.stored(buttons)
+    }
 
     /// The rows of [tab] in their order.
     /// The HDR row shows where HDR can work, and also while `hdr` is stored as on where it cannot (a profile from
@@ -324,6 +341,25 @@ struct StreamSettingsForm: Equatable {
             label: L("title_checkbox_host_audio"), value: .toggle(settings.playAudioOnHost), help: L("help_checkbox_host_audio"))
     }
 
+    /// "Not set" or the recorded buttons; the list clears them or records new ones, and a step records (the row's own
+    /// value is never a choice of its list once buttons are set).
+    private var menuButtonsRow: SettingRow {
+        let buttons = menuButtonsChosen
+        let label = buttons.isEmpty ? L("row_not_set") : StreamMenuButtonsText.label(buttons)
+        return SettingRow(
+            id: Self.menuButtons, tab: .controls, section: L("settings_native_section_stream_menu"), icon: Symbols.streamMenuButtons,
+            label: L("settings_native_menu_buttons_title"),
+            value: .choice(label: label, options: [L("row_not_set"), L("settings_native_menu_buttons_record")], selected: buttons.isEmpty ? 0 : nil),
+            help: AppearanceForm.details(value: label, explanation: nil, about: L("settings_native_menu_buttons_description")))
+    }
+
+    private var menuSwipeRow: SettingRow {
+        SettingRow(
+            id: Self.menuSwipe, tab: .controls, section: L("settings_native_section_stream_menu"), icon: Symbols.swipeUp,
+            label: L("settings_native_menu_swipe_title"), value: .toggle(settings.streamMenuSwipe),
+            help: L("settings_native_menu_swipe_description"))
+    }
+
     /// `SettingsHelp.details`: the chosen value with its explanation and the note that it is unavailable, a blank line,
     /// then what the setting does.
     static func details(value: String, explanation: String?, unavailable: Bool, about: String) -> String {
@@ -349,6 +385,7 @@ struct StreamSettingsForm: Equatable {
         case Self.bitrate: setBitrate(effectiveBitrate + direction * StreamSettings.bitrateStep)
         case Self.hdr where showsHDRRow: settings.hdr.toggle()
         case Self.hostAudio: settings.playAudioOnHost.toggle()
+        case Self.menuSwipe: settings.streamMenuSwipe.toggle()
         default: break
         }
         return settings != before
@@ -361,6 +398,8 @@ struct StreamSettingsForm: Equatable {
         case Self.frameRate: if frameRateOptions.indices.contains(index) { settings.fps = frameRateOptions[index].value }
         case Self.codec: if codecOptions.indices.contains(index) { settings.codec = codecOptions[index].value }
         case Self.framePacing: if framePacingOptions.indices.contains(index) { settings.framePacing = framePacingOptions[index].value }
+        // "Not set"; "Record buttons" is the screen's (it opens the recording)
+        case Self.menuButtons: if index == 0 { settings.streamMenuButtons = [] }
         default: break
         }
     }

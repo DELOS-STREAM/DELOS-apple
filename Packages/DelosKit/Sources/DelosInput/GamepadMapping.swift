@@ -13,6 +13,8 @@ public struct GamepadSnapshot: Equatable, Sendable {
     public var paddle1 = false, paddle2 = false, paddle3 = false, paddle4 = false
     public var touchpadButton = false, share = false
     public var leftTrigger: Float = 0, rightTrigger: Float = 0
+    /// The triggers past GameController's own press threshold (a trigger as a button of the stream menu's shortcut).
+    public var leftTriggerPressed = false, rightTriggerPressed = false
     public var leftStickX: Float = 0, leftStickY: Float = 0
     public var rightStickX: Float = 0, rightStickY: Float = 0
 
@@ -82,41 +84,5 @@ public struct ControllerSlots<Key: Hashable> {
     /// A bit for every controller connected (`activeGamepadMask`).
     public var mask: UInt16 {
         numbers.values.reduce(0) { $0 | 1 << UInt16($1) }
-    }
-}
-
-/// The stream menu's button shortcut (`ButtonShortcut` in DELOS for Android): all of `buttons` held together, in any
-/// order, open the menu when the last of them is let go (L3 + R3 by default, Android's `StreamMenuSettings`).
-///
-/// Only the button that completes the shortcut is kept from the host, until it is released: the ones pressed before
-/// it already reached the game, so their release must reach it too, or the host would keep them pressed.
-public struct MenuShortcut: Sendable {
-    public static let defaultButtons: ControllerButtons = [.leftStick, .rightStick]
-
-    public let buttons: ControllerButtons
-    private var held: ControllerButtons = []
-    private var swallowed: ControllerButtons = []
-    private var pending = false
-
-    public init(buttons: ControllerButtons = MenuShortcut.defaultButtons) {
-        self.buttons = buttons
-    }
-
-    /// Takes the controller's buttons now; returns the buttons the host may see and whether the menu opens.
-    public mutating func update(_ pressed: ControllerButtons) -> (forward: ControllerButtons, open: Bool) {
-        let now = pressed.intersection(buttons)
-        let newlyPressed = now.subtracting(held)
-        held = now
-        if !newlyPressed.isEmpty, now == buttons {
-            pending = true
-            swallowed.formUnion(newlyPressed)
-        }
-        swallowed.formIntersection(now)
-        var open = false
-        if pending, held.isEmpty {
-            pending = false
-            open = true
-        }
-        return (pressed.subtracting(swallowed), open)
     }
 }

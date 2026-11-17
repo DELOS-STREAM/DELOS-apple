@@ -24,9 +24,10 @@ extension StreamSession: StreamInputSink {}
 ///
 /// Each controller gets the lowest free controller number and is announced to the host with its type, buttons and
 /// capabilities; its state is sent whenever an element changes. The system gestures of the controllers' buttons (the
-/// Home button's Game Center overlay, a held Share button's screenshot) are off while the input runs, so the host gets
-/// those buttons. L3 + R3 (``MenuShortcut``) opens the stream menu; while ``paused`` (the menu is open) nothing is
-/// sent and every held control is released at the host.
+/// Home button's Game Center overlay and the system's games overlay, a held Share button's screenshot) are off while the
+/// input runs, so the stream gets those buttons. A tap of Home opens the stream menu and sends nothing to the PC; a hold of
+/// Home (``GuideTapHold``) is Guide on the PC. The buttons the player recorded (``MenuShortcut``, none by default) open the
+/// menu too; while ``paused`` (the menu is open) nothing is sent and every held control is released at the host.
 ///
 /// The handlers are GameController's profile-level `valueChangedHandler` of the gamepad and the per-key handlers of
 /// the keyboard, so ``MenuInput``'s handlers keep working next to them.
@@ -56,32 +57,53 @@ public final class GameInput {
         let controller: GCController
         let number: UInt8
         let haptics: ControllerHaptics
-        var shortcut = MenuShortcut()
+        var shortcut: MenuShortcut
         var announced = false
+        /// Home's tap or hold, whether it is down now, and the timer of its hold.
+        var guide = GuideTapHold()
+        var homeDown = false
+        var guideTimer: Task<Void, Never>?
+        /// The controller's last state, sent again when the hold makes Home Guide.
+        var last = GamepadSnapshot()
 
-        init(controller: GCController, number: UInt8) {
+        init(controller: GCController, number: UInt8, menuButtons: Set<ShortcutButton>) {
             self.controller = controller
             self.number = number
             haptics = ControllerHaptics(controller: controller)
+            shortcut = MenuShortcut(buttons: menuButtons)
+        }
+
+        /// Forgets Home's press and its timer.
+        func forgetGuide() {
+            guideTimer?.cancel()
+            guideTimer = nil
+            guide.reset()
         }
     }
 
+    /// The buttons the player recorded to open the stream menu (none by default).
+    private let menuButtons: Set<ShortcutButton>
+
     /// - Parameters:
-    ///   - onMenu: the menu shortcut was pressed (L3 + R3 on a controller, ``MenuKeyShortcut`` on a keyboard).
+    ///   - menuButtons: the stream menu's own combination of controller buttons (``MenuShortcut``).
+    ///   - onMenu: the stream menu is asked for (a tap of Home, the recorded buttons, ``MenuKeyShortcut`` on a keyboard).
     ///   - escapeHold: how long Escape is held to open the menu.
     public init(
-        sink: any StreamInputSink, escapeHold: Duration = MenuKeyShortcut.holdDuration,
+        sink: any StreamInputSink, menuButtons: Set<ShortcutButton> = [], escapeHold: Duration = MenuKeyShortcut.holdDuration,
         onMenu: @escaping @MainActor () -> Void
     ) {
         self.sink = sink
+        self.menuButtons = menuButtons
         self.onMenu = onMenu
         escapeHoldDuration = escapeHold
     }
 
-    /// While true (the stream menu is open) no input reaches the host.
+    /// While true (the stream menu is open) no input reaches the host; a Home press in progress is forgotten (its Guide is
+    /// released with the rest).
     public var paused = false {
         didSet {
             guard paused, !oldValue else { return }
+            pads.values.forEach { $0.forgetGuide() }
             releaseAll()
         }
     }
@@ -152,7 +174,7 @@ public final class GameInput {
     private func attach(_ controller: GCController) {
         let id = ObjectIdentifier(controller)
         guard pads[id] == nil, let gamepad = controller.extendedGamepad, let number = slots.number(for: id) else { return }
-        let pad = Pad(controller: controller, number: number)
+        let pad = Pad(controller: controller, number: number, menuButtons: menuButtons)
         pads[id] = pad
         for element in controller.physicalInputProfile.allElements {
             element.preferredSystemGestureState = .disabled
@@ -168,6 +190,7 @@ public final class GameInput {
 
     private func detach(_ id: ObjectIdentifier) {
         guard let pad = pads.removeValue(forKey: id) else { return }
+        pad.forgetGuide()
         pad.haptics.stop()
         pad.controller.extendedGamepad?.valueChangedHandler = nil
         for element in pad.controller.physicalInputProfile.allElements {
@@ -196,14 +219,52 @@ public final class GameInput {
 
     private func send(_ snapshot: GamepadSnapshot, from id: ObjectIdentifier) {
         guard let pad = pads[id] else { return }
-        let state = GamepadMapping.state(snapshot)
-        let (forward, open) = pad.shortcut.update(state.buttons)
+        pad.last = snapshot
+        var state = GamepadMapping.state(snapshot)
+        let (swallowed, open) = pad.shortcut.update(ShortcutButton.pressed(snapshot))
+        ShortcutButton.remove(swallowed, from: &state)
+        home(snapshot.home && !swallowed.contains(.home), on: pad, id: id)
+        // Home reaches the PC only as Guide, once it was held
+        state.buttons.remove(.special)
+        if pad.guide.isGuideDown { state.buttons.insert(.special) }
         if open { onMenu() }
         guard !paused else { return }
         if !pad.announced { announce(pad) }
-        var sent = state
-        sent.buttons = forward
-        try? sink.sendController(number: pad.number, activeGamepadMask: slots.mask, state: sent)
+        try? sink.sendController(number: pad.number, activeGamepadMask: slots.mask, state: state)
+    }
+
+    /// Home went down or up: a press starts the hold timer, a release before it is a tap (the menu), a release after it
+    /// lets go of Guide. A press while the menu is open (or the loader) belongs to no tap or hold.
+    private func home(_ down: Bool, on pad: Pad, id: ObjectIdentifier) {
+        guard down != pad.homeDown else { return }
+        pad.homeDown = down
+        if down {
+            guard !paused, pad.guide.onDown(Self.milliseconds()) else { return }
+            pad.guideTimer = Task { [weak self] in
+                do { try await Task.sleep(for: .milliseconds(GuideTapHold.holdMilliseconds)) } catch { return }
+                self?.homeHeld(id)
+            }
+        } else {
+            pad.guideTimer?.cancel()
+            pad.guideTimer = nil
+            if pad.guide.onUp() == .tapMenu { onMenu() }
+        }
+    }
+
+    /// The hold time of Home passed: Guide goes down on the PC while the button stays down.
+    private func homeHeld(_ id: ObjectIdentifier) {
+        guard let pad = pads[id] else { return }
+        pad.guideTimer = nil
+        guard !paused, pad.guide.onHoldTimeout(Self.milliseconds()) == .guideDown else { return }
+        send(pad.last, from: id)
+    }
+
+    private nonisolated static let epoch = ContinuousClock.now
+
+    /// Milliseconds on the clock the hold timer sleeps on.
+    private nonisolated static func milliseconds() -> Int64 {
+        let elapsed = (ContinuousClock.now - epoch).components
+        return elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000
     }
 
     nonisolated static func snapshot(_ pad: GCExtendedGamepad) -> GamepadSnapshot {
@@ -233,6 +294,8 @@ public final class GameInput {
         }
         s.leftTrigger = pad.leftTrigger.value
         s.rightTrigger = pad.rightTrigger.value
+        s.leftTriggerPressed = pad.leftTrigger.isPressed
+        s.rightTriggerPressed = pad.rightTrigger.isPressed
         s.leftStickX = pad.leftThumbstick.xAxis.value
         s.leftStickY = pad.leftThumbstick.yAxis.value
         s.rightStickX = pad.rightThumbstick.xAxis.value

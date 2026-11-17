@@ -444,8 +444,11 @@ private let iPhone = DisplayInfo(pixelWidth: 1290, pixelHeight: 2796, maxFramesP
     @Test func touchesAreIgnoredOutsideTheRunningStream() {
         let controller = StreamController { FakeSteps() }
         // No crash and no effect while connecting
-        controller.touch(1, .began, at: .zero, width: 1000, time: 0)
-        controller.touch(1, .ended, at: .zero, width: 1000, time: 0.1)
+        let area = StreamController.TouchArea(width: 1000, height: 600)
+        controller.touch(1, .began, at: CGPoint(x: 500, y: 550), area: area, time: 0)
+        controller.touch(1, .moved, at: CGPoint(x: 500, y: 100), area: area, time: 0.05)
+        controller.touch(1, .ended, at: .zero, area: area, time: 0.1)
+        #expect(!controller.menuOpen)
         #expect(controller.phase == .connecting)
     }
 }
@@ -644,8 +647,9 @@ extension StreamControllerTests {
         #expect(StreamScreen.capture(.options, controller: controller, focus: focus, fromRemote: true, hasGamepad: false))
         #expect(!controller.menuOpen)
         // A touch is not the PC's trackpad and not the menu's swipe
-        controller.touch(1, .began, at: .zero, width: 1000, time: 0)
-        controller.touch(1, .moved, at: CGPoint(x: 900, y: 0), width: 1000, time: 0.1)
+        let area = StreamController.TouchArea(width: 2796, height: 1290, gestureInset: 63, scale: 3)
+        controller.touch(1, .began, at: CGPoint(x: 1400, y: 1150), area: area, time: 0)
+        controller.touch(1, .moved, at: CGPoint(x: 1400, y: 600), area: area, time: 0.1)
         #expect(!controller.menuOpen)
         #expect(StreamScreen.capture(.back, controller: controller, focus: focus))
         await eventually { controller.phase == .ended }
@@ -665,6 +669,67 @@ extension StreamControllerTests {
         await controller.cancelLoader()
         #expect(controller.phase == .streaming)
         #expect(steps.stops == 0)
+    }
+
+    /// A running stream on an iPhone 18 Pro Max in landscape (pixels): the home indicator keeps the bottom 21 points.
+    private static let phone = StreamController.TouchArea(width: 2868, height: 1320, gestureInset: 63, scale: 3)
+
+    private func runningStream(swipe: Bool = true) async -> StreamController {
+        let steps = FakeSteps()
+        let controller = StreamController(menuSwipe: swipe) { steps }
+        controller.start(display: iPhone)
+        await eventually { steps.isConnecting }
+        steps.finishConnect()
+        await eventually { controller.phase == .streaming }
+        controller.loaderEnded()
+        return controller
+    }
+
+    @Test func aSwipeUpFromTheBandAboveTheBottomEdgeOpensTheMenu() async {
+        let controller = await runningStream()
+        let area = Self.phone
+        // The band: from 82 % of the height down to the edge's strip, at least 24 points (72 px) even though the home
+        // indicator keeps only 21 (63 px)
+        let zone = area.swipeZone
+        #expect(abs(zone.top - 1082.4) < 1e-6 && zone.bottom == CGFloat(1248))
+        controller.touch(1, .began, at: CGPoint(x: 1400, y: 1200), area: area, time: 0)
+        // 12 % of the height up (158.4 px) opens it, not before
+        controller.touch(1, .moved, at: CGPoint(x: 1400, y: 1042), area: area, time: 0.05)
+        #expect(!controller.menuOpen)
+        controller.touch(1, .moved, at: CGPoint(x: 1420, y: 1040), area: area, time: 0.1)
+        #expect(controller.menuOpen)
+        controller.touch(1, .ended, at: CGPoint(x: 1420, y: 1040), area: area, time: 0.2)
+        #expect(controller.menuOpen)
+    }
+
+    @Test func theLeftEdgeTheSystemStripAndASidewaysDragDoNotOpenIt() async {
+        let controller = await runningStream()
+        let area = Self.phone
+        // The old left-edge swipe
+        controller.touch(1, .began, at: CGPoint(x: 10, y: 600), area: area, time: 0)
+        controller.touch(1, .moved, at: CGPoint(x: 900, y: 600), area: area, time: 0.1)
+        controller.touch(1, .ended, at: CGPoint(x: 900, y: 600), area: area, time: 0.2)
+        // A start in the home indicator's strip
+        controller.touch(2, .began, at: CGPoint(x: 1400, y: 1300), area: area, time: 1)
+        controller.touch(2, .moved, at: CGPoint(x: 1400, y: 500), area: area, time: 1.1)
+        controller.touch(2, .ended, at: CGPoint(x: 1400, y: 500), area: area, time: 1.2)
+        // More sideways than up
+        controller.touch(3, .began, at: CGPoint(x: 1000, y: 1200), area: area, time: 2)
+        controller.touch(3, .moved, at: CGPoint(x: 1400, y: 900), area: area, time: 2.1)
+        controller.touch(3, .ended, at: CGPoint(x: 1400, y: 900), area: area, time: 2.2)
+        #expect(!controller.menuOpen)
+    }
+
+    @Test func theProfileCanTurnTheSwipeOff() async {
+        let controller = await runningStream(swipe: false)
+        controller.touch(1, .began, at: CGPoint(x: 1400, y: 1200), area: Self.phone, time: 0)
+        controller.touch(1, .moved, at: CGPoint(x: 1400, y: 700), area: Self.phone, time: 0.1)
+        #expect(!controller.menuOpen)
+    }
+
+    @Test func aScreenWithoutAHomeIndicatorStillKeeps24PointsAtTheEdge() {
+        let area = StreamController.TouchArea(width: 2420, height: 1668, gestureInset: 0, scale: 2)
+        #expect(area.swipeZone.bottom == CGFloat(1668 - 48))
     }
 
     @Test func aNewAttemptHasAFreshLoader() async {

@@ -46,6 +46,19 @@ import Testing
         #expect(store.load(profile: "b").statisticsOverlay == .off)
     }
 
+    /// `ui_stream_menu_buttons` and `ui_stream_menu_swipe`: no buttons and the swipe on by default, both kept by the profile.
+    @Test func theStreamMenuButtonsAndSwipeAreKeptByTheProfile() throws {
+        #expect(StreamSettings().streamMenuButtons.isEmpty)
+        #expect(StreamSettings().streamMenuSwipe)
+        var s = StreamSettings()
+        s.streamMenuButtons = ["l3", "r3"]
+        s.streamMenuSwipe = false
+        #expect(try JSONDecoder().decode(StreamSettings.self, from: JSONEncoder().encode(s)) == s)
+        // Settings stored before these rows existed: none and on
+        let old = try JSONDecoder().decode(StreamSettings.self, from: Data(#"{"fps":90}"#.utf8))
+        #expect(old.streamMenuButtons.isEmpty && old.streamMenuSwipe)
+    }
+
     @Test func settersClampToTheRanges() {
         var s = StreamSettings()
         s.bitrateKbps = 10

@@ -108,6 +108,9 @@ final class StreamController {
     @ObservationIgnored private(set) var input: GameInput?
     @ObservationIgnored private var trackpad = TouchTrackpad()
     @ObservationIgnored private var swipe = MenuSwipe()
+    /// How the stream menu opens besides a tap of Home (the profile's `ui_stream_menu_buttons` and `ui_stream_menu_swipe`).
+    @ObservationIgnored private let menuButtons: Set<ShortcutButton>
+    @ObservationIgnored private let menuSwipe: Bool
     /// The app went to the background during the stream: the connection was closed and is opened again on return.
     @ObservationIgnored private(set) var suspended = false
     /// The leaving that runs (``leave(quit:)``).
@@ -127,12 +130,15 @@ final class StreamController {
     init(
         capabilities: StreamMenuCapabilities = .platform, brightness: (any ScreenBrightness)? = nil,
         statisticsOverlay: StatisticsOverlay = .off, playtime: PlaytimeTracker? = nil, playtimeFlushInterval: Duration = .seconds(30),
+        menuButtons: Set<ShortcutButton> = [], menuSwipe: Bool = true,
         makeSteps: @escaping @MainActor () -> any StreamSteps
     ) {
         self.playtime = playtime
         self.playtimeFlushInterval = playtimeFlushInterval
         self.makeSteps = makeSteps
         self.statisticsOverlay = statisticsOverlay
+        self.menuButtons = menuButtons
+        self.menuSwipe = menuSwipe
         self.brightness = brightness
         self.capabilities = StreamMenuCapabilities(keyboard: capabilities.keyboard, brightness: capabilities.brightness && brightness != nil)
         if let brightness { brightnessPercent = Self.rounded(brightness.percent) }
@@ -246,7 +252,7 @@ final class StreamController {
         loader.connected()
         progress = 1
         if let sink = steps.input, input == nil {
-            let input = GameInput(sink: sink) { [weak self] in self?.openMenu() }
+            let input = GameInput(sink: sink, menuButtons: menuButtons) { [weak self] in self?.openMenu() }
             input.start()
             // The scene is still opening over the picture: B, keys and touches are the loader's, not the game's
             input.paused = true
@@ -596,6 +602,20 @@ final class StreamController {
 
     enum TouchPhase { case began, moved, ended, cancelled }
 
+    /// The surface the touches arrive on, in pixels: its size, the strip at its bottom the system keeps for its home
+    /// gesture, and the pixels per point.
+    struct TouchArea: Equatable {
+        var width: CGFloat
+        var height: CGFloat
+        var gestureInset: CGFloat = 0
+        var scale: CGFloat = 1
+
+        /// Where the swipe up that opens the menu starts.
+        var swipeZone: SwipeZone {
+            StreamMenuSwipe.zone(height: height, gestureInset: gestureInset, minDeadEdge: StreamMenuSwipe.minDeadEdge * scale)
+        }
+    }
+
     // MARK: Loader
 
     /// The loader can be cancelled now: its scene is up, while it connects and while it opens over the picture.
@@ -614,16 +634,22 @@ final class StreamController {
         if phase == .streaming, !menuOpen { input?.paused = false }
     }
 
-    /// A touch on the stream, in pixels of a screen `width` pixels wide: the left-edge swipe opens the menu, the other
-    /// touches are the PC's trackpad.
-    func touch(_ id: Int, _ touchPhase: TouchPhase, at point: CGPoint, width: CGFloat, time: TimeInterval) {
+    /// A touch on the stream, in pixels of [area]: the swipe up from the band above the bottom edge opens the menu
+    /// (unless the profile turned it off), the other touches are the PC's trackpad.
+    func touch(_ id: Int, _ touchPhase: TouchPhase, at point: CGPoint, area: TouchArea, time: TimeInterval) {
+        // A touch that ends after the menu opened (its own swipe opened it) is forgotten all the same
+        if touchPhase == .ended || touchPhase == .cancelled, phase != .streaming || menuOpen || loader.cancellable {
+            _ = swipe.ended(id)
+            trackpad.cancelled(id)
+            return
+        }
         guard phase == .streaming, !menuOpen, !loader.cancellable else { return }
         switch touchPhase {
         case .began:
-            if swipe.began(id, x: point.x, width: width) { return }
+            if menuSwipe, swipe.began(id, at: point, zone: area.swipeZone) { return }
             trackpad.began(id, at: point, time: time)
         case .moved:
-            let (owned, open) = swipe.moved(id, x: point.x, width: width)
+            let (owned, open) = swipe.moved(id, to: point, height: area.height)
             if open { openMenu() }
             if owned { return }
             trackpad.moved(id, to: point).forEach { input?.send($0) }

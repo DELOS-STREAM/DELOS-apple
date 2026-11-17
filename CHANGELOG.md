@@ -157,6 +157,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- The stream menu opens with a tap of a controller's Home button, and holding Home for half a second sends Guide to the
+  PC while it is held; the Home button's system overlay stays off during a stream. L3 + R3 no longer open the menu by
+  default: Settings → Controls → Stream menu buttons records your own combination ("Not set" by default). On the touch
+  screen the menu opens with a swipe up from a band above the bottom edge (Swipe up to open the menu, on by default)
+  instead of the swipe from the left edge; touches starting in that band do not reach the PC. Not yet tried on a device.
 - Feedback and motion as in DELOS for Android: a tap or a click plays the same cue and squeezes the element (.97) as A
   does, without a second sound (Cancel and Back to library are BACK only; the stream menu opens with OPEN and closes with
   BACK; the PC ending the stream shows a toast), Apple TV plays MOVE and SELECT through the focus engine, circle rows and

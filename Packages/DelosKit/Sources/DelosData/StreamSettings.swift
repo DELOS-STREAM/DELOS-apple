@@ -91,6 +91,11 @@ public struct StreamSettings: Codable, Equatable, Sendable {
     /// The statistics overlay the stream menu's Overlay tile last chose (Android keeps it in the profile as well); every
     /// stream of the profile starts with it.
     public var statisticsOverlay = StatisticsOverlay.off
+    /// The controller buttons that open the stream menu when held together (`ui_stream_menu_buttons`), by name; none by
+    /// default, since a tap of Home opens it. The names are DelosInput's `ShortcutButton` values.
+    public var streamMenuButtons: [String] = []
+    /// The swipe up from the band above the bottom edge opens the stream menu (`ui_stream_menu_swipe`).
+    public var streamMenuSwipe = true
 
     /// The bitrate slider of Android (`seekbar_bitrate_kbps`): 1 to 1000 Mbps in steps of 1 Mbps.
     public static let bitrateRange = 1000...1_000_000
@@ -141,6 +146,8 @@ public struct StreamSettings: Codable, Equatable, Sendable {
         playAudioOnHost = value(.playAudioOnHost, d.playAudioOnHost)
         framePacing = value(.framePacing, d.framePacing)
         statisticsOverlay = value(.statisticsOverlay, d.statisticsOverlay)
+        streamMenuButtons = value(.streamMenuButtons, d.streamMenuButtons)
+        streamMenuSwipe = value(.streamMenuSwipe, d.streamMenuSwipe)
     }
 }
 
