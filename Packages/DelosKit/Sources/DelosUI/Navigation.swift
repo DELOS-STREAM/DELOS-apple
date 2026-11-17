@@ -93,10 +93,40 @@ public final class Navigator {
 
     /// What the screen shown says about its buttons for the hint bar (adjust, reset).
     var screenHints = ScreenHints()
+    @ObservationIgnored private weak var hintsOwner: AnyObject?
+
+    /// The screen [owner] says what its buttons do now.
+    func setHints(_ hints: ScreenHints, from owner: AnyObject) {
+        hintsOwner = owner
+        screenHints = hints
+    }
+
+    /// The screen [owner] is gone: its hints go with it, unless the next screen has already said its own (a screen that is
+    /// leaving is removed after the one that comes has appeared).
+    func clearHints(of owner: AnyObject) {
+        guard hintsOwner === owner else { return }
+        hintsOwner = nil
+        screenHints = ScreenHints()
+    }
 
     /// While set, every controller and keyboard command goes here first; true: consumed (the stream screen owns the
-    /// controller).
+    /// controller). Set with ``capture(for:_:)``.
     @ObservationIgnored public var commandCapture: (@MainActor (MenuCommand) -> Bool)?
+    @ObservationIgnored private weak var captureOwner: AnyObject?
+
+    /// The screen [owner] takes the commands first (Settings, a sheet, the stream).
+    func capture(for owner: AnyObject, _ handler: @escaping @MainActor (MenuCommand) -> Bool) {
+        captureOwner = owner
+        commandCapture = handler
+    }
+
+    /// The screen [owner] lets go of the commands, unless the screen that comes next has taken them already: a screen that is
+    /// leaving is removed (its `onDisappear` runs) after the one that comes has appeared, and must not take its capture away.
+    func releaseCapture(of owner: AnyObject) {
+        guard captureOwner === owner else { return }
+        captureOwner = nil
+        commandCapture = nil
+    }
     /// Ends the repeats of a held direction (``MenuInput/cancelRepeats()``); set by the screen that owns the input.
     @ObservationIgnored public var cancelRepeats: (@MainActor () -> Void)?
     /// How often the command being handled has repeated while its direction is held (0: a new press).

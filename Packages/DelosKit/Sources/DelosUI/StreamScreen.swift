@@ -89,7 +89,7 @@ struct StreamScreen: View {
         controller.statisticsChosen = keepStatisticsOverlay
         self.renderer = renderer
         self.controller = controller
-        navigator.commandCapture = { [navigator] command in
+        navigator.capture(for: controller) { [navigator] command in
             Self.capture(command, controller: controller, focus: navigator.focus, fromRemote: navigator.commandFromRemote, feedback: layers?.feedback,
                 repeatCount: navigator.commandRepeat)
         }
@@ -99,7 +99,7 @@ struct StreamScreen: View {
     }
 
     private func end() {
-        navigator.commandCapture = nil
+        if let controller { navigator.releaseCapture(of: controller) }
         controller?.restoreBrightness()
         IdleTimer.disabled = false
         if let shutdownID { StreamShutdown.shared.unregister(shutdownID) }

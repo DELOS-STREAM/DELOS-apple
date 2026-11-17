@@ -109,16 +109,16 @@ struct SettingsScreen: View {
         .onChange(of: form.settings) { _, now in store.save(now, profile: profileID) }
         .onChange(of: appearance) { _, now in appearances.save(now, profile: profileID) }
         .onAppear {
-            navigator.commandCapture = { command in capture(command) }
+            navigator.capture(for: focus) { command in capture(command) }
             if focusedRow == nil { focus.focus(Self.firstRow(tab)) }
             SettingsSession.shared.tab = tab
         }
         .onDisappear {
-            navigator.commandCapture = nil
-            navigator.screenHints = ScreenHints()
+            navigator.releaseCapture(of: focus)
+            navigator.clearHints(of: focus)
         }
         .onChange(of: tab) { _, next in SettingsSession.shared.tab = next }
-        .onChange(of: focus.focused, initial: true) { navigator.screenHints = ScreenHints(adjustable: ShellHints.adjustable(focusedRow)) }
+        .onChange(of: focus.focused, initial: true) { navigator.setHints(ScreenHints(adjustable: ShellHints.adjustable(focusedRow)), from: focus) }
     }
 
     private var content: some View {

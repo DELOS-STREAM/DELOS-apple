@@ -175,12 +175,12 @@ struct HomeScreen: View {
             }
         }
         .onChange(of: ScreenFilter(label: offeredNow ? LibraryFilter.hintLabel(filters) : nil, open: sheetOpen), initial: true) { _, now in
-            navigator.screenHints = ScreenHints(sheetOpen: now.open, filterLabel: now.label)
+            navigator.setHints(ScreenHints(sheetOpen: now.open, filterLabel: now.label), from: focus)
         }
-        .onAppear { navigator.commandCapture = { command in capture(command) } }
+        .onAppear { navigator.capture(for: focus) { command in capture(command) } }
         .onDisappear {
-            navigator.commandCapture = nil
-            navigator.screenHints = ScreenHints()
+            navigator.releaseCapture(of: focus)
+            navigator.clearHints(of: focus)
         }
     }
 

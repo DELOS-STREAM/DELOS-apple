@@ -106,16 +106,16 @@ struct GameSettingsScreen: View {
         .screenModal(popup?.focus)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
-            navigator.commandCapture = { command in capture(command) }
+            navigator.capture(for: focus) { command in capture(command) }
             if focusedRow == nil { focus.focus(Self.firstFocus()) }
         }
         .onDisappear {
-            navigator.commandCapture = nil
-            navigator.screenHints = ScreenHints()
+            navigator.releaseCapture(of: focus)
+            navigator.clearHints(of: focus)
         }
         .onChange(of: HintKey(focus: focus.focused, custom: model.overrides.count), initial: true) {
-            navigator.screenHints = ScreenHints(
-                adjustable: ShellHints.adjustable(focusedRow), resetsRow: focusedRow.map { model.isCustom($0.id) } ?? false)
+            navigator.setHints(ScreenHints(
+                adjustable: ShellHints.adjustable(focusedRow), resetsRow: focusedRow.map { model.isCustom($0.id) } ?? false), from: focus)
         }
         .onChange(of: focus.focused) { _, now in
             if let id = now as? String, rows.contains(where: { $0.id == id }) { lastRow = id }
