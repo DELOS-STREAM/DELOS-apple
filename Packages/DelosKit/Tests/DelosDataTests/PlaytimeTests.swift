@@ -72,3 +72,59 @@ import Testing
         #expect(played.times(profile: "a", hostID: "PC").isEmpty)
     }
 }
+
+@MainActor
+@Suite struct PlaytimeTrackerTests {
+    private final class Ledger {
+        var now = 0.0
+        var slices: [Double] = []
+    }
+
+    private func tracker(_ ledger: Ledger) -> PlaytimeTracker {
+        PlaytimeTracker(clock: { ledger.now }, sink: { ledger.slices.append($0) })
+    }
+
+    @Test func theSlicesAddUpToTheConnectedTime() {
+        let ledger = Ledger()
+        let tracker = tracker(ledger)
+        ledger.now = 5
+        tracker.flush()
+        #expect(ledger.slices.isEmpty, "not started: nothing counts")
+        tracker.start()
+        ledger.now += 30
+        tracker.flush()
+        ledger.now += 12
+        tracker.end()
+        tracker.end()
+        ledger.now += 100
+        tracker.flush()
+        #expect(ledger.slices == [30, 12])
+        #expect(!tracker.running)
+    }
+
+    @Test func startingWhileCountingChangesNothingAndItCanStartAgain() {
+        let ledger = Ledger()
+        let tracker = tracker(ledger)
+        tracker.start()
+        ledger.now += 10
+        tracker.start()
+        ledger.now += 10
+        tracker.end()
+        ledger.now += 50
+        tracker.start()
+        ledger.now += 3
+        tracker.end()
+        #expect(ledger.slices == [20, 3])
+    }
+
+    @Test func theStoreKeepsTheTotalAndTheDayOfTheLastAdditionPerProfileHostAndApp() {
+        let store = PlaytimeStore(suiteName: "delos.tests.\(UUID().uuidString)")
+        let day = Date(timeIntervalSince1970: 1_700_000_000)
+        store.add(30, profile: "p", hostID: "h", appID: 7, at: day)
+        store.add(12, profile: "p", hostID: "h", appID: 7, at: day.addingTimeInterval(60))
+        store.add(5, profile: "p", hostID: "h", appID: 8, at: day)
+        #expect(store.playtime(profile: "p", hostID: "h", appID: 7) == Playtime(totalSeconds: 42, lastStreamed: day.addingTimeInterval(60)))
+        #expect(store.playtime(profile: "p", hostID: "h", appID: 8).totalSeconds == 5)
+        #expect(store.playtime(profile: "q", hostID: "h", appID: 7) == .none)
+    }
+}

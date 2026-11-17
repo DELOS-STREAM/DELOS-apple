@@ -449,7 +449,7 @@ public struct DelosRoot: View {
             }
         case .stream(let hostID, let appID):
             StreamScreen(
-                hostID: hostID, appID: appID, settings: actions.streamSettings(hostID: hostID, appID: appID),
+                hostID: hostID, appID: appID, profileID: profiles.current?.id, settings: actions.streamSettings(hostID: hostID, appID: appID),
                 keepStatisticsOverlay: { actions.keepStatisticsOverlay($0) })
         case .settings:
             SettingsScreen(
