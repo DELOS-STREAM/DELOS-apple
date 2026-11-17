@@ -83,6 +83,8 @@ enum StreamMenuButtonsText {
         // Android names a button without a legend by its platform constant (a technical readout): Share is
         // KEYCODE_MEDIA_RECORD there
         case .share: "Media record"
+        // A keyboard's key the same way: "Ctrl left", "Escape", "F5"
+        case .key(let usage): ShortcutButton.keyName(usage)
         }
     }
 }

@@ -735,6 +735,9 @@ stream_result_timeout_details
 stream_result_try_again
 stream_result_unpaired
 stream_result_unpaired_details
+stream_mouse_emulation_on
+stream_mouse_emulation_off
+toast_controller_type_changed
 
 # Hint bar (button hints, shown with the connected controller's glyphs) and the library note
 shell_hint_select
