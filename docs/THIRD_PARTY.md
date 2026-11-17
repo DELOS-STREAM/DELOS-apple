@@ -89,6 +89,31 @@ license.
 | `wizard.webp` | `e67bf9eeda7b75d86b88e6e61ff6254bd181cee8aee68fdbfb5b79730fe3ebb0` |
 | `wolf.webp` | `2391c5bffa9aa0e26bd33addba8ecea90537f00d7fa45c2e4b1aa3f033dd9747` |
 
+## Bundled artwork
+
+The cover, wide cover and background of DELOS's own entries on a PC (Desktop, Remote Input, Remote Monitor, Steam Big
+Picture) in `Packages/DelosKit/Sources/DelosUI/Artwork/<entry>/` are copied byte for byte from DELOS for Android
+(`app/src/main/assets/artwork/`, last changed in commit `4a58b0b6`), without resizing or recompression. They are abstract
+art made for DELOS (the covers and wide covers with the entry's name and icon, the backgrounds as island terraces
+generated with an image generator, issue #81 of DELOS for Android); the entries' logo stays the rendered name. The files
+are copied into the app as they are (`.copy("Artwork")` in `Package.swift`: `.process` would flatten the four folders of
+the same file names). Original to DELOS, project license.
+
+| File | SHA-256 |
+|---|---|
+| `desktop/cover.jpg` | `9c94f172ce3a81b3632ca8e965bbf408668b65a9ea3a0d09d93b737aa7e6c696` |
+| `desktop/wide.jpg` | `fe6791e9b8390ee38efa0a0d078e8f25a4568527ddd3d026a40d5c417d828b8b` |
+| `desktop/hero.jpg` | `bd73e5216a77c62c44aa8c89897d95ec4fcd2d17057cc0277eb9dd734ea12d24` |
+| `remote-input/cover.jpg` | `8e08227fb3db35e8907199b05c9f2dbff01733926f4db1391bfae13deeb8186f` |
+| `remote-input/wide.jpg` | `c62cb96c2f93523ef6b289ad68723d6ffd72795a2d01ccc3395642284b9f2a35` |
+| `remote-input/hero.jpg` | `87f0a62c463dce6449014d0bf98dd63735bcff21ff476730a78a7ce031557203` |
+| `remote-monitor/cover.jpg` | `6012a3fe4083937aec913eb3e54863f4c4c8cff1953582f829e3a98d42e5f8dc` |
+| `remote-monitor/wide.jpg` | `6383dc3ced22760ecd4d0ecfc5724b639d766f7f71acf2c9937c314b7585a324` |
+| `remote-monitor/hero.jpg` | `cf123578a04701f2b0f814a25daf4b9c1cba799d112a2b1b82f44012dbb65b11` |
+| `steam-big-picture/cover.jpg` | `f1e958ff4b59b06e1544898f523109ef933576a575f12d2e5308a1a73c498a6d` |
+| `steam-big-picture/wide.jpg` | `a45de44370bac2c9e87e8e7b178e3bc121eda70829db4f60656b420d070a56ac` |
+| `steam-big-picture/hero.jpg` | `04b4f6837638e273a6ae9aae8a3eb7ec29843fa07eedfb5bc805b1674a181916` |
+
 ## Game metadata services
 
 The metadata data layer ports DELOS for Android's `GameMetadata`, policy and clients (project GPL-3.0).

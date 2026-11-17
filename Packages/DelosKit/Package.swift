@@ -110,7 +110,8 @@ let package = Package(
         .target(
             name: "DelosUI",
             dependencies: ["DelosData", "DelosInput", "DelosMedia"],
-            resources: [.process("Resources")],
+            // The bundled artwork of DELOS's own entries is copied as it is (`process` would flatten the four folders of the same file names)
+            resources: [.process("Resources"), .copy("Artwork")],
             swiftSettings: strict
         ),
         .testTarget(name: "DelosCoreTests", dependencies: ["DelosCore", "CDelosCommon"], swiftSettings: strict),
