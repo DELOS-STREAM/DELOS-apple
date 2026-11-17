@@ -79,7 +79,11 @@ public enum MetadataProxy {
     public static func url(baseURL: String, path: String, parameters: [URLQueryItem] = []) -> URL? {
         guard var parts = URLComponents(string: baseURL.trimmingCharacters(in: .whitespacesAndNewlines)),
               let host = parts.host, !host.isEmpty else { return nil }
-        let local = ["localhost", "10.0.2.2", "127.0.0.1"].contains(host.lowercased())
+        #if DEBUG
+        let local = ["localhost", "127.0.0.1"].contains(host.lowercased())
+        #else
+        let local = false
+        #endif
         guard parts.scheme?.lowercased() == "https" || (local && parts.scheme?.lowercased() == "http") else { return nil }
         let basePath = parts.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         parts.path = "/" + ([basePath, path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))].filter { !$0.isEmpty }).joined(separator: "/")
