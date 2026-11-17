@@ -209,15 +209,89 @@ public struct HostClient: Sendable {
 
     /// `query` is already encoded; the client id, the device name and a fresh request id are appended.
     func perform(_ path: String, query: String, pin: HostPin?, timeout: Duration?, limit: Int) async throws -> Data {
+        let response = try await send(path, query: query, pin: pin, timeout: timeout, limit: limit)
+        guard response.status == 200 else { throw HostError.httpStatus(response.status) }
+        return response.body
+    }
+
+    /// The request as ``perform(_:query:pin:timeout:limit:)`` makes it, a POST of [text] when there is one; the answer
+    /// whatever its status.
+    func send(
+        _ path: String, query: String, pin: HostPin?, timeout: Duration?, limit: Int, text: Data? = nil
+    ) async throws -> HTTPResponse {
         let common = HTTPRequest.encode(
             [("uniqueid", identity.uniqueID), ("devicename", deviceName), ("uuid", UUID().uuidString)])
         let target = pin.map { HostAddress(host: address.host, port: $0.httpsPort) } ?? address
         let request = HTTPRequest(
             address: target, path: "/" + path, query: query.isEmpty ? common : query + "&" + common,
             tls: pin.map { TLSPolicy(pinnedCertificate: $0.certificate, identity: identity) },
-            timeout: timeout, maximumBodySize: limit)
-        let response = try await HTTPTransport.get(request)
-        guard response.status == 200 else { throw HostError.httpStatus(response.status) }
-        return response.body
+            timeout: timeout, maximumBodySize: limit, text: text)
+        return try await HTTPTransport.perform(request)
     }
+}
+
+// MARK: During a stream (Vibepollo and Apollo)
+
+extension HostClient {
+    /// The bitrates Vibepollo accepts for a running stream, in kbps: 1 to 1000 Mbps (NvHTTP.java:944-946).
+    public static let runtimeBitrateRange = 1000...1_000_000
+    /// The longest clipboard text accepted from the host. DELOS for Android reads any length; this client needs a cap
+    /// for every answer (HTTPResponseParser), and 16 MiB of text is far beyond what a clipboard holds.
+    static let clipboardLimit = 16 << 20
+
+    /// Changes the bitrate of this client's running stream (`setRuntimeBitrate`, NvHTTP.java:942-962: Vibepollo's paired
+    /// HTTPS command, no control-stream extension). Returns the bitrate the host applied, which can be lower than asked.
+    ///
+    /// Throws as DELOS for Android tells the failures apart (StreamMenu.kt:318-327): `httpStatus(404)` when the host has
+    /// no such command (or the stream has ended), `hostStatus` with the host's code and message when it refused (an
+    /// HTTP error with its reason phrase, or an XML `status_code`, 403 when it did not allow it), anything else when the
+    /// change was not confirmed. [kbps] outside ``runtimeBitrateRange`` throws ``RuntimeBitrateOutOfRange``.
+    public func setRuntimeBitrate(_ kbps: Int, pin: HostPin) async throws -> Int {
+        guard Self.runtimeBitrateRange.contains(kbps) else { throw RuntimeBitrateOutOfRange(kbps: kbps) }
+        let response = try await send(
+            "bitrate", query: HTTPRequest.encode([("bitrate", "\(kbps)")]), pin: pin, timeout: Self.requestTimeout,
+            limit: Self.xmlLimit)
+        try Self.check(response)
+        guard let text = try HostXML.root(response.body).child("bitrate") else {
+            throw HostError.malformedResponse("no bitrate")
+        }
+        guard let applied = Int(text), Self.runtimeBitrateRange.contains(applied) else {
+            throw HostError.malformedResponse("the host did not confirm a valid bitrate")
+        }
+        return applied
+    }
+
+    /// The host's clipboard as text (`getClipboard`, NvHTTP.java:1003-1007): whatever the host answers, as DELOS for
+    /// Android puts it on the clipboard.
+    public func clipboard(pin: HostPin) async throws -> String {
+        let response = try await send(
+            "actions/clipboard", query: "type=text", pin: pin, timeout: Self.requestTimeout, limit: Self.clipboardLimit)
+        try Self.check(response)
+        return String(decoding: response.body, as: UTF8.self)
+    }
+
+    /// Sends [text] to the host's clipboard (`sendClipboard`, NvHTTP.java:1009-1018). False when the host does not
+    /// support it: Sunshine answers the unknown command with 200 and a body, a host that takes it answers with none.
+    public func sendClipboard(_ text: String, pin: HostPin) async throws -> Bool {
+        let response = try await send(
+            "actions/clipboard", query: "type=text", pin: pin, timeout: Self.requestTimeout, limit: Self.xmlLimit,
+            text: Data(text.utf8))
+        try Self.check(response)
+        return response.body.isEmpty
+    }
+
+    /// OkHttp's `isSuccessful` as NvHTTP reads it (NvHTTP.java:538-550): 2xx passes, 404 is `httpStatus(404)` (Android's
+    /// FileNotFoundException), any other status the host's code and reason phrase (HostHttpResponseException).
+    private static func check(_ response: HTTPResponse) throws {
+        switch response.status {
+        case 200..<300: return
+        case 404: throw HostError.httpStatus(404)
+        default: throw HostError.hostStatus(code: response.status, message: response.reason)
+        }
+    }
+}
+
+/// A bitrate outside ``HostClient/runtimeBitrateRange`` (Android's IllegalArgumentException, NvHTTP.java:945).
+public struct RuntimeBitrateOutOfRange: Error, Equatable, Sendable {
+    public let kbps: Int
 }

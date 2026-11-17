@@ -57,15 +57,17 @@ import Testing
     }
 
     @Test(arguments: [
-        (AudioConfiguration.stereo, Int32(0x0003_02CA), 2),
-        (AudioConfiguration.surround51, Int32(0x003F_06CA), 6),
-        (AudioConfiguration.surround71, Int32(0x063F_08CA), 8),
+        (AudioConfiguration.stereo, Int32(0x0003_02CA), 2, 196_610),
+        (AudioConfiguration.surround51, Int32(0x003F_06CA), 6, 4_128_774),
+        (AudioConfiguration.surround71, Int32(0x063F_08CA), 8, 104_792_072),
     ])
-    func audioLayoutsEncodeLikeTheCoreMacro(layout: AudioConfiguration, encoded: Int32, channels: Int) {
+    func audioLayoutsEncodeLikeTheCoreMacro(layout: AudioConfiguration, encoded: Int32, channels: Int, surroundInfo: Int) {
         // MAKE_AUDIO_CONFIGURATION(channels, mask) = mask << 16 | channels << 8 | 0xCA, evaluated by hand
         #expect(layout.rawValue == encoded)
         #expect(layout.channelCount == channels)
         #expect(AudioConfiguration(rawValue: encoded) == layout)
+        // SURROUNDAUDIOINFO_FROM_AUDIO_CONFIGURATION = mask << 16 | channels, the launch request's surroundAudioInfo
+        #expect(layout.surroundAudioInfo == surroundInfo)
     }
 
     @Test func unknownAudioEncodingsAreRejected() {

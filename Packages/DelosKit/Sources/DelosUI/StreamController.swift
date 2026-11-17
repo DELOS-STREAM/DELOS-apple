@@ -1,5 +1,6 @@
 import DelosCore
 import DelosData
+import DelosHost
 import DelosInput
 import DelosMedia
 import Foundation
@@ -35,12 +36,19 @@ protocol StreamSteps: AnyObject {
     func stop() async
     /// Asks the PC to quit the app; false when it did not.
     func quitApp() async -> Bool
+    /// Vibepollo's live bitrate change of the running stream; returns the bitrate the host applied (``StreamBitrate``).
+    func setRuntimeBitrate(_ kbps: Int) async throws -> Int
+    /// The clipboard sync with the PC once ``launch(display:)`` knows it; nil before and without one.
+    var clipboard: ClipboardSync? { get }
 }
 
 extension StreamSteps {
     /// Attempts without a video renderer (including lifecycle tests) have no presentation telemetry.
     var statisticsSource: StreamStatisticsSource? { nil }
     var serverCommands: [String] { [] }
+    /// Without a PC that answers, a bitrate change is a command the host does not have (``BitrateFailure/unsupported``).
+    func setRuntimeBitrate(_ kbps: Int) async throws -> Int { throw HostError.httpStatus(404) }
+    var clipboard: ClipboardSync? { nil }
 }
 
 /// One stream on the screen (`DelosStreamActivity` with `StreamLoader` of DELOS for Android): launch, the connecting
@@ -86,6 +94,8 @@ final class StreamController {
     private(set) var statisticsOverlay = StatisticsOverlay.off
     /// The popover of the stream menu: which page is open and what has the focus in it.
     let menu = StreamMenuState()
+    /// The live bitrate of the stream (the Bitrate page's Apply, ``applyBitrate(_:)``).
+    let bitrate = StreamBitrate()
     /// What this device can do for the menu's tiles and pages (the brightness needs a device to set it on).
     let capabilities: StreamMenuCapabilities
     /// The screen's brightness in percent, in steps of 5 (the Brightness page's slider).
@@ -266,6 +276,8 @@ final class StreamController {
         }
         startStatistics()
         startPlaytime()
+        // Smart Clipboard Sync sends this device's clipboard once the stream runs (DelosStreamActivity.java:1808-1809)
+        steps.clipboard?.handleFocusChange(true, connected: true)
     }
 
     /// Time counts from the moment the core is connected (video and audio flow), like Android's `connectionStarted`;
@@ -480,6 +492,22 @@ final class StreamController {
         input?.runServerCommand(index)
     }
 
+    /// Apply of the Bitrate page (`applyBitrate`, StreamMenu.kt:308-331): asks the PC for [kbps] while the stream runs.
+    func applyBitrate(_ kbps: Int) {
+        let steps = self.steps
+        bitrate.apply(kbps, connected: { [weak self] in self?.phase == .streaming }, change: { try await steps.setRuntimeBitrate($0) })
+    }
+
+    /// Send clipboard of the More page (StreamMenu.kt:453): this device's clipboard to the PC, also a clip DELOS marked.
+    func sendClipboard() {
+        steps.clipboard?.send(force: true)
+    }
+
+    /// Get clipboard of the More page (StreamMenu.kt:454): the PC's clipboard to this device.
+    func getClipboard() {
+        steps.clipboard?.get()
+    }
+
     /// The Keyboard tile: the menu closes, then the on-screen keyboard comes up or goes away.
     func toggleKeyboard() {
         KeyboardTileLog.note("tile: Keyboard pressed; offered \(capabilities.keyboard), shown \(keyboardShown), menu open \(menuOpen)")
@@ -575,6 +603,8 @@ final class StreamController {
         case .connecting, .streaming:
             break
         }
+        // Disconnect brings the PC's clipboard along with Smart Clipboard Sync (DelosStreamActivity.java:2086-2091)
+        if !quit, phase == .streaming { steps.clipboard?.disconnecting() }
         stopStatistics()
         hideMenu()
         // No return from the background starts another attempt now; the one that ran is the one the PC quits

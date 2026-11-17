@@ -9,6 +9,15 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Surround audio: Settings → Audio asks the PC for stereo, 5.1 or 7.1. Each channel plays on the speaker of its
+  name on an HDMI or AirPlay receiver that has it, and fewer speakers get the layout mixed down. The stream also
+  sends the resolution scale factor and asks for full-range video when chosen. Real surround receivers are not
+  verified.
+- Live bitrate change and clipboard sync with Vibepollo and Apollo: the stream can ask the PC for another
+  bitrate and reports what it accepted or why it failed; Smart Clipboard Sync sends this device's clipboard when
+  the stream starts and fetches the PC's on Disconnect, with Android's toasts and the Hide clipboard content
+  option. The stream menu's Bitrate page and clipboard rows come later; nothing was verified against a real PC.
+
 - Pairing waits for the trusted paired state instead of a fixed delay, and manual-address entry reports a PC
   that was not added. The start screen retargets its initial PC focus as discovery changes. On compact stages,
   the profile chip shares the status line, clears the measured status cluster and truncates long names.

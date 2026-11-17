@@ -96,8 +96,10 @@ struct StreamScreen: View {
         let controller = StreamController(
             brightness: Self.deviceBrightness, statisticsOverlay: settings.statisticsOverlay, playtime: playtime,
             menuButtons: ShortcutButton.parse(settings.streamMenuButtons), menuSwipe: settings.streamMenuSwipe
-        ) { [hosts, hostID, appID, settings] in
-            LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer)
+        ) { [hosts, hostID, appID, settings, toasts] in
+            LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer) { text, kind in
+                toasts?.show(text, durationMs: ToastTiming.streamShortMs, kind: kind)
+            }
         }
         controller.rumbleConfiguration = settings.rumble
         controller.leavingHold = .seconds(ExitLook.handoff(reduced: reducedMotion))

@@ -39,6 +39,12 @@ public enum AudioConfiguration: Sendable, CaseIterable {
         Int32(channelMask << 16 | channelCount << 8 | 0xCA)
     }
 
+    /// The launch request's `surroundAudioInfo`: `SURROUNDAUDIOINFO_FROM_AUDIO_CONFIGURATION` of Limelight.h
+    /// (`getSurroundAudioInfo` of DELOS for Android, MoonBridge.java:176).
+    public var surroundAudioInfo: Int {
+        channelMask << 16 | channelCount
+    }
+
     /// The layout of a value encoded by the core, or nil for a layout the core does not define.
     public init?(rawValue: Int32) {
         guard let layout = Self.allCases.first(where: { $0.rawValue == rawValue }) else { return nil }

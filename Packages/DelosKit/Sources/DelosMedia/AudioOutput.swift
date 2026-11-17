@@ -59,14 +59,67 @@ public final class AudioOutput: AudioSampleSink, @unchecked Sendable {
         let engine = AVAudioEngine()
         engine.attach(source)
         engine.connect(source, to: engine.mainMixerNode, format: format)
+        Self.routeOutput(of: engine, channels: channels)
         self.engine = engine
-        observe(engine)
+        observe(engine, channels: channels)
         return true
     }
 
-    /// Starts the engine again when the system stopped it (route or device change, interruption).
-    private func observe(_ engine: AVAudioEngine) {
-        let restarter = AudioRestarter(isRunning: { engine.isRunning }, restart: { (try? engine.start()) != nil })
+    /// Gives the stream's speakers to the output (Android's `AudioTrack` with `CHANNEL_OUT_5POINT1` or
+    /// `CHANNEL_OUT_7POINT1_SURROUND`, AndroidAudioRenderer.java:72-92): the route is asked for up to [channels]
+    /// channels (HDMI and AirPlay receivers have more than two only when asked), and the main mixer feeds the output in
+    /// a format that names the route's speakers. The mixer then places each channel of the stream by its label; on a
+    /// route with fewer speakers (built-in speakers, headphones) it mixes the layout down to them, as Android's audio
+    /// framework mixes a 5.1 track down to stereo. Called again when the route changes.
+    static func routeOutput(of engine: AVAudioEngine, channels: Int) {
+        var speakers: [AudioChannelLabel] = []
+        #if !os(macOS)
+        let session = AVAudioSession.sharedInstance()
+        try? session.setPreferredOutputNumberOfChannels(min(channels, max(session.maximumOutputNumberOfChannels, 1)))
+        speakers = session.currentRoute.outputs.flatMap { $0.channels ?? [] }.map(\.channelLabel)
+        #endif
+        if let output = outputFormat(hardware: engine.outputNode.outputFormat(forBus: 0), speakers: speakers) {
+            engine.connect(engine.mainMixerNode, to: engine.outputNode, format: output)
+        }
+    }
+
+    /// The format between the main mixer and an output of more than two channels that does not name its speakers (no
+    /// layout, or a discrete or unknown one): the output's channels with the [speakers] of the route as their labels.
+    /// Nil when the engine's own connection is right: one or two channels, an output that names its speakers itself
+    /// (the Mac's device layout), or speakers the route does not name (the engine then keeps its own order).
+    static func outputFormat(hardware: AVAudioFormat, speakers: [AudioChannelLabel]) -> AVAudioFormat? {
+        let channels = Int(hardware.channelCount)
+        guard channels > 2, hardware.sampleRate > 0, !namesSpeakers(hardware.channelLayout), speakers.count == channels,
+              !speakers.contains(where: { $0 == kAudioChannelLabel_Unknown || $0 == kAudioChannelLabel_Unused }) else {
+            return nil
+        }
+        let size = MemoryLayout<AudioChannelLayout>.size + (channels - 1) * MemoryLayout<AudioChannelDescription>.stride
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: MemoryLayout<AudioChannelLayout>.alignment)
+        defer { raw.deallocate() }
+        raw.initializeMemory(as: UInt8.self, repeating: 0, count: size)
+        let layout = raw.bindMemory(to: AudioChannelLayout.self, capacity: 1)
+        layout.pointee.mChannelLayoutTag = kAudioChannelLayoutTag_UseChannelDescriptions
+        layout.pointee.mNumberChannelDescriptions = UInt32(channels)
+        let descriptions = (raw + MemoryLayout<AudioChannelLayout>.offset(of: \.mChannelDescriptions)!)
+            .bindMemory(to: AudioChannelDescription.self, capacity: channels)
+        for (index, label) in speakers.enumerated() { descriptions[index].mChannelLabel = label }
+        return AVAudioFormat(standardFormatWithSampleRate: hardware.sampleRate, channelLayout: AVAudioChannelLayout(layout: layout))
+    }
+
+    /// Whether [layout] says which speaker each channel is for (not a discrete or unknown layout).
+    static func namesSpeakers(_ layout: AVAudioChannelLayout?) -> Bool {
+        guard let tag = layout?.layoutTag else { return false }
+        let kind = tag & 0xFFFF_0000
+        return kind != kAudioChannelLayoutTag_DiscreteInOrder && kind != kAudioChannelLayoutTag_Unknown
+    }
+
+    /// Starts the engine again when the system stopped it (route or device change, interruption); the new route gets
+    /// the stream's speakers first (``routeOutput(of:channels:)``).
+    private func observe(_ engine: AVAudioEngine, channels: Int) {
+        let restarter = AudioRestarter(isRunning: { engine.isRunning }, restart: {
+            Self.routeOutput(of: engine, channels: channels)
+            return (try? engine.start()) != nil
+        })
         self.restarter = restarter
         let center = NotificationCenter.default
         func watch(_ name: Notification.Name, object: Any?, _ event: @escaping @Sendable (Notification) -> AudioRestarter.Event?) {

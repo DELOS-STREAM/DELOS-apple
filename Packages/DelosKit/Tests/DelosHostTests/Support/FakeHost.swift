@@ -13,6 +13,10 @@ final class FakeHost: Sendable {
         let secure: Bool
         /// The client certificate of the TLS connection (DER), for HTTPS requests.
         let clientCertificate: Data?
+        var method = "GET"
+        var headers: [String: String] = [:]
+        /// What a POST carried.
+        var body = Data()
 
         var query: [String: String] {
             var out = [String: String]()
@@ -29,6 +33,7 @@ final class FakeHost: Sendable {
         var body: Data
         /// Never answer (for time-out tests).
         var silent = false
+        var reason = "X"
 
         static func xml(_ text: String) -> Response { Response(body: Data(text.utf8)) }
     }
@@ -110,29 +115,52 @@ final class FakeHost: Sendable {
         queue: DispatchQueue, respond: @escaping Handler
     ) {
         connection.start(queue: queue)
-        receiveHead(connection, buffer: Data()) { head in
-            let line = String(decoding: head, as: UTF8.self).components(separatedBy: "\r\n")[0]
-            let target = line.split(separator: " ")[1]
-            let parts = target.split(separator: "?", maxSplits: 1).map(String.init)
-            let request = Request(
-                path: parts[0], rawQuery: parts.count > 1 ? parts[1] : "", secure: secure,
-                clientCertificate: secure ? certificate() : nil)
-            let response = respond(request)
-            guard !response.silent else { return }
-            var bytes = Data("HTTP/1.1 \(response.status) X\r\nContent-Length: \(response.body.count)\r\nConnection: close\r\n\r\n".utf8)
-            bytes.append(response.body)
-            connection.send(content: bytes, completion: .contentProcessed { _ in connection.cancel() })
+        receiveHead(connection, buffer: Data()) { head, rest in
+            let lines = String(decoding: head, as: UTF8.self).components(separatedBy: "\r\n")
+            let requestLine = lines[0].split(separator: " ")
+            let parts = requestLine[1].split(separator: "?", maxSplits: 1).map(String.init)
+            var headers = [String: String]()
+            for line in lines.dropFirst() {
+                guard let colon = line.firstIndex(of: ":") else { continue }
+                headers[line[..<colon].lowercased()] = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            }
+            let length = headers["content-length"].flatMap(Int.init) ?? 0
+            let received = headers
+            receiveBody(connection, buffer: rest, length: length) { body in
+                let request = Request(
+                    path: parts[0], rawQuery: parts.count > 1 ? parts[1] : "", secure: secure,
+                    clientCertificate: secure ? certificate() : nil, method: String(requestLine[0]), headers: received, body: body)
+                let response = respond(request)
+                guard !response.silent else { return }
+                var bytes = Data(
+                    "HTTP/1.1 \(response.status) \(response.reason)\r\nContent-Length: \(response.body.count)\r\nConnection: close\r\n\r\n".utf8)
+                bytes.append(response.body)
+                connection.send(content: bytes, completion: .contentProcessed { _ in connection.cancel() })
+            }
         }
     }
 
-    private static func receiveHead(_ connection: NWConnection, buffer: Data, done: @escaping @Sendable (Data) -> Void) {
+    private static func receiveHead(_ connection: NWConnection, buffer: Data, done: @escaping @Sendable (Data, Data) -> Void) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, complete, error in
             var buffer = buffer
             if let data { buffer.append(data) }
             if let end = buffer.range(of: Data("\r\n\r\n".utf8)) {
-                done(buffer[..<end.lowerBound])
+                done(Data(buffer[..<end.lowerBound]), Data(buffer[end.upperBound...]))
             } else if error == nil && !complete {
                 receiveHead(connection, buffer: buffer, done: done)
+            }
+        }
+    }
+
+    private static func receiveBody(_ connection: NWConnection, buffer: Data, length: Int, done: @escaping @Sendable (Data) -> Void) {
+        guard buffer.count < length else { return done(Data(buffer.prefix(length))) }
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, complete, error in
+            var buffer = buffer
+            if let data { buffer.append(data) }
+            if buffer.count >= length || error != nil || complete {
+                done(Data(buffer.prefix(length)))
+            } else {
+                receiveBody(connection, buffer: buffer, length: length, done: done)
             }
         }
     }

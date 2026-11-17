@@ -380,6 +380,17 @@ audio ring has no lock, so the audio render thread never waits for the decoder: 
 preallocated storage, each moving its own atomic position (acquire/release), and the reader skips what is older than
 60 ms; a full ring (nothing reads) drops what does not fit.
 
+Surround (Settings → Audio, `list_audio_config`: stereo, 5.1, 7.1, as `PreferenceConfiguration` of DELOS for Android
+reads it, anything unknown is stereo) is asked of the host by `StreamPlan` in both the launch request
+(`surroundAudioInfo`) and the core's configuration. The host's Opus multistream (four streams for 5.1, five for 7.1)
+decodes in Windows' order, which the source node's format names with the WAVE 5.1 and 7.1 layouts. On iOS and tvOS the
+audio session is asked for up to that many output channels (`setPreferredOutputNumberOfChannels`; HDMI and AirPlay
+receivers give more than two only when asked), and when the route's output does not name its speakers itself, the main
+mixer feeds it in a format whose labels are the route's (`AVAudioSessionChannelDescription.channelLabel`), so each
+channel reaches the speaker of its name whatever order the route has. On fewer speakers the mixer mixes the layout down
+(built-in speakers, headphones), as Android's audio framework does with a 5.1 `AudioTrack`. The route is applied again
+whenever the engine restarts after a route change.
+
 `WatchdogVideoRenderer` decorates the renderer without changing its files. Actual cumulative presentation counters
 come through `VideoPresentationProgress` (the existing display-layer metrics adapter or a conforming Metal renderer).
 Five seconds of arriving frames without displayed progress schedules a video-thread flush and a false enqueue result,
@@ -517,8 +528,9 @@ goes from a page to the row or tile that opened it and then resumes; a tap outsi
 the menu (`StreamController.tapOutside`), never quits and never sends a click to the game; the popover has a focus of its own and the dock's tile that opened it keeps its look. The model is
 `StreamMenuModel.swift` (tiles, pages, popover geometry), the state `StreamMenuState.swift` and `StreamController`.
 
-Left out of Android's menu, because the platform has no such action: Bitrate (the core cannot change the bitrate of a
-running stream), Upscaler and Supersampling (the renderer has none), Send and Get clipboard, Zoom, Mouse mode and Local
+Bitrate, Send clipboard and Get clipboard have their actions (`StreamController.applyBitrate`, `sendClipboard`,
+`getClipboard`, below) but no tile or row yet. Left out of Android's menu, because the platform has no such action:
+Upscaler and Supersampling (the renderer has none), Zoom, Mouse mode and Local
 mouse cursor (touch is the trackpad only), On-screen controls, Open Android keyboard, Touch sensitivity, Rumble feel, Gyro
 smoothing. The captions of Overlay, Keyboard and More are empty: Android's texts describe its own statistics, keyboard and
 rows, and no Android string fits. The recorded buttons only open the menu (the input is paused while the menu is open, so
@@ -549,6 +561,28 @@ Each attempt (the first, the return from the background, Try again) has an ident
 returns afterwards (a launch that fails late, a connect that completes late, queued events) is ignored. A new attempt
 launches only once the previous one has stopped, since the core runs one connection at a time; leaving uses the steps
 of the attempt that ran.
+
+### Live bitrate and clipboard
+
+Both are Vibepollo's and Apollo's paired HTTPS commands, as DELOS for Android sends them; neither goes through the
+streaming core. `HostClient.setRuntimeBitrate` asks `/bitrate?bitrate=<kbps>` (1 to 1000 Mbps) and returns the bitrate the
+host applied, which can be lower. `StreamBitrate` (`StreamController.bitrate`) runs one change at a time while the stream
+runs and keeps what it came to: accepted, limited by the host, or failed with Android's reasons (not connected; 404:
+unsupported; 403: denied; another host error: rejected, with the host's message cut to 60 characters; anything else:
+unconfirmed) and the texts of the Bitrate page's Apply row (`statusText`, `failureText`). An answer that arrives after the
+stream ended is dropped.
+
+`HostClient.clipboard` reads `/actions/clipboard?type=text` (at most 16 MiB) and `sendClipboard` posts plain UTF-8 text to
+it; an answer with a body means the host does not support it (Sunshine). `ClipboardSync` (`StreamSteps.clipboard`, made
+once the launch knows the PC) follows `StreamClipboardSync` of DELOS for Android: with Smart Clipboard Sync this device's
+clipboard is sent once the stream runs and the PC's is fetched on Disconnect (not on Quit); Send clipboard sends also
+what DELOS already marked, Get clipboard fetches. A clip DELOS put on the clipboard or already read carries its own
+pasteboard type (`io.github.meitoncz.delos.streaming`) and is not sent again unasked; the mark is read without the
+clip's content, which on iOS asks the player before an app reads it. The PC's clip is marked concealed
+(`org.nspasteboard.ConcealedType`, the convention clipboard histories honour) while Hide clipboard content is on:
+Apple has no equivalent of Android's sensitive flag. Results are toasts over the stream when Clipboard Sync Toast is on,
+with Android's texts and its exception messages appended (the host's address instead of the full request URL, whose
+client id is no help). tvOS has no system clipboard; its closest equivalent is a clipboard in memory for the app's run.
 
 ### Input during a stream
 
@@ -982,7 +1016,10 @@ pairing with a four-digit PIN the app shows, and `loadApps` reads a paired PC's 
 (`UserDefaults`, JSON; a record that no longer decodes is skipped, the others are kept); they start offline until
 refreshed. `StreamPlan` makes the launch request and the stream configuration of one stream with one random remote
 input key (the IV is the key id, big-endian), the profile's `StreamSettings` on the display it is shown on, the default
-bitrate of DELOS for Android (`getDefaultBitrate`) and stereo audio. `rename` gives a PC a name of its own on this
+bitrate of DELOS for Android (`getDefaultBitrate`), the speaker layout of `list_audio_config`, the resolution scale factor
+of `seekbar_resolution_scale_factor` (20 to 200 %), full-range video with `checkbox_full_range`, and a virtual display
+with `checkbox_use_virtual_display` only when the caller says the PC has one ready (`virtualDisplayReady`, as
+`GameLauncher` of DELOS for Android checks `vDisplaySupported` and `vDisplayDriverReady`). `rename` gives a PC a name of its own on this
 device (`HostRecord.customName`; blank returns to the PC's `serverName`), `wake` sends Wake-on-LAN to its known
 addresses, `quitApp` quits the app that runs on it.
 
@@ -1309,7 +1346,10 @@ has no such setting; both are in `Config/Info.plist`, which Xcode merges with th
   `ECONNREFUSED` after the core's 10-second retry), `stop()` and task cancellation during that retry (the start ends
   within a second; `stop()` returns with the core released), a task cancelled before the start (ends at once), no
   round-trip read without a running stream, an invalid configuration, Opus encode → decode of stereo sweeps (2.5 ms
-  delay, both channels above 15 dB SNR), packet loss concealment, 5.1 layout, invalid layouts and packets.
+  delay, both channels above 15 dB SNR), packet loss concealment, 5.1 layout, 5.1 and 7.1 encode → decode with one tone
+  per channel (each above 10 dB against its own input, below 0 dB against its neighbour's), invalid layouts and packets.
+  Offline `AVAudioEngine` rendering of the stream's 5.1 format: mixed down on stereo, and on a six-channel output in
+  HDMI's order every channel on the speaker of its label.
 - `xcodebuild -scheme DelosCore` and `-scheme DelosMedia` for `generic/platform=iOS`, `tvOS`, `macOS` and the iOS and
   tvOS simulators.
 - `swift test`, host layer (`Tests/DelosHostTests`), against a fake host on the loopback interface (Network.framework

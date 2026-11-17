@@ -102,6 +102,52 @@ import Testing
         #expect(samples == Self.frameSize)
     }
 
+    /// 5.1 and 7.1 as the host sends them (several streams, some coupled): every channel comes out in its own place.
+    /// Each channel carries a tone of its own; after the codec's 2.5 ms delay a channel matches its input and no other.
+    @Test(arguments: [
+        (6, 4, 2, [UInt8]([0, 4, 1, 5, 2, 3])),
+        (8, 5, 3, [UInt8]([0, 6, 1, 7, 2, 3, 4, 5])),
+    ])
+    func surroundChannelsStayInTheirPlaces(channels: Int, streams: Int, coupled: Int, mapping: [UInt8]) throws {
+        let frames = 100
+        let count = frames * Self.frameSize
+        let tones = (0..<channels).map { channel in
+            (0..<count).map { index in 0.4 * sin(2 * Float.pi * Float(400 + 250 * channel) * Float(index) / 48000) }
+        }
+        let input = (0..<count).flatMap { index in tones.map { $0[index] } }
+
+        var error: Int32 = 0
+        var encoderMapping = mapping
+        let encoder = try #require(
+            opus_multistream_encoder_create(
+                48000, Int32(channels), Int32(streams), Int32(coupled), &encoderMapping, OPUS_APPLICATION_RESTRICTED_LOWDELAY, &error))
+        defer { opus_multistream_encoder_destroy(encoder) }
+        try #require(error == OPUS_OK)
+
+        let decoder = try OpusMultistreamDecoder(configuration: OpusMultistreamConfiguration(
+            sampleRate: 48000, channelCount: channels, streams: streams, coupledStreams: coupled, samplesPerFrame: 240, mapping: mapping))
+        var output: [Float] = []
+        var frame = [Float](repeating: 0, count: channels * Self.frameSize)
+        for start in stride(from: 0, to: input.count, by: channels * Self.frameSize) {
+            var packet = [UInt8](repeating: 0, count: 4000)
+            let length = input.withUnsafeBufferPointer {
+                opus_multistream_encode_float(encoder, $0.baseAddress! + start, Int32(Self.frameSize), &packet, Int32(packet.count))
+            }
+            try #require(length > 0)
+            let samples = try packet.prefix(Int(length)).withUnsafeBytes { bytes in
+                try frame.withUnsafeMutableBufferPointer { try decoder.decode(bytes, into: $0) }
+            }
+            #expect(samples == Self.frameSize)
+            output += frame
+        }
+
+        let decoded = (0..<channels).map { channel in stride(from: channel, to: output.count, by: channels).map { output[$0] } }
+        for channel in 0..<channels {
+            #expect(signalToNoise(tones[channel], decoded[channel], delay: 120) > 10, "channel \(channel)")
+            #expect(signalToNoise(tones[(channel + 1) % channels], decoded[channel], delay: 120) < 0, "channel \(channel)")
+        }
+    }
+
     @Test func invalidLayoutsAreRejected() {
         let moreCoupledThanStreams = OpusMultistreamConfiguration(
             sampleRate: 48000, channelCount: 2, streams: 1, coupledStreams: 2, samplesPerFrame: 240, mapping: [0, 1])

@@ -203,6 +203,56 @@ import Testing
         #expect(plan.configuration.supportedVideoFormats == [.h264, .hevc])
     }
 
+    private func plan(_ settings: StreamSettings) -> StreamPlan {
+        StreamPlan(
+            app: HostApp(id: 7, title: "Desktop"), settings: settings, display: StreamResolution(width: 1920, height: 1080),
+            decodable: [.h264, .hevc], refreshRate: 60, displaySupportsHDR: false)
+    }
+
+    /// `list_audio_config` (PreferenceConfiguration.java:811-820): "71" and "51" ask for surround, anything else is
+    /// stereo; the core and the launch request get the same layout.
+    @Test(arguments: [
+        (nil, AudioConfiguration.stereo), ("2", .stereo), ("51", .surround51), ("71", .surround71), ("6", .stereo),
+    ] as [(String?, AudioConfiguration)])
+    func thePlanAsksForTheChosenSpeakerLayout(stored: String?, layout: AudioConfiguration) {
+        var s = StreamSettings()
+        if let stored { s.values[SettingKey.audioConfiguration.rawValue] = .text(stored) }
+        let planned = plan(s)
+        #expect(planned.configuration.audio == layout)
+        #expect(planned.request.surroundAudioInfo == layout.channelMask << 16 | layout.channelCount)
+    }
+
+    /// `seekbar_resolution_scale_factor` goes to the launch request's `scaleFactor` (NvHTTP.java:919), within 20…200.
+    @Test func thePlanSendsTheResolutionScaleFactor() {
+        var s = StreamSettings()
+        #expect(plan(s).request.resolutionScaleFactor == 100)
+        s.set(.resolutionScaleFactor, .int(150))
+        #expect(plan(s).request.resolutionScaleFactor == 150)
+        s.values[SettingKey.resolutionScaleFactor.rawValue] = .int(5)
+        #expect(plan(s).request.resolutionScaleFactor == 20)
+        s.values[SettingKey.resolutionScaleFactor.rawValue] = .int(900)
+        #expect(plan(s).request.resolutionScaleFactor == 200)
+    }
+
+    /// `checkbox_full_range` asks the host for full-range video (MediaCodecDecoderRenderer.java:588-595).
+    @Test func thePlanAsksForFullRangeWhenChosen() {
+        var s = StreamSettings()
+        #expect(plan(s).configuration.colorRange == .limited)
+        s.set(.fullRange, .bool(true))
+        #expect(plan(s).configuration.colorRange == .full)
+    }
+
+    /// A virtual display is asked for only when chosen and the PC has one ready (GameLauncher.kt:100-103).
+    @Test(arguments: [(false, false, false), (false, true, false), (true, false, false), (true, true, true)])
+    func thePlanAsksForAVirtualDisplayOnlyWhenThePCHasOneReady(chosen: Bool, ready: Bool, asked: Bool) {
+        var s = StreamSettings()
+        s.set(.useVirtualDisplay, .bool(chosen))
+        let planned = StreamPlan(
+            app: HostApp(id: 7, title: "Desktop"), settings: s, display: StreamResolution(width: 1920, height: 1080),
+            decodable: .h264, refreshRate: 60, displaySupportsHDR: false, virtualDisplayReady: ready)
+        #expect(planned.request.virtualDisplay == asked)
+    }
+
     // MARK: HDR
 
     private let tenBitDevice: VideoFormats = [.h264, .hevc, .hevcMain10, .av1Main8, .av1Main10]
