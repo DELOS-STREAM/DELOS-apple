@@ -206,6 +206,30 @@ enum ArtworkChoices: Equatable {
     case ready(gameID: Int, images: [SteamGridDBImage], total: Int?)
 }
 
+/// Why a ready list has no image (`NoImages`).
+enum ArtworkEmpty: Equatable {
+    /// The filters left nothing: the message with Reset filters and Change filters and no tile. The first choice (the PC's
+    /// artwork) is not drawn: it would stand beside the message as a stray cover, and Reset gives the whole grid back.
+    case filtered
+    /// SteamGridDB has no image of this kind: the first choice stays, with a note beside it.
+    case bare
+
+    static let resetID = "art-none-reset"
+    static let changeID = "art-none-change"
+
+    /// Nil: the list has images.
+    init?(images: Int, filters: ArtFilters) {
+        guard images == 0 else { return nil }
+        self = filters.active ? .filtered : .bare
+    }
+
+    /// Whether the first choice is drawn as a tile.
+    var showsFirstChoice: Bool { self == .bare }
+
+    /// The item the focus starts on.
+    var firstFocus: String { self == .filtered ? Self.resetID : ArtworkScreen.noneID }
+}
+
 /// The labels of the filter sheet and the strip (`ArtType.label`, `ArtSort.label`/`chip`/`first`, `ActiveFilter.label`).
 extension ArtType {
     var label: String {

@@ -29,6 +29,9 @@ final class ArtworkModel {
     @ObservationIgnored private var lists: [String: [SteamGridDBImage]] = [:]
     /// The tab and game the grid shows images of: another one starts over with the loading message.
     @ObservationIgnored private var shown: (tab: ArtworkTab, game: Int)?
+    /// The list [choices] holds, by game and filters (``listKey(game:)``): the filters just chosen have no list yet while it
+    /// differs from the current one.
+    private(set) var shownKey: String?
 
     init(hostID: String, app: HostApp, artwork: ArtworkStore) {
         self.hostID = hostID
@@ -70,10 +73,11 @@ final class ArtworkModel {
         let filters = self.filters
         let tab = self.tab
         // The sort is applied here to what was loaded, so changing it asks nothing
-        let key = "\(game.id)|\(ArtFilterRules.cacheKey(kind, filters))"
+        let key = listKey(game: game.id)
         func total() -> Int? { lists["\(game.id)|\(ArtFilterRules.cacheKey(kind, ArtFilters()))"]?.count }
         func ready(_ list: [SteamGridDBImage]) -> ArtworkChoices {
             shown = (tab, game.id)
+            shownKey = key
             return .ready(gameID: game.id, images: ArtFilterRules.sort(list, filters.sort), total: total())
         }
         if let cached = lists[key] { return choices = ready(cached) }
@@ -105,8 +109,19 @@ final class ArtworkModel {
 
     var loadKey: LoadKey { LoadKey(tab: tab, game: match?.id, enabled: artwork.enabled, looking: looking, filters: filters) }
 
-    /// The tile that takes the focus when a list shows: the image in use, else the first choice.
+    /// What identifies the list of a game for the current tab and filters; the sort is applied to the list, not asked for.
+    private func listKey(game: Int) -> String { "\(game)|\(ArtFilterRules.cacheKey(tab.kind, filters))" }
+
+    /// Why the grid has no image, once the list of the current filters is there (not while it loads).
+    var empty: ArtworkEmpty? {
+        guard case .ready(_, let images, _) = choices, let game = match, shownKey == listKey(game: game.id) else { return nil }
+        return ArtworkEmpty(images: images.count, filters: filters)
+    }
+
+    /// The tile that takes the focus when a list shows: the image in use, else the first choice, or Reset when the filters
+    /// left nothing.
     func initialTile() -> String {
+        if let empty { return empty.firstFocus }
         if case .image(let id) = chosen, case .ready(_, let images, _) = choices, images.contains(where: { $0.id == id }) {
             return ArtworkScreen.tileID(id)
         }
@@ -256,6 +271,16 @@ private struct ArtworkContent: View, Equatable {
         .onChange(of: model.readyKey) { _, now in
             if now.hasPrefix("ready") { focus.focus(model.initialTile()) }
         }
+        .onChange(of: model.empty) { was, now in
+            // The filters emptied the grid under the focus: Reset is the first thing to reach. Reset or another filter brought
+            // the tiles back: the first choice. An open sheet keeps the focus; closeSheet() places it afterwards
+            guard !model.sheetOpen else { return }
+            if now == .filtered {
+                focus.focus(ArtworkEmpty.resetID)
+            } else if was == .filtered {
+                focus.focus(model.initialTile())
+            }
+        }
         .onChange(of: filters.active) { was, now in
             // Reset disables itself once nothing is filtered; if it had the focus, the focus goes back to the first option
             if was, !now, model.sheetOpen, model.sheetFocus.focused == AnyHashable(ArtworkFilterSheet.resetID) {
@@ -327,11 +352,16 @@ private struct ArtworkContent: View, Equatable {
         actions.layers.feedback?.play(.back)
         withAnimation { model.sheetOpen = false }
         navigator.screenHints = ScreenHints()
-        // The focus goes back to where it was; a tile the filters removed leaves it on the first choice
-        let gone = (origin as? String).flatMap { id in id.hasPrefix("art-") ? Int(id.dropFirst(4)) : nil }.map { number in
-            !(model.images?.contains { $0.id == number } ?? false)
-        } ?? false
-        focus.focus(gone ? AnyHashable(ArtworkScreen.noneID) : origin ?? AnyHashable(ArtworkScreen.noneID))
+        // The focus goes back to where it was; a tile the filters removed (or the first choice, when they left nothing) leaves
+        // it on the first thing that is there
+        let fallback = AnyHashable(model.empty?.firstFocus ?? ArtworkScreen.noneID)
+        let tileGone: Bool = {
+            guard let id = origin as? String else { return false }
+            if id == ArtworkScreen.noneID { return model.empty?.showsFirstChoice == false }
+            guard id.hasPrefix("art-"), let number = Int(id.dropFirst(4)) else { return false }
+            return !(model.images?.contains { $0.id == number } ?? false)
+        }()
+        focus.focus(tileGone ? fallback : origin ?? fallback)
     }
 
     private func resetFilters() {
@@ -464,38 +494,47 @@ private struct ArtworkGridView: View {
         case .failed(let text):
             ArtworkMessage(icon: Symbols.error, title: L("artwork_unreachable"), text: text)
         case .ready(_, let images, let total):
+            let empty = model.empty
             let layout = ArtworkGrid(
                 width: stage.width - left - right, ratio: model.tab.ratio, columns: model.tab.columns(forStageWidth: stage.width))
             let all: [ArtworkTile] = [.none] + images.map(ArtworkTile.image)
             let tiles = Array(all.enumerated())
             let rows = stride(from: 0, to: tiles.count, by: layout.columns).map { tiles[$0..<min($0 + layout.columns, tiles.count)] }
             ZStack(alignment: .top) {
-                FocusScroll(axis: .vertical) {
-                    VStack(alignment: .leading, spacing: stage.px(layout.gapY)) {
-                        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                            HStack(spacing: stage.px(layout.gapX)) {
-                                ForEach(row, id: \.element.id) { place, tile in tileView(tile, place: place, layout: layout) }
+                // Filters that leave nothing take the first choice's tile away with the rest: the message and its two buttons
+                // are all there is
+                if empty?.showsFirstChoice ?? true {
+                    FocusScroll(axis: .vertical) {
+                        VStack(alignment: .leading, spacing: stage.px(layout.gapY)) {
+                            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                                HStack(spacing: stage.px(layout.gapX)) {
+                                    ForEach(row, id: \.element.id) { place, tile in tileView(tile, place: place, layout: layout) }
+                                }
                             }
                         }
+                        // A short list (the first choice alone, a single row) starts at the left like the full ones
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, stage.px(left))
+                        .padding(.trailing, stage.px(right))
+                        .padding(.top, stage.px(46))
+                        .padding(.bottom, stage.px(96))
                     }
-                    .padding(.leading, stage.px(left))
-                    .padding(.trailing, stage.px(right))
-                    .padding(.top, stage.px(46))
-                    .padding(.bottom, stage.px(96))
-                }
-                .focusable(false)
-                .scrollClipDisabled()
-                .mask {
-                    VStack(spacing: 0) {
-                        LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: stage.px(30))
-                        Rectangle()
-                        LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: stage.px(70))
+                    .focusable(false)
+                    .scrollClipDisabled()
+                    .mask {
+                        VStack(spacing: 0) {
+                            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: stage.px(30))
+                            Rectangle()
+                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: stage.px(70))
+                        }
                     }
                 }
-                if images.isEmpty {
+                if let empty {
                     NoImages(
-                        tab: model.tab, filters: model.filters, total: total, gameName: model.match?.name.isEmpty == false ? model.match!.name : app.title,
-                        focus: focus, onReset: onReset, onChange: onChange)
+                        kind: empty, tab: model.tab, filters: model.filters, total: total,
+                        gameName: model.match?.name.isEmpty == false ? model.match!.name : app.title, focus: focus,
+                        left: left, right: right, tile: CGSize(width: layout.tileWidth, height: layout.tileHeight),
+                        onReset: onReset, onChange: onChange)
                 }
             }
         }
@@ -626,51 +665,71 @@ private struct ArtworkGameChip: View {
 
 // MARK: Grid
 
-/// No image in the grid: what the filters left, or that SteamGridDB has none; the first choice stays (`NoImages`).
+/// No image in the grid (`NoImages`): what the filters left, as a message with Reset filters and Change filters and nothing
+/// else, or that SteamGridDB has none, in a note beside the first choice that stays.
 private struct NoImages: View {
+    let kind: ArtworkEmpty
     let tab: ArtworkTab
     let filters: ArtFilters
     let total: Int?
     let gameName: String
     let focus: FocusModel
+    /// The grid's side margins and the first choice's tile (stage px).
+    let left: Double
+    let right: Double
+    let tile: CGSize
     let onReset: () -> Void
     let onChange: () -> Void
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
 
     var body: some View {
+        switch kind {
+        case .filtered: filtered
+        case .bare: bare
+        }
+    }
+
+    private var filtered: some View {
         VStack(spacing: stage.px(18)) {
-            if filters.active {
-                SymbolView(symbol: Symbols.search, size: 90, color: colors.accent, filled: true)
-                Text(tab.none)
-                    .font(DelosFonts.unbounded(stage.tpx(34)))
-                    .foregroundStyle(colors.text.color)
-                Text(total.map { tab.has(game: gameName, total: $0) } ?? tab.unknown)
-                    .font(DelosFonts.figtree(stage.tpx(22)))
-                    .foregroundStyle(colors.text2.color)
-                    .frame(maxWidth: stage.px(min(820, stage.width - 160)))
-                Text(L("artwork_filtered_active", ArtFilterRules.chips(filters).map(\.label).joined(separator: " · ")))
-                    .font(DelosFonts.figtree(stage.tpx(20), .semibold))
-                    .foregroundStyle(colors.text3.color)
-                    .frame(maxWidth: stage.px(min(820, stage.width - 160)))
-                HStack(spacing: stage.px(16)) {
-                    FocusItem(id: "art-none-reset", model: focus, clickCue: nil, action: onReset) { focused in
-                        ToolbarPill(label: L("filters_art_reset"), icon: Symbols.reset, focused: focused, glyph: .west)
-                    }
-                    FocusItem(id: "art-none-change", model: focus, clickCue: nil, action: onChange) { focused in
-                        ToolbarPill(label: L("filters_art_change"), icon: Symbols.filter, focused: focused, glyph: .north)
-                    }
+            SymbolView(symbol: Symbols.search, size: 90, color: colors.accent, filled: true)
+            Text(tab.none)
+                .font(DelosFonts.unbounded(stage.tpx(34)))
+                .foregroundStyle(colors.text.color)
+            Text(total.map { tab.has(game: gameName, total: $0) } ?? tab.unknown)
+                .font(DelosFonts.figtree(stage.tpx(22)))
+                .foregroundStyle(colors.text2.color)
+                .frame(maxWidth: stage.px(min(820, stage.width - 160)))
+            Text(L("artwork_filtered_active", ArtFilterRules.chips(filters).map(\.label).joined(separator: " · ")))
+                .font(DelosFonts.figtree(stage.tpx(20), .semibold))
+                .foregroundStyle(colors.text3.color)
+                .frame(maxWidth: stage.px(min(820, stage.width - 160)))
+            HStack(spacing: stage.px(16)) {
+                FocusItem(id: ArtworkEmpty.resetID, model: focus, clickCue: nil, action: onReset) { focused in
+                    ToolbarPill(label: L("filters_art_reset"), icon: Symbols.reset, focused: focused, glyph: .west)
                 }
-            } else {
-                Text(tab.empty)
-                    .font(DelosFonts.figtree(stage.tpx(22)))
-                    .foregroundStyle(colors.text3.color)
+                FocusItem(id: ArtworkEmpty.changeID, model: focus, clickCue: nil, action: onChange) { focused in
+                    ToolbarPill(label: L("filters_art_change"), icon: Symbols.filter, focused: focused, glyph: .north)
+                }
             }
         }
         .multilineTextAlignment(.center)
         .padding(.top, stage.px(40))
-        .padding(.leading, stage.px(300))
+        .padding(.leading, stage.px(left))
+        .padding(.trailing, stage.px(right))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// The note stands beside the first choice's tile, centred on its height.
+    private var bare: some View {
+        Text(tab.empty)
+            .font(DelosFonts.figtree(stage.tpx(22)))
+            .foregroundStyle(colors.text3.color)
+            .frame(height: stage.px(tile.height))
+            .padding(.leading, stage.px(left + tile.width + 48))
+            .padding(.trailing, stage.px(right))
+            .padding(.top, stage.px(46))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
