@@ -33,7 +33,39 @@ enum ShellHints {
         var screenHints = ScreenHints()
     }
 
-    @MainActor static func hints(_ c: Context) -> [Hint] {
+    /// The hints for the kind of input in use: the controller's own, or what the other kinds do (``adapt(_:to:)``).
+    @MainActor static func hints(_ c: Context, kind: InputKind = ControllerGlyphs.shared.kind) -> [Hint] {
+        adapt(padHints(c), to: kind)
+    }
+
+    /// The hints written for a controller, turned into the ones of [kind]. The rules (docs/ARCHITECTURE.md, "Input kind"):
+    /// - controller: unchanged;
+    /// - touch: only the primary action stays, with the tap symbol (every other action has a control on the screen);
+    /// - pointer (mouse, trackpad): the same, with the pointer symbol;
+    /// - keyboard: Return for the primary action, Esc for back, the arrows for the adjust cue; the buttons with no key
+    ///   (tabs, menu buttons, X, Y) are dropped.
+    nonisolated static func adapt(_ hints: [Hint], to kind: InputKind) -> [Hint] {
+        func map(_ hint: Hint, _ button: HintButton?) -> Hint? {
+            button.map { Hint(button: $0, label: hint.label, shortLabel: hint.shortLabel) }
+        }
+        switch kind {
+        case .controller: return hints
+        case .touch, .pointer:
+            let primary: HintButton = kind == .touch ? .tap : .click
+            return hints.compactMap { map($0, $0.button == .pad(.south) ? primary : nil) }
+        case .keyboard:
+            return hints.compactMap { hint in
+                switch hint.button {
+                case .pad(.south): map(hint, .key(.returnKey))
+                case .pad(.east): map(hint, .key(.escape))
+                case .adjust: map(hint, .key(.arrows))
+                default: nil
+                }
+            }
+        }
+    }
+
+    @MainActor private static func padHints(_ c: Context) -> [Hint] {
         func hint(_ role: GlyphRole, _ label: String, short: String? = nil) -> Hint {
             Hint(button: .pad(role), label: label, shortLabel: short)
         }

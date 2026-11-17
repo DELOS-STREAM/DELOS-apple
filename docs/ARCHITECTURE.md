@@ -931,6 +931,43 @@ panel with the impact legend, and the Stream and Display tabs (`TabRow`, with th
 Display has a row (HDR is the one display setting that exists). Not ported: Android's other Display rows (upscaler, scaling,
 virtual display), PyroWave chroma, gyro rows and the per-codec bitrate slots, none of which exist here.
 
+## Input kind and the hints
+
+`ControllerGlyphs.shared` (DelosInput) is the one glyph source: the **input kind** (`InputKind`: controller, keyboard,
+pointer, touch) and, for a controller, the glyph family (`PadFamily`). The hint bar, the dialogs' and menus' hints (all
+`ShellHints`), the toast's action and the back arrow read it, so one change redraws them all. Rules (Android ports the same):
+
+- **What sets the kind.** The last input wins: a touch begins (`touchesBegan` of a window-level recognizer that fails at
+  once, `InputKindProbe`; a direct touch is touch, an indirect pointer touch is pointer), the mouse moves, clicks or scrolls
+  (Mac: `NSEvent` monitor), a key `MenuInput` maps is pressed (keyboard), a controller button is pressed or the system makes
+  a controller the current one or one connects (controller). A keyboard connecting is no input.
+- **No input yet, or the controller left.** `InputKind.resolve`: a connected gamepad means controller, else the last
+  non-controller kind, else the platform default (iPhone and iPad touch, Mac pointer, Apple TV controller). The Siri Remote
+  is not a gamepad (no `extendedGamepad`). A controller that is gone cannot be the answer, so unplugging it brings back the
+  touch or keyboard hints at once.
+- **Hints by kind** (`ShellHints.adapt`; the screens only write controller hints): controller: unchanged; touch: only the
+  primary action (south: Select, Start, Connect, Change), drawn with the hand-tap symbol; pointer: the same with the mouse
+  symbol; keyboard: Return (primary), Esc (back), the arrows (adjust), key caps with the legend as text; the other actions
+  (tabs, menu buttons, X, Y) have a control on the screen or no key and are dropped. The toast's action shows its Y button
+  only for a controller; a finger or a pointer presses the chip.
+- **Marks of a controller.** Face buttons and shoulders by position (`GlyphRole`), per family (A/B/X/Y, cross/circle/square/
+  triangle, Nintendo letters with B south; shoulders LB/RB/LT/RT, L1/R1/L2/R2, L/R/ZL/ZR). The left menu button is View
+  (Xbox, generic), Create (DualSense; Share on DualShock) or the minus sign (Switch); the right one Menu, Options or the plus
+  sign. For PlayStation pads the system's own symbol of the connected pad is drawn when it names one
+  (`GCControllerElement.sfSymbolsName` of `buttonOptions` and `buttonMenu`, without its enclosing circle, since the glyph
+  sits on a disc); otherwise the symbol font's icon (interim icons until `.agent/tasks/codex-icons.md` is done). Nothing is
+  drawn by hand.
+- **`inputKindVisibility(_:gap:)`** (`InputKindVisibility.swift`) is the one modifier for chrome that depends on the kind
+  (`InputKindRule.withoutController` / `.withController`): it fades with a small scale and slide (`Motion.out(rowIn)`,
+  reduced motion a plain fade), takes its width and `gap` only while shown so the neighbors glide, takes no touches and is
+  hidden from accessibility while hidden. The back arrow of the top bar (and the submenu's back chip) uses it: shown for
+  touch, pointer and keyboard, hidden while a controller is the input (B and its hint do the job). Android's system back
+  makes the top-bar arrow unnecessary there; the Android lead ports the same rule for its own back pills.
+- **Hint bar position** (`HintBarLayout`): its middle is the midpoint between the lowest content edge and the stage's
+  bottom edge. On the library that is the row's bottom with the focus ring (`HomeLayout.coverTop + coverHeight +
+  ringReach`), on the other screens the same line at the design distance (87 px above the bottom on a 1080 px stage, since
+  the row is bottom anchored), and never lower than the glyphs clear the bottom safe edge.
+
 ## The library row
 
 The row of covers keeps its distance from the stage's bottom edge: its top is 430 stage pixels on a 1080 px high stage

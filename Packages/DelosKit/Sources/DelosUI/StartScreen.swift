@@ -274,6 +274,8 @@ public struct DelosRoot: View {
         .onAppear(perform: startInput)
         // The keys that scroll or move the system focus (arrows, Space, Page, Home, End) are the interface's alone
         .ownsMenuKeys(typing: navigator.isEditingText)
+        // A touch or the pointer changes the kind of input the hints and the back arrow are drawn for
+        .tracksInputKind()
         // An "up" of a key may never come after the app lost the keyboard
         .onChange(of: scenePhase) { _, now in if now != .active { input?.forgetDown() } }
     }

@@ -35,8 +35,8 @@ enum HintFit {
     /// more important (`hintRank`).
     static func rank(_ button: HintButton) -> Int {
         switch button {
-        case .pad(.south): 0
-        case .pad(.east): 1
+        case .pad(.south), .tap, .click, .key(.returnKey): 0
+        case .pad(.east), .key(.escape): 1
         case .pad(.leftShoulder), .pad(.rightShoulder): 3
         case .pad(.menuLeft), .pad(.menuRight): 4
         default: 2

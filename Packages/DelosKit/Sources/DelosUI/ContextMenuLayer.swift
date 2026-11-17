@@ -307,6 +307,7 @@ private struct MenuCardHeader: View {
                         .onTapGesture(perform: onBack)
                         .accessibilityLabel(L("shell_hint_back"))
                         .accessibilityAddTraits(.isButton)
+                        .inputKindVisibility(.withoutController)
                 } else if let header = menu.header {
                     tile(header.tint)
                 }
