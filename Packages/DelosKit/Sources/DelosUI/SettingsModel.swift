@@ -85,6 +85,8 @@ struct SettingRow: Identifiable, Equatable {
     var swatch: RGBA? = nil
     /// False: the row is dimmed, its value cannot change and the panel says it is unavailable (`SettingsItem.enabled`).
     var enabled = true
+    /// A line under the label (`SettingRow`'s `description`: the side menu's hidden-games count).
+    var note: String? = nil
 }
 
 /// What this device offers Settings → Stream (`SettingsCapabilities` of DELOS for Android).

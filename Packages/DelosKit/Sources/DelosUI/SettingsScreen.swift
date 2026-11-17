@@ -435,10 +435,18 @@ struct SettingRowView: View {
         HStack(spacing: stage.px(22)) {
             SymbolView(symbol: row.icon, size: 34, color: focused ? colors.accent2 : colors.accent2.opacity(0.62), filled: focused)
                 .frame(width: stage.px(compact ? 44 : 52), alignment: .leading)
-            MarqueeLabel(text: row.label, active: focused)
-                .font(DelosFonts.figtree(stage.tpx(26), .semibold))
-                .foregroundStyle(colors.text.color)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: stage.px(4)) {
+                MarqueeLabel(text: row.label, active: focused)
+                    .font(DelosFonts.figtree(stage.tpx(26), .semibold))
+                    .foregroundStyle(colors.text.color)
+                if let note = row.note {
+                    Text(note)
+                        .font(DelosFonts.figtree(stage.tpx(19)))
+                        .foregroundStyle(colors.text3.color)
+                        .lineLimit(2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             value
         }
         // An unavailable row is dimmed (Android's 45 %); the focus plate keeps its look

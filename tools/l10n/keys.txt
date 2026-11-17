@@ -161,6 +161,13 @@ home_menu_resume_other
 home_header_game
 home_header_running
 home_header_other_running
+home_header_hidden
+home_meta_join
+home_menu_show
+home_menu_hide
+home_hidden_toast
+home_tile_hidden_description
+home_tile_custom_description
 shell_game_quitting
 home_quit_done
 home_quit_failed
@@ -208,6 +215,9 @@ shell_side_background
 shell_side_sounds
 shell_side_haptics
 shell_side_all_settings
+shell_side_show_hidden
+shell_side_hidden_on
+shell_side_hidden_on_this_pc
 
 # Settings: frame, Stream and Audio tabs
 settings_screen_title

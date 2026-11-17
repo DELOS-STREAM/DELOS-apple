@@ -73,7 +73,7 @@ private struct Lenient<Value: Decodable>: Decodable {
 
 /// Keeps the profiles in `UserDefaults` (kept on tvOS, which may purge files), the list and the current id in one
 /// value so they never disagree. Each profile's settings are stored by its id (``AppearanceStore``,
-/// ``StreamSettingsStore``, ``StartupStore``, ``PlaytimeStore``, ``PlayedGames``).
+/// ``StreamSettingsStore``, ``StartupStore``, ``PlaytimeStore``, ``PlayedGames``, ``HiddenGames``).
 ///
 /// Without a profile DELOS is on its first run: it shows the first-run screens until one is created
 /// (`ShellActivity` in DELOS for Android).
@@ -89,6 +89,7 @@ public final class ProfileStore {
     @ObservationIgnored private let startups: StartupStore
     @ObservationIgnored private let playtimes: PlaytimeStore
     @ObservationIgnored private let played: PlayedGames
+    @ObservationIgnored private let hidden: HiddenGames
     @ObservationIgnored private let deleteGrace: Duration
     /// The profiles deleted less than ``deleteGrace`` ago, which Undo can bring back.
     @ObservationIgnored private var deleted: [String: Deleted] = [:]
@@ -117,6 +118,7 @@ public final class ProfileStore {
         startups = StartupStore(suiteName: suiteName)
         playtimes = PlaytimeStore(suiteName: suiteName)
         played = PlayedGames(suiteName: suiteName)
+        hidden = HiddenGames(suiteName: suiteName)
         self.deleteGrace = deleteGrace
         let stored = defaults.data(forKey: Self.key)
             .flatMap { try? JSONDecoder().decode(Profiles.self, from: $0) } ?? Profiles()
@@ -233,6 +235,7 @@ public final class ProfileStore {
         startups.remove(profile: id)
         playtimes.remove(profile: id)
         played.remove(profile: id)
+        hidden.remove(profile: id)
     }
 
     private func save(_ next: Profiles) {

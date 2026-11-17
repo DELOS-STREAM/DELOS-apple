@@ -196,6 +196,7 @@ public struct DelosRoot: View {
                                 closeSideMenu(sound: nil)
                                 go { navigator.openFromNavigation(.settings, focus: SettingsScreen.initialFocus) }
                             },
+                            hidden: actions.hiddenRow(pcName: connectedPC?.name),
                             onClose: { closeSideMenu(sound: .back) })
                     }
                 }
@@ -481,6 +482,10 @@ public struct DelosRoot: View {
     /// A quick setting of the side menu stepped (the side menu's rows): applied at once and kept with the current
     /// profile's appearance. False when nothing changed.
     private func quickStep(_ id: String, by direction: Int) -> Bool {
+        if id == SideMenu.hiddenID {
+            actions.hiding.showHidden.toggle()
+            return true
+        }
         guard let profile = profiles.current?.id, let next = QuickSettings.step(id, by: direction, from: appearance) else { return false }
         appearance = next
         appearances.save(next, profile: profile)
