@@ -323,6 +323,11 @@ final class ShellActions {
         profiles.current.map { playtimes.playtime(profile: $0.id, hostID: hostID, appID: appID) } ?? .none
     }
 
+    /// The current profile's whole streaming time (every game on every PC) and its last stream: the side menu's summary.
+    func profilePlaytime() -> Playtime {
+        profiles.current.map { playtimes.total(profile: $0.id) } ?? .none
+    }
+
     // MARK: Artwork
 
     /// The SteamGridDB API key row's dialog (`covers_sgdb_key`): the key is kept in the Keychain; an empty one turns

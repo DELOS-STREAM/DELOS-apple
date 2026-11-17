@@ -40,6 +40,22 @@ public struct PlaytimeStore: Sendable {
         defaults.set([total, now.timeIntervalSince1970], forKey: key(profile, hostID, appID))
     }
 
+    /// A profile's whole streaming time: every app's total on every PC added up, and the latest of their last-streamed
+    /// times (the side menu's summary).
+    public func total(profile: String) -> Playtime {
+        let prefix = "playtime.\(profile)."
+        var total = Playtime.none
+        for (key, value) in defaults.dictionaryRepresentation() where key.hasPrefix(prefix) {
+            guard let stored = value as? [Double], stored.count == 2 else { continue }
+            total.totalSeconds += max(stored[0], 0)
+            if stored[1] > 0 {
+                let last = Date(timeIntervalSince1970: stored[1])
+                total.lastStreamed = max(total.lastStreamed ?? last, last)
+            }
+        }
+        return total
+    }
+
     /// Forgets a removed profile's times.
     public func remove(profile: String) {
         let prefix = "playtime.\(profile)."

@@ -154,7 +154,8 @@ private struct StatRow: View {
     }
 }
 
-private struct Eyebrow: View {
+/// The small-caps label over a stat (STREAMING TIME, LAST STREAMED): 13 px bold, tracked 0.16 em.
+struct Eyebrow: View {
     let text: String
     let color: RGBA
     @Environment(\.stage) private var stage
@@ -170,7 +171,7 @@ private struct Eyebrow: View {
 
 /// The bar between the block's columns: 2 px wide, 38 px high at the interface scale, the main color at 70 % fading out
 /// over 22 % at both ends.
-private struct StatDivider: View {
+struct StatDivider: View {
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
 

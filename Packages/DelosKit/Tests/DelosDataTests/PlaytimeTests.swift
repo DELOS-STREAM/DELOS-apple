@@ -55,6 +55,22 @@ import Testing
         #expect(store.playtime(profile: "a", hostID: "PC", appID: 1) == .none)
     }
 
+    @Test func aProfilesTotalAddsEveryAppOnEveryPCAndKeepsTheLatestDay() throws {
+        let name = suite()
+        defer { UserDefaults().removePersistentDomain(forName: name) }
+        let store = PlaytimeStore(suiteName: name)
+        #expect(store.total(profile: "a") == .none)
+        let first = Date(timeIntervalSince1970: 1_000), second = Date(timeIntervalSince1970: 2_000)
+        store.add(90, profile: "a", hostID: "PC", appID: 1, at: second)
+        store.add(30, profile: "a", hostID: "PC", appID: 2, at: first)
+        store.add(600, profile: "a", hostID: "Other", appID: 1, at: first)
+        // Another profile, and one whose id starts the same, stay apart
+        store.add(45, profile: "b", hostID: "PC", appID: 1, at: second)
+        store.add(45, profile: "ab", hostID: "PC", appID: 1, at: Date(timeIntervalSince1970: 9_000))
+        #expect(store.total(profile: "a") == Playtime(totalSeconds: 720, lastStreamed: second))
+        #expect(store.total(profile: "b") == Playtime(totalSeconds: 45, lastStreamed: second))
+    }
+
     @Test func theLibraryListsTheRunningGameThenThePlayedOnesFromTheMostRecent() throws {
         let name = suite()
         defer { UserDefaults().removePersistentDomain(forName: name) }

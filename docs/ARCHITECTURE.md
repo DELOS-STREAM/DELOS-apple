@@ -137,7 +137,7 @@ The screens of Android's top navigation (`Screen.main`: the library, Settings, P
 `TopNav` in the middle of the status bar: Settings, Profile and Devices (Android's order) as round buttons in a glass
 capsule; Settings, Profile and Devices take each other's place on the stack; the buttons are items of the shown screen's focus, so Up from the library or the first settings
 row reaches them. On those screens and on the start screen (`hasSideMenu`), the left menu button opens the side menu
-(`SideMenu`, Android's `SideMenuLayer`): the profile and the connected PC at the top and All settings; it takes every
+(`SideMenu`, Android's `SideMenuLayer`): its header (`SideMenuHeader`: the profile, the connected PC's live state as a dot and a word, `SidePCState`, and a card with the profile's whole streaming time and last stream, `PlaytimeStore.total`, read as the menu opens) at the top and All settings; it takes every
 command while it is open, and B, the menu button or a tap beside it closes it. The quick settings (theme, background, sounds, haptics) are in it; the rows scroll
 (`FocusScroll` with edge fades) where the stage is too short, the panel is 680 px wide (glass, `panel` role), docked to the left edge at full height (`SideMenuStyle`: on iPad and Apple TV it is a floating box instead, with continuous 40 px corners and the same gap to the left, top and bottom edges of the screen, `SideMenuStyle.gap`: 48 px beyond the deepest of the three safe areas, so a status bar or the home indicator does not make one gap larger; iPhone, a narrow iPad window and Mac keep the edge panel). The edge panel arrives from
 a tenth of its width to its left (`sideEnter`: 560 ms ease-out with a 280 ms fade; it leaves over 240 ms ease-in); the

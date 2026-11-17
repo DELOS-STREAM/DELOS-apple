@@ -385,6 +385,8 @@ shell_nav_devices
 shell_side_not_connected
 shell_side_connected
 shell_side_offline
+shell_side_pc_streaming
+shell_side_pc_connecting
 shell_side_theme
 shell_side_theme_dark
 shell_side_theme_light
