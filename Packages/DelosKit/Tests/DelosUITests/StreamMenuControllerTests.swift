@@ -82,6 +82,8 @@ private func streaming(
     let controller = StreamController(capabilities: capabilities, brightness: brightness) { steps }
     controller.start(display: screen)
     for _ in 0..<500 where controller.phase != .streaming { try? await Task.sleep(for: .milliseconds(2)) }
+    // The launch scene is over: the stream is the player's
+    controller.loaderEnded()
     return (controller, steps)
 }
 

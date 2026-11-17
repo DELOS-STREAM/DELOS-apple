@@ -107,6 +107,8 @@ final class StreamController {
     @ObservationIgnored private(set) var suspended = false
     /// The leaving that runs (``leave(quit:)``).
     @ObservationIgnored private var leaving: Task<Void, Never>?
+    /// The loader's phase and its one-shot cancel (B, Escape and the Cancel pill); a new one for each attempt.
+    @ObservationIgnored private(set) var loader = LoaderCancel()
 
     @ObservationIgnored private let brightness: (any ScreenBrightness)?
     /// The brightness the player chose in this stream: it is set again when the app comes back from the background.
@@ -146,6 +148,7 @@ final class StreamController {
         let id = attemptID
         leavingScene = false
         phase = .connecting
+        loader = LoaderCancel()
         progress = 0
         line = StageLines.line(.platform, pcName: steps.pcName)
         let steps = self.steps
@@ -224,10 +227,13 @@ final class StreamController {
     private func connected() {
         guard phase == .connecting else { return }
         phase = .streaming
+        loader.connected()
         progress = 1
         if let sink = steps.input, input == nil {
             let input = GameInput(sink: sink) { [weak self] in self?.openMenu() }
             input.start()
+            // The scene is still opening over the picture: B, keys and touches are the loader's, not the game's
+            input.paused = true
             self.input = input
         }
         startStatistics()
@@ -354,6 +360,16 @@ final class StreamController {
     func dismissPopover() {
         guard menuOpen, let exit = StreamMenuNavigation.afterDismiss(menu.page) else { return }
         go(exit)
+    }
+
+    /// A tap outside the dock and the popover: the popover closes first, then the menu (it resumes the stream). The tap is the
+    /// menu's alone: the game gets no click (the menu paused its input, and a release without a press is not sent).
+    func tapOutside() {
+        guard menuOpen else { return }
+        switch StreamMenuNavigation.afterOutsideTap(menu.page) {
+        case .dismissPopover(let exit): go(exit)
+        case .closeMenu: closeMenu()
+        }
     }
 
     private func go(_ exit: PageExit) {
@@ -535,10 +551,28 @@ final class StreamController {
 
     enum TouchPhase { case began, moved, ended, cancelled }
 
+    // MARK: Loader
+
+    /// The loader can be cancelled now: its scene is up, while it connects and while it opens over the picture.
+    var loaderCancellable: Bool { loader.cancellable && (phase == .connecting || phase == .streaming) }
+
+    /// Cancels the loader in any phase (B, Escape, the Cancel pill): this client's attempt ends and the library comes back.
+    /// The game is never quit on the PC and no result overlay is shown (``LoaderCancel/plan``). One cancel per attempt.
+    func cancelLoader() async {
+        guard loaderCancellable, loader.request() else { return }
+        await leave(quit: LoaderCancel.plan.quitGame)
+    }
+
+    /// The launch scene is over: the stream is the player's.
+    func loaderEnded() {
+        loader.ended()
+        if phase == .streaming, !menuOpen { input?.paused = false }
+    }
+
     /// A touch on the stream, in pixels of a screen `width` pixels wide: the left-edge swipe opens the menu, the other
     /// touches are the PC's trackpad.
     func touch(_ id: Int, _ touchPhase: TouchPhase, at point: CGPoint, width: CGFloat, time: TimeInterval) {
-        guard phase == .streaming, !menuOpen else { return }
+        guard phase == .streaming, !menuOpen, !loader.cancellable else { return }
         switch touchPhase {
         case .began:
             if swipe.began(id, x: point.x, width: width) { return }

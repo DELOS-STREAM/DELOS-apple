@@ -194,9 +194,9 @@ struct StreamMenu: View {
         .ignoresSafeArea()
         .contentShape(Rectangle())
         .onTapGesture {
-            guard controller.menu.isOpen else { return }
+            guard controller.menuOpen else { return }
             layers?.feedback?.play(.back)
-            controller.dismissPopover()
+            controller.tapOutside()
         }
     }
 

@@ -376,6 +376,7 @@ private let iPhone = DisplayInfo(pixelWidth: 1290, pixelHeight: 2796, maxFramesP
         await eventually { steps.isConnecting }
         steps.finishConnect()
         await eventually { controller.phase == .streaming }
+        controller.loaderEnded()
         // The stream owns every command while the menu is closed
         #expect(StreamScreen.capture(.accept, controller: controller, focus: focus))
         #expect(StreamScreen.capture(.back, controller: controller, focus: focus))
@@ -398,6 +399,7 @@ private let iPhone = DisplayInfo(pixelWidth: 1290, pixelHeight: 2796, maxFramesP
         await eventually { steps.isConnecting }
         steps.finishConnect()
         await eventually { controller.phase == .streaming }
+        controller.loaderEnded()
         controller.openMenu()
         #expect(cancelled == 1)
         // Just opened: the held direction and its repeats, and a press of A, are swallowed
@@ -419,6 +421,7 @@ private let iPhone = DisplayInfo(pixelWidth: 1290, pixelHeight: 2796, maxFramesP
         await eventually { steps.isConnecting }
         steps.finishConnect()
         await eventually { controller.phase == .streaming }
+        controller.loaderEnded()
         // A controller's Menu button reaches the app as Menu too, but it is Start for the PC: nothing opens
         #expect(StreamScreen.capture(.back, controller: controller, focus: focus, fromRemote: true, hasGamepad: true))
         #expect(!controller.menuOpen)
@@ -544,5 +547,170 @@ extension StreamControllerTests {
         #expect(LaunchChoice.of(app: 7, running: 9) == .otherAppRunning)
         #expect(StreamText.launchFailure(.otherAppRunning, pcName: "PC", appName: "A").sentence
             == "Another app is already running · quit it from Delos first")
+    }
+}
+
+/// Cancelling the loader (issue #5, Android #92): B, Escape and the Cancel pill end this client's attempt in every phase; the game
+/// is never quit on the PC and the library comes back.
+@MainActor
+@Suite struct LoaderCancelTests {
+    @Test func theStateMachineCancelsOnceWhileTheSceneIsUp() {
+        var loader = LoaderCancel()
+        #expect(loader.phase == .connecting && loader.cancellable)
+        loader.connected()
+        #expect(loader.phase == .opening && loader.cancellable)
+        let first = loader.request()
+        #expect(first)
+        #expect(loader.phase == .cancelled && !loader.cancellable)
+        let second = loader.request()
+        #expect(!second, "one cancel for one attempt")
+        loader.ended()
+        #expect(loader.phase == .cancelled, "a cancelled loader stays cancelled")
+        loader.connected()
+        #expect(loader.phase == .cancelled)
+    }
+
+    @Test func aFinishedSceneCannotBeCancelled() {
+        var loader = LoaderCancel()
+        loader.connected()
+        loader.ended()
+        #expect(loader.phase == .gone && !loader.cancellable)
+        let late = loader.request()
+        #expect(!late)
+        var early = LoaderCancel()
+        early.ended()
+        let earlyRequest = early.request()
+        #expect(early.phase == .gone && !earlyRequest)
+    }
+
+    @Test func aCancelOnlyStopsTheConnectionAndGoesBack() {
+        let plan = LoaderCancel.plan
+        #expect(plan.stopConnection && plan.returnToLibrary)
+        #expect(!plan.quitGame && !plan.showResult)
+    }
+
+    @Test func cancelWhileLaunchingStopsTheAttemptAndNeverQuitsTheGame() async {
+        let steps = FakeSteps()
+        steps.holdsLaunch = true
+        let controller = StreamController { steps }
+        controller.start(display: iPhone)
+        await eventually { steps.isLaunching }
+        #expect(controller.loaderCancellable)
+        await controller.cancelLoader()
+        #expect(controller.phase == .ended)
+        #expect(steps.stops == 1)
+        #expect(steps.quits == 0)
+        #expect(controller.loader.phase == .cancelled)
+        steps.finishLaunch()
+    }
+
+    @Test func cancelWhileConnectingEndsWithoutAResultOverlay() async {
+        let steps = FakeSteps()
+        let controller = StreamController { steps }
+        controller.start(display: iPhone)
+        await eventually { steps.isConnecting }
+        await controller.cancelLoader()
+        #expect(controller.phase == .ended)
+        #expect(steps.quits == 0)
+        // Asking again changes nothing
+        await controller.cancelLoader()
+        #expect(steps.stops == 1)
+    }
+
+    @Test func bAndEscapeCancelWhileConnecting() async {
+        let steps = FakeSteps()
+        let controller = StreamController { steps }
+        controller.start(display: iPhone)
+        await eventually { steps.isConnecting }
+        #expect(StreamScreen.capture(.accept, controller: controller, focus: FocusModel()))
+        #expect(controller.phase == .connecting)
+        #expect(StreamScreen.capture(.back, controller: controller, focus: FocusModel()))
+        await eventually { controller.phase == .ended }
+        #expect(controller.phase == .ended)
+        #expect(steps.quits == 0)
+    }
+
+    @Test func whileTheSceneOpensOverTheStreamBCancelsAndNothingElseGetsThrough() async {
+        let steps = FakeSteps()
+        let controller = StreamController { steps }
+        let focus = FocusModel()
+        controller.start(display: iPhone)
+        await eventually { steps.isConnecting }
+        steps.finishConnect()
+        await eventually { controller.phase == .streaming }
+        #expect(controller.loader.phase == .opening && controller.loaderCancellable)
+        // The other buttons are the loader's too: no menu opens from the remote, nothing moves
+        #expect(StreamScreen.capture(.options, controller: controller, focus: focus, fromRemote: true, hasGamepad: false))
+        #expect(!controller.menuOpen)
+        // A touch is not the PC's trackpad and not the menu's swipe
+        controller.touch(1, .began, at: .zero, width: 1000, time: 0)
+        controller.touch(1, .moved, at: CGPoint(x: 900, y: 0), width: 1000, time: 0.1)
+        #expect(!controller.menuOpen)
+        #expect(StreamScreen.capture(.back, controller: controller, focus: focus))
+        await eventually { controller.phase == .ended }
+        #expect(controller.phase == .ended)
+        #expect(steps.quits == 0)
+    }
+
+    @Test func onceTheSceneIsOverBIsTheMenusAndNoLongerCancels() async {
+        let steps = FakeSteps()
+        let controller = StreamController { steps }
+        controller.start(display: iPhone)
+        await eventually { steps.isConnecting }
+        steps.finishConnect()
+        await eventually { controller.phase == .streaming }
+        controller.loaderEnded()
+        #expect(!controller.loaderCancellable)
+        await controller.cancelLoader()
+        #expect(controller.phase == .streaming)
+        #expect(steps.stops == 0)
+    }
+
+    @Test func aNewAttemptHasAFreshLoader() async {
+        let steps = FakeSteps()
+        steps.connectFailure = .stageFailed(.rtspHandshake, errorCode: -408)
+        var made = [FakeSteps]()
+        let controller = StreamController {
+            let next = made.isEmpty ? steps : FakeSteps()
+            made.append(next)
+            return next
+        }
+        controller.start(display: iPhone)
+        await eventually { steps.isConnecting }
+        steps.finishConnect()
+        await eventually { controller.phase != .connecting }
+        controller.retry()
+        #expect(controller.loader.phase == .connecting && controller.loaderCancellable)
+    }
+}
+
+/// A tap outside the stream menu: the popover closes first, then the menu; the stream is never left and no click reaches the game.
+@MainActor
+@Suite struct StreamMenuOutsideTapTests {
+    @Test func theNavigationClosesThePopoverBeforeTheMenu() {
+        #expect(StreamMenuNavigation.afterOutsideTap(.main) == .closeMenu)
+        #expect(StreamMenuNavigation.afterOutsideTap(.more) == .dismissPopover(PageExit(page: .main, focusTile: .more, focusRow: nil)))
+        #expect(StreamMenuNavigation.afterOutsideTap(.keys) == .dismissPopover(PageExit(page: .main, focusTile: .more, focusRow: nil)))
+    }
+
+    @Test func twoTapsOutsideCloseThePopoverThenTheMenuAndTheStreamKeepsRunning() async {
+        let steps = FakeSteps()
+        let controller = StreamController { steps }
+        controller.start(display: iPhone)
+        await eventually { steps.isConnecting }
+        steps.finishConnect()
+        await eventually { controller.phase == .streaming }
+        controller.loaderEnded()
+        controller.tapOutside()
+        #expect(!controller.menuOpen, "no menu: nothing to close")
+        controller.openMenu()
+        controller.openMenuPage(.more)
+        #expect(controller.menu.isOpen)
+        controller.tapOutside()
+        #expect(controller.menuOpen && !controller.menu.isOpen, "the popover closes first")
+        controller.tapOutside()
+        #expect(!controller.menuOpen)
+        #expect(controller.phase == .streaming)
+        #expect(steps.stops == 0 && steps.quits == 0)
     }
 }
