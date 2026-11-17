@@ -102,10 +102,12 @@ def unit(text: str) -> dict:
 def plural(forms: dict[str, str]) -> dict:
     """A plural as a variation by plural category. Apple requires a plural variation to show its number; forms without
     one ("hour" / "hours", Android's getQuantityString for a unit beside a number) become a substitution that picks
-    the form from the first argument and shows only the form."""
+    the form from the first argument and shows only the form. A form that shows a text ("%1$s Hours", the quantity an
+    Android count apart from its text) takes the text as the second argument, after the count."""
     variations = {"plural": {q: unit(t) for q, t in forms.items()}}
     if any(PLACEHOLDER.search(t) for t in forms.values()):
         return {"variations": variations}
+    variations = {"plural": {q: unit(t.replace("%1$@", "%2$@")) for q, t in forms.items()}}
     return {"stringUnit": {"state": "translated", "value": "%#@count@"},
             "substitutions": {"count": {"argNum": 1, "formatSpecifier": "d", "variations": variations}}}
 

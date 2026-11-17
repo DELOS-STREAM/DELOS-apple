@@ -48,6 +48,12 @@ class PluralTest(unittest.TestCase):
         self.assertEqual(substitution["variations"]["plural"]["one"]["stringUnit"]["value"], "hour")
 
 
+    def test_a_plural_with_a_text_shows_it_as_the_second_argument(self):
+        entry = import_android.plural({"one": "%1$@ Hour", "other": "%1$@ Hours"})
+        substitution = entry["substitutions"]["count"]
+        self.assertEqual(substitution["variations"]["plural"]["other"]["stringUnit"]["value"], "%2$@ Hours")
+
+
 class CheckUsageTest(unittest.TestCase):
     catalog = {"strings": {
         "full": {"localizations": {language: {} for language in check_usage.LANGUAGES}},
