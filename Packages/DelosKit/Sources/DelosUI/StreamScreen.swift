@@ -10,8 +10,9 @@ import UIKit
 /// connects, the video full screen with the controllers, keyboard, mouse and touch going to the PC, a minimal stream
 /// menu (Resume, Overlay, Disconnect, Quit app), the statistics panel and the result overlay when the stream failed.
 ///
-/// The stream menu opens like on Android by default: L3 + R3 held together on a controller (``MenuShortcut``), or a
-/// swipe from the left edge of the touch screen (``MenuSwipe``).
+/// The stream menu opens with a tap of a controller's Home button (a hold is Guide on the PC, ``GuideTapHold``), with the
+/// buttons the profile recorded (``MenuShortcut``, none by default), and with a swipe up from the band above the bottom
+/// edge of the touch screen (``StreamMenuSwipe``, unless the profile turned it off).
 struct StreamScreen: View {
     let hostID: String
     let appID: Int
@@ -92,7 +93,10 @@ struct StreamScreen: View {
             let store = PlaytimeStore()
             return PlaytimeTracker(sink: { [hostID, appID] in store.add($0, profile: profile, hostID: hostID, appID: appID) })
         }
-        let controller = StreamController(brightness: Self.deviceBrightness, statisticsOverlay: settings.statisticsOverlay, playtime: playtime) { [hosts, hostID, appID, settings] in
+        let controller = StreamController(
+            brightness: Self.deviceBrightness, statisticsOverlay: settings.statisticsOverlay, playtime: playtime,
+            menuButtons: ShortcutButton.parse(settings.streamMenuButtons), menuSwipe: settings.streamMenuSwipe
+        ) { [hosts, hostID, appID, settings] in
             LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer)
         }
         controller.rumbleConfiguration = settings.rumble
@@ -124,9 +128,10 @@ struct StreamScreen: View {
     /// menu or the result overlay while they are shown (through the screen's focus); B closes the menu, leaves the
     /// result overlay (Back to library) and stops a stream that is still connecting.
     ///
-    /// The Siri Remote (Apple TV, [fromRemote]) has no L3 + R3: its Play/Pause opens the stream menu, and so does its
-    /// Menu button when no game controller is connected (a controller's Menu button is Start for the PC, and the
-    /// system also reports it as Menu). Either closes the open menu.
+    /// The Siri Remote (Apple TV, [fromRemote]) has no Home button for the stream (its TV button is the system's). Its Back
+    /// button is the device's Back: a press opens the stream menu when no game controller is connected (a controller's Menu
+    /// button is Start for the PC, and the system also reports it as Menu). SwiftUI reports that button only as the exit
+    /// command, without how long it was held, so its hold cannot be Guide. Play/Pause opens the menu too; either closes it.
     static func capture(
         _ command: MenuCommand, controller: StreamController, focus: FocusModel, fromRemote: Bool = false,
         feedback: Feedback? = nil, repeatCount: Int = 0, at now: Date = .now,
@@ -257,8 +262,8 @@ struct StreamContent: View {
                             display = info
                             controller.start(display: info)
                         },
-                        onTouch: { id, phase, point, width, time in
-                            controller.touch(id, phase, at: point, width: width, time: time)
+                        onTouch: { id, phase, point, area, time in
+                            controller.touch(id, phase, at: point, area: area, time: time)
                         },
                         ignoresPointer: { controller.hasMouse },
                         capturesPointer: capturesPointer,
@@ -364,7 +369,7 @@ struct StreamContent: View {
 
     /// A launch scene for a new attempt; its first line is the stage told so far, if any.
     private func makeDirector() -> LaunchDirector {
-        LaunchDirector(line: controller.line.isEmpty ? nil : controller.line, reducedMotion: reducedMotion)
+        LaunchDirector(line: controller.line.isEmpty ? nil : controller.line, reducedMotion: reducedMotion, renderer: renderer)
     }
 
     /// The launch scene's words.

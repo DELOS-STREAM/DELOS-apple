@@ -449,7 +449,8 @@ public struct DelosRoot: View {
         switch layers.layer {
         case .context?: layer = .context(root: layers.menuPath.isEmpty)
         case .dialog?: layer = .dialog
-        case nil: break
+        // The recording of the stream menu's buttons keeps the screen's hints, as Android's capture layer does
+        case .buttonCapture?, nil: break
         }
         let focus = layers.isOpen ? layers.focus : navigator.focus
         return ShellHints.hints(ShellHints.Context(

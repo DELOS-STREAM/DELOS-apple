@@ -20,6 +20,13 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - Controller hints use the approved complete Xbox, DualSense, DualShock 4 and Joy-Con font glyphs,
   with physical button positions preserved and no extra disc or connected-pad SF Symbols override. The shared
   library also includes Mac keyboard, mouse and trackpad symbols.
+- The stream arrives at the end of the launch scene: while the tunnel opens, the live picture waits zoomed to 118 %
+  and blurred, then springs in to 100 % with a short squash, wave and RGB split, and ends exactly on the plain picture.
+  It is drawn by the Metal renderer on the live frames; with reduced motion, and with the display layer where Metal
+  is unavailable, the picture is shown as it is. Not verified on a device.
+- Controller hints use the same approved complete Xbox, DualSense, DualShock 4 and Joy-Con font glyphs as Android,
+  with physical button positions preserved and no extra disc or connected-pad SF Symbols override. Both font files
+  are byte-identical to Android; the shared library also includes Mac keyboard, mouse and trackpad symbols.
   Physical-device rendering is not verified.
 - The library filter on the home screen (when `DelosMetadataURL` is configured): Y, or a tap on the hint bar's Filter
   (a glyphless pill while no controller is the input), opens a glass sheet with chips for genre and theme (with the number of games each holds), HDR support and
@@ -166,6 +173,12 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 ### Changed
 
 - Feedback and motion: a tap or a click plays the same cue and squeezes the element (.97) as A
+- The stream menu opens with a tap of a controller's Home button, and holding Home for half a second sends Guide to the
+  PC while it is held; the Home button's system overlay stays off during a stream. L3 + R3 no longer open the menu by
+  default: Settings → Controls → Stream menu buttons records your own combination ("Not set" by default). On the touch
+  screen the menu opens with a swipe up from a band above the bottom edge (Swipe up to open the menu, on by default)
+  instead of the swipe from the left edge; touches starting in that band do not reach the PC. Not yet tried on a device.
+- Feedback and motion as in DELOS for Android: a tap or a click plays the same cue and squeezes the element (.97) as A
   does, without a second sound (Cancel and Back to library are BACK only; the stream menu opens with OPEN and closes with
   BACK; the PC ending the stream shows a toast), Apple TV plays MOVE and SELECT through the focus engine, circle rows and
   tall menus scroll to the focused item, icons cross-fade between Regular and Fill, the focus curves are 420 ms and jump

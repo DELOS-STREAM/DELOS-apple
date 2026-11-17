@@ -1,5 +1,6 @@
 import CoreGraphics
 import DelosData
+import DelosMedia
 import Foundation
 import Observation
 import SwiftUI
@@ -20,13 +21,16 @@ final class LaunchDirector {
     @ObservationIgnored let start = LaunchDirector.now()
     @ObservationIgnored private var lastLine: String?
     @ObservationIgnored private var ticker: Task<Void, Never>?
+    /// Draws the picture's arrival when the exit begins (``LaunchTimeline/arrivalSeconds(since:)``).
+    @ObservationIgnored private let renderer: (any VideoRenderer)?
 
     /// Seconds on the clock the scene runs on.
     nonisolated static func now() -> Double { ProcessInfo.processInfo.systemUptime }
 
-    init(line: String?, reducedMotion: Bool) {
+    init(line: String?, reducedMotion: Bool, renderer: (any VideoRenderer)? = nil) {
         timeline = LaunchTimeline(now: Self.now(), line: line, reducedMotion: reducedMotion)
         self.line = line
+        self.renderer = renderer
         lastLine = line
         ticker = Task { [weak self] in
             while !Task.isCancelled {
@@ -39,7 +43,9 @@ final class LaunchDirector {
     isolated deinit { ticker?.cancel() }
 
     private func tick() {
+        let previous = timeline.phase
         timeline.update(at: Self.now())
+        if let seconds = timeline.arrivalSeconds(since: previous) { renderer?.startArrival(duration: seconds) }
         if line != timeline.currentLine { line = timeline.currentLine }
         if !timeline.isActive { stop() }
     }
@@ -60,11 +66,12 @@ final class LaunchDirector {
         timeline.framePresented()
     }
 
-    /// The scene goes away at once (the stream failed, or is being left).
+    /// The scene goes away at once (the stream failed, or is being left); an arrival still running ends with it.
     func stop() {
         ticker?.cancel()
         ticker = nil
         isActive = false
+        if timeline.isActive { renderer?.cancelArrival() }
     }
 }
 

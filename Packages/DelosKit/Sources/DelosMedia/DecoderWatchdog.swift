@@ -86,6 +86,8 @@ public final class WatchdogVideoRenderer: VideoRenderer {
     @MainActor public func resize(to bounds: CGRect, scale: CGFloat) { renderer.resize(to: bounds, scale: scale) }
     @MainActor public func attached(maxFramesPerSecond: Int) { renderer.attached(maxFramesPerSecond: maxFramesPerSecond) }
     @MainActor public func detached() { renderer.detached() }
+    public func startArrival(duration: Double) { renderer.startArrival(duration: duration) }
+    public func cancelArrival() { renderer.cancelArrival() }
 
     func observe(_ counters: VideoPresentationCounters?, now: UInt64) {
         let displayed = counters.flatMap { value -> Int? in

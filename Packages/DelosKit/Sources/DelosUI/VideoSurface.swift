@@ -7,7 +7,7 @@ import SwiftUI
 struct VideoSurface {
     let renderer: any VideoRenderer
     let onDisplay: @MainActor (DisplayInfo) -> Void
-    var onTouch: @MainActor (_ id: Int, _ phase: StreamController.TouchPhase, _ point: CGPoint, _ width: CGFloat, _ time: TimeInterval) -> Void = { _, _, _, _, _ in }
+    var onTouch: @MainActor (_ id: Int, _ phase: StreamController.TouchPhase, _ point: CGPoint, _ area: StreamController.TouchArea, _ time: TimeInterval) -> Void = { _, _, _, _, _ in }
     /// Whether a touch of the system pointer (a mouse or trackpad) is ignored: the mouse's own input already moves the
     /// PC's pointer.
     var ignoresPointer: @MainActor () -> Bool = { false }
@@ -98,7 +98,7 @@ private final class ScenePointerBackend: PointerLockBackend {
 final class VideoHostView: UIView {
     private let renderer: any VideoRenderer
     var onDisplay: @MainActor (DisplayInfo) -> Void = { _ in }
-    var onTouch: @MainActor (Int, StreamController.TouchPhase, CGPoint, CGFloat, TimeInterval) -> Void = { _, _, _, _, _ in }
+    var onTouch: @MainActor (Int, StreamController.TouchPhase, CGPoint, StreamController.TouchArea, TimeInterval) -> Void = { _, _, _, _, _ in }
     var ignoresPointer: @MainActor () -> Bool = { false }
     var onText: @MainActor (String) -> Void = { _ in }
     var onBackspace: @MainActor () -> Void = {}
@@ -123,6 +123,7 @@ final class VideoHostView: UIView {
         #if os(iOS)
         isMultipleTouchEnabled = true
         addInteraction(pointerStyle)
+        KeyboardTileLog.observeSystem()
         #endif
         layer.addSublayer(renderer.hostLayer)
     }
@@ -134,6 +135,7 @@ final class VideoHostView: UIView {
     func setKeyboard(_ shown: Bool) {
         #if os(iOS)
         guard shown != keyboardWanted else { return }
+        KeyboardTileLog.note("video: keyboard wanted \(shown); \(keyboardState)")
         keyboardWanted = shown
         if shown {
             raiseKeyboard(retries: Self.raiseRetries)
@@ -153,9 +155,21 @@ final class VideoHostView: UIView {
     /// over a keyboard that is not there.
     private func raiseKeyboard(retries: Int) {
         guard keyboardWanted, !isFirstResponder else { return }
-        if window != nil, becomeFirstResponder() { return }
+        if window != nil, becomeFirstResponder() {
+            #if DEBUG
+            // Whether the system showed a keyboard for it: the notifications are logged too
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(500))
+                guard let self else { return }
+                KeyboardTileLog.note("video: 0.5 s after taking the first responder; \(self.keyboardState)")
+            }
+            #endif
+            return
+        }
+        KeyboardTileLog.note("video: first responder refused, \(retries) tries left; \(keyboardState)")
         guard retries > 0 else {
             keyboardWanted = false
+            KeyboardTileLog.note("video: gives up, the Keyboard tile turns off")
             Task { @MainActor [onKeyboardHidden] in onKeyboardHidden() }
             return
         }
@@ -167,8 +181,17 @@ final class VideoHostView: UIView {
 
     override var canBecomeFirstResponder: Bool { true }
 
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        KeyboardTileLog.note("video: becomeFirstResponder \(became); \(keyboardState)")
+        return became
+    }
+
     override func resignFirstResponder() -> Bool {
         let resigned = super.resignFirstResponder()
+        // Who took it: the frames that led here (a responder that took the first responder, UIKit's own hide button)
+        KeyboardTileLog.note("video: resignFirstResponder \(resigned), keyboard wanted \(keyboardWanted); from "
+            + Thread.callStackSymbols.dropFirst().prefix(12).joined(separator: " | "))
         guard resigned else { return resigned }
         // The system's own hide button: the menu's Keyboard tile turns off
         if keyboardWanted {
@@ -178,6 +201,20 @@ final class VideoHostView: UIView {
         // The keys of the interface belong to the interface again (the menu's arrows must not reach the system)
         Task { @MainActor in NotificationCenter.default.post(name: MenuKeyOwnerView.reclaim, object: nil) }
         return resigned
+    }
+
+    /// Debug builds: the facts that decide whether UIKit shows the keyboard (`KeyboardTileLog`).
+    private var keyboardState: String {
+        #if DEBUG
+        let scene = window?.windowScene
+        let windowState = window.map { "key \($0.isKeyWindow)" } ?? "none"
+        let sceneState = scene.map { "\($0.activationState.rawValue)" } ?? "none"
+        return "self first responder \(isFirstResponder), app first responder \(KeyboardTileLog.firstResponder), window \(windowState), "
+            + "scene state \(sceneState), hardware keyboard \(KeyboardTileLog.hardwareKeyboard), pointer lock wanted "
+            + "\(StreamPointerLock.prefersLocked), locked \(scene?.pointerLockState?.isLocked == true)"
+        #else
+        ""
+        #endif
     }
 
     // A hardware keyboard types into the first responder as well as through GameController, which already sends its keys to the
@@ -250,13 +287,20 @@ final class VideoHostView: UIView {
 
     private func report(_ touches: Set<UITouch>, _ phase: StreamController.TouchPhase) {
         let scale = window?.windowScene?.screen.nativeScale ?? contentScaleFactor
+        let area = StreamController.TouchArea(
+            width: bounds.width * scale, height: bounds.height * scale, gestureInset: gestureInset * scale, scale: scale)
         for touch in touches {
             if touch.type == .indirectPointer, ignoresPointer() { continue }
             let point = touch.location(in: self)
-            onTouch(
-                ObjectIdentifier(touch).hashValue, phase, CGPoint(x: point.x * scale, y: point.y * scale),
-                bounds.width * scale, touch.timestamp)
+            onTouch(ObjectIdentifier(touch).hashValue, phase, CGPoint(x: point.x * scale, y: point.y * scale), area, touch.timestamp)
         }
+    }
+
+    /// The points at the bottom of this view that the system keeps for its home gesture (the home indicator's safe area).
+    private var gestureInset: CGFloat {
+        guard let window else { return 0 }
+        let bottom = convert(bounds, to: window).maxY
+        return max(0, bottom - (window.bounds.height - window.safeAreaInsets.bottom))
     }
 }
 

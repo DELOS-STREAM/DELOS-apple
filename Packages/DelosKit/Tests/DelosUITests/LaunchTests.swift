@@ -1,5 +1,9 @@
+import CoreMedia
 import DelosData
+import DelosMedia
 import Foundation
+import QuartzCore
+import Synchronization
 import Testing
 @testable import DelosUI
 
@@ -190,6 +194,41 @@ private func advance(_ queue: inout LaunchStageQueue, _ now: Int64) -> Bool { qu
         #expect(t.phase == .done)
     }
 
+    /// The renderer's arrival starts once, at the update that begins the exit, and lasts the exit's 2.2 s.
+    @Test func theArrivalStartsWithTheExitAndLastsItsTime() {
+        var t = timeline()
+        var starts: [Double] = []
+        func update(_ now: Double) {
+            let previous = t.phase
+            t.update(at: now)
+            if let seconds = t.arrivalSeconds(since: previous) { starts.append(seconds) }
+        }
+        t.gameRuns(at: 101)
+        update(101.1)
+        t.framePresented()
+        update(101.2)
+        #expect(starts.isEmpty)
+        update(101.5)
+        #expect(t.phase == .opening(since: 101.5))
+        #expect(starts == [2.2])
+        update(102)
+        update(101.5 + 2.2)
+        #expect(t.phase == .done && starts == [2.2])
+    }
+
+    /// Reduced motion has no arrival: the picture is shown as it is while the plain fades run.
+    @Test func reducedMotionHasNoArrival() {
+        var t = timeline(reduced: true)
+        t.gameRuns(at: 101)
+        t.framePresented()
+        for now in stride(from: 101.0, through: 102, by: 0.05) {
+            let previous = t.phase
+            t.update(at: now)
+            #expect(t.arrivalSeconds(since: previous) == nil)
+        }
+        #expect(t.phase == .done)
+    }
+
     @Test func stagesAfterTheGameRunsChangeNothing() {
         var t = timeline()
         t.gameRuns(at: 101)
@@ -272,5 +311,57 @@ private func advance(_ queue: inout LaunchStageQueue, _ now: Int64) -> Bool { qu
         // The flat color is complete before the library comes back
         #expect(ExitLook.flat(at: ExitLook.handoff(reduced: false), reduced: false) == 1)
         #expect(ExitLook.flat(at: ExitLook.handoff(reduced: true), reduced: true) == 1)
+    }
+}
+
+/// Records what the launch scene asks of the renderer.
+private final class ArrivalRecorder: VideoRenderer, @unchecked Sendable {
+    private let calls = Mutex<[String]>([])
+    var recorded: [String] { calls.withLock { $0 } }
+    var name: String { "recorder" }
+    func enqueue(_ sample: CMSampleBuffer) -> Bool { true }
+    func flush() {}
+    func presentationCounters() async -> VideoPresentationCounters? { nil }
+    @MainActor var hostLayer: CALayer { CALayer() }
+    @MainActor func resize(to bounds: CGRect, scale: CGFloat) {}
+    func startArrival(duration: Double) { calls.withLock { $0.append("start \(duration)") } }
+    func cancelArrival() { calls.withLock { $0.append("cancel") } }
+}
+
+@MainActor @Suite struct LaunchDirectorArrivalTests {
+    /// Waits on the real clock (the director ticks every 16 ms) until `done`, at most `seconds`.
+    private func wait(upTo seconds: Double, until done: () -> Bool) async throws {
+        let end = LaunchDirector.now() + seconds
+        while !done(), LaunchDirector.now() < end { try await Task.sleep(for: .milliseconds(10)) }
+    }
+
+    /// The director starts the renderer's arrival once, when the exit begins (0.25 s after the first frame), and leaves
+    /// its end to the renderer's clock: a scene that ends normally cancels nothing.
+    @Test func theExitStartsTheRenderersArrivalOnce() async throws {
+        let renderer = ArrivalRecorder()
+        let director = LaunchDirector(line: nil, reducedMotion: false, renderer: renderer)
+        director.gameRuns()
+        director.framePresented()
+        try await wait(upTo: 10) { !director.isActive }
+        #expect(!director.isActive)
+        #expect(renderer.recorded == ["start 2.2"])
+    }
+
+    /// A scene stopped before its exit ended (the stream failed or is being left) ends the arrival with it.
+    @Test func aSceneStoppedEarlyCancelsTheArrival() {
+        let renderer = ArrivalRecorder()
+        let director = LaunchDirector(line: nil, reducedMotion: false, renderer: renderer)
+        director.stop()
+        #expect(renderer.recorded == ["cancel"])
+    }
+
+    @Test func reducedMotionNeverStartsIt() async throws {
+        let renderer = ArrivalRecorder()
+        let director = LaunchDirector(line: nil, reducedMotion: true, renderer: renderer)
+        director.gameRuns()
+        director.framePresented()
+        try await wait(upTo: 10) { !director.isActive }
+        #expect(!director.isActive)
+        #expect(renderer.recorded.isEmpty)
     }
 }

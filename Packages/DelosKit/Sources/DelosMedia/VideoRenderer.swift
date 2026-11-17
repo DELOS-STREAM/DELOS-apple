@@ -27,12 +27,20 @@ public protocol VideoRenderer: Sendable {
     @MainActor func attached(maxFramesPerSecond: Int)
     /// The view left its window.
     @MainActor func detached()
+    /// The launch scene's exit begins: the picture arrives (``LaunchArrival``) over `duration` seconds, timed by the
+    /// renderer's own clock from now. The display layer draws no effects and shows the picture as it is, as when the
+    /// arrival cannot run on the GPU.
+    func startArrival(duration: Double)
+    /// The launch scene went away before its exit ended: the picture is shown plainly from the next refresh on.
+    func cancelArrival()
 }
 
 extension VideoRenderer {
     public func setHDR(_ active: Bool) {}
     @MainActor public func attached(maxFramesPerSecond: Int) {}
     @MainActor public func detached() {}
+    public func startArrival(duration: Double) {}
+    public func cancelArrival() {}
 }
 
 /// Renders through an `AVSampleBufferDisplayLayer`; a view hosts ``layer`` (on the main actor), while frames go to its

@@ -247,6 +247,16 @@ struct LaunchTimeline {
 
     var openingSeconds: Double { reducedMotion ? LaunchLook.reducedOpeningSeconds : LaunchLook.openingSeconds }
 
+    /// How long the picture's arrival lasts when the exit began since [previous], the phase before the last update: the
+    /// exit's whole time, over which the renderer runs it on its own clock (`VideoRenderer.startArrival(duration:)`).
+    /// Nil when the exit did not begin then, and always with reduced motion, which has no arrival (`StreamLoader` of
+    /// DELOS for Android keeps the effect off and only the plain fades run).
+    func arrivalSeconds(since previous: Phase) -> Double? {
+        guard !reducedMotion, case .opening = phase else { return nil }
+        if case .opening = previous { return nil }
+        return openingSeconds
+    }
+
     /// The ring's progress, 0…1.
     func progress(at now: Double) -> Double { progress.value(at: now) }
 
