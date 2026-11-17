@@ -28,6 +28,7 @@ public enum GlyphRole: Sendable, Hashable, CaseIterable {
     /// The right menu button: Menu, Options, +.
     case menuRight
     case touchpad
+    case dpad, guide
 }
 
 /// What a glyph shows.
@@ -43,6 +44,7 @@ public enum GlyphMark: Sendable, Hashable {
     /// The PlayStation Options button.
     case options
     case touchpad
+    case dpad, guide
 
     /// The mark as text, for a sentence ("B cancels"); nil for the icons.
     public var text: String? {
@@ -52,7 +54,7 @@ public enum GlyphMark: Sendable, Hashable {
         case .circle: "\u{25CB}"
         case .square: "\u{25A1}"
         case .triangle: "\u{25B3}"
-        case .view, .menu, .create, .options, .touchpad: nil
+        case .view, .menu, .create, .options, .touchpad, .dpad, .guide: nil
         }
     }
 }
@@ -84,6 +86,8 @@ extension PadFamily {
             case .generic, .xbox: .menu
             }
         case .touchpad: .touchpad
+        case .dpad: .dpad
+        case .guide: .guide
         }
     }
 
@@ -112,20 +116,11 @@ public struct PadDescriptor: Sendable, Hashable {
     public var profile: Profile
     public var productCategory: String
     public var vendorName: String?
-    /// The system's SF Symbols names of the two menu buttons (`GCControllerElement.sfSymbolsName` of `buttonOptions`, the
-    /// left one, and `buttonMenu`, the right one): the system draws the buttons of the connected controller itself.
-    public var menuLeftSymbol: String?
-    public var menuRightSymbol: String?
 
-    public init(
-        profile: Profile, productCategory: String = "", vendorName: String? = nil, menuLeftSymbol: String? = nil,
-        menuRightSymbol: String? = nil
-    ) {
+    public init(profile: Profile, productCategory: String = "", vendorName: String? = nil) {
         self.profile = profile
         self.productCategory = productCategory
         self.vendorName = vendorName
-        self.menuLeftSymbol = menuLeftSymbol
-        self.menuRightSymbol = menuRightSymbol
     }
 
     public init(_ controller: GCController) {
@@ -136,10 +131,7 @@ public struct PadDescriptor: Sendable, Hashable {
         case .some: .other
         case .none: .none
         }
-        self.init(
-            profile: profile, productCategory: controller.productCategory, vendorName: controller.vendorName,
-            menuLeftSymbol: controller.extendedGamepad?.buttonOptions?.sfSymbolsName,
-            menuRightSymbol: controller.extendedGamepad?.buttonMenu.sfSymbolsName)
+        self.init(profile: profile, productCategory: controller.productCategory, vendorName: controller.vendorName)
     }
 
     /// The glyph family: the class of the gamepad first (the system knows DualSense, DualShock and Xbox pads by it), then
@@ -239,8 +231,6 @@ public final class ControllerGlyphs {
 
     public private(set) var family = PadFamily.generic
     public private(set) var kind = InputKind.platformDefault
-    /// The system's symbol names for the menu buttons of the controller in use (nil: the system has none).
-    public private(set) var menuSymbols: (left: String?, right: String?) = (nil, nil)
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var state = InputKindState()
     #if DEBUG
@@ -305,8 +295,6 @@ public final class ControllerGlyphs {
         state.controllersChanged(hasGamepad: hasGamepad)
         let next = pad?.family ?? .generic
         if next != family { family = next }
-        let symbols = (pad?.menuLeftSymbol, pad?.menuRightSymbol)
-        if symbols != menuSymbols { menuSymbols = symbols }
         evaluate()
     }
 
@@ -316,13 +304,4 @@ public final class ControllerGlyphs {
     }
 
     public func mark(_ role: GlyphRole) -> GlyphMark { family.mark(role) }
-
-    /// The system's symbol for the PlayStation menu button at [role], when the connected controller names one.
-    public func systemSymbol(_ role: GlyphRole) -> String? {
-        switch (family, role) {
-        case (.dualSense, .menuLeft), (.dualShock, .menuLeft): menuSymbols.left
-        case (.dualSense, .menuRight), (.dualShock, .menuRight): menuSymbols.right
-        default: nil
-        }
-    }
 }

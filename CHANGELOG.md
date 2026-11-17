@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Controller hints use the same approved complete Xbox, DualSense, DualShock 4 and Joy-Con font glyphs as Android,
+  with physical button positions preserved and no extra disc or connected-pad SF Symbols override. Both font files
+  are byte-identical to Android; the shared library also includes Mac keyboard, mouse and trackpad symbols.
+  Physical-device rendering is not verified.
 - The library filter of Android on the home screen (when `DelosMetadataURL` is configured): Y, or a tap on the hint bar's Filter
   (a glyphless pill while no controller is the input), opens a glass sheet with chips for genre and theme (with the number of games each holds), HDR support and
 - A demo harness for debug builds (`-DelosDemo YES`, docs/BUILDING.md): a fake PC with games, generated artwork, fake metadata and a

@@ -25,14 +25,22 @@ deletes it; nothing of MoltenVK or of PyroWave's SPIR-V is stored in this reposi
 
 Copied byte for byte from DELOS for Android (`app/src/main/res/font/`), where `tools/fonts/subset_fonts.py` makes them
 from verified sources; the licence files are next to them in `Packages/DelosKit/Sources/DelosUI/Resources/Licenses/`.
-`tools/fonts/sync_symbols.py` generates `Symbols.swift` from the same Android build.
+`tools/fonts/sync_symbols.py` copies both icon fonts and notices and generates `Symbols.swift`, recording the exact Android source SHA-256.
 
 | File (in `Packages/DelosKit/Sources/DelosUI/Resources/Fonts/`) | Source | Version | License | SHA-256 |
 |---|---|---|---|---|
 | `unbounded.ttf` | [google/fonts](https://github.com/google/fonts) `ofl/unbounded` | commit `e7db6ca603fd4862010383ff17ffd6cc4ffac1c0` | OFL-1.1 | `af82d541d5007a370b0fd6e05d573ae7214fb0b5c1ece3327c17ebd971bf19d1` |
 | `figtree.ttf` | google/fonts `ofl/figtree` | same commit | OFL-1.1 | `723c2843a782299a5473cbbe9ad44b685fe0994d17a4b7dc75e4644ae695e962` |
-| `phosphor_regular.ttf` (subset) | [phosphor-icons/web](https://github.com/phosphor-icons/web) | `v2.1.2` | MIT | `8bd032eee68c9fba5e822d613d26d874ad3bf2f4866d1182b349995dc31faf63` |
-| `phosphor_fill.ttf` (subset) | phosphor-icons/web | `v2.1.2` | MIT | `79723fd6a2025abee9e17ef6d06c46afc31542f7282a390afd3fbce07db4c3fa` |
+| `phosphor_regular.ttf` (subset with input glyphs) | [phosphor-icons/web](https://github.com/phosphor-icons/web), original input artwork | `v2.1.2` plus approved local SVGs | MIT base, OFL-1.1 lettering, CC0-1.0 brand paths | `578799423b926bc0b29bd74165cb082b93af7668f347194d67670e4d5e4384d8` |
+| `phosphor_fill.ttf` (subset with input glyphs) | same sources | same versions | same component licences | `4616e725b7affa949f0a5c4d99f2606ad58336f8cf6736a3fa7fe9047683d228` |
+
+The icon subsets add the approved Xbox, DualSense, DualShock 4, Joy-Con and Mac input controls
+from Android's `tools/fonts/controller/` and `tools/fonts/mac/`. Figtree-derived lettering retains
+its OFL notice; the component is not relicensed as MIT. Authentic Guide marks use
+[Simple Icons 11.0.0](https://github.com/simple-icons/simple-icons/tree/11.0.0), with
+`Simple-Icons-CC0.txt` bundled beside the other notices. CC0 does not waive trademark rights.
+The source SHA-256 inventory remains in Android's `third_party/CHECKSUMS.sha256`.
+
 
 ## Sounds
 
