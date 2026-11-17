@@ -59,7 +59,8 @@ final class LiveStream: StreamSteps {
 
         let plan = StreamPlan(
             app: app, settings: settings, display: StreamResolution(width: display.pixelWidth, height: display.pixelHeight),
-            decodable: formats, refreshRate: display.maxFramesPerSecond)
+            decodable: formats, refreshRate: display.maxFramesPerSecond,
+            displaySupportsHDR: HDRDisplay.isSupported)
         let nvidia = record.isNvidiaServer
         let sessionURL: String?
         if record.runningAppID == appID {

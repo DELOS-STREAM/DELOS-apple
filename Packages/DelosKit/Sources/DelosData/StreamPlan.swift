@@ -12,8 +12,9 @@ public struct StreamPlan: Sendable {
     ///   - display: the display's size in pixels: the resolution while the settings have none.
     ///   - decodable: the video formats this device decodes; the settings' codec chooses which are offered (the host
     ///     picks one of them).
+    ///   - displaySupportsHDR: the display shows HDR (`HDRDisplay`); without it a stored `hdr = true` is ignored.
     public init(
-        app: HostApp, settings: StreamSettings, display: StreamResolution, decodable: VideoFormats, refreshRate: Int,
+        app: HostApp, settings: StreamSettings, display: StreamResolution, decodable: VideoFormats, refreshRate: Int, displaySupportsHDR: Bool,
         randomBytes: (Int) -> [UInt8] = StreamPlan.secureRandom
     ) {
         let key = randomBytes(RemoteInputKey.length)
@@ -22,7 +23,7 @@ public struct StreamPlan: Sendable {
         var iv = [UInt8](repeating: 0, count: RemoteInputKey.length)
         withUnsafeBytes(of: keyID.bigEndian) { for (i, byte) in $0.enumerated() { iv[i] = byte } }
         let audio = AudioConfiguration.stereo
-        let formats = settings.codec.formats(decodable: decodable, hdr: settings.hdr)
+        let formats = settings.codec.formats(decodable: decodable, hdr: settings.hdr && displaySupportsHDR)
         // HDR is asked of the host only with a 10-bit format to carry it
         let hdr = !formats.isDisjoint(with: .tenBit)
         let size = settings.resolution(displayWidth: display.width, displayHeight: display.height)

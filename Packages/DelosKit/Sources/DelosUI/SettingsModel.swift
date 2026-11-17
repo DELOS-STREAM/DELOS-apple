@@ -135,9 +135,13 @@ struct StreamSettingsForm: Equatable {
     static let hostAudio = "checkbox_host_audio"
 
     /// The rows of [tab] in their order.
+    /// The HDR row shows where HDR can work, and also while `hdr` is stored as on where it cannot (a profile from
+    /// another device, another monitor): the row is then the way to switch it off.
+    private var showsHDRRow: Bool { device.supportsHDR || settings.hdr }
+
     func rows(_ tab: SettingsTab) -> [SettingRow] {
         switch tab {
-        case .stream: [resolutionRow, frameRateRow, bitrateRow, codecRow, framePacingRow] + (device.supportsHDR ? [hdrRow] : [])
+        case .stream: [resolutionRow, frameRateRow, bitrateRow, codecRow, framePacingRow] + (showsHDRRow ? [hdrRow] : [])
         case .audio: [hostAudioRow]
         case .controls, .appearance, .covers, .about: []
         }
@@ -331,7 +335,7 @@ struct StreamSettingsForm: Equatable {
         case Self.codec: settings.codec = Self.next(settings.codec, in: codecOptions.map(\.value), direction)
         case Self.framePacing: settings.framePacing = Self.next(settings.framePacing, in: framePacingOptions.map(\.value), direction)
         case Self.bitrate: setBitrate(effectiveBitrate + direction * StreamSettings.bitrateStep)
-        case Self.hdr where device.supportsHDR: settings.hdr.toggle()
+        case Self.hdr where showsHDRRow: settings.hdr.toggle()
         case Self.hostAudio: settings.playAudioOnHost.toggle()
         default: break
         }
