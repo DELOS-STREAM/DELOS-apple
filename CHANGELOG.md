@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Interface cues use media-volume playback instead of system-alert sounds. Audio preparation runs off the main
+  thread and preserves an active stream's audio-session mode. Device volume, silent-switch behavior and
+  real-stream mixing are not verified on hardware.
+
 - Controller hints use the approved complete Xbox, DualSense, DualShock 4 and Joy-Con font glyphs,
   with physical button positions preserved and no extra disc or connected-pad SF Symbols override. The shared
   library also includes Mac keyboard, mouse and trackpad symbols.

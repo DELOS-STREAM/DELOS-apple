@@ -596,9 +596,19 @@ Not verified: a real Apple TV (focus, the Siri Remote's touch surface and long p
 
 ## Sounds and haptics
 
-`Feedback` plays the five interface sounds of DELOS for Android (move, select, back, open, error) as system sounds, so
-they mix with other audio and follow the silent switch, and on iPhone and iPad a matching system haptic.
-Moving the focus plays move, activating an item plays select.
+`Feedback` plays move, select, back, open and error as preloaded media cues through `AVAudioPlayer`.
+Preparation and audio-session calls run on a dedicated serial queue, never on the main actor. iOS and tvOS use
+the playback category with mixing outside a stream; an existing playback category and the stream's
+moviePlayback mode are preserved. UI cues never deactivate the shared session.
+The media volume controls sound; the ring/silent switch does not select the playback policy.
+iPhone and iPad also use matching system haptics. Interface sounds and haptics have independent toggles.
+
+Moving focus plays move except after an explicit focus-silence request. Activations use their item's cue, and
+an explicit action cue replaces that default instead of playing twice. Artwork filters already route chip
+activation through this path; reset is select, opening is open, and closing is back. The connect flow uses open,
+error on wake timeout, select on arrival and back on cancellation.
+`FeedbackTests`, `PolishFeedbackTests` and `ConnectFlowTests` cover suppression, de-duplication and flow cues.
+Physical-device media volume, silent-switch behavior, first-cue latency and mixing with a real stream are not verified.
 
 ## Glass
 
