@@ -12,7 +12,7 @@ public enum ArtSort: String, CaseIterable, Sendable {
 
 /// The filters of one artwork tab (`ArtFilters`). NSFW and humor images are never requested, so they are not filters.
 /// [style] and [dimensions] are SteamGridDB's own values (nil: any).
-public struct ArtFilters: Equatable, Sendable {
+public struct ArtFilters: Hashable, Sendable {
     public var type: ArtType
     public var style: String?
     public var dimensions: String?

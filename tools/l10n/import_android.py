@@ -95,6 +95,16 @@ def read_resources(android: Path) -> dict[str, dict[str, object]]:
     return result
 
 
+# Plurals whose Android quantity is the second argument ("%1$d of %2$d covers" picks its form by %2$d). Apple picks a form
+# by the first argument, so their first two placeholders swap numbers and Swift passes the quantity first.
+QUANTITY_SECOND = ("artwork_count_of_", "artwork_filtered_has_", "filters_result_active")
+SWAP = re.compile(r"%([12])\$")
+
+
+def swap_quantity(forms: dict[str, str]) -> dict[str, str]:
+    return {q: SWAP.sub(lambda m: "%" + ("2" if m.group(1) == "1" else "1") + "$", t) for q, t in forms.items()}
+
+
 def unit(text: str) -> dict:
     return {"stringUnit": {"state": "translated", "value": text}}
 
@@ -126,6 +136,8 @@ def build(android: Path, keys: list[str]) -> tuple[dict, list[str]]:
                 problems.append(f"{key}: no {language} translation")
                 continue
             if isinstance(value, dict):
+                if key.startswith(QUANTITY_SECOND):
+                    value = swap_quantity(value)
                 localizations[language] = plural(value)
             else:
                 localizations[language] = unit(value)
