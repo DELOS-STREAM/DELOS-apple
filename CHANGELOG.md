@@ -143,5 +143,9 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- A hardware keyboard on the iPad (Magic Keyboard) no longer scrolls the library, Settings and the other lists on top of
+  the focus: the arrow, Space, Page, Home and End keys are taken from UIKit's own keyboard scrolling and focus movement
+  (priority key commands, `allowsKeyboardScrolling` off), a key the keyboard repeats by itself is not another press, and
+  a held arrow scrolls every list in short steps. Not yet verified on the iPad.
 - The Moonlight reference app starts on iOS and tvOS 27, which stop apps without the scene lifecycle.
 - The DELOS app no longer stops at launch: it finds the OpenSSL framework it embeds.

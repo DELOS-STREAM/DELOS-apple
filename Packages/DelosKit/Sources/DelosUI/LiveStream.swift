@@ -14,6 +14,7 @@ final class LiveStream: StreamSteps {
     private(set) var appName: String
     let events: AsyncStream<StreamEvent>
     var input: (any StreamInputSink)? { session }
+    private(set) var serverCommands: [String] = []
     let statisticsSource: StreamStatisticsSource?
 
     private let hosts: HostStore
@@ -83,6 +84,11 @@ final class LiveStream: StreamSteps {
             }
         }
         self.client = (client, pin)
+        // The PC's commands for the menu's Commands page: asked in the background, the stream does not wait for them
+        Task { [weak self] in
+            guard let reply = try? await client.serverInfo(pin: pin), reply.source == .pinnedHTTPS else { return }
+            self?.serverCommands = reply.info.serverCommands
+        }
         self.plan = (StreamPlan.serverInformation(record, address: client.address, sessionURL: sessionURL), plan.configuration)
     }
 

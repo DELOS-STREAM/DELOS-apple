@@ -90,6 +90,13 @@ public final class FocusModel {
         return cue
     }
 
+    /// Whether the focused item has a context menu (the hint bar's options hint). Reads ``focused``, so a view that asks is
+    /// redrawn when the focus moves.
+    var focusedHasMenu: Bool {
+        guard let focused else { return false }
+        return menus[focused] != nil
+    }
+
     /// The focused item's context menu and its frame (global points); nil when it has none.
     func contextMenu() -> (ContextMenu, CGRect)? {
         guard let focused, let frame = frames[focused], let menu = menus[focused]?() else { return nil }
@@ -157,7 +164,8 @@ extension EnvironmentValues {
 }
 
 /// A scroll view whose focused item stays in view: the item is centered, so the next one always peeks in at the edge
-/// (Android's focus margin). Not animated for reduced motion.
+/// (Android's focus margin). Not animated for reduced motion. The focus is the only thing that scrolls it: the content
+/// switches the keyboard scrolling of the scroll view off (``View/focusDrivenScroll()``).
 struct FocusScroll<Content: View>: View {
     var axis: Axis.Set = .horizontal
     /// The cut edges' fades in stage pixels (top, bottom) of a vertical scroll view that continues beyond them.
@@ -165,16 +173,18 @@ struct FocusScroll<Content: View>: View {
     @ViewBuilder let content: () -> Content
     @State private var reveal = FocusReveal()
     @Environment(\.reducedMotion) private var reducedMotion
+    @State private var pace = ScrollPace()
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView(axis, showsIndicators: false) { content() }
+            ScrollView(axis, showsIndicators: false) { content().focusDrivenScroll() }
                 .modifier(OptionalFades(fades: fades))
                 .environment(\.focusReveal, reveal)
                 .onAppear {
                     reveal.attach { id, animated in
                         if animated && !reducedMotion {
-                            withAnimation(Motion.out(Motion.rowFocus)) { proxy.scrollTo(id, anchor: .center) }
+                            // A held arrow moves the focus every 50 ms: one short step each, not overlapping glides
+                            withAnimation(pace.animation(Motion.out(Motion.rowFocus))) { proxy.scrollTo(id, anchor: .center) }
                         } else {
                             proxy.scrollTo(id, anchor: .center)
                         }

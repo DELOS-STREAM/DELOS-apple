@@ -245,7 +245,10 @@ struct ArtworkScreen: View {
         .onAppear {
             navigator.commandCapture = { command in capture(command) }
         }
-        .onDisappear { navigator.commandCapture = nil }
+        .onDisappear {
+            navigator.commandCapture = nil
+            navigator.screenHints = ScreenHints()
+        }
     }
 
     // MARK: Parts
@@ -257,14 +260,14 @@ struct ArtworkScreen: View {
                 imageCount: model.total ?? (model.filters.active ? nil : model.images?.count))
             let enabled = actions.artwork.enabled
             FocusItem(id: Self.searchID, model: focus, clickCue: .open, action: { search() }) { focused in
-                ToolbarPill(label: L("artwork_search_other"), icon: Symbols.searchName, focused: focused, glyph: "X")
+                ToolbarPill(label: L("artwork_search_other"), icon: Symbols.searchName, focused: focused, glyph: .west)
                     .opacity(enabled ? 1 : 0.4)
             }
             .disabled(!enabled)
             let filterEnabled = enabled && model.match != nil
             FocusItem(id: Self.filterID, model: focus, clickCue: nil, action: { openSheet() }) { focused in
                 ToolbarPill(
-                    label: L("artwork_filter"), icon: Symbols.filter, focused: focused, glyph: "Y", badge: model.filters.activeCount)
+                    label: L("artwork_filter"), icon: Symbols.filter, focused: focused, glyph: .north, badge: model.filters.activeCount)
                     .opacity(filterEnabled ? 1 : 0.4)
             }
             .disabled(!filterEnabled)
@@ -383,7 +386,7 @@ struct ArtworkScreen: View {
     private func select(_ next: ArtworkTab, sound: Cue) {
         guard next != model.tab else { return }
         actions.layers.feedback?.play(sound)
-        if model.sheetOpen { model.sheetOpen = false }
+        if model.sheetOpen { model.sheetOpen = false; navigator.screenHints = ScreenHints() }
         model.tab = next
     }
 
@@ -403,12 +406,14 @@ struct ArtworkScreen: View {
         sheetFocus = FocusModel(initial: ArtworkFilterSheet.startID(kind: model.tab.kind, filters: model.filters))
         navigator.armInputGate()
         withAnimation { model.sheetOpen = true }
+        navigator.screenHints = ScreenHints(sheetOpen: true)
     }
 
     private func closeSheet() {
         guard model.sheetOpen else { return }
         actions.layers.feedback?.play(.back)
         withAnimation { model.sheetOpen = false }
+        navigator.screenHints = ScreenHints()
         // The focus goes back to where it was; a tile the filters removed leaves it on the first choice
         let gone = (origin as? String).flatMap { id in id.hasPrefix("art-") ? Int(id.dropFirst(4)) : nil }.map { number in
             !(model.images?.contains { $0.id == number } ?? false)
@@ -496,7 +501,7 @@ struct ToolbarPill: View {
     let label: String
     let icon: String
     let focused: Bool
-    var glyph: String?
+    var glyph: GlyphRole?
     var badge = 0
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
@@ -509,7 +514,7 @@ struct ToolbarPill: View {
                 .foregroundStyle(colors.text.color)
                 .lineLimit(1)
             if badge > 0 { ArtCountBadge(count: badge) }
-            if let glyph { ArtGlyph(letter: glyph) }
+            if let glyph { GlyphButton(glyph, size: 32) }
         }
         .padding(.horizontal, stage.px(28))
         .frame(height: stage.px(64))
@@ -600,10 +605,10 @@ private struct NoImages: View {
                     .frame(maxWidth: stage.px(min(820, stage.width - 160)))
                 HStack(spacing: stage.px(16)) {
                     FocusItem(id: "art-none-reset", model: focus, clickCue: nil, action: onReset) { focused in
-                        ToolbarPill(label: L("filters_art_reset"), icon: Symbols.reset, focused: focused, glyph: "X")
+                        ToolbarPill(label: L("filters_art_reset"), icon: Symbols.reset, focused: focused, glyph: .west)
                     }
                     FocusItem(id: "art-none-change", model: focus, clickCue: nil, action: onChange) { focused in
-                        ToolbarPill(label: L("filters_art_change"), icon: Symbols.filter, focused: focused, glyph: "Y")
+                        ToolbarPill(label: L("filters_art_change"), icon: Symbols.filter, focused: focused, glyph: .north)
                     }
                 }
             } else {

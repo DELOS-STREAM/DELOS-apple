@@ -10,6 +10,12 @@ import SwiftUI
 /// CUSTOM badge and the profile's value and resets with X (or its round button on touch). Changes are stored at once and
 /// apply to the next stream. Android's Display tab has no counterpart here, so there are no tabs.
 struct GameSettingsScreen: View {
+    /// What the hint bar's adjust and reset hints depend on.
+    private struct HintKey: Equatable {
+        let focus: AnyHashable?
+        let custom: Int
+    }
+
     let hostID: String
     let app: HostApp
     let focus: FocusModel
@@ -104,7 +110,14 @@ struct GameSettingsScreen: View {
             navigator.commandCapture = { command in capture(command) }
             if focusedRow == nil { focus.focus(Self.firstFocus()) }
         }
-        .onDisappear { navigator.commandCapture = nil }
+        .onDisappear {
+            navigator.commandCapture = nil
+            navigator.screenHints = ScreenHints()
+        }
+        .onChange(of: HintKey(focus: focus.focused, custom: model.overrides.count), initial: true) {
+            navigator.screenHints = ScreenHints(
+                adjustable: ShellHints.adjustable(focusedRow), resetsRow: focusedRow.map { model.isCustom($0.id) } ?? false)
+        }
         .onChange(of: focus.focused) { _, now in
             if let id = now as? String, rows.contains(where: { $0.id == id }) { lastRow = id }
         }
@@ -186,6 +199,7 @@ struct GameSettingsScreen: View {
             .padding(.horizontal, stage.px(18))
             .padding(.top, stage.px(GameSettingsLayout.listInnerTop))
             .padding(.bottom, stage.px(140))
+            .focusDrivenScroll()
             .coordinateSpace(.named(SettingsListScroll.contentSpace))
             // A tab that is switched starts a new entrance
             .entranceScope()
@@ -397,7 +411,7 @@ private struct GameSettingsPanel: View {
                 #if os(iOS)
                 L("settings_game_profile_value_touch", source.profile)
                 #else
-                L("settings_game_profile_value_button", source.profile, "X")
+                L("settings_game_profile_value_button", source.profile, ControllerGlyphs.shared.mark(.west).text ?? "X")
                 #endif
             } else {
                 L("settings_game_currently", source.current)

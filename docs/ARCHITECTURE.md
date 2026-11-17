@@ -122,8 +122,13 @@ capsule; Settings, Profile and Devices take each other's place on the stack; the
 row reaches them. On those screens and on the start screen (`hasSideMenu`), the left menu button opens the side menu
 (`SideMenu`, Android's `SideMenuLayer`): the profile and the connected PC at the top and All settings; it takes every
 command while it is open, and B, the menu button or a tap beside it closes it. The quick settings (theme, background, sounds, haptics) are in it; the rows scroll
-(`FocusScroll` with edge fades) where the stage is too short, the panel is 680 px wide and arrives from a tenth of its width
-to its left (only fading with reduced motion). The top navigation wraps from the last button to the first. Android has no touch way to the side menu; on the start
+(`FocusScroll` with edge fades) where the stage is too short, the panel is 680 px wide (glass, `panel` role) and arrives from
+a tenth of its width to its left (`sideEnter`: 560 ms ease-out with a 280 ms fade; it leaves over 240 ms ease-in; only
+fading with reduced motion) under the root's scrim (`LayerScrim`: the scrim token, fading in over 420 ms, out over 240 ms),
+while the screen behind it blurs by 6 stage pixels (`LayerBackdropBlur`, also behind dialogs; the context menu's scrim only
+dims). One plate glides between its rows, as in Settings. The top navigation wraps from the last button to the first; while
+the focus moves between two buttons an accent pill glides behind them (`NavPill`: both edges springs, the one in the
+direction of travel stiffer) and the focused button's own fill fades in over it. Android has no touch way to the side menu; on the start
 screen the profile chip opens the profiles menu (as on Android), so touch reaches Profile and Settings through a PC's
 library and its top navigation.
 
@@ -424,20 +429,42 @@ Live stream values and presentation-delay behavior on physical Apple devices are
 
 ### The stream menu
 
-The dock (`StreamMenu`, `StreamDockLayout`) is Android's: 150 px glass tiles with a 42 px radius, 40 px apart, the
-tiles' top 452 stage px above the bottom edge, one 186 px ring that glides (560 ms) and breathes (2.6 s), a dark ramp
-over the stream, which is blurred by 50 px. Its tiles rise 90 px from .8 one after the other (100 ms + 42 ms each, 620 ms,
-the spring) and leave the last first (46 px, .92, 240 ms); one clock drives them all, and reduced motion keeps the fades
-only. Left on the first tile goes to the last and back. Only the four actions exist; the name, hints and captions wait
-for the other tiles.
+The menu is Android's "Console tiles" (`docs/gui/STREAM_MENU.md` of DELOS for Android), one for one where the platform has
+the action. `StreamMenu` (`StreamDock.swift`) is the dock: 150 px glass tiles with a 42 px radius, 40 px apart, the tiles'
+top 452 stage px above the bottom edge, one 186 px ring that glides (560 ms) and breathes (2.6 s), a dark ramp over the
+stream, which is blurred by 50 px, the game's name (Unbounded 36) and the A / B hints above the row's left end, and under
+the tiles the complete help of the focused tile (the caption, three lines, a new text slides up out of a blur). Its tiles
+rise 90 px from .8 one after the other (100 ms + 42 ms each, 620 ms, the spring) and leave the last first (46 px, .92,
+240 ms); one clock drives them all, and reduced motion keeps the fades only. The row wraps: Right on the last tile goes to
+the first and Left on the first to the last (a held direction never reaches the menu, so it never wraps onto Quit by
+repeat). A row that does not fit a narrow stage keeps the tile size and scrolls with the focus.
+
+The tiles are Resume, Keyboard (iPhone and iPad: the system keyboard over the stream, what is typed goes to the PC as text,
+Return, Tab and Backspace as keys), Overlay (statistics), Brightness (iPhone and iPad: the screen's brightness for the
+length of the stream, given back when it ends or the app leaves the screen), More, Disconnect and Quit app. Brightness and
+More open a popover (`StreamPopover.swift`): a frosted card above the tile that opened it with a 60 x 24 caret in one
+outline, a header with a back circle and the title, 72 px rows on one gliding plate (a slider takes left and right, a held
+key steps it faster), and under the rows the help of the focused row. The dock sinks 160 px and dims while it is open, the
+card grows from .86 around the caret's tip, and another tile's page morphs the card (x, width, caret and height follow
+their targets with a spring). More holds Send keys (Android's fourteen built-in combinations as pills), Commands (the PC's
+server commands, asked from the host in the background when the stream starts) and Task manager (Ctrl + Shift + Esc). B
+goes from a page to the row or tile that opened it and then resumes; a tap outside the popover closes it and never
+resumes the stream; the popover has a focus of its own and the dock's tile that opened it keeps its look. The model is
+`StreamMenuModel.swift` (tiles, pages, popover geometry), the state `StreamMenuState.swift` and `StreamController`.
+
+Left out of Android's menu, because the platform has no such action: Bitrate (the core cannot change the bitrate of a
+running stream), Upscaler and Supersampling (the renderer has none), Send and Get clipboard, Zoom, Mouse mode and Local
+mouse cursor (touch is the trackpad only), On-screen controls, Open Android keyboard, Touch sensitivity, Rumble feel, Gyro
+smoothing and the Compact overlay. The captions of Overlay, Keyboard and More are empty: Android's texts describe its own
+compact statistics, keyboard and rows, and no Android string fits. The L3 + R3 shortcut only opens the menu (Android also
+closes it with it: the input is paused while the menu is open).
 
 It opens as in DELOS for Android by default: L3 + R3 held together (`MenuShortcut`, Android's `ButtonShortcut`: the
 button that completes the shortcut is kept from the PC, the menu opens when both are let go), or a swipe from the
 left edge of the touch screen (`MenuSwipe`: a touch starting in the left 4 % belongs to the swipe and does not reach
 the PC; 12 % of the width to the right opens the menu). Android swipes up from the bottom edge, but on iPhone and iPad
 that edge belongs to the system's home gesture. A hardware keyboard opens it with Control + Option + Shift + M or by
-holding Escape for a second (`MenuKeyShortcut`, [the Mac app](#the-mac-app)). The menu is minimal: Resume, Overlay
-(statistics), Disconnect and Quit app from Android's dock.
+holding Escape for a second (`MenuKeyShortcut`, [the Mac app](#the-mac-app)).
 While it is open, `GameInput` sends nothing and releases every held button, key and mouse button at the PC.
 When the app goes to the background during a stream, iOS suspends it and the connection would break; the stream is
 closed at once instead (as Disconnect: the game keeps running on the PC), the loader shows, and on return the same game
@@ -540,6 +567,12 @@ one role, so the same kind of element looks the same everywhere:
 
 Not glass: primary buttons (solid main color, as on Android), focus rings, progress bars, cover art and toasts (an
 opaque navy card, as on Android, so it reads over any frame of a stream).
+
+Focus rings are Android's `drawFocusRing`: the ring (5 px; 4 px on the profile chip) lies a gap of its own width outside the
+element and the gap is filled with the background color; the glow is a box-shadow with a spread (a cover's `0 30 80 -18`,
+the chip's `14 / 40 / -12`; `focusLook(glowSpread:gap:)`), drawn as a blurred, shrunk copy of the element's shape and
+never under the element itself (its glass would show it through). A focused cover also has the online pulse. The circles of
+a row (`CircleRow`) share one ring that glides to the focused one over 560 ms (`GlideRing`, `glideRingHost`).
 
 ## Backgrounds
 

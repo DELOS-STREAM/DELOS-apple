@@ -184,16 +184,3 @@ private struct DialogFieldView: View {
     }
     #endif
 }
-
-/// The blur of what lies behind a dialog (`Scrim` of DELOS for Android: `backdropBlur(haze, 6f, scrim)`): applied to the
-/// screen below the layer, which fades it in with the scrim (420 ms) and out (240 ms).
-struct DialogBackdropBlur: ViewModifier {
-    let active: Bool
-    @Environment(\.stage) private var stage
-
-    func body(content: Content) -> some View {
-        content
-            .blur(radius: active ? stage.px(6) : 0)
-            .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: (active ? 420 : Motion.exit) / 1000), value: active)
-    }
-}

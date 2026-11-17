@@ -201,6 +201,12 @@ extension StreamSession {
         try check(code)
     }
 
+    /// Asks the host to run its server command [id] (the position of the command in the host's list; Vibepollo and
+    /// Apollo configure them).
+    public nonisolated func sendServerCommand(_ id: UInt8) throws(InputError) {
+        try check(LiSendExecServerCmd(id))
+    }
+
     /// Vertical scroll in wheel notches; positive scrolls up.
     public nonisolated func sendScroll(clicks: Int8) throws(InputError) {
         try check(LiSendScrollEvent(clicks))

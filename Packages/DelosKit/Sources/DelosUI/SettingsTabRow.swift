@@ -1,3 +1,4 @@
+import DelosInput
 import SwiftUI
 
 /// One tab of a ``TabRow``: its icon, its label and, on the per-app settings, how many of its settings the app overrides.
@@ -35,11 +36,11 @@ struct TabRow<ID: Hashable>: View {
     private var row: some View {
         SelectionPillHost(selected: AnyHashable(selected)) {
             HStack(spacing: 0) {
-                ShoulderLabel(label: "L1")
+                ShoulderLabel(role: .leftShoulder)
                 ForEach(tabs) { tab in
                     tabView(tab)
                 }
-                ShoulderLabel(label: "R1")
+                ShoulderLabel(role: .rightShoulder)
             }
         }
         .fixedSize()
@@ -122,16 +123,16 @@ private struct TabPressStyle: ButtonStyle {
     }
 }
 
-/// The L1 / R1 hint beside a row of tabs; its border sits ``outset`` inside the room it takes (`ShoulderLabel`).
+/// The previous / next tab hint beside a row of tabs (the connected controller's L1 / R1, LB / RB, L / R); its border sits ``outset`` inside the room it takes (`ShoulderLabel`).
 struct ShoulderLabel: View {
     /// The room outside the border: the visible ends of a tab row sit this far inside the row (stage px, `SHOULDER_OUTSET`).
     static let outset = 10.0
-    let label: String
+    let role: GlyphRole
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
 
     var body: some View {
-        Text(label)
+        Text(ControllerGlyphs.shared.mark(role).text ?? "")
             .font(DelosFonts.figtree(stage.tpx(18), .bold))
             .foregroundStyle(colors.text3.color)
             .padding(.horizontal, stage.px(12))

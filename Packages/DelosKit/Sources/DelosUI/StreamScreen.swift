@@ -78,7 +78,7 @@ struct StreamScreen: View {
         // The display layer unless the debug switch asks for the Metal renderer (RendererChoice)
         let renderer = RendererChoice.current.makeRenderer(
             pacing: settings.framePacing, fps: settings.streamFPS(refreshRate: StreamDevice.current.maxFramesPerSecond))
-        let controller = StreamController { [hosts, hostID, appID, settings] in
+        let controller = StreamController(brightness: Self.deviceBrightness) { [hosts, hostID, appID, settings] in
             LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer)
         }
         controller.leavingHold = .seconds(ExitLook.handoff(reduced: reducedMotion))
@@ -96,6 +96,7 @@ struct StreamScreen: View {
 
     private func end() {
         navigator.commandCapture = nil
+        controller?.restoreBrightness()
         IdleTimer.disabled = false
         if let shutdownID { StreamShutdown.shared.unregister(shutdownID) }
         shutdownID = nil
@@ -122,9 +123,20 @@ struct StreamScreen: View {
                 if remoteMenu { controller.openMenu() }
                 return true
             }
-            if command == .back || remoteMenu {
+            if command == .back {
+                // One level up: a page goes back to its row or tile, the dock resumes
+                feedback?.play(.back)
+                controller.menuBack()
+                return true
+            }
+            if remoteMenu {
                 feedback?.play(.back)
                 controller.closeMenu()
+                return true
+            }
+            // A page of the popover has the commands: its own focus, and a slider takes left and right
+            if controller.menu.isOpen {
+                capturePopover(command, controller: controller, feedback: feedback, repeatCount: repeatCount, at: now)
                 return true
             }
             // A direction or A still held from the game is not a choice: nothing reaches the menu's focus until the
@@ -146,6 +158,39 @@ struct StreamScreen: View {
         case .leaving, .ended:
             return true
         }
+    }
+
+    /// A command while a page of the stream menu is open: A, the directions and left / right on a slider go to the popover's
+    /// focus (the dock keeps its own; the focus cannot leave the popover). A repeat of a held direction moves the focus
+    /// within the page and steps a slider faster; the page's rows do not wrap.
+    private static func capturePopover(
+        _ command: MenuCommand, controller: StreamController, feedback: Feedback?, repeatCount: Int, at now: Date
+    ) {
+        let menu = controller.menu
+        switch command {
+        case .accept:
+            guard repeatCount == 0, !menu.swallowsAccept(at: now) else { return }
+            if let feedback { feedback.activate(menu.focus.acceptCue) { menu.focus.handle(.accept) } } else { menu.focus.handle(.accept) }
+        case .up, .down:
+            if menu.focus.handle(command) { feedback?.play(.move) }
+        case .left, .right:
+            if controller.adjustFocusedRow(command == .right ? 1 : -1, repeatCount: repeatCount) {
+                feedback?.play(.move)
+            } else if menu.focus.handle(command) {
+                feedback?.play(.move)
+            }
+        default:
+            break
+        }
+    }
+
+    /// The screen's brightness, where the device has it to change.
+    private static var deviceBrightness: (any ScreenBrightness)? {
+        #if os(iOS)
+        DeviceBrightness()
+        #else
+        nil
+        #endif
     }
 }
 
@@ -192,7 +237,11 @@ struct StreamContent: View {
                             controller.touch(id, phase, at: point, width: width, time: time)
                         },
                         ignoresPointer: { controller.hasMouse },
-                        capturesPointer: controller.phase == .streaming && !controller.menuOpen
+                        capturesPointer: controller.phase == .streaming && !controller.menuOpen,
+                        keyboard: controller.keyboardShown && !controller.menuOpen,
+                        onText: { controller.typed($0) },
+                        onBackspace: { controller.typedBackspace() },
+                        onKeyboardHidden: { controller.keyboardDismissed() }
                     )
                     .ignoresSafeArea()
                     .opacity(pictureOpacity(cover))
@@ -250,7 +299,7 @@ struct StreamContent: View {
                 dockShown = true
             } else {
                 unmount = Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(Int(StreamDockLayout.closeTotal(count: 4))))
+                    try? await Task.sleep(for: .milliseconds(Int(StreamDockLayout.closeTotal(count: controller.capabilities.tiles.count))))
                     guard !Task.isCancelled else { return }
                     dockShown = false
                 }

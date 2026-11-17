@@ -186,10 +186,10 @@ struct CreateProfileScreen: View {
                 }
             }
         }
-        if stage.compact { return AnyView(grid.glideRingHost()) }
+        if stage.compact { return AnyView(grid.glideRingHost(focusScale: 1.16)) }
         // Both rows scroll together (a column stays a column) when the stage is narrower than the eight cells, which keep
         // AVATAR_MARGIN (52) at each end; the focused avatar scrolls into view with the next one peeking in
-        let padded = grid.glideRingHost().padding(.horizontal, stage.px(52))
+        let padded = grid.glideRingHost(focusScale: 1.16).padding(.horizontal, stage.px(52))
         return AnyView(ViewThatFits(in: .horizontal) {
             padded
             FocusScroll(axis: .horizontal) { padded }.scrollClipDisabled()

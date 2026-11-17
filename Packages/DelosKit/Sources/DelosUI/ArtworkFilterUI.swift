@@ -1,4 +1,5 @@
 import DelosData
+import DelosInput
 import SwiftUI
 
 // The filter strip, the filter sheet and the chips of the Artwork screen (`FilterStrip`, `FilterSheetLayer` and `FilterChip`
@@ -21,11 +22,11 @@ struct ChipGlideHost<Content: View>: View {
     var body: some View {
         content()
             .coordinateSpace(name: "chipGlide")
-            .backgroundPreferenceValue(ChipGlideKey.self) { frame in GlideRing(target: frame) }
+            .backgroundPreferenceValue(ChipGlideKey.self) { frame in ChipGlideRing(target: frame) }
     }
 }
 
-private struct GlideRing: View {
+private struct ChipGlideRing: View {
     let target: CGRect?
     @State private var previous: CGRect?
     @Environment(\.delosColors) private var colors
@@ -152,22 +153,6 @@ struct ArtCountBadge: View {
     }
 }
 
-/// The button a hint stands for (`GlyphButton`): a circle in the text color with the letter in the background color.
-struct ArtGlyph: View {
-    let letter: String
-    var size = 32.0
-    @Environment(\.delosColors) private var colors
-    @Environment(\.stage) private var stage
-
-    var body: some View {
-        Text(letter)
-            .font(DelosFonts.figtree(stage.tpx(21 * size / 38), .heavy))
-            .foregroundStyle(colors.bg.color)
-            .frame(width: stage.px(size), height: stage.px(size))
-            .background(Circle().fill(colors.text.color))
-    }
-}
-
 // MARK: Strip
 
 /// "10 of 41 covers" and the active filters as chips (A removes one, Reset removes them all); without a filter, the sort
@@ -281,7 +266,7 @@ struct ArtworkFilterSheet: View {
                 Spacer(minLength: 0)
                 resetPill(active: filters.active)
                 FocusItem(id: Self.doneID, model: focus, clickCue: .back, action: onClose) { focused in
-                    ToolbarPill(label: L("filters_art_done"), icon: Symbols.check, focused: focused, glyph: "Y")
+                    ToolbarPill(label: L("filters_art_done"), icon: Symbols.check, focused: focused, glyph: .north)
                 }
             }
             .padding(.bottom, stage.px(8))
@@ -358,10 +343,10 @@ struct ArtworkFilterSheet: View {
     @ViewBuilder private func resetPill(active: Bool) -> some View {
         if active {
             FocusItem(id: Self.resetID, model: focus, clickCue: nil, action: onReset) { focused in
-                ToolbarPill(label: L("filters_art_reset"), icon: Symbols.reset, focused: focused, glyph: "X")
+                ToolbarPill(label: L("filters_art_reset"), icon: Symbols.reset, focused: focused, glyph: .west)
             }
         } else {
-            ToolbarPill(label: L("filters_art_reset"), icon: Symbols.reset, focused: false, glyph: "X").opacity(0.4)
+            ToolbarPill(label: L("filters_art_reset"), icon: Symbols.reset, focused: false, glyph: .west).opacity(0.4)
         }
     }
 

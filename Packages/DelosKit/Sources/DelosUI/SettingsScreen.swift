@@ -114,8 +114,12 @@ struct SettingsScreen: View {
             if focusedRow == nil { focus.focus(Self.firstRow(tab)) }
             SettingsSession.shared.tab = tab
         }
-        .onDisappear { navigator.commandCapture = nil }
+        .onDisappear {
+            navigator.commandCapture = nil
+            navigator.screenHints = ScreenHints()
+        }
         .onChange(of: tab) { _, next in SettingsSession.shared.tab = next }
+        .onChange(of: focus.focused, initial: true) { navigator.screenHints = ScreenHints(adjustable: ShellHints.adjustable(focusedRow)) }
     }
 
     private var content: some View {
@@ -225,6 +229,7 @@ struct SettingsScreen: View {
             .padding(.horizontal, stage.px(18))
             .padding(.top, stage.px(14))
             .padding(.bottom, stage.px(140))
+            .focusDrivenScroll()
             .coordinateSpace(.named(SettingsListScroll.contentSpace))
             // A tab that is switched starts a new entrance (`rememberEntranceStagger(tab)`)
             .entranceScope()
@@ -1037,8 +1042,9 @@ struct ChoicePicker: View {
                             .id(Self.optionID(index))
                         }
                     }
+                    .focusDrivenScroll()
                 }
-            .focusable(false)
+                .focusable(false)
                 .frame(height: listHeight)
                 .onAppear { proxy.scrollTo(Self.optionID(selected ?? 0)) }
                 .onChange(of: focus.focused) { _, now in if let now { proxy.scrollTo(now) } }

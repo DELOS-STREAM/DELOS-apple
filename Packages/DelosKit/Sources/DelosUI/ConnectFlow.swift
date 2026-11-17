@@ -1,4 +1,5 @@
 import DelosData
+import DelosInput
 import Foundation
 import Observation
 
@@ -75,8 +76,9 @@ final class ConnectFlow {
         static let poll = 3.0
     }
 
-    /// The Back button's name in the prompts ("B cancels"): the pads are labelled like an Xbox pad throughout the UI.
-    static let backButton = "B"
+    /// The Back button's name in the prompts ("B cancels") on the connected controller (circle on a PlayStation pad, A on a
+    /// Nintendo one), where Android labels every pad like an Xbox pad.
+    static var backButton: String { ControllerGlyphs.shared.mark(.east).text ?? "B" }
 
     private(set) var phase = Phase.idle
     private(set) var portal: Portal?

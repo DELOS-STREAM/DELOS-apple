@@ -70,9 +70,11 @@ enum StreamDockLayout {
     static func closeTotal(count: Int) -> Double { exitTotal(count: count) + 80 }
 }
 
-/// The stream menu's dock: the existing four actions as glass tiles of Android's stream menu, one gold ring that glides
-/// between them and breathes, on a dark ramp over the blurred stream. They rise in one after the other and leave the other
-/// way round. [open] false: the dock is leaving (the parent unmounts it once the exit is over).
+/// The stream menu (`StreamMenuRoot` of DELOS for Android): the dock of glass tiles with the game's name and the button hints
+/// above them and the help of the focused tile under them, one gold ring that glides between the tiles and breathes, on a
+/// dark ramp over the blurred stream, and the popover with the pages of the tiles that have one. The tiles rise in one
+/// after the other and leave the other way round. [open] false: the menu is leaving (the parent unmounts it once the exit
+/// is over).
 struct StreamMenu: View {
     let focus: FocusModel
     let controller: StreamController
@@ -84,25 +86,57 @@ struct StreamMenu: View {
     @State private var openedAt = Date()
     @State private var closedAt: Date?
     @State private var animating = true
+    /// The horizontal center of each tile in the menu's space, stage pixels: the caret of the popover points at it.
+    @State private var tileCenters: [BarItem: Double] = [:]
 
     private typealias D = StreamDockLayout
+    private typealias M = StreamMenuLayout
 
-    static let resumeID = "stream-resume"
-    private static let ids = [resumeID, "stream-statistics", "stream-disconnect", "stream-quit"]
+    static let resumeID = BarItem.resume.id
+    private nonisolated static let space = "stream-menu"
+
+    private var tiles: [BarItem] { controller.capabilities.tiles }
+    private var popOpen: Bool { open && controller.menu.isOpen }
+
+    // MARK: Geometry
+
+    private var labelHeight: Double { D.labelSize * stage.textScale * M.labelLineHeight }
+    /// The caption's top edge below the tiles' top edge (below the label, its gap and 8).
+    private var captionTop: Double { D.tile + D.labelGap + labelHeight + M.captionGap + 8 }
+
+    /// How far the dock rises so that its caption stays clear of the safe area (the home indicator).
+    private var lift: Double {
+        let bottom = stage.height - D.topFromBottom + captionTop + M.captionHeight(textScale: stage.textScale)
+        return max(0, bottom - (stage.height - stage.safe.bottom - 16))
+    }
+
+    /// The tiles' top edge on the stage.
+    private var top: Double { stage.height - D.topFromBottom - lift }
+
+    private var geometry: DockGeometry { DockGeometry(count: tiles.count, width: stage.width) }
 
     var body: some View {
-        let count = Self.ids.count
-        TimelineView(.animation(paused: !animating)) { timeline in
-            let now = timeline.date
-            let t = now.timeIntervalSince(openedAt) * 1000
-            let exitT = closedAt.map { now.timeIntervalSince($0) * 1000 } ?? 0
-            ZStack(alignment: .topLeading) {
-                backdrop(t: t, exitT: exitT)
-                dock(t: t, exitT: exitT, count: count)
+        let count = tiles.count
+        ZStack(alignment: .topLeading) {
+            TimelineView(.animation(paused: !animating)) { timeline in
+                let now = timeline.date
+                let t = now.timeIntervalSince(openedAt) * 1000
+                let exitT = closedAt.map { now.timeIntervalSince($0) * 1000 } ?? 0
+                ZStack(alignment: .topLeading) {
+                    backdrop(t: t, exitT: exitT)
+                    dock(t: t, exitT: exitT)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .disabled(!open)
+            StreamPopoverHost(
+                controller: controller, anchorX: anchorX, bottom: stage.height - M.popoverBottom - M.caretHeight - lift,
+                maxHeight: M.maxHeight(stageHeight: stage.height, lift: lift, top: stage.safe.top))
+                .disabled(!open)
         }
-        .disabled(!open)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .coordinateSpace(name: Self.space)
+        .environment(\.modalFocus, popOpen ? controller.menu.focus : nil)
         .onAppear { focus.focus(Self.resumeID) }
         .task {
             try? await Task.sleep(for: .milliseconds(Int(D.enterTotal(count: count)) + 50))
@@ -116,89 +150,296 @@ struct StreamMenu: View {
                 animating = true
             }
         }
+        // A dimmed tile that opens no page takes no focus while a popover is open: the ring stays on the tile that opened it
+        .onChange(of: focus.focused) { _, now in
+            guard controller.menu.isOpen, let item = BarItem(id: now), item.page == nil, let opener = controller.menu.page.barItem else { return }
+            focus.focus(opener.id)
+        }
+        // The tile that opened a page wears the focus while the page is open (another tile's page moves it there)
+        .onChange(of: controller.menu.page) { _, page in
+            guard let opener = page.barItem, focus.focused != AnyHashable(opener.id) else { return }
+            focus.focus(opener.id)
+        }
+    }
+
+    /// The center of the tile that opened the open page: its caret's point.
+    private var anchorX: Double {
+        guard let item = controller.menu.shownPage.barItem else { return stage.width / 2 }
+        return tileCenters[item] ?? stage.width / 2
     }
 
     // MARK: Backdrop
 
-    /// `#grad`: the soft ramp under the dock; a tap beside the tiles resumes.
+    /// `#grad`: the soft ramp under the dock, and the extra scrim while a popover is open (`#scrim`). Nothing else dims the
+    /// stream; a tap beside the tiles closes the popover and never resumes.
     private func backdrop(t: Double, exitT: Double) -> some View {
         let alpha = open || closedAt == nil
             ? Motion.progress(t, delay: 0, duration: D.gradientIn, Motion.ease)
             : 1 - Motion.progress(exitT, delay: 0, duration: D.gradientOut, Motion.ease)
         let ink = RGBA(red: 4 / 255, green: 6 / 255, blue: 14 / 255)
-        return LinearGradient(stops: [
-            .init(color: ink.opacity(0).color, location: 0),
-            .init(color: ink.opacity(0).color, location: 0.34),
-            .init(color: ink.opacity(0.22).color, location: 0.48),
-            .init(color: ink.opacity(0.55).color, location: 0.66),
-            .init(color: ink.opacity(0.80).color, location: 0.84),
-            .init(color: ink.opacity(0.90).color, location: 1),
-        ], startPoint: .top, endPoint: .bottom)
-            .opacity(alpha)
-            .ignoresSafeArea()
-            .contentShape(Rectangle())
-            .onTapGesture {
-                layers?.feedback?.play(.back)
-                controller.closeMenu()
-            }
+        return ZStack {
+            LinearGradient(stops: [
+                .init(color: ink.opacity(0).color, location: 0),
+                .init(color: ink.opacity(0).color, location: 0.34),
+                .init(color: ink.opacity(0.22).color, location: 0.48),
+                .init(color: ink.opacity(0.55).color, location: 0.66),
+                .init(color: ink.opacity(0.80).color, location: 0.84),
+                .init(color: ink.opacity(0.90).color, location: 1),
+            ], startPoint: .top, endPoint: .bottom)
+            ink.opacity(M.scrimPopover).color
+                .opacity(popOpen ? 1 : 0)
+                .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: popOpen)
+        }
+        .opacity(alpha)
+        .ignoresSafeArea()
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard controller.menu.isOpen else { return }
+            layers?.feedback?.play(.back)
+            controller.dismissPopover()
+        }
     }
 
     // MARK: Dock
 
-    private func dock(t: Double, exitT: Double, count: Int) -> some View {
-        let width = D.rowWidth(count: count)
-        let top = min(stage.height - D.topFromBottom, stage.height - stage.safe.bottom / stage.scale - D.tile - D.labelGap - 70)
-        let focusedIndex = Self.ids.firstIndex { focus.focused == AnyHashable($0) }
+    private func dock(t: Double, exitT: Double) -> some View {
+        let geometry = geometry
+        let sink = popOpen ? M.dockShift : 0
         return ZStack(alignment: .topLeading) {
-            DockRing(index: focusedIndex ?? 0, t: t, exitT: exitT, count: count)
-            ForEach(Self.ids.indices, id: \.self) { index in
-                let id = Self.ids[index]
-                FocusItem(
-                    id: id, model: focus,
-                    clickCue: id == Self.resumeID ? .back : .select, action: { activate(id) }
-                ) { focused in
-                    DockTile(
-                        spec: spec(id), focused: focused, index: index, count: count, t: t, exitT: exitT)
-                }
-                .offset(x: stage.px(D.tileLeft(index)))
+            tilesRow(t: t, exitT: exitT, geometry: geometry)
+            DockHead(title: controller.appName, t: t, exitT: exitT)
+                .offset(x: stage.px(geometry.tilesLeft))
+            DockCaption(text: caption, popOpen: popOpen, t: t, exitT: exitT)
+                .frame(width: stage.px(M.captionWidth), height: stage.px(M.captionHeight(textScale: stage.textScale)), alignment: .top)
+                .offset(x: stage.px((stage.width - M.captionWidth) / 2), y: stage.px(captionTop))
+        }
+        .frame(width: stage.px(stage.width), alignment: .topLeading)
+        .offset(y: stage.px(top + sink))
+        .animation(reducedMotion ? nil : Motion.out(M.dockSink), value: popOpen)
+    }
+
+    /// The help of the tile that has the focus (the one that opened the page while the popover is open).
+    private var caption: String {
+        StreamMenuText.caption(BarItem(id: focus.focused) ?? tiles.first ?? .resume)
+    }
+
+    private func tilesRow(t: Double, exitT: Double, geometry: DockGeometry) -> some View {
+        let focusedIndex = tiles.firstIndex { focus.focused == AnyHashable($0.id) }
+        let row = ZStack(alignment: .topLeading) {
+            DockRing(index: focusedIndex ?? 0, t: t, exitT: exitT, count: tiles.count)
+            ForEach(Array(tiles.enumerated()), id: \.element) { index, item in
+                tile(item, index: index, t: t, exitT: exitT)
+                    .offset(x: stage.px(D.tileLeft(index)))
             }
         }
-        .frame(width: stage.px(width), height: stage.px(D.tile), alignment: .topLeading)
-        .offset(x: (stage.px(stage.width) - stage.px(width)) / 2, y: stage.px(top))
+        .frame(width: stage.px(D.rowWidth(count: tiles.count)), height: stage.px(D.tile), alignment: .topLeading)
+        if geometry.scrolls {
+            // The tiles keep their size and the row scrolls sideways under the focus; the ring, glow, pills and labels have room
+            let room = 110.0
+            return AnyView(
+                FocusScroll(axis: .horizontal) {
+                    row
+                        .padding(.leading, stage.px(DockGeometry.scrollSide))
+                        .padding(.trailing, stage.px(DockGeometry.scrollSide))
+                        .padding(.top, stage.px(room))
+                        .padding(.bottom, stage.px(130))
+                }
+                .frame(width: stage.px(stage.width), height: stage.px(room + D.tile + 130))
+                .offset(y: -stage.px(room)))
+        }
+        return AnyView(row.offset(x: stage.px(geometry.tilesLeft)))
     }
 
-    private func activate(_ id: String) {
-        switch id {
-        case Self.resumeID: controller.closeMenu()
-        case "stream-statistics": controller.toggleStatistics()
-        case "stream-disconnect": Task { await controller.leave(quit: false, scene: true) }
-        default: Task { await controller.leave(quit: true, scene: true) }
+    private func tile(_ item: BarItem, index: Int, t: Double, exitT: Double) -> some View {
+        let last = tiles.count - 1
+        var moves: [FocusDirection: AnyHashable] = [:]
+        // The dock wraps: Right on the last tile goes to the first, Left on the first to the last
+        if tiles.count > 1 {
+            if index == 0 { moves[.left] = AnyHashable(tiles[last].id) }
+            if index == last { moves[.right] = AnyHashable(tiles[0].id) }
+        }
+        let works = StreamMenuNavigation.tileWorks(opensPage: item.page != nil, popoverOpen: popOpen)
+        return FocusItem(
+            id: item.id, model: focus, moves: moves, clickCue: works ? cue(item) : nil, action: { activate(item) }
+        ) { focused in
+            DockTile(
+                spec: spec(item), focused: focused, index: index, count: tiles.count, t: t, exitT: exitT,
+                dimmed: popOpen && !focused, labelsHidden: popOpen && stage.compact && stage.height < 800)
+        }
+        .onGeometryChange(for: Double.self) { $0.frame(in: .named(Self.space)).midX } action: { x in
+            tileCenters[item] = x / stage.scale
         }
     }
 
-    private func spec(_ id: String) -> DockTile.Spec {
-        switch id {
-        case Self.resumeID:
-            DockTile.Spec(icon: Symbols.resume, label: L("stream_menu_tile_resume"), on: nil)
-        case "stream-statistics":
-            DockTile.Spec(icon: Symbols.overlay, label: L("stream_menu_tile_overlay"), on: controller.statisticsEnabled)
-        case "stream-disconnect":
-            DockTile.Spec(icon: Symbols.logout, label: L("stream_menu_tile_disconnect"), on: nil)
-        default:
-            DockTile.Spec(icon: Symbols.powerSettingsNew, label: L("stream_menu_tile_quit"), on: nil)
+    private func cue(_ item: BarItem) -> Cue {
+        switch item {
+        case .resume: .back
+        case .brightness, .more: .open
+        default: .select
         }
+    }
+
+    private func activate(_ item: BarItem) {
+        guard StreamMenuNavigation.tileWorks(opensPage: item.page != nil, popoverOpen: popOpen) else { return }
+        switch item {
+        case .resume: controller.closeMenu()
+        case .keyboard: controller.toggleKeyboard()
+        case .overlay: controller.toggleStatistics()
+        case .brightness, .more:
+            if let page = item.page { controller.openMenuPage(page) }
+        case .disconnect: Task { await controller.leave(quit: false, scene: true) }
+        case .quit: Task { await controller.leave(quit: true, scene: true) }
+        }
+    }
+
+    private func spec(_ item: BarItem) -> DockTile.Spec {
+        switch item {
+        case .resume: DockTile.Spec(icon: Symbols.resume, label: L("stream_menu_tile_resume"))
+        // The Delos keyboard of Android turns accent while it is up and has no On / Off pill
+        case .keyboard: DockTile.Spec(icon: Symbols.keyboard, label: L("stream_menu_tile_keyboard"), on: controller.keyboardShown, showState: false)
+        case .overlay: DockTile.Spec(icon: Symbols.overlay, label: L("stream_menu_tile_overlay"), on: controller.statisticsEnabled)
+        case .brightness: DockTile.Spec(icon: Symbols.brightnessMedium, label: L("stream_menu_tile_brightness"))
+        case .more: DockTile.Spec(icon: Symbols.moreHoriz, label: L("stream_menu_tile_more"))
+        case .disconnect: DockTile.Spec(icon: Symbols.logout, label: L("stream_menu_tile_disconnect"))
+        case .quit: DockTile.Spec(icon: Symbols.powerSettingsNew, label: L("stream_menu_tile_quit"))
+        }
+    }
+}
+
+/// An A or B button's glyph (`GlyphButton` of DELOS for Android): the letter in the background color on a disc in the text
+/// color.
+struct ButtonGlyph: View {
+    let letter: String
+    let size: Double
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+
+    var body: some View {
+        Text(letter)
+            .font(DelosFonts.figtree(stage.tpx(21 * size / 38), .heavy))
+            .foregroundStyle(colors.bg.color)
+            .frame(width: stage.px(size), height: stage.px(size))
+            .background(Circle().fill(colors.text.color))
+            .accessibilityHidden(true)
+    }
+}
+
+/// The game's name (Unbounded 36) and the A / B hints, their bottom edge 46 above the tiles at the row's left edge. They rise
+/// 24 px from 60 ms and fade out with the exit.
+private struct DockHead: View {
+    let title: String
+    let t: Double
+    let exitT: Double
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+    @Environment(\.reducedMotion) private var reducedMotion
+
+    private typealias D = StreamDockLayout
+    private typealias M = StreamMenuLayout
+
+    var body: some View {
+        let p = Motion.progress(t, delay: 60, duration: D.enter, Motion.easeOut)
+        let leaving = Motion.progress(exitT, delay: 0, duration: D.leave, Motion.ease)
+        // A low compact stage has no room for the two hints one above the other: side by side there
+        let inRow = stage.compact && stage.height < 800
+        let hints = Group {
+            hint("A", L("stream_menu_hint_select"))
+            hint("B", L("stream_menu_hint_back"))
+        }
+        let block = VStack(alignment: .leading, spacing: stage.px(M.headGap)) {
+            Text(title)
+                .font(DelosFonts.unbounded(stage.px(M.titleSize)))
+                .foregroundStyle(colors.text.color)
+                .shadow(color: .black.opacity(0.55), radius: stage.px(8), y: stage.px(2))
+                .lineLimit(1)
+                .frame(maxWidth: stage.px(min(M.titleMaxWidth, stage.width - 2 * DockGeometry.scrollSide)), alignment: .leading)
+            if inRow {
+                HStack(spacing: stage.px(32)) { hints }
+            } else {
+                VStack(alignment: .leading, spacing: stage.px(M.hintsGap)) { hints }
+            }
+        }
+        // The block's bottom edge lies 46 above the tiles: it hangs from a point on that edge
+        Color.clear
+            .frame(width: 0, height: 0)
+            .overlay(alignment: .bottomLeading) { block.fixedSize().offset(y: -stage.px(M.headBottom)) }
+            .opacity(min(max(p, 0), 1) * (1 - leaving))
+            .offset(y: reducedMotion ? 0 : stage.px(24 * (1 - p)))
+    }
+
+    private func hint(_ letter: String, _ label: String) -> some View {
+        HStack(spacing: stage.px(14)) {
+            ButtonGlyph(letter: letter, size: M.hintGlyph)
+            Text(label)
+                .font(DelosFonts.figtree(stage.tpx(M.hintSize), .medium))
+                .foregroundStyle(colors.text2.color)
+                .shadow(color: .black.opacity(0.55), radius: stage.px(8), y: stage.px(2))
+                .lineLimit(1)
+        }
+    }
+}
+
+/// The caption under the tiles: the complete help of the focused tile, centered, in a box as tall as three lines. A new text
+/// slides up 18 px out of a 6 px blur; it rises 20 px from 520 ms; while a popover is open it is gone.
+private struct DockCaption: View {
+    let text: String
+    let popOpen: Bool
+    let t: Double
+    let exitT: Double
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+    @Environment(\.reducedMotion) private var reducedMotion
+
+    private typealias D = StreamDockLayout
+    private typealias M = StreamMenuLayout
+
+    var body: some View {
+        let p = Motion.progress(t, delay: 520, duration: D.enter, Motion.easeOut)
+        let leaving = Motion.progress(exitT, delay: 0, duration: D.leave, Motion.ease)
+        ZStack {
+            Text(text)
+                .font(DelosFonts.figtree(stage.tpx(M.captionSize), .medium))
+                .lineSpacing(stage.tpx(M.captionSize) * (M.captionLineHeight - 1.2))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(colors.text.color)
+                .shadow(color: .black.opacity(0.65), radius: stage.px(7), y: stage.px(2))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .id(text)
+                .transition(.asymmetric(
+                    insertion: reducedMotion ? .opacity : .modifier(active: CaptionShift(settled: 0), identity: CaptionShift(settled: 1)),
+                    removal: .identity))
+        }
+        .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42), value: text)
+        .opacity(min(max(p, 0), 1) * (1 - leaving) * (popOpen ? 0 : 1))
+        .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: popOpen)
+        .offset(y: reducedMotion ? 0 : stage.px(20 * (1 - p)))
+    }
+}
+
+/// A new caption slides up 18 px out of a 6 px blur.
+private struct CaptionShift: ViewModifier {
+    let settled: Double
+    @Environment(\.stage) private var stage
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(settled)
+            .offset(y: stage.px(18 * (1 - settled)))
+            .blur(radius: stage.px(6 * (1 - settled)))
     }
 }
 
 /// One tile with its label: 150 px of glass, the icon, and for a toggle the On / Off pill. The focus lifts it to 1.12 with
 /// the spring, lights its glass, fills its icon and turns the label gold and 8 px lower; a toggle that is on has accent
-/// glass and an accent icon.
+/// glass and an accent icon. While a popover is open the tiles but the one that opened it dim.
 private struct DockTile: View {
     struct Spec {
         let icon: String
         let label: String
         /// A toggle's state; nil: not a toggle.
-        let on: Bool?
+        var on: Bool?
+        /// Whether a toggle shows its On / Off pill (the keyboard only turns accent).
+        var showState = true
     }
 
     let spec: Spec
@@ -207,12 +448,17 @@ private struct DockTile: View {
     let count: Int
     let t: Double
     let exitT: Double
+    /// A popover is open and this is not its tile.
+    let dimmed: Bool
+    /// A low compact stage's sunk dock has no room for the labels: they fade out while a popover is open.
+    let labelsHidden: Bool
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reducedMotion
     @Environment(\.pressed) private var pressed
 
     private typealias D = StreamDockLayout
+    private typealias M = StreamMenuLayout
 
     var body: some View {
         let on = spec.on == true
@@ -221,7 +467,7 @@ private struct DockTile: View {
         let label = Motion.progress(t, delay: D.labelDelay(index), duration: D.labelDuration, Motion.ease)
         let entrance = reducedMotion ? 1 : Motion.lerp(Motion.lerp(0.8, 1, p), 0.92, q)
         let rise = reducedMotion ? 0 : 90 * (1 - p) + 46 * q
-        let alpha = min(max(p, 0), 1) * (1 - q)
+        let alpha = min(max(p, 0), 1) * (1 - q) * (dimmed ? M.tileDimmed : 1)
         let shape = RoundedRectangle(cornerRadius: stage.px(D.tileRadius), style: .continuous)
         ZStack {
             tile(shape: shape, on: on)
@@ -231,7 +477,7 @@ private struct DockTile: View {
                         SymbolView(symbol: spec.icon, size: D.icon, color: on ? colors.accent : colors.text, filled: focused)
                             .scaleEffect(focused ? D.iconFocusScale : 1)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        if let on = spec.on {
+                        if let on = spec.on, spec.showState {
                             pill(on: on)
                                 .offset(x: -stage.px(D.pillRight), y: stage.px(D.pillTop))
                                 .fixedSize()
@@ -244,6 +490,7 @@ private struct DockTile: View {
                 .scaleEffect(entrance)
                 .offset(y: stage.px(rise))
                 .opacity(alpha)
+                .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: dimmed)
             Text(spec.label)
                 .font(DelosFonts.figtree(stage.tpx(D.labelSize), .semibold))
                 .foregroundStyle((focused ? colors.accent : colors.text2).color)
@@ -253,7 +500,8 @@ private struct DockTile: View {
                 .offset(y: stage.px(D.tile / 2 + D.labelGap + 18 + (focused ? D.labelFocusShift : 0)))
                 .animation(reducedMotion ? nil : Motion.spring(Motion.focus), value: focused)
                 .animation(.easeOut(duration: Motion.fade / 1000), value: focused)
-                .opacity(label * (1 - Motion.progress(exitT, delay: 0, duration: D.leave, Motion.ease)))
+                .opacity(label * (1 - Motion.progress(exitT, delay: 0, duration: D.leave, Motion.ease)) * (labelsHidden ? 0 : dimmed ? M.labelDimmed : 1))
+                .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: dimmed)
         }
         .frame(width: stage.px(D.tile), height: stage.px(D.tile))
     }
@@ -306,6 +554,7 @@ private struct TilePress: Equatable {
     let focused: Bool
     let pressed: Bool
 }
+
 
 /// The dock's one ring: a gold 186 box that glides to the focused tile (560 ms, overshooting) and breathes (2.6 s),
 /// behind the tiles. It arrives after the first tile, from a 0.7 scale; reduced motion: it jumps and does not breathe.

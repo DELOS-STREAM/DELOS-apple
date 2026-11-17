@@ -180,6 +180,21 @@ enum LibraryWrap {
     }
 }
 
+/// What the row does when the focus goes from one cover to another: the one scroll target of that focus step.
+enum LibraryScroll {
+    enum Step: Equatable {
+        /// Round the row from the first cover to the last or back (``LibraryWrap``).
+        case wrap
+        /// The row brings cover [to] to its start: a glide for a single move, one short step while the focus is moving
+        /// fast (a held arrow).
+        case follow(to: Int, pace: ScrollPace.Pace)
+    }
+
+    static func step(from old: Int?, to new: Int, count: Int, pace: ScrollPace.Pace) -> Step {
+        LibraryWrap.isWrap(from: old, to: new, count: count) ? .wrap : .follow(to: new, pace: pace)
+    }
+}
+
 /// The covers of a state of the context menu: the ones beside the focused cover idle slightly muted
 /// (`saturate(.86) brightness(.92)`) and dim further while a context menu is open (`.6` and `.5`), so the cover the
 /// menu belongs to stands out. The focused cover keeps its colors.
@@ -263,7 +278,7 @@ struct GameLibrary: View {
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
     @State private var position = ScrollPosition(edge: .leading)
-    @State private var lastFocusMove = Date.distantPast
+    @State private var pace = ScrollPace()
     /// Where the focused game stood, for the one that takes its place when it disappears.
     @State private var lastIndex = 0
     @State private var ends = ScrollEnds()
@@ -344,12 +359,13 @@ struct GameLibrary: View {
                 .padding(.leading, stage.px(start))
                 .padding(.trailing, stage.px(end))
                 .padding(.vertical, stage.px(Self.rowPad))
+                .focusDrivenScroll()
             }
             .entranceScope()
             .scrollClipDisabled()
             // The row is moved by the focus alone: without this a hardware keyboard's arrow keys also scroll the
             // scroll view by themselves, on top of the focus (owner's iPad with a Magic Keyboard: a crawl, then the
-            // focus ran off the screen)
+            // focus ran off the screen); the content switches the scroll view's own keyboard scrolling off
             .focusable(false)
             .scrollPosition($position)
             .onScrollGeometryChange(for: ScrollEnds.self) { geometry in
@@ -359,7 +375,7 @@ struct GameLibrary: View {
             }
             .padding(.top, stage.px(layout.coverTop - Self.rowPad))
             .modifier(RowEdgeFade(back: ends.back ? 1 : 0, forward: ends.forward ? 1 : 0, width: stage.width, overdraw: stage.px(1000)))
-            .animation(.easeInOut(duration: 0.3), value: ends)
+            .animation(Motion.fastOutSlowIn(300), value: ends)
             .opacity(rowAlpha)
             .offset(x: stage.px(rowBounce))
             #if os(tvOS)
@@ -375,18 +391,16 @@ struct GameLibrary: View {
                 guard let now else { return }
                 lastIndex = now
                 actions.rememberHomeGame(hostID: hostID, appID: apps[now].id)
-                if LibraryWrap.isWrap(from: old, to: now, count: apps.count) {
+                // One focus step, one scroll target: this is the only thing that scrolls the row
+                switch LibraryScroll.step(from: old, to: now, count: apps.count, pace: pace.move()) {
+                case .wrap:
                     glide(to: now, from: old ?? now)
-                    return
+                case .follow(let index, let speed):
+                    wrap?.cancel()
+                    rowAlpha = 1
+                    rowBounce = 0
+                    scroll(to: index, animation: speed == .held ? ScrollPace.heldStep : .timingCurve(0.33, 1, 0.68, 1, duration: 0.2))
                 }
-                wrap?.cancel()
-                rowAlpha = 1
-                rowBounce = 0
-                // A held arrow moves the focus every 50 ms: overlapping 200 ms animations lagged behind it, so a fast
-                // move scrolls in one short step and a single press glides
-                let fast = Date.now.timeIntervalSince(lastFocusMove) < 0.12
-                lastFocusMove = .now
-                scroll(to: now, animation: fast ? .linear(duration: 0.05) : .timingCurve(0.33, 1, 0.68, 1, duration: 0.2))
             }
             // The focused game disappeared (hidden, removed): its neighbour takes the focus
             .onChange(of: ids) { _, now in
@@ -666,10 +680,9 @@ private struct Cover: View {
                         title: app.title, titleSize: wide ? 72 : 34, titleInset: wide ? 44 : 26, titleBottom: wide ? 40 : 26)
                 }
             }
-            .animation(.easeInOut(duration: 0.4), value: shown.map(ObjectIdentifier.init))
+            .animation(Motion.fastOutSlowIn(400), value: shown.map(ObjectIdentifier.init))
             if art.artwork.isBusy(hostID: hostID, appID: app.id) {
-                ProgressView()
-                    .tint(.white)
+                RingSpinner(size: 32)
                     .frame(width: stage.px(56), height: stage.px(56))
                     .background(Circle().fill(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0.55)))
                     .padding(stage.px(16))
@@ -703,9 +716,12 @@ private struct Cover: View {
         }
         .frame(width: stage.px(width), height: stage.px(GameLibrary.height))
         .clipShape(shape)
-        .overlay(shape.strokeBorder(colors.line.color, lineWidth: stage.px(1)))
-        // Android's TILE_FOCUS_SCALE; the wide first cover grows only to the left, so it never covers its neighbour
-        .focusLook(focused, scale: 1.055, ring: 5, glowBlur: 50, glowY: 18, corner: 26, anchor: wide ? .trailing : .center, sweep: true)
+        // The online pulse of the start screen, around the selected game (`focusPulse`), inside the scaled layer
+        .background { if focused { FocusPulse(corner: 26) } }
+        // Android's TILE_FOCUS_SCALE; the wide first cover grows only to the left, so it never covers its neighbour. The
+        // ring is `FocusRing(5, 5)` with the gap in the background color, the glow `FocusGlow(30, 80, -18)`
+        .focusLook(focused, scale: 1.055, ring: 5, glowBlur: 80, glowY: 30, corner: 26, anchor: wide ? .trailing : .center, sweep: true,
+                   glowSpread: -18, gap: 5)
         .task(id: "\(app.id)#\(art.artwork.version)") { await load() }
     }
 
@@ -731,6 +747,28 @@ private struct Cover: View {
         guard let box = await art.boxArt(hostID: hostID, appID: app.id, hosts: hosts) else { return }
         shown = box
         art.analyzeCover(key, cover ?? box)
+    }
+}
+
+/// The online pulse (`focusPulse`, `.online-ring`) of a rounded element: a 2 px outline in the third accent starts just
+/// outside the focus ring, grows outwards by 26 stage pixels and fades, every 2.4 s.
+private struct FocusPulse: View {
+    let corner: Double
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+    @Environment(\.reducedMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(paused: reduceMotion)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2.4) / 2.4
+            let wave = Motion.easeOut(t)
+            // From just outside the focus ring (5 px gap + 5 px ring) outwards
+            let offset = 10 + 26 * wave
+            RoundedRectangle(cornerRadius: stage.px(corner + offset + 1))
+                .strokeBorder(colors.accent2.opacity(0.7 * (1 - wave)).color, lineWidth: stage.px(2))
+                .padding(-stage.px(offset + 2))
+        }
+        .allowsHitTesting(false)
     }
 }
 
