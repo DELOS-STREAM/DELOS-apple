@@ -93,6 +93,23 @@ public final class Navigator {
     /// While set, every controller and keyboard command goes here first; true: consumed (the stream screen owns the
     /// controller).
     @ObservationIgnored public var commandCapture: (@MainActor (MenuCommand) -> Bool)?
+    /// The screen (its focus model) that installed ``commandCapture``.
+    @ObservationIgnored private var inputOwner: ObjectIdentifier?
+
+    /// [owner]'s screen takes the commands before the focus gets them. A screen that is left is removed after the next one
+    /// appeared (the transition), so its release must not clear what the new screen has just installed: only the owner clears.
+    func takeInput(_ owner: FocusModel, capture: @escaping @MainActor (MenuCommand) -> Bool) {
+        inputOwner = ObjectIdentifier(owner)
+        commandCapture = capture
+    }
+
+    /// [owner]'s screen is gone: its capture and its hint state go, unless another screen took them meanwhile.
+    func releaseInput(_ owner: FocusModel) {
+        guard inputOwner == ObjectIdentifier(owner) else { return }
+        inputOwner = nil
+        commandCapture = nil
+        screenHints = ScreenHints()
+    }
     /// Ends the repeats of a held direction (``MenuInput/cancelRepeats()``); set by the screen that owns the input.
     @ObservationIgnored public var cancelRepeats: (@MainActor () -> Void)?
     /// How often the command being handled has repeated while its direction is held (0: a new press).

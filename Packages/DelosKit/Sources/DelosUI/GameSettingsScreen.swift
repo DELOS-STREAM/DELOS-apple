@@ -107,13 +107,10 @@ struct GameSettingsScreen: View {
         .environment(\.modalFocus, popup?.focus ?? inheritedModal)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
-            navigator.commandCapture = { command in capture(command) }
+            navigator.takeInput(focus) { command in capture(command) }
             if focusedRow == nil { focus.focus(Self.firstFocus()) }
         }
-        .onDisappear {
-            navigator.commandCapture = nil
-            navigator.screenHints = ScreenHints()
-        }
+        .onDisappear { navigator.releaseInput(focus) }
         .onChange(of: HintKey(focus: focus.focused, custom: model.overrides.count), initial: true) {
             navigator.screenHints = ScreenHints(
                 adjustable: ShellHints.adjustable(focusedRow), resetsRow: focusedRow.map { model.isCustom($0.id) } ?? false)

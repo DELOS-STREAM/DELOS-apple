@@ -177,11 +177,8 @@ struct HomeScreen: View {
         .onChange(of: ScreenFilter(label: offeredNow ? LibraryFilter.hintLabel(filters) : nil, open: sheetOpen), initial: true) { _, now in
             navigator.screenHints = ScreenHints(sheetOpen: now.open, filterLabel: now.label)
         }
-        .onAppear { navigator.commandCapture = { command in capture(command) } }
-        .onDisappear {
-            navigator.commandCapture = nil
-            navigator.screenHints = ScreenHints()
-        }
+        .onAppear { navigator.takeInput(focus) { command in capture(command) } }
+        .onDisappear { navigator.releaseInput(focus) }
     }
 
     /// What the hint bar needs of the filter: Y's label (nil: no filter here) and whether the sheet is open.
