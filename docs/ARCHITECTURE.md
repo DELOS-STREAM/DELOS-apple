@@ -485,7 +485,10 @@ repeat). A row that does not fit a narrow stage keeps the tile size and scrolls 
 The tiles are Resume, Keyboard (iPhone and iPad: the system keyboard over the stream, what is typed goes to the PC as text,
 Return, Tab and Backspace as keys; `VideoHostView` is its first responder, it comes up once the menu has closed and goes down
 when the menu opens again or the stream stops running; the keys of an iPad's hardware keyboard go to the PC through
-GameController alone, so the keyboard does not type them a second time), Overlay (statistics), Brightness (iPhone and iPad: the screen's brightness for the
+GameController alone, so the keyboard does not type them a second time; debug builds log the tile press, the first
+responder's changes with the frames that caused a resign, the system keyboard's notifications, the hardware keyboard's
+connections and `MenuKeyOwnerView`'s claims as `KeyboardTileLog`, subsystem `io.github.meitoncz.delos`, category
+`KeyboardTile`), Overlay (statistics), Brightness (iPhone and iPad: the screen's brightness for the
 length of the stream, given back when it ends or the app leaves the screen), More, Disconnect and Quit app. Brightness and
 More open a popover (`StreamPopover.swift`): a frosted card above the tile that opened it with the shared caret (`CardCaret`, 60 x 24) in one
 outline, a header with a back circle and the title, 72 px rows on one gliding plate (a slider takes left and right, a held

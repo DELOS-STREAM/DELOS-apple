@@ -109,8 +109,17 @@ public final class MenuKeyOwnerView: UIView {
     /// of a stream (a key window event must not take it away again: the keyboard went down the moment it came up).
     private func claim() {
         guard !typing, window != nil, !isFirstResponder else { return }
-        if let holder = UIResponder.current, holder is UIKeyInput { return }
+        if let holder = UIResponder.current, holder is UIKeyInput {
+            KeyboardTileLog.note("menu key owner: leaves the first responder to \(type(of: holder))")
+            return
+        }
+        #if DEBUG
+        let previous = UIResponder.current.map { "\(type(of: $0))" } ?? "none"
+        let took = becomeFirstResponder()
+        KeyboardTileLog.note("menu key owner: claims the first responder from \(previous): \(took)")
+        #else
         becomeFirstResponder()
+        #endif
     }
 
     public override func didMoveToWindow() {
@@ -124,11 +133,17 @@ public final class MenuKeyOwnerView: UIView {
         window.addInteraction(controllerEvents)
         claim()
         reclaimObserver = NotificationCenter.default.addObserver(forName: Self.reclaim, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.claim() }
+            MainActor.assumeIsolated {
+                KeyboardTileLog.note("menu key owner: reclaim posted")
+                self?.claim()
+            }
         }
         // Another window (a share sheet, a system alert) took the key and gave it back: so does the first responder
         observer = NotificationCenter.default.addObserver(forName: UIWindow.didBecomeKeyNotification, object: window, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.claim() }
+            MainActor.assumeIsolated {
+                KeyboardTileLog.note("menu key owner: its window became key")
+                self?.claim()
+            }
         }
     }
 }

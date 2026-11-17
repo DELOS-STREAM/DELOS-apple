@@ -476,6 +476,7 @@ final class StreamController {
 
     /// The Keyboard tile: the menu closes, then the on-screen keyboard comes up or goes away.
     func toggleKeyboard() {
+        KeyboardTileLog.note("tile: Keyboard pressed; offered \(capabilities.keyboard), shown \(keyboardShown), menu open \(menuOpen)")
         guard capabilities.keyboard else { return }
         closeMenu()
         keyboardShown.toggle()
@@ -483,6 +484,7 @@ final class StreamController {
 
     /// The system took the keyboard away (its own hide button).
     func keyboardDismissed() {
+        KeyboardTileLog.note("tile: the keyboard went away, the tile turns off")
         keyboardShown = false
     }
 
