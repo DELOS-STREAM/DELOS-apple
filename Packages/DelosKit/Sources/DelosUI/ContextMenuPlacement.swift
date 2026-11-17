@@ -13,11 +13,12 @@ enum ContextMenuLayout {
     static let minWidth = 470.0
     static let maxWidth = 640.0
 
-    /// The caret: ``caretWidth`` along the card's edge, ``caretDepth`` out of it (its tip).
-    static let caretWidth = 72.0
+    /// The caret (the shared ``CardCaret``): ``caretWidth`` along the card's edge; ``caretDepth`` is its nominal distance for the placement
+    /// (the room around the card, 30 as on Android), the drawn tip is ``CardCaret/depth`` out of the card.
+    static let caretWidth = CardCaret.width
     static let caretDepth = 30.0
     /// The caret keeps this far from the card's corners (the stream popover's `CARET_MIN_INSET`).
-    static let caretInset = 72.0
+    static let caretInset = CardCaret.minInset
     /// The caret's tip relative to the element's edge: negative reaches into the element (half the caret over the
     /// element with its 10 px focus ring).
     static let tipGap = -5.0

@@ -33,6 +33,10 @@ enum LaunchLook {
     // The information block
     static let infoWidth = 1000.0
     static let infoBottom = 100.0
+    /// The Cancel pill under the information: 64 high, 16 above the bottom edge, 12 clear of the information.
+    static let cancelHeight = 64.0
+    static let cancelBottom = 16.0
+    static let cancelGap = 12.0
     static let logoWidth = 440.0
     static let logoHeight = 124.0
     static let titleSize = 58.0

@@ -25,7 +25,7 @@ struct GameSettingsScreen: View {
     @Environment(\.stage) private var stage
     @Environment(HostStore.self) private var hosts
     @State private var model: GameSettingsModel
-    @State private var picker: (id: String, focus: FocusModel)?
+    @State private var popup: RowPopupState?
     @State private var rowFrames: [String: CGRect] = [:]
     /// The row last focused, which Reset all gives the focus back to.
     @State private var lastRow: String?
@@ -97,14 +97,14 @@ struct GameSettingsScreen: View {
                 .padding(.top, stage.px(SettingsLayout.listTop + stage.safe.top))
                 .padding(.bottom, stage.px(bottom))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-            if let picker, let row = rows.first(where: { $0.id == picker.id }), case let .choice(_, options, selected) = row.value {
-                ChoicePicker(
-                    title: row.label, options: options, selected: selected, focus: picker.focus,
-                    anchor: rowFrames[row.id] ?? .zero, onPick: { index in pick(row.id, index) }, onClose: closePicker)
+            if let popup, let row = rows.first(where: { $0.id == popup.id }) {
+                RowPopover(
+                    row: row, kind: popup.kind, focus: popup.focus, anchor: rowFrames[row.id] ?? .zero, slider: popup.slider,
+                    onPick: { index in pick(row.id, index) }, onClose: closePopup)
             }
         }
         .coordinateSpace(.named(Self.space))
-        .environment(\.modalFocus, picker?.focus ?? inheritedModal)
+        .environment(\.modalFocus, popup?.focus ?? inheritedModal)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
             navigator.commandCapture = { command in capture(command) }
@@ -176,12 +176,12 @@ struct GameSettingsScreen: View {
                     FocusItem(
                         id: row.id, model: focus,
                         menu: { model.isCustom(row.id) ? resetMenu(row) : nil },
-                        action: { activate(row) }, tap: { tapped(row) }
+                        action: { activate(row) }, tap: { wasFocused in tapped(row, wasFocused: wasFocused) }
                     ) { focused in
                         SettingRowView(row: row, focused: focused, hostedPlate: true, entrance: min(index, Motion.staggerCap), onSlide: { value in
                             focus.focus(AnyHashable(row.id))
                             model.slide(to: value)
-                        }, onReset: { resetRow(row.id) })
+                        }, onStep: { direction in steppedByTouch(row, direction) }, onReset: { resetRow(row.id) })
                     }
                     .id(row.id)
                     .anchorPreference(key: SettingsRowAnchors.self, value: .bounds) { [row.id: $0] }
@@ -223,7 +223,7 @@ struct GameSettingsScreen: View {
 
     /// The controller's and the keyboard's commands, before the focus gets them.
     private func capture(_ command: MenuCommand) -> Bool {
-        if let picker { return capturePicker(command, picker.focus) }
+        if let popup { popup.capture(command, navigator: navigator, feedback: actions.feedback, close: closePopup); return true }
         switch command {
         case .previousTab, .nextTab:
             guard tabs.count > 1 else { return false }
@@ -252,21 +252,6 @@ struct GameSettingsScreen: View {
         }
     }
 
-    private func capturePicker(_ command: MenuCommand, _ pickerFocus: FocusModel) -> Bool {
-        switch command {
-        case .up, .down:
-            if pickerFocus.handle(command) { actions.feedback?.play(.move) }
-        case .accept:
-            if pickerFocus.handle(.accept) { actions.feedback?.play(.select) }
-        case .back:
-            actions.feedback?.play(.back)
-            closePicker()
-        case .left, .right, .previousTab, .nextTab, .menu, .options, .toastAction:
-            break
-        }
-        return true
-    }
-
     private func activate(_ row: SettingRow) {
         guard row.enabled else {
             actions.feedback?.play(.error)
@@ -275,27 +260,43 @@ struct GameSettingsScreen: View {
         model.step(row.id, by: 1)
     }
 
-    private func tapped(_ row: SettingRow) {
-        switch row.value {
-        case .toggle:
-            actions.feedback?.play(.select)
-            model.step(row.id, by: 1)
-        case .choice(_, _, let selected):
+    /// A tap on a row (rules in ``RowTouch/of(_:wasFocused:enabled:canPopup:)``): the first tap focuses it and shows its help, a
+    /// tap on the focused row flips it, or opens its options / its slider popover.
+    private func tapped(_ row: SettingRow, wasFocused: Bool) {
+        switch RowTouch.of(row.value, wasFocused: wasFocused, enabled: row.enabled, canPopup: RowPopupKind.of(row) != nil) {
+        case .focusOnly:
+            actions.feedback?.play(.move)
+        case .activate:
+            if case .toggle = row.value { actions.feedback?.play(.select) } else { actions.feedback?.play(.open) }
+            activate(row)
+        case .pick, .adjust:
             actions.feedback?.play(.open)
-            picker = (row.id, FocusModel(initial: ChoicePicker.optionID(selected ?? 0)))
-        case .slider, .action, .appSettings, .info:
+            popup = RowPopupState.open(row) { value in model.slide(to: value) }
+        case .error:
+            actions.feedback?.play(.error)
+        case .none:
             break
         }
+    }
+
+    /// A touch on a choice's arrow or on a switch: the row is focused for its help and changes at once.
+    private func steppedByTouch(_ row: SettingRow, _ direction: Int) {
+        focus.focus(AnyHashable(row.id))
+        guard row.enabled else {
+            actions.feedback?.play(.error)
+            return
+        }
+        if model.step(row.id, by: direction) { actions.feedback?.play(.move) }
     }
 
     private func pick(_ id: String, _ index: Int) {
         actions.feedback?.play(.select)
         model.pick(id, option: index)
-        closePicker()
+        closePopup()
     }
 
-    private func closePicker() {
-        withAnimation(.easeOut(duration: 0.2)) { picker = nil }
+    private func closePopup() {
+        withAnimation(.easeOut(duration: 0.2)) { popup = nil }
     }
 
     // MARK: Resets

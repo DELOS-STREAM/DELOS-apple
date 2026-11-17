@@ -36,8 +36,8 @@ struct SettingsScreen: View {
     @Environment(\.modalFocus) private var inheritedModal
     @State private var form: StreamSettingsForm
     @State private var tab: SettingsTab
-    /// The row whose list of values is open, and the focus inside the list.
-    @State private var picker: (id: String, focus: FocusModel)?
+    /// The popover that is open on a row (its options, or its slider), and the focus inside the options.
+    @State private var popup: RowPopupState?
     @State private var rowFrames: [String: CGRect] = [:]
     /// A row of the search to bring into view once its tab is laid out.
     @State private var reveal: String?
@@ -105,7 +105,7 @@ struct SettingsScreen: View {
         }
         .coordinateSpace(.named(Self.space))
         // The rows cannot take the system focus (tvOS) while the list of values or the search is open
-        .environment(\.modalFocus, searchFocus ?? picker?.focus ?? inheritedModal)
+        .environment(\.modalFocus, searchFocus ?? popup?.focus ?? inheritedModal)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onChange(of: form.settings) { _, now in store.save(now, profile: profileID) }
         .onChange(of: appearance) { _, now in appearances.save(now, profile: profileID) }
@@ -184,12 +184,10 @@ struct SettingsScreen: View {
                 .padding(.top, stage.px(SettingsLayout.listTop + stage.safe.top))
                 .padding(.bottom, stage.px(bottom))
             }
-            if let picker, let row = rows.first(where: { $0.id == picker.id }), case let .choice(_, options, selected) = row.value {
-                ChoicePicker(
-                    title: row.label, options: options, selected: selected, focus: picker.focus,
-                    anchor: rowFrames[row.id] ?? .zero,
-                    onPick: { index in pick(row.id, index) },
-                    onClose: closePicker)
+            if let popup, let row = rows.first(where: { $0.id == popup.id }) {
+                RowPopover(
+                    row: row, kind: popup.kind, focus: popup.focus, anchor: rowFrames[row.id] ?? .zero, slider: popup.slider,
+                    onPick: { index in pick(row.id, index) }, onClose: closePopup)
             }
         }
     }
@@ -205,12 +203,14 @@ struct SettingsScreen: View {
                         SectionHeading(label: row.section)
                     }
                     FocusItem(
-                        id: row.id, model: focus, action: { activate(row) }, tap: { tapped(row) }
+                        id: row.id, model: focus, action: { activate(row) }, tap: { wasFocused in tapped(row, wasFocused: wasFocused) }
                     ) { focused in
-                        SettingRowView(row: row, focused: focused, hostedPlate: true, entrance: min(index, Motion.staggerCap)) { value in
-                            focus.focus(AnyHashable(row.id))
-                            slide(row.id, to: value)
-                        }
+                        SettingRowView(
+                            row: row, focused: focused, hostedPlate: true, entrance: min(index, Motion.staggerCap),
+                            onSlide: { value in
+                                focus.focus(AnyHashable(row.id))
+                                slide(row.id, to: value)
+                            }, onStep: { direction in steppedByTouch(row, direction) })
                     }
                     .id(row.id)
                     .anchorPreference(key: SettingsRowAnchors.self, value: .bounds) { [row.id: $0] }
@@ -248,7 +248,7 @@ struct SettingsScreen: View {
     /// The controller's and the keyboard's commands, before the focus gets them (`Navigator.commandCapture`).
     private func capture(_ command: MenuCommand) -> Bool {
         if let searchFocus { return captureSearch(command, searchFocus) }
-        if let picker { return capturePicker(command, picker.focus) }
+        if let popup { popup.capture(command, navigator: navigator, feedback: feedback, close: closePopup); return true }
         switch command {
         case .previousTab, .nextTab:
             select(tab.step(command == .nextTab ? 1 : -1), sound: .move)
@@ -276,22 +276,6 @@ struct SettingsScreen: View {
         case .down, .accept, .back, .menu, .options:
             return false
         }
-    }
-
-    /// The open list of values: up and down move, A picks, B closes it; nothing reaches the screen behind it.
-    private func capturePicker(_ command: MenuCommand, _ pickerFocus: FocusModel) -> Bool {
-        switch command {
-        case .up, .down:
-            if pickerFocus.handle(command) { feedback?.play(.move) }
-        case .accept:
-            if pickerFocus.handle(.accept) { feedback?.play(.select) }
-        case .back:
-            feedback?.play(.back)
-            closePicker()
-        case .left, .right, .previousTab, .nextTab, .menu, .options, .toastAction:
-            break
-        }
-        return true
     }
 
     /// A on a row: a toggle flips, a choice or a slider steps forward, an action runs (`SettingRow.activate` of DELOS for
@@ -347,26 +331,33 @@ struct SettingsScreen: View {
         }
     }
 
-    /// A tap on a row (it is focused already): a toggle flips, a choice opens its list, an action runs, a slider waits
-    /// for its track.
-    private func tapped(_ row: SettingRow) {
+    /// A tap on a row (rules in ``RowTouch/of(_:wasFocused:enabled:canPopup:)``): the first tap focuses it and shows its help, a
+    /// tap on the focused row flips it, or opens its options / its slider popover; a row that opens something does so at once.
+    private func tapped(_ row: SettingRow, wasFocused: Bool) {
+        switch RowTouch.of(row.value, wasFocused: wasFocused, enabled: row.enabled, canPopup: RowPopupKind.of(row) != nil) {
+        case .focusOnly:
+            feedback?.play(.move)
+        case .activate:
+            if case .toggle = row.value { feedback?.play(.select) } else { feedback?.play(.open) }
+            activate(row)
+        case .pick, .adjust:
+            feedback?.play(.open)
+            popup = RowPopupState.open(row) { value in slide(row.id, to: value) }
+        case .error:
+            feedback?.play(.error)
+        case .none:
+            break
+        }
+    }
+
+    /// A touch on a choice's arrow or on a switch: the row is focused for its help and changes at once.
+    private func steppedByTouch(_ row: SettingRow, _ direction: Int) {
+        focus.focus(AnyHashable(row.id))
         guard row.enabled else {
             feedback?.play(.error)
             return
         }
-        switch row.value {
-        case .toggle:
-            feedback?.play(.select)
-            step(row.id, by: 1)
-        case .choice(_, _, let selected):
-            feedback?.play(.open)
-            picker = (row.id, FocusModel(initial: ChoicePicker.optionID(selected ?? 0)))
-        case .appSettings, .action:
-            feedback?.play(.open)
-            activate(row)
-        case .slider, .info:
-            break
-        }
+        if step(row.id, by: direction) { feedback?.play(.move) }
     }
 
     private func pick(_ id: String, _ index: Int) {
@@ -378,11 +369,11 @@ struct SettingsScreen: View {
         } else {
             form.pick(id, option: index)
         }
-        closePicker()
+        closePopup()
     }
 
-    private func closePicker() {
-        withAnimation(.easeOut(duration: 0.2)) { picker = nil }
+    private func closePopup() {
+        withAnimation(.easeOut(duration: 0.2)) { popup = nil }
     }
 
     /// [keepFocus]: the tab was chosen on the tab itself (tvOS), so the focus stays there.
@@ -497,6 +488,8 @@ struct SettingRowView: View {
     var entrance: Int?
     /// A value set on the slider's track by touch (on release).
     var onSlide: (Int) -> Void = { _ in }
+    /// A touch on a switch or on a choice's arrow (-1, +1) changes the row by itself, without the focus-first tap.
+    var onStep: ((Int) -> Void)? = nil
     /// Resets the row to the profile's value (a row that is custom only).
     var onReset: (() -> Void)? = nil
     @Environment(\.delosColors) private var colors
@@ -564,8 +557,9 @@ struct SettingRowView: View {
         switch row.value {
         case .toggle(let on):
             SettingSwitch(on: on)
+                .touchStep(onStep)
         case .choice(let label, let options, let selected):
-            ChoiceValue(index: selected ?? 0, count: options.count, arrows: arrows) {
+            ChoiceValue(index: selected ?? 0, count: options.count, arrows: arrows, onStep: onStep) {
                 // The dot stays beside the value, as on Android
                 HStack(spacing: stage.px(12)) {
                     if let swatch = row.swatch {
@@ -715,8 +709,7 @@ private struct SettingSlider: View {
     }
 
     private func label(_ number: Int) -> String {
-        let text = number % divisor == 0 ? "\(number / divisor)" : String(format: "%.1f", locale: .current, Double(number) / Double(divisor))
-        return text + unit
+        SliderSpec(value: number, min: range.lowerBound, max: range.upperBound, step: step, divisor: divisor, unit: unit).label(number)
     }
 }
 
@@ -982,106 +975,31 @@ private struct BackgroundPreview: View {
     }
 }
 
-/// The values of a choice row to pick from (touch; Android issue #92): a card that opens at the row's value with the
-/// current value (checked and focused) over the row, kept under the status bar and above the bottom edge; a long list
-/// scrolls. A tap picks a value, a tap beside the card closes it. With a controller: up and down, A picks, B closes.
-struct ChoicePicker: View {
-    let title: String
-    let options: [String]
-    let selected: Int?
-    let focus: FocusModel
-    /// The row's frame in the screen.
-    let anchor: CGRect
-    let onPick: (Int) -> Void
-    let onClose: () -> Void
-    @Environment(\.delosColors) private var colors
+extension View {
+    /// A tap on this part of a row's value changes the row by itself (+1: a switch flips); the hit area is about 44 points. No
+    /// effect when [onStep] is nil, and on tvOS, which has no touch.
+    @ViewBuilder func touchStep(_ onStep: ((Int) -> Void)?) -> some View {
+        #if os(tvOS)
+        self
+        #else
+        if let onStep {
+            modifier(TouchStepArea(onStep: onStep))
+        } else {
+            self
+        }
+        #endif
+    }
+}
+
+private struct TouchStepArea: ViewModifier {
+    let onStep: (Int) -> Void
     @Environment(\.stage) private var stage
 
-    static func optionID(_ index: Int) -> String { "option-\(index)" }
-
-    /// The card's parts in stage pixels: its padding, the title line with its gap, an option and the gap between two.
-    private static let pad = 20.0, titleLine = 36.0, option = 64.0, gap = 4.0
-
-    var body: some View {
-        GeometryReader { proxy in
-            let top = stage.px(104 + stage.safe.top), bottom = proxy.size.height - stage.px(24 + stage.safe.bottom)
-            let chrome = stage.px(2 * Self.pad + Self.titleLine + 2 * Self.gap)
-            let list = min(stage.px(Double(options.count) * (Self.option + Self.gap)), max(bottom - top - chrome, stage.px(Self.option)))
-            let height = chrome + list
-            // The current value lies over the row
-            let current = stage.px(Self.pad + Self.titleLine + 2 * Self.gap + Double(selected ?? 0) * (Self.option + Self.gap) + Self.option / 2)
-            let y = min(max(anchor.midY - current, top), max(bottom - height, top))
-            let width = stage.px(560)
-            ZStack(alignment: .topLeading) {
-                Color.black.opacity(0.25)
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: onClose)
-                card(listHeight: list)
-                    .frame(width: width, height: height, alignment: .top)
-                    .offset(x: max(stage.px(24), anchor.maxX - width), y: y)
-            }
-        }
-        .transition(.opacity)
-    }
-
-    private func card(listHeight: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: stage.px(Self.gap)) {
-            Text(title)
-                .font(DelosFonts.figtree(stage.tpx(20), .semibold))
-                .foregroundStyle(colors.text3.color)
-                .lineLimit(1)
-                .padding(.horizontal, stage.px(24))
-                .frame(height: stage.px(Self.titleLine), alignment: .top)
-            ScrollViewReader { proxy in
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: stage.px(Self.gap)) {
-                        ForEach(Array(options.enumerated()), id: \.offset) { index, option in
-                            FocusItem(id: Self.optionID(index), model: focus, action: { onPick(index) }) { focused in
-                                optionView(option, current: index == selected, focused: focused)
-                            }
-                            .id(Self.optionID(index))
-                        }
-                    }
-                    .focusDrivenScroll()
-                }
-                .focusable(false)
-                .frame(height: listHeight)
-                .onAppear { proxy.scrollTo(Self.optionID(selected ?? 0)) }
-                .onChange(of: focus.focused) { _, now in if let now { proxy.scrollTo(now) } }
-            }
-        }
-        .padding(.vertical, stage.px(Self.pad))
-        .padding(.horizontal, stage.px(12))
-        .background {
-            // Opaque under the glass: the rows behind must not show through the values
-            RoundedRectangle(cornerRadius: stage.px(34)).fill(colors.bg2.color)
-                .overlay(RoundedRectangle(cornerRadius: stage.px(34)).fill(colors.surface3.color))
-                .overlay(RoundedRectangle(cornerRadius: stage.px(34)).strokeBorder(colors.line.color, lineWidth: stage.px(1)))
-                .shadow(color: .black.opacity(0.35), radius: stage.px(30), y: stage.px(20))
-        }
-    }
-
-    /// An option (`.menu-item` of the prototype): the focused one on a tint of the main color with a 3 px ring, the
-    /// current one with a check.
-    private func optionView(_ label: String, current: Bool, focused: Bool) -> some View {
-        HStack(spacing: stage.px(18)) {
-            Text(label)
-                .font(DelosFonts.figtree(stage.tpx(23), .semibold))
-                .foregroundStyle(colors.text.color)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if current {
-                SymbolView(symbol: Symbols.check, size: 30, color: focused ? colors.accent : colors.text2)
-            }
-        }
-        .padding(.leading, stage.px(24))
-        .padding(.trailing, stage.px(22))
-        .frame(height: stage.px(Self.option))
-        .background {
-            RoundedRectangle(cornerRadius: stage.px(28))
-                .fill(colors.accent.opacity(0.17).color)
-                .overlay(RoundedRectangle(cornerRadius: stage.px(28)).strokeBorder(colors.accent.color, lineWidth: stage.px(3)))
-                .opacity(focused ? 1 : 0)
-        }
+    func body(content: Content) -> some View {
+        content
+            .padding(stage.px(24))
+            .contentShape(Rectangle())
+            .onTapGesture { onStep(1) }
+            .padding(-stage.px(24))
     }
 }

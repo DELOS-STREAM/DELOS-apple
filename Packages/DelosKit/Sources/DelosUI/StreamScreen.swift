@@ -122,6 +122,14 @@ struct StreamScreen: View {
     ) -> Bool {
         switch controller.phase {
         case .streaming:
+            // The launch scene still opens over the picture: B and Escape cancel it, nothing else reaches the game or the menu
+            if controller.loaderCancellable {
+                if command == .back {
+                    feedback?.play(.back)
+                    Task { await controller.cancelLoader() }
+                }
+                return true
+            }
             let remoteMenu = fromRemote && (command == .options || (command == .back && !hasGamepad()))
             guard controller.menuOpen else {
                 if remoteMenu { controller.openMenu() }
@@ -156,7 +164,7 @@ struct StreamScreen: View {
         case .connecting:
             if command == .back {
                 feedback?.play(.back)
-                Task { await controller.leave(quit: false) }
+                Task { await controller.cancelLoader() }
             }
             return true
         case .leaving, .ended:
@@ -257,7 +265,10 @@ struct StreamContent: View {
                 }
             }
             if let director, director.isActive, launching {
-                LaunchLoader(director: director, card: card)
+                LaunchLoader(director: director, card: card, onCancel: {
+                    layers?.feedback?.play(.back)
+                    Task { await controller.cancelLoader() }
+                })
             }
             switch controller.phase {
             case .connecting:
@@ -308,6 +319,10 @@ struct StreamContent: View {
                     dockShown = false
                 }
             }
+        }
+        // The launch scene is over: the stream is the player's (input, touches and the menu come alive)
+        .onChange(of: director?.isActive) { _, active in
+            if active == false { controller.loaderEnded() }
         }
         .onChange(of: controller.phase) { old, phase in
             dockShown = controller.menuOpen

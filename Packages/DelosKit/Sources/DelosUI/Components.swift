@@ -217,6 +217,8 @@ struct ChoiceValue<Value: View>: View {
     let index: Int
     let count: Int
     let arrows: RGBA
+    /// A touch on an arrow (-1 left, +1 right) steps the choice by itself; nil: the arrows are only drawn.
+    var onStep: ((Int) -> Void)? = nil
     @ViewBuilder let value: () -> Value
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
@@ -248,7 +250,25 @@ struct ChoiceValue<Value: View>: View {
 
     private func chevron(_ symbol: String, side: Int) -> some View {
         let nudge = reduceMotion || direction != side ? 0 : Double(side) * stage.px(Motion.chevronBumpDistance)
-        return SymbolView(symbol: symbol, size: 30, color: arrows).modifier(ChevronBump(steps: steps, nudge: nudge))
+        let arrow = SymbolView(symbol: symbol, size: 30, color: arrows).modifier(ChevronBump(steps: steps, nudge: nudge))
+        return tappable(arrow, side: side)
+    }
+
+    /// The arrow takes its own tap with a hit area of about 44 points around the symbol (it does not change the layout).
+    @ViewBuilder private func tappable(_ arrow: some View, side: Int) -> some View {
+        #if os(tvOS)
+        arrow
+        #else
+        if let onStep {
+            arrow
+                .padding(stage.px(36))
+                .contentShape(Rectangle())
+                .onTapGesture { onStep(side) }
+                .padding(-stage.px(36))
+        } else {
+            arrow
+        }
+        #endif
     }
 }
 

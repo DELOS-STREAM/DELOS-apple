@@ -105,20 +105,77 @@ enum LaunchText {
 struct LaunchLoader: View {
     let director: LaunchDirector
     let card: LaunchCard
+    /// Cancels the launch (the persistent pill; B and Escape do the same through the screen). Nil: no pill.
+    var onCancel: (@MainActor () -> Void)?
+    @Environment(\.stage) private var stage
+
+    /// The pill's height: 64 stage pixels, at least 44 points for a finger.
+    private var pillHeight: CGFloat { max(stage.px(LaunchLook.cancelHeight), 44) }
+
+    /// How far the information moves up so that the pill under it does not touch it.
+    private var lift: CGFloat {
+        guard onCancel != nil else { return 0 }
+        let pillTop = stage.px(LaunchLook.cancelBottom + stage.safe.bottom) + pillHeight + stage.px(LaunchLook.cancelGap)
+        return max(0, pillTop - stage.px(LaunchLook.infoBottom + stage.safe.bottom))
+    }
 
     var body: some View {
-        TimelineView(.animation(paused: !director.isActive)) { _ in
-            let now = LaunchDirector.now()
-            LaunchScene(
-                card: card, line: director.line, progress: director.timeline.progress(at: now),
-                opening: director.timeline.opening(at: now), time: now - director.start, run: director.run,
-                reducedMotion: director.timeline.reducedMotion)
+        ZStack(alignment: .bottom) {
+            TimelineView(.animation(paused: !director.isActive)) { _ in
+                let now = LaunchDirector.now()
+                LaunchScene(
+                    card: card, line: director.line, progress: director.timeline.progress(at: now),
+                    opening: director.timeline.opening(at: now), time: now - director.start, run: director.run,
+                    reducedMotion: director.timeline.reducedMotion, lift: lift)
+            }
+            .allowsHitTesting(false)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(card.greeting)
+            .accessibilityValue(director.line ?? "")
+            #if !os(tvOS)
+            if let onCancel {
+                // A persistent pill, not one that a first tap reveals: the loader lasts seconds on a LAN, so a tap to reveal Cancel
+                // and another to press it would come too late. It fades with the information, as long as it can be pressed.
+                TimelineView(.animation(paused: !director.isActive)) { _ in
+                    let alpha = LaunchLook.infoAlpha(opening: director.timeline.opening(at: LaunchDirector.now()))
+                    LaunchCancelPill(height: pillHeight, action: onCancel)
+                        .opacity(alpha)
+                        .allowsHitTesting(alpha > 0.5)
+                }
+                .padding(.bottom, stage.px(LaunchLook.cancelBottom + stage.safe.bottom))
+            }
+            #endif
         }
         .ignoresSafeArea()
-        .allowsHitTesting(false)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(card.greeting)
-        .accessibilityValue(director.line ?? "")
+    }
+}
+
+/// The Cancel pill of the launch scene (the look of ``PillButton``'s glass pill): a close icon and "Cancel".
+struct LaunchCancelPill: View {
+    let height: CGFloat
+    let action: @MainActor () -> Void
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: stage.px(12)) {
+                SymbolView(symbol: Symbols.close, size: 30, color: colors.text)
+                Text(L("common_cancel"))
+                    .font(DelosFonts.figtree(stage.tpx(24), .semibold))
+                    .foregroundStyle(colors.text.color)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, stage.px(28))
+            .frame(height: height)
+            .background {
+                GlassShape(Capsule(), tint: colors.surface)
+                    .overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
+            }
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(L("common_cancel"))
     }
 }
 
@@ -132,6 +189,8 @@ struct LaunchScene: View {
     let time: Double
     let run: LaunchTunnelRun
     let reducedMotion: Bool
+    /// How far the information is lifted (the Cancel pill is under it), points.
+    var lift: CGFloat = 0
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
 
@@ -194,7 +253,7 @@ struct LaunchScene: View {
                 .padding(.top, stage.px(12))
         }
         .frame(width: stage.px(LaunchLook.infoWidth))
-        .padding(.bottom, stage.px(LaunchLook.infoBottom + stage.safe.bottom))
+        .padding(.bottom, stage.px(LaunchLook.infoBottom + stage.safe.bottom) + lift)
         .opacity(LaunchLook.infoAlpha(opening: opening))
     }
 

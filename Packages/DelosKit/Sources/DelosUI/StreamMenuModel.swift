@@ -126,6 +126,17 @@ enum StreamMenuNavigation {
         page == .main ? nil : PageExit(page: .main, focusTile: page.barItem, focusRow: nil)
     }
 
+    /// What a tap outside the menu's dock and popover does: with a popover open, the popover closes first; with none, the menu
+    /// itself closes. Either way the tap is the menu's: it never quits, and never reaches the game.
+    enum OutsideTap: Equatable, Sendable {
+        case dismissPopover(PageExit)
+        case closeMenu
+    }
+
+    static func afterOutsideTap(_ page: MenuPage) -> OutsideTap {
+        afterDismiss(page).map(OutsideTap.dismissPopover) ?? .closeMenu
+    }
+
     /// The tile to press while a popover is open: nothing for a tile without a page (it is dimmed and does nothing).
     static func tileWorks(opensPage: Bool, popoverOpen: Bool) -> Bool { !popoverOpen || opensPage }
 
@@ -174,8 +185,8 @@ enum StreamMenuLayout {
     static let popoverGapAfterHead = 12.0
     static let popoverHelpGap = 18.0
     static let popoverTitle = 30.0
-    static let caretWidth = 60.0
-    static let caretHeight = 24.0
+    static let caretWidth = CardCaret.width
+    static let caretHeight = CardCaret.depth
     /// The popover's box ends here above the stage's bottom: the card's bottom 734, the caret's tip about 13 above the
     /// sunk tile's ring.
     static let popoverBottom = 322.0

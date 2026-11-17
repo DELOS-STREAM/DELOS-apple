@@ -90,8 +90,9 @@ Android (after 500 ms, every 50 ms); the handler gets the number of the repeat (
 settings use to speed up a slider and to stop a held Up at the first row.
 `FocusItem` wraps a view for both engines.
 A `FocusItem` can name where a direction leads instead of the nearest item (`moves`): the avatar grid continues a
-row's end in the next row. Its `tap` is what a touch does when it is not what A does (a settings row's choice opens its
-list on a tap, A steps it); a tap always focuses the item first.
+row's end in the next row. Its `tap` is what a touch does when it is not what A does; it gets whether the item had the focus
+before the tap (a settings row's first tap only focuses it, the second changes it, `RowTouch`); a tap always focuses the item
+first.
 
 ## Navigation
 
@@ -357,6 +358,15 @@ that talk to the PC and the core are behind the `StreamSteps` protocol, so the t
 | Stream | `connectionStarted`: the video shows, `GameInput` starts; rumble events go to the controllers. A termination shows the result overlay (`StreamText.termination`, Android's `describeStreamFailure`); a graceful end goes back (without Android's toast "The PC ended the stream" yet) |
 | Leave | Disconnect stops the session (the app keeps running on the PC); Quit app also asks the PC to quit it (`cancel`), and a refusal shows "The PC did not quit …". Leaving the screen any other way disconnects. From the stream menu the exit scene plays first (below) |
 
+### Cancelling the loader
+
+B, Escape and the persistent Cancel pill of the launch scene (`LaunchCancelPill`, 64 px, at least 44 points, under the information)
+cancel the loader at any moment: while the PC is asked and the core connects, and while the scene still opens over the running
+picture (`LoaderCancel`: connecting, opening, cancelled, gone; one cancel per attempt, `StreamController.cancelLoader`). It ends only this
+client's attempt and goes back to the library: the game is never quit on the PC (`LoaderCancel.plan`), no result overlay shows.
+While the scene opens, `GameInput` is paused and touches are not the trackpad's or the menu swipe's; the scene reports its end
+(`loaderEnded`) and the stream is the player's.
+
 ### The launch scene
 
 While a stream connects and opens, `LaunchLoader` lies over the screen (`LaunchOverlay` and `LoaderScene` of Android, the
@@ -451,14 +461,14 @@ Return, Tab and Backspace as keys; `VideoHostView` is its first responder, it co
 when the menu opens again or the stream stops running; the keys of an iPad's hardware keyboard go to the PC through
 GameController alone, so the keyboard does not type them a second time), Overlay (statistics), Brightness (iPhone and iPad: the screen's brightness for the
 length of the stream, given back when it ends or the app leaves the screen), More, Disconnect and Quit app. Brightness and
-More open a popover (`StreamPopover.swift`): a frosted card above the tile that opened it with a 60 x 24 caret in one
+More open a popover (`StreamPopover.swift`): a frosted card above the tile that opened it with the shared caret (`CardCaret`, 60 x 24) in one
 outline, a header with a back circle and the title, 72 px rows on one gliding plate (a slider takes left and right, a held
 key steps it faster), and under the rows the help of the focused row. The dock sinks 160 px and dims while it is open, the
 card grows from .86 around the caret's tip, and another tile's page morphs the card (x, width, caret and height follow
 their targets with a spring). More holds Send keys (Android's fourteen built-in combinations as pills), Commands (the PC's
 server commands, asked from the host in the background when the stream starts) and Task manager (Ctrl + Shift + Esc). B
-goes from a page to the row or tile that opened it and then resumes; a tap outside the popover closes it and never
-resumes the stream; the popover has a focus of its own and the dock's tile that opened it keeps its look. The model is
+goes from a page to the row or tile that opened it and then resumes; a tap outside the dock closes the popover first and then
+the menu (`StreamController.tapOutside`), never quits and never sends a click to the game; the popover has a focus of its own and the dock's tile that opened it keeps its look. The model is
 `StreamMenuModel.swift` (tiles, pages, popover geometry), the state `StreamMenuState.swift` and `StreamController`.
 
 Left out of Android's menu, because the platform has no such action: Bitrate (the core cannot change the bitrate of a
@@ -472,7 +482,9 @@ It opens as in DELOS for Android by default: L3 + R3 held together (`MenuShortcu
 button that completes the shortcut is kept from the PC, the menu opens when both are let go), or a swipe from the
 left edge of the touch screen (`MenuSwipe`: a touch starting in the left 4 % belongs to the swipe and does not reach
 the PC; 12 % of the width to the right opens the menu). Android swipes up from the bottom edge, but on iPhone and iPad
-that edge belongs to the system's home gesture. A hardware keyboard opens it with Control + Option + Shift + M or by
+that edge belongs to the system's home gesture (Android's swipe up had to start above the system's gesture strip at the edge;
+here the swipe is on the left edge, which has no system gesture in a full-screen app, and `defersSystemGestures` keeps the
+home indicator's swipe from firing on the first touch, so there is no edge conflict to move away from). A hardware keyboard opens it with Control + Option + Shift + M or by
 holding Escape for a second (`MenuKeyShortcut`, [the Mac app](#the-mac-app)).
 While it is open, `GameInput` sends nothing and releases every held button, key and mouse button at the PC.
 When the app goes to the background during a stream, iOS suspends it and the connection would break; the stream is
@@ -683,7 +695,7 @@ menu's bitrate), the summary of the catalog or no value line is used instead.
 | Left, right | Change the focused row's value and never leave the row: the previous or next choice (wrapping), a slider's step, faster while held (`sliderAcceleration` of Android) |
 | A | The next choice, a slider's next step, a switch flips (Android's `activate`) |
 | L1, R1 | The previous or next tab (the tabs are never focused, as on Android) |
-| Tap | Focuses the row, so the panel shows its help; a switch also flips, a choice opens the list of its values (`ChoicePicker`: a glass card at the row's right end, the current value checked; a tap picks, a tap beside it closes it; up, down, A and B work in it too), a slider waits for its track (a tap or a drag sets the value when the finger lifts). A tab is tapped to select it |
+| Tap | The first tap focuses the row, so the panel shows its help; a tap on the focused row changes it (`RowTouch.of`): a switch flips, a choice opens its options and a slider its popover (below); a row that opens something (a screen, a dialog, the system Settings) opens on the first tap. A switch and the arrows of a choice take their own taps (the row is focused too, the value changes at once). An unavailable row plays the error cue. A tab is tapped to select it |
 
 **Appearance** (`AppearanceForm`, the native rows of Android's `nativeSettings`): the Appearance tab has Theme (Dark,
 Light), Color palette (all eight; the value shows a dot of the palette's main hue, `hsl(accent, 90, 60)`, and the panel
@@ -1261,3 +1273,19 @@ has no such setting; both are in `Config/Info.plist`, which Xcode merges with th
   and Wake-on-LAN and pairing from the sandbox. The window, the screens, the start of the sandboxed ad-hoc signed
   app and its discovery and keychain calls were tried (above), nothing that needs a PC or a keyboard. The battery
   was read only as far as the parsing of a power source description goes: the test Mac has no internal battery.
+
+## Popovers of settings rows
+
+A tap on the focused choice or slider row opens a popover (`RowPopover`, Android's `RowPicker`, issue #92): the stream menu's glass
+card (`PopoverGlass`, with a real blur of what is behind it) in one outline with the shared caret (`CardCaret`, the same for the
+context menus, the stream menu's popover and these; 60 x 24 stage px, exact numbers in Android's MENUS_AND_SETTINGS.md 3.1.1).
+`RowPopoverLayout` (pure, tested) places it as Android does: vertically centered on the row and clamped inside the stage (24 px at
+the sides and the bottom, 104 under the top), the caret on the card's left edge pointing left into the row, its tip 360 px from the
+row's right edge (further left as far as the card needs to end 24 px before the stage's edge, at most to 120 px inside the row's left
+end), the card to its right; only without room there it flips (caret on the right edge, tip 120 px inside the row's right edge, card to
+the left), and when neither side has room it is narrowed. The options card is 560 px wide (the current value checked, a long list
+scrolls); the slider card 1040 x 300 with 96 px ◀ ▶ buttons (a hold repeats after 380 ms every 55 ms, faster the longer it is held), a
+96 px track and an 88 px field with the number (52) and unit (32) that opens the system keyboard (`SliderSpec.parse`: digits and one
+separator, Mbit/s for the bitrate, rounded to the grid and clamped; text that is no number is dropped with the error cue). The
+controller keeps its behavior: left and right step the row; in the open popover up, down and A work the options, left and right the
+slider, B closes it. Not verified on a device: the look, the keyboard lifting the card, a hold on the buttons.

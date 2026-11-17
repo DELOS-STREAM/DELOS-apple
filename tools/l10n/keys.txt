@@ -361,6 +361,9 @@ settings_game_summary
 settings_tab_display
 row_reset_to_profile
 row_reset
+row_slider_decrease
+row_slider_increase
+row_slider_enter_value
 
 # Toasts and dialogs
 toast_kind_info
