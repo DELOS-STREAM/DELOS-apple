@@ -4,8 +4,9 @@ import ImageIO
 import Observation
 import SwiftUI
 
-/// Art of a game (`GameArt` of DELOS for Android): the two hues and the icon of its procedural placeholder, and the
-/// [image] of its game background once loaded (the SteamGridDB hero, else its cover, else the PC's box art).
+/// Art of a game (`GameArt` of DELOS for Android): the two hues and the icon of its procedural placeholder, the [image] of
+/// its game background once loaded (the SteamGridDB hero, else its cover, else the PC's box art) and, when that is a
+/// SteamGridDB hero that is an animation, the [animation] that plays over it.
 struct GameArt: Equatable {
     /// "host/app".
     let id: String
@@ -13,19 +14,21 @@ struct GameArt: Equatable {
     let hue2: Double
     let icon: String
     var image: CGImage?
+    var animation: AnimatedSource?
 
     static func == (a: GameArt, b: GameArt) -> Bool {
-        a.id == b.id && a.image.map(ObjectIdentifier.init) == b.image.map(ObjectIdentifier.init)
+        a.id == b.id && a.image.map(ObjectIdentifier.init) == b.image.map(ObjectIdentifier.init) && a.animation == b.animation
     }
 
     /// The placeholder's hues from the app's name (`appArt`: Java's `String.hashCode`, so both apps pick the same).
-    init(hostID: String, app: HostApp, image: CGImage? = nil) {
+    init(hostID: String, app: HostApp, image: CGImage? = nil, animation: AnimatedSource? = nil) {
         id = Self.key(hostID, app.id)
         let hue = Double(Int(Self.javaHash(app.title) & 0x7fff_ffff) % 360)
         self.hue = hue
         hue2 = (hue + 35).truncatingRemainder(dividingBy: 360)
         icon = Self.builtInIcon(app) ?? Symbols.sportsEsports
         self.image = image
+        self.animation = animation
     }
 
     /// The placeholder's icon of DELOS's own entries (`appArt`), nil for a game.
@@ -55,6 +58,8 @@ final class HomeArt {
     @ObservationIgnored let artwork: ArtworkStore
     @ObservationIgnored private var images = MemoryCache<CGImage>(imageBytes: 96 * 1024 * 1024)
     @ObservationIgnored private var renders = MemoryCache<CGImage>(imageBytes: 64 * 1024 * 1024)
+    /// What ``animation(hostID:app:kind:)`` found, by image and artwork version (an entry may be nil: a still image).
+    @ObservationIgnored private var animations = MemoryCache<AnimatedSource?>(costLimit: 512) { _ in 1 }
     /// The image each game's cover colors were taken from.
     @ObservationIgnored private var coverSources: [String: ObjectIdentifier] = [:]
 
@@ -130,6 +135,17 @@ final class HomeArt {
     }
 
     func cachedBoxArt(hostID: String, appID: Int) -> CGImage? { images["box/\(hostID)/\(appID)"] }
+
+    /// The SteamGridDB image of [kind] when it is an animation that plays (its still first frame is ``image(hostID:appID:kind:)``),
+    /// nil for a still image, none, or DELOS's own entries (`rememberAnimatedArtwork`). The answer is kept per artwork version.
+    func animation(hostID: String, app: HostApp, kind: ArtKind) async -> AnimatedSource? {
+        guard BundledArtwork.kind(app) == nil, artwork.enabled else { return nil }
+        let key = "sgdb/\(hostID)/\(app.id)/\(kind.rawValue)#\(artwork.version)"
+        if let known = animations[key] { return known }
+        let source = await artwork.animation(hostID: hostID, appID: app.id, kind: kind).map { AnimatedSource(key: key, data: $0) }
+        animations[key] = .some(source)
+        return source
+    }
 
     /// Decodes an image no larger than [maxPixels] on its longer side, off the main thread.
     nonisolated static func decode(_ data: Data, maxPixels: Int) async -> CGImage? {

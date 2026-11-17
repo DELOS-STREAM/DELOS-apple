@@ -297,6 +297,7 @@ private struct ArtworkContent: View, Equatable {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .modifier(SheetModalFocus(model: model))
+        .modifier(ArtworkArtMotion(model: model))
         .task { await model.lookup { error in report(error) } }
         .task(id: model.loadKey) { await model.load() }
         .task(id: actions.artwork.version) { await model.refresh() }
@@ -439,6 +440,23 @@ private struct SheetModalFocus: ViewModifier {
 
     func body(content: Content) -> some View {
         content.environment(\.modalFocus, model.sheetOpen ? model.sheetFocus : nil)
+    }
+}
+
+/// Whether the animated choices play (`AnimatedPlayback.shouldPlay` on the Artwork screen): nothing covers the screen (the
+/// filter sheet, a layer, the side menu, the portal) and motion is not reduced; each tile adds whether it is on screen. Its
+/// own modifier, so the screen's body does not read ``ArtworkModel/sheetOpen``.
+private struct ArtworkArtMotion: ViewModifier {
+    let model: ArtworkModel
+    @Environment(Layers.self) private var layers
+    @Environment(\.shellCoversArt) private var shellCoversArt
+    @Environment(\.reducedMotion) private var reducedMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+
+    func body(content: Content) -> some View {
+        content.environment(\.artMotion, AnimatedPlayback.shouldPlay(
+            visible: !model.sheetOpen && !layers.isOpen && !shellCoversArt, foreground: true, streaming: false,
+            reducedMotion: reducedMotion, systemReduceMotion: systemReduceMotion))
     }
 }
 
@@ -818,14 +836,22 @@ struct ArtworkTileView: View, Equatable {
     @Environment(\.stage) private var stage
     @Environment(HomeArt.self) private var art
     @Environment(HostStore.self) private var hosts
+    @Environment(\.artMotion) private var artMotion
     @State private var picture: CGImage?
     @State private var visible = false
+    /// The animation has faded in over the thumbnail: the still under it is hidden.
+    @State private var animating = false
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: stage.px(20))
         ZStack(alignment: .topLeading) {
             shape.fill(colors.surface2.color)
             content
+                .opacity(animating ? 0 : 1)
+            if let image, image.animated {
+                ArtworkTileAnimation(image: image, logo: tab == .logo, playing: artMotion && visible, covering: $animating)
+                    .frame(width: stage.px(width), height: stage.px(height))
+            }
             if image == nil {
                 Text(tab == .logo ? L("artwork_first_name_only") : L("artwork_first_from_pc"))
                     .font(DelosFonts.figtree(stage.tpx(18), .semibold))
@@ -920,6 +946,63 @@ struct ArtworkTileView: View, Equatable {
             picture = await art.thumbnail(image)
         } else if tab != .logo {
             picture = await art.boxArt(hostID: hostID, appID: app.id, hosts: hosts)
+        }
+    }
+}
+
+/// The playing animation of an animated choice over its first frame (`AnimatedTileLayer`): its animated thumbnail (else the
+/// full file) is fetched the first time the tile may play, kept in the cache, decoded at tile size while [playing] and
+/// released when it stops; a bar shows how far the download is meanwhile. A logo plays whole, with the still's air round it.
+private struct ArtworkTileAnimation: View {
+    let image: SteamGridDBImage
+    let logo: Bool
+    let playing: Bool
+    @Binding var covering: Bool
+    @Environment(HomeArt.self) private var art
+    @Environment(\.stage) private var stage
+    @State private var source: AnimatedSource?
+
+    var body: some View {
+        let store = art.artwork
+        ZStack {
+            AnimatedArtLayer(source: source, playing: playing, width: AnimatedPlayback.tileWidth, fit: logo, covering: $covering)
+                .padding(logo ? stage.px(18) : 0)
+            // The animation is a whole file: how far it is shows while it downloads
+            if source == nil, playing, !store.hasNoAnimation(image) {
+                TileDownloadBar(progress: store.animationProgress[image.previewURL])
+            }
+        }
+        .task(id: playing) {
+            guard source == nil, playing, !store.hasNoAnimation(image) else { return }
+            if let data = await store.animation(of: image) { source = AnimatedSource(key: "choice/\(image.id)", data: data) }
+        }
+    }
+}
+
+/// A slim bar at the foot of a tile: [progress] of its download, a small spinner while the size is not known yet.
+private struct TileDownloadBar: View {
+    let progress: Double?
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+
+    var body: some View {
+        if let progress {
+            GeometryReader { proxy in
+                Capsule()
+                    .fill(colors.accent.color)
+                    .frame(width: proxy.size.width * max(progress, 0.04))
+                    .animation(Motion.fadeIn, value: progress)
+            }
+            .frame(height: stage.px(8))
+            .background(Capsule().fill(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0x99 / 255)))
+            .clipShape(Capsule())
+            .padding(.horizontal, stage.px(16))
+            .padding(.vertical, stage.px(14))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        } else {
+            RingSpinner(size: 26)
+                .padding(stage.px(12))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         }
     }
 }

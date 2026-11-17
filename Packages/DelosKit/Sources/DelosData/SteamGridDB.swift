@@ -95,8 +95,9 @@ public struct SteamGridDB: Sendable {
 
     let key: String
     let transport: Transport
-    /// Fetches a file and stops reading once it is larger than the limit (the second argument).
-    typealias Downloader = @Sendable (URLRequest, Int64) async throws -> (Data, HTTPURLResponse)
+    /// Fetches a file and stops reading once it is larger than the limit (the second argument), telling how far it is
+    /// (0…1, only when the reply announces its length) to the third.
+    typealias Downloader = @Sendable (URLRequest, Int64, (@Sendable (Double) -> Void)?) async throws -> (Data, HTTPURLResponse)
     let downloader: Downloader
 
     /// - Parameter transport: replaces the network for the API and the downloads (tests); nil uses URLSession, and
@@ -105,7 +106,7 @@ public struct SteamGridDB: Sendable {
         self.key = key
         self.transport = transport ?? SteamGridDB.urlSession
         if let transport {
-            downloader = { request, _ in try await transport(request) }
+            downloader = { request, _, _ in try await transport(request) }
         } else {
             downloader = SteamGridDB.boundedDownload
         }
@@ -121,14 +122,15 @@ public struct SteamGridDB: Sendable {
     }
 
     /// A download that is refused as soon as the announced length, or the bytes read so far, pass [limit]: a huge
-    /// reply is never held whole. A reply that is not 2xx is not read.
-    static let boundedDownload: Downloader = { request, limit in
+    /// reply is never held whole. A reply that is not 2xx is not read. [progress] hears the share read after every 64 KB.
+    static let boundedDownload: Downloader = { request, limit, progress in
         var request = request
         request.timeoutInterval = 30
         let (bytes, response) = try await URLSession.shared.bytes(for: request)
         guard let http = response as? HTTPURLResponse else { throw SteamGridDBError.badReply }
         guard (200..<300).contains(http.statusCode) else { return (Data(), http) }
         guard response.expectedContentLength <= limit else { throw SteamGridDBError.imageTooLarge }
+        let total = response.expectedContentLength
         var data = Data()
         var chunk = [UInt8]()
         chunk.reserveCapacity(64 * 1024)
@@ -138,6 +140,7 @@ public struct SteamGridDB: Sendable {
                 data.append(contentsOf: chunk)
                 chunk.removeAll(keepingCapacity: true)
                 guard Int64(data.count) <= limit else { throw SteamGridDBError.imageTooLarge }
+                if total > 0 { progress?(min(Double(data.count) / Double(total), 1)) }
             }
         }
         data.append(contentsOf: chunk)
@@ -207,10 +210,10 @@ public struct SteamGridDB: Sendable {
         return ArtFilterRules.sort(ArtFilterRules.merge(lists), filters.sort)
     }
 
-    /// The file at [url], at most [limit] bytes.
-    public func download(_ url: URL, limit: Int64) async throws -> Data {
+    /// The file at [url], at most [limit] bytes; [progress] hears how far the download is (0…1) when its length is known.
+    public func download(_ url: URL, limit: Int64, progress: (@Sendable (Double) -> Void)? = nil) async throws -> Data {
         guard url.scheme == "https" else { throw SteamGridDBError.insecureURL }
-        let (data, response) = try await downloader(URLRequest(url: url), limit)
+        let (data, response) = try await downloader(URLRequest(url: url), limit, progress)
         guard (200..<300).contains(response.statusCode) else { throw SteamGridDBError.downloadHTTP(response.statusCode) }
         guard Int64(data.count) <= limit else { throw SteamGridDBError.imageTooLarge }
         return data

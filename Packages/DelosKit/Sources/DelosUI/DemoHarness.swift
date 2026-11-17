@@ -161,7 +161,13 @@ enum DemoHarness {
     static let transport: SteamGridDB.Transport = { request in
         let url = request.url!
         let ok = { (data: Data) in (data, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!) }
-        if url.host() == "cdn.example" { return ok(png(seed: Int(url.lastPathComponent.split(separator: ".")[0]) ?? 1, kind: url.pathComponents[1])) }
+        if url.host() == "cdn.example" {
+            let seed = Int(url.lastPathComponent.split(separator: ".")[0]) ?? 1
+            let kind = url.pathComponents[1]
+            // The animated choices, and every image of about a third of the games (so the library plays some), are APNGs
+            let animated = url.pathExtension == "apng" || (seed / 100) % 3 == 0
+            return ok(animated ? apng(seed: seed, kind: kind) : png(seed: seed, kind: kind))
+        }
         let path = String(url.path().dropFirst("/api/v2/".count))
         let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         func param(_ name: String) -> String? { query.first { $0.name == name }?.value }
@@ -183,12 +189,23 @@ enum DemoHarness {
             if let wanted = param("dimensions"), !wanted.split(separator: ",").contains(Substring(size)) { continue }
             let gid = game * 100 + id + (animated ? 1000 : 0)
             let parts = size.split(separator: "x")
-            list.append(#"{"id":\#(gid),"url":"https://cdn.example/\#(kind)/\#(gid).png","thumb":"https://cdn.example/\#(kind)/\#(gid).png","width":\#(parts[0]),"height":\#(parts[1]),"style":"\#(style)","score":\#(id * 3 % 40),"author":{"name":"Author \#(id % 7)"},"date":\#(1_700_000_000 + id * 86400),"mime":"\#(animated ? "image/webp" : "image/png")"}"#)
+            let file = "\(gid).\(animated ? "apng" : "png")"
+            list.append(#"{"id":\#(gid),"url":"https://cdn.example/\#(kind)/\#(file)","thumb":"https://cdn.example/\#(kind)/\#(file)","width":\#(parts[0]),"height":\#(parts[1]),"style":"\#(style)","score":\#(id * 3 % 40),"author":{"name":"Author \#(id % 7)"},"date":\#(1_700_000_000 + id * 86400),"mime":"image/png"}"#)
         }
         return ok(Data(#"{"success":true,"data":[\#(list.joined(separator: ","))]}"#.utf8))
     }
 
     static func png(seed: Int, kind: String) -> Data {
+        encode([frame(seed: seed, kind: kind, phase: 0.25)], type: .png, delay: nil)
+    }
+
+    /// An animated PNG of 16 frames, 120 ms each (a 1.92 s loop, long enough for a game background's cross-faded loop): the
+    /// light circle of ``png(seed:kind:)`` travels across the picture.
+    static func apng(seed: Int, kind: String) -> Data {
+        encode((0..<16).map { frame(seed: seed, kind: kind, phase: Double($0) / 16) }, type: .png, delay: 0.12)
+    }
+
+    private static func frame(seed: Int, kind: String, phase: Double) -> CGImage {
         let (w, h) = kind == "hero" ? (960, 310) : kind == "logo" ? (500, 250) : (400, 600)
         let space = CGColorSpaceCreateDeviceRGB()
         let context = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: space,
@@ -200,11 +217,21 @@ enum DemoHarness {
         let gradient = CGGradient(colorsSpace: space, colors: [color(hue, 0.9), color((hue + 0.3).truncatingRemainder(dividingBy: 1), 0.5)] as CFArray, locations: nil)!
         context.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: w, y: h), options: [])
         context.setFillColor(CGColor(gray: 1, alpha: 0.35))
-        context.fillEllipse(in: CGRect(x: w / 4, y: h / 4, width: min(w, h) / 2, height: min(w, h) / 2))
-        let image = context.makeImage()!
+        let size = min(w, h) / 2
+        context.fillEllipse(in: CGRect(x: Double(w - size) * phase, y: Double(h) / 4, width: Double(size), height: Double(size)))
+        return context.makeImage()!
+    }
+
+    private static func encode(_ frames: [CGImage], type: UTType, delay: Double?) -> Data {
         let out = NSMutableData()
-        let destination = CGImageDestinationCreateWithData(out, UTType.png.identifier as CFString, 1, nil)!
-        CGImageDestinationAddImage(destination, image, nil)
+        let destination = CGImageDestinationCreateWithData(out, type.identifier as CFString, frames.count, nil)!
+        if delay != nil {
+            CGImageDestinationSetProperties(destination, [kCGImagePropertyPNGDictionary: [kCGImagePropertyAPNGLoopCount: 0]] as CFDictionary)
+        }
+        for frame in frames {
+            let properties = delay.map { [kCGImagePropertyPNGDictionary: [kCGImagePropertyAPNGDelayTime: $0]] as CFDictionary }
+            CGImageDestinationAddImage(destination, frame, properties)
+        }
         CGImageDestinationFinalize(destination)
         return out as Data
     }

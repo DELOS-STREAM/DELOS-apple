@@ -207,7 +207,8 @@ public struct DelosRoot: View {
                     // The library's filter sheet is a layer of Android's shell: its scrim covers the bar too (the screen is raised
                     // while the sheet is open) and the backdrop and the bar blur under it like the screen does
                     if !videoCoversBackdrop {
-                        ShellBackdrop(appearance: appearance, showsLibrary: showsLibrary)
+                        // An animated game background pauses while the portal into a PC is up (`animate`)
+                        ShellBackdrop(appearance: appearance, showsLibrary: showsLibrary, animate: actions.connection.portal == nil)
                             .modifier(LayerBackdropBlur(active: librarySheetOpen))
                     }
                     let entry = navigator.stack[navigator.stack.count - 1]
@@ -288,6 +289,7 @@ public struct DelosRoot: View {
         #endif
         .environment(\.delosColors, colors)
         .environment(\.reducedMotion, systemReduceMotion || appearance.reducedMotion)
+        .environment(\.shellCoversArt, sideMenu != nil || actions.connection.portal != nil)
         .environment(\.matchGameColors, appearance.matchGameColors)
         .onChange(of: systemReduceMotion || appearance.reducedMotion, initial: true) { _, now in actions.connection.reducedMotion = now }
         .preferredColorScheme(colors.dark ? .dark : .light)

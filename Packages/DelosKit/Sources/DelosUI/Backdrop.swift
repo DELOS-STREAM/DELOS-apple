@@ -3,14 +3,16 @@ import SwiftUI
 
 /// The backdrop of the root: the game background shows only behind the library (`ShellBackdrop`'s heroShown). It reads the
 /// focused game's background itself, so a new one (140 ms after every step of the library's focus) redraws the backdrop
-/// alone, not the root and every screen and bar under it while the row of covers is still moving.
+/// alone, not the root and every screen and bar under it while the row of covers is still moving. [animate]: an animated
+/// game background may play (no portal into a PC is up).
 struct ShellBackdrop: View {
     let appearance: Appearance
     let showsLibrary: Bool
+    var animate = true
     @Environment(HomeArt.self) private var art
 
     var body: some View {
-        Backdrop(appearance: appearance, hero: showsLibrary ? art.hero : nil)
+        Backdrop(appearance: appearance, hero: showsLibrary ? art.hero : nil, animate: animate)
     }
 }
 
@@ -24,6 +26,8 @@ struct Backdrop: View {
     let appearance: Appearance
     /// The game background to show (the library's focused game), nil elsewhere.
     var hero: GameArt?
+    /// An animated game background may play.
+    var animate = true
     @Environment(\.delosColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(HomeArt.self) private var art
@@ -40,7 +44,8 @@ struct Backdrop: View {
         // makes the backdrop, and the screens over it, larger than the window
         colors.bg.color
             .overlay {
-                HeroLayer(art: heroOn ? hero : nil, blur: appearance.heroBlur, reduced: appearance.reducedMotion || systemReduceMotion)
+                HeroLayer(art: heroOn ? hero : nil, blur: appearance.heroBlur, reduced: appearance.reducedMotion || systemReduceMotion,
+                          animate: animate && heroOn)
                     .opacity(heroOn ? Double(appearance.heroOpacity) / 100 : 0)
                     .animation(Motion.fastOutSlowIn(800), value: heroOn)
             }
@@ -219,12 +224,13 @@ private struct HeroLayer: View {
     let art: GameArt?
     let blur: Int
     let reduced: Bool
+    let animate: Bool
 
     var body: some View {
         ZStack {
             if let art {
-                HeroArt(art: art, blur: blur, reduced: reduced)
-                    .id(art.id + (art.image.map { "\(ObjectIdentifier($0).hashValue)" } ?? "-"))
+                HeroArt(art: art, blur: blur, reduced: reduced, animate: animate)
+                    .id(art.id + (art.image.map { "\(ObjectIdentifier($0).hashValue)" } ?? "-") + (art.animation?.key ?? ""))
                     .transition(.opacity)
             }
         }
@@ -232,28 +238,48 @@ private struct HeroLayer: View {
     }
 }
 
-/// One game's background (`HeroArt`, the still path): the rendered picture over the hero area, centred on the screen
-/// and tilted by the slow orbit; a game without an image shows its placeholder art, unblurred and still. Animated heroes
-/// are not played.
+/// One game's background (`HeroArt`): the rendered picture over the hero area, centred on the screen and tilted by the
+/// slow orbit; a game without an image shows its placeholder art, unblurred and still. An animated hero plays over its
+/// still first frame (``HeroLive``) once the game has stayed focused for ``AnimatedPlayback/heroDwell``, while [animate]
+/// allows it and motion is not reduced. When it stops while the hero stays (a portal opens, motion is reduced) it is held,
+/// paused on the frame it showed, and released after ``AnimatedPlayback/heroHold`` (the still first frame shows again).
 private struct HeroArt: View {
     let art: GameArt
     let blur: Int
     let reduced: Bool
+    let animate: Bool
     @Environment(HomeArt.self) private var homeArt
     @Environment(\.stage) private var stage
     @State private var rendered: CGImage?
+    @State private var dwelled = false
+    /// The animation is decoded and drawn.
+    @State private var live = false
+    @State private var released = false
+    /// The still under a shown animation fades out, and then leaves.
+    @State private var stillAlpha = 1.0
+    @State private var stillGone = false
 
     var body: some View {
         let area = HeroArea.of(stageWidth: stage.width, stageHeight: stage.height)
+        let playing = art.image != nil && art.animation != nil && !reduced
+            && AnimatedPlayback.heroMayPlay(animate: animate, dwelledMillis: dwelled ? AnimatedPlayback.heroDwell : 0)
+        let held = live && !playing && !released && (!animate || reduced)
+        // Decided in the update that adds or removes the animation, so the hero is never without both
+        let liveOn = playing || held
+        let liveShown = live && liveOn
         Color.clear
             .overlay {
                 if art.image != nil {
-                    if let image = rendered ?? homeArt.cachedBackground(art, blur: blur, area: area) {
+                    if !(liveShown && stillGone), let image = rendered ?? homeArt.cachedBackground(art, blur: blur, area: area) {
                         Image(decorative: image, scale: 1)
                             .resizable()
                             .interpolation(.medium)
                             .frame(width: stage.px(area.width), height: stage.px(area.height))
                             .modifier(HeroTilt(reduced: reduced))
+                            .opacity(liveShown ? stillAlpha : 1)
+                    }
+                    if liveOn, let image = art.image, let animation = art.animation {
+                        HeroLive(still: image, animation: animation, blur: blur, area: area, reduced: reduced, play: playing) { live = $0 }
                     }
                 } else {
                     PlaceholderArt(hue: art.hue, hue2: art.hue2, icon: art.icon, glyphSize: 1050, glyphRight: 84, glyphTop: -0.14, glyphAlpha: 0.14)
@@ -273,6 +299,101 @@ private struct HeroArt: View {
             .task(id: "\(blur)/\(area.width)x\(area.height)") {
                 rendered = await homeArt.background(art, blur: blur, area: area)
             }
+            // The animation starts only after the game has stayed in focus for a moment, so holding or tapping the D-pad does not
+            // create and drop a decoder per step; losing the focus ends it at once
+            .task(id: animate) {
+                dwelled = false
+                guard animate else { return }
+                try? await Task.sleep(for: .milliseconds(AnimatedPlayback.heroDwell))
+                guard !Task.isCancelled else { return }
+                dwelled = true
+            }
+            .task(id: HoldKey(playing: playing, live: live)) {
+                if playing {
+                    released = false
+                } else if live {
+                    try? await Task.sleep(for: .milliseconds(AnimatedPlayback.heroHold))
+                    guard !Task.isCancelled else { return }
+                    released = true
+                }
+            }
+            // The still hero leaves once the animation has faded in over it (its soft diagonal edge must not show the first frame)
+            .task(id: liveShown) {
+                stillGone = false
+                guard liveShown else {
+                    stillAlpha = 1
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(Motion.fade))
+                guard !Task.isCancelled else { return }
+                withAnimation(Motion.fastOutSlowIn(Motion.fade)) { stillAlpha = 0 } completion: { stillGone = stillAlpha == 0 }
+            }
+    }
+
+    private struct HoldKey: Equatable {
+        let playing: Bool
+        let live: Bool
+    }
+}
+
+/// The playing animated game background (`HeroLive`): each frame is decoded no wider than it is drawn (and never above
+/// ``AnimatedPlayback/heroWidth``) and rendered exactly like the still one (``HeroRender/frame(_:blur:area:extension:)``,
+/// over the still first frame's extension for a wide hero), then drawn over the hero area with the same tilt. It loops
+/// without a jump (``LoopedAnimation``), fades in over the still once decoded, and exists while composed; [play] false
+/// pauses it on the frame it shows (the caller removes it to release it), and it plays its newest pass from the start when
+/// [play] or the app's foreground comes back.
+private struct HeroLive: View {
+    let still: CGImage
+    let animation: AnimatedSource
+    let blur: Int
+    let area: HeroArea
+    let reduced: Bool
+    let play: Bool
+    let onLive: (Bool) -> Void
+    @Environment(\.stage) private var stage
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var looped: LoopedAnimation?
+    @State private var shown = false
+
+    var body: some View {
+        let running = play && scenePhase == .active
+        ZStack {
+            if let looped {
+                TimelineView(.animation(paused: !running)) { context in
+                    let frame = looped.frame(at: context.date)
+                    ZStack {
+                        Image(decorative: frame.bottom, scale: 1).resizable().interpolation(.medium)
+                        if let top = frame.top {
+                            Image(decorative: top, scale: 1).resizable().interpolation(.medium).opacity(frame.mix)
+                        }
+                    }
+                    .frame(width: stage.px(area.width), height: stage.px(area.height))
+                    .modifier(HeroTilt(reduced: reduced))
+                }
+                .opacity(shown ? 1 : 0)
+            }
+        }
+        .task(id: "\(animation.key)/\(blur)/\(area.width)x\(area.height)") {
+            shown = false
+            looped = nil
+            onLive(false)
+            let (still, blur, area) = (still, blur, area)
+            let layout = HeroGeometry.layout(area, width: still.width, height: still.height)
+            // The extension under a wide hero is the still first frame's
+            let underlay = layout.extended ? await Task.detached(priority: .userInitiated) { HeroRender.extensionImage(still, area: area) }.value : nil
+            if layout.extended, underlay == nil { return }
+            // Frames are decoded no wider than the render draws them, and never above the hero's own cap
+            let drawn = Int((layout.width * Double(blur > 0 ? HeroRender.width : HeroRender.sharpWidth) / area.width).rounded())
+            let decodeWidth = min(AnimatedPlayback.heroWidth, max(drawn, 1))
+            guard let loaded = await LoopedAnimation.load(animation.data, maxWidth: decodeWidth, render: { frame in
+                HeroRender.frame(frame, blur: blur, area: area, extension: underlay)
+            }), !Task.isCancelled else { return }
+            looped = loaded
+            onLive(true)
+            withAnimation(Motion.fadeIn) { shown = true }
+        }
+        .onChange(of: running) { _, now in if now { looped?.restart() } }
+        .onDisappear { onLive(false) }
     }
 }
 

@@ -50,9 +50,15 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   dynamic range. The look on iPad and iPhone HDR displays is not verified.
 - Hiding games: the game menu has Hide app and Show app, the side menu has "Show hidden apps" with the count, and a shown
   hidden game carries an eye-slash pill. Hidden games are kept per profile and per PC.
-- The Artwork screen of the game menu: choose the cover, wide cover, background and logo among the still SteamGridDB images
-  (best rated first) or leave it to the PC's artwork or the name, search for another name and match the game by hand. The
-  choices are kept by automatic refreshes. The filters and animated images are not ported.
+- The Artwork screen of the game menu: choose the cover, wide cover, background and logo among the still and animated
+  SteamGridDB images, narrowed and sorted by the filter sheet, or leave it to the PC's artwork or the name, search for
+  another name and match the game by hand. The choices are kept by automatic refreshes.
+- Animated artwork plays: an animated WebP, GIF or APNG cover, wide cover, logo or game background plays over its first
+  frame in the library, and the animated choices play in their Artwork screen tiles (a bar shows the download of the
+  animation). Each frame keeps the time its file gives it, frames are decoded one at a time at the size they are shown,
+  and nothing plays while it is off screen or covered, while the app is in the background, or with reduced motion; the
+  game background starts after the game has stayed focused for half a second and loops with a cross-fade. Playback on
+  devices and its cost there are not verified.
 - App settings in the game menu: resolution, frame rate, bitrate, codec, frame pacing and host audio can be set for one
   app, stored per profile and app, with the CUSTOM marks, Reset all and Undo. A stream of the app uses them.
 - Video frame pacing adds Balanced with FPS limit, Warp Drive and Warp 2: real host FPS cap/2x/4x
