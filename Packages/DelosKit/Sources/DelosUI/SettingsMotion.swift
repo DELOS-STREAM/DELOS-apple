@@ -162,33 +162,6 @@ enum SettingsScrollMotion {
     }
 }
 
-/// The top and bottom edges of a settings list fade only while rows continue behind them: each fade grows with the first
-/// pixels scrolled away and is gone at that end of the content (`Modifier.fadeEdges(stage, scroll, ...)`), so the first and
-/// the last row's plate are never dimmed. The mask reaches [overdraw] stage pixels to the sides, for the plate's glow.
-struct SettingsListFades: ViewModifier {
-    let metrics: SettingsScrollMetrics
-    let top: Double
-    let bottom: Double
-    var overdraw = 400.0
-    @Environment(\.stage) private var stage
-
-    func body(content: Content) -> some View {
-        content.mask {
-            GeometryReader { proxy in
-                let height = max(Double(proxy.size.height), 1)
-                let start = min(stage.px(top), max(metrics.offset, 0)), end = min(stage.px(bottom), max(metrics.maxOffset - metrics.offset, 0))
-                LinearGradient(stops: [
-                    .init(color: start > 0 ? .clear : .black, location: 0),
-                    .init(color: .black, location: min(start / height, 0.5)),
-                    .init(color: .black, location: 1 - min(end / height, 0.5)),
-                    .init(color: end > 0 ? .clear : .black, location: 1),
-                ], startPoint: .top, endPoint: .bottom)
-                .padding(.horizontal, -stage.px(overdraw))
-            }
-        }
-    }
-}
-
 private struct SelectionPillKey: PreferenceKey {
     static var defaultValue: [AnyHashable: Anchor<CGRect>] { [:] }
     static func reduce(value: inout [AnyHashable: Anchor<CGRect>], nextValue: () -> [AnyHashable: Anchor<CGRect>]) {

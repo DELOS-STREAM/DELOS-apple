@@ -1,6 +1,19 @@
 import DelosData
 import SwiftUI
 
+/// The backdrop of the root: the game background shows only behind the library (`ShellBackdrop`'s heroShown). It reads the
+/// focused game's background itself, so a new one (140 ms after every step of the library's focus) redraws the backdrop
+/// alone, not the root and every screen and bar under it while the row of covers is still moving.
+struct ShellBackdrop: View {
+    let appearance: Appearance
+    let showsLibrary: Bool
+    @Environment(HomeArt.self) private var art
+
+    var body: some View {
+        Backdrop(appearance: appearance, hero: showsLibrary ? art.hero : nil)
+    }
+}
+
 /// The layered background behind every screen, as `Backdrop` in DELOS for Android (`shell/ui/Backdrop.kt`): the theme
 /// color, the focused game's background ("hero", blurred, at the game background's opacity, faded into the theme color
 /// at the bottom and on the left), and the animated background of `appearance.background` drawn on a 960 × 540 canvas

@@ -134,7 +134,8 @@ struct NativeHDRChip: View {
 }
 
 /// The badges of the info row in one line: the facts, a thin divider, the tag pills; 12 px apart, the divider 16 px
-/// from each side. When they do not fit in the room they scroll back and forth in it, with a fade at the edges.
+/// from each side. When they do not fit in the room they scroll back and forth in it, the edge with badges behind it
+/// fading (the fade glides with them).
 struct BadgeStrip<Facts: View, Tags: View>: View {
     let hasFacts: Bool
     let hasTags: Bool
@@ -167,15 +168,9 @@ struct BadgeStrip<Facts: View, Tags: View>: View {
         .offset(x: shifted ? -overflow : 0)
         .frame(maxWidth: .infinity, alignment: .leading)
         .onGeometryChange(for: Double.self) { $0.size.width } action: { room = $0 }
-        .mask {
-            if overflow > 0 {
-                let fade = min(stage.px(40) / max(room, 1), 0.25)
-                LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 1 - fade),
-                                       .init(color: .clear, location: 1)], startPoint: .leading, endPoint: .trailing)
-            } else {
-                Rectangle().padding(-stage.px(40))
-            }
-        }
+        .modifier(EdgeFadeMask(
+            hiddenStart: shifted ? overflow : 0, hiddenEnd: shifted ? 0 : overflow, axis: .horizontal,
+            start: FadeEdge(solid: stage.px(40)), end: FadeEdge(solid: stage.px(40)), bleed: stage.px(40), outset: stage.px(40)))
         .task(id: overflow > 0 && !reduceMotion) {
             shifted = false
             guard overflow > 0, !reduceMotion else { return }

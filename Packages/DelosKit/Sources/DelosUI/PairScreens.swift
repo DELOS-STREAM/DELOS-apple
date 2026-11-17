@@ -144,7 +144,8 @@ struct CircleRow<Content: View>: View {
             .glideRingHost(focusScale: 1.16)
         ViewThatFits(in: .horizontal) {
             row
-            FocusScroll(axis: .horizontal) { row }.scrollClipDisabled().focusable(false)
+            // The cut edges fade over 40 px where circles go on behind them; the mask reaches over the glow room
+            FocusScroll(axis: .horizontal, fades: FadeEdges(40), bleed: 40) { row }.scrollClipDisabled().focusable(false)
         }
     }
 }

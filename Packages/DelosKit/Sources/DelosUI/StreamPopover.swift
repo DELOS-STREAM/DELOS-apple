@@ -207,7 +207,7 @@ private struct PopoverContent: View {
         switch content {
         case .rows(let rows):
             let overflows = M.rowsHeight(rows.count) > area
-            FocusScroll(axis: .vertical, fades: overflows ? (top: 26, bottom: 64) : nil) {
+            FocusScroll(axis: .vertical, fades: FadeEdges(start: FadeEdge(solid: 26), end: FadeEdge(solid: 64))) {
                 VStack(spacing: stage.px(M.rowGap)) {
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                         FocusItem(

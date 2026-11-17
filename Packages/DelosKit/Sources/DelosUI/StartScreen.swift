@@ -207,7 +207,7 @@ public struct DelosRoot: View {
                     // The library's filter sheet is a layer of Android's shell: its scrim covers the bar too (the screen is raised
                     // while the sheet is open) and the backdrop and the bar blur under it like the screen does
                     if !videoCoversBackdrop {
-                        Backdrop(appearance: appearance, hero: showsLibrary ? homeArt.hero : nil)
+                        ShellBackdrop(appearance: appearance, showsLibrary: showsLibrary)
                             .modifier(LayerBackdropBlur(active: librarySheetOpen))
                     }
                     let entry = navigator.stack[navigator.stack.count - 1]

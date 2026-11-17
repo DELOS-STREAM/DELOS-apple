@@ -192,7 +192,9 @@ struct CreateProfileScreen: View {
         let padded = grid.glideRingHost(focusScale: 1.16).padding(.horizontal, stage.px(52))
         return AnyView(ViewThatFits(in: .horizontal) {
             padded
-            FocusScroll(axis: .horizontal) { padded }.scrollClipDisabled()
+            // The cut edges fade over the end margin where avatars go on behind them (`edge = AVATAR_MARGIN`); the mask reaches
+            // over the glow room
+            FocusScroll(axis: .horizontal, fades: FadeEdges(52), bleed: 40) { padded }.scrollClipDisabled()
         })
     }
 

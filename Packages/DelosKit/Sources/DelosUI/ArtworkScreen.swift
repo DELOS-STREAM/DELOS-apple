@@ -525,7 +525,8 @@ private struct ArtworkGridView: View {
                 // Filters that leave nothing take the first choice's tile away with the rest: the message and its two buttons
                 // are all there is
                 if empty?.showsFirstChoice ?? true {
-                    FocusScroll(axis: .vertical) {
+                    // The top and bottom edges fade where tiles go on behind them
+                    FocusScroll(axis: .vertical, fades: FadeEdges(start: FadeEdge(solid: 30), end: FadeEdge(solid: 70))) {
                         VStack(alignment: .leading, spacing: stage.px(layout.gapY)) {
                             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                                 HStack(spacing: stage.px(layout.gapX)) {
@@ -542,13 +543,6 @@ private struct ArtworkGridView: View {
                     }
                     .focusable(false)
                     .scrollClipDisabled()
-                    .mask {
-                        VStack(spacing: 0) {
-                            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: stage.px(30))
-                            Rectangle()
-                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: stage.px(70))
-                        }
-                    }
                 }
                 if let empty {
                     NoImages(
