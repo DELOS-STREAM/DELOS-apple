@@ -33,7 +33,7 @@ enum AnimatedPlayback {
     static func layerStopsLibraryArt(_ layer: Layers.Layer?) -> Bool {
         switch layer {
         case nil, .context?: false
-        case .dialog?: true
+        case .dialog?, .buttonCapture?: true
         }
     }
 
