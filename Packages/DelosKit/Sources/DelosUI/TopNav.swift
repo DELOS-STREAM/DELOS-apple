@@ -271,28 +271,22 @@ struct SideMenu: View {
                 FocusScroll(axis: .vertical, fades: (Self.glowVertical + 16, Self.glowVertical + 40)) {
                     VStack(alignment: .leading, spacing: stage.px(10)) {
                         ForEach(QuickSettings.rows(appearance)) { row in
-                            FocusItem(id: row.id, model: focus, action: { onStep(row.id, 1) }) { focused in
-                                SettingRowView(row: row, focused: focused, compact: true)
-                            }
-                            .staggerEntrance()
+                            sideRow(row) { onStep(row.id, 1) }
                         }
-                        FocusItem(id: Self.settingsID, model: focus, action: onSettings) { focused in
-                            SettingRowView(
-                                row: SettingRow(
-                                    id: Self.settingsID, tab: .stream, section: "", icon: Symbols.settings, label: L("shell_side_all_settings"),
-                                    value: .action(label: nil), help: ""),
-                                focused: focused, compact: true)
-                        }
-                        .staggerEntrance()
+                        sideRow(SettingRow(
+                            id: Self.settingsID, tab: .stream, section: "", icon: Symbols.settings, label: L("shell_side_all_settings"),
+                            value: .action(label: nil), help: ""), action: onSettings)
                         if let hidden {
-                            FocusItem(id: Self.hiddenID, model: focus, action: { onStep(Self.hiddenID, 1) }) { focused in
-                                SettingRowView(
-                                    row: SettingRow(
-                                        id: Self.hiddenID, tab: .stream, section: "", icon: Symbols.visibility, label: L("shell_side_show_hidden"),
-                                        value: .toggle(hidden.showing), help: "", note: hidden.note),
-                                    focused: focused, compact: true)
-                            }
-                            .staggerEntrance()
+                            sideRow(SettingRow(
+                                id: Self.hiddenID, tab: .stream, section: "", icon: Symbols.visibility, label: L("shell_side_show_hidden"),
+                                value: .toggle(hidden.showing), help: "", note: hidden.note)) { onStep(Self.hiddenID, 1) }
+                        }
+                    }
+                    // One plate glides between the rows (`SettingRowList`'s `RowGlideHost`), as in Settings
+                    .backgroundPreferenceValue(SettingsRowAnchors.self) { anchors in
+                        GeometryReader { proxy in
+                            let anchor = (focus.focused as? String).flatMap { anchors[$0] }
+                            SettingsFocusPlate(target: anchor.map { SettingsPlateGeometry.target(proxy[$0]) })
                         }
                     }
                     .padding(.horizontal, stage.px(14 + Self.glowSide))
@@ -324,6 +318,15 @@ struct SideMenu: View {
                 removal: reduceMotion ? Self.fade(Motion.exit)
                     : Self.fade(Motion.exit).combined(with: .offset(x: -stage.px(Self.width) / 10).animation(LayerHost.easeIn(Motion.exit)))))
         }
+    }
+
+    /// A quick-setting row: focusable, on the shared plate, rising in with the others.
+    private func sideRow(_ row: SettingRow, action: @escaping @MainActor () -> Void) -> some View {
+        FocusItem(id: row.id, model: focus, action: action) { focused in
+            SettingRowView(row: row, focused: focused, compact: true, hostedPlate: true)
+        }
+        .anchorPreference(key: SettingsRowAnchors.self, value: .bounds) { [row.id: $0] }
+        .staggerEntrance()
     }
 
     private static func fade(_ ms: Double) -> AnyTransition {

@@ -122,8 +122,13 @@ capsule; Settings, Profile and Devices take each other's place on the stack; the
 row reaches them. On those screens and on the start screen (`hasSideMenu`), the left menu button opens the side menu
 (`SideMenu`, Android's `SideMenuLayer`): the profile and the connected PC at the top and All settings; it takes every
 command while it is open, and B, the menu button or a tap beside it closes it. The quick settings (theme, background, sounds, haptics) are in it; the rows scroll
-(`FocusScroll` with edge fades) where the stage is too short, the panel is 680 px wide and arrives from a tenth of its width
-to its left (only fading with reduced motion). The top navigation wraps from the last button to the first. Android has no touch way to the side menu; on the start
+(`FocusScroll` with edge fades) where the stage is too short, the panel is 680 px wide (glass, `panel` role) and arrives from
+a tenth of its width to its left (`sideEnter`: 560 ms ease-out with a 280 ms fade; it leaves over 240 ms ease-in; only
+fading with reduced motion) under the root's scrim (`LayerScrim`: the scrim token, fading in over 420 ms, out over 240 ms),
+while the screen behind it blurs by 6 stage pixels (`LayerBackdropBlur`, also behind dialogs; the context menu's scrim only
+dims). One plate glides between its rows, as in Settings. The top navigation wraps from the last button to the first; while
+the focus moves between two buttons an accent pill glides behind them (`NavPill`: both edges springs, the one in the
+direction of travel stiffer) and the focused button's own fill fades in over it. Android has no touch way to the side menu; on the start
 screen the profile chip opens the profiles menu (as on Android), so touch reaches Profile and Settings through a PC's
 library and its top navigation.
 
@@ -540,6 +545,12 @@ one role, so the same kind of element looks the same everywhere:
 
 Not glass: primary buttons (solid main color, as on Android), focus rings, progress bars, cover art and toasts (an
 opaque navy card, as on Android, so it reads over any frame of a stream).
+
+Focus rings are Android's `drawFocusRing`: the ring (5 px; 4 px on the profile chip) lies a gap of its own width outside the
+element and the gap is filled with the background color; the glow is a box-shadow with a spread (a cover's `0 30 80 -18`,
+the chip's `14 / 40 / -12`; `focusLook(glowSpread:gap:)`), drawn as a blurred, shrunk copy of the element's shape and
+never under the element itself (its glass would show it through). A focused cover also has the online pulse. The circles of
+a row (`CircleRow`) share one ring that glides to the focused one over 560 ms (`GlideRing`, `glideRingHost`).
 
 ## Backgrounds
 
