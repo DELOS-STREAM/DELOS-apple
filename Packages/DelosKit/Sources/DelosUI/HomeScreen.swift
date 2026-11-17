@@ -126,10 +126,11 @@ struct HomeScreen: View {
                     if listed.isEmpty {
                         HomeMessage(icon: Symbols.sportsEsports, title: L("home_empty_title", name), text: L("home_empty_note"))
                     } else if visible.isEmpty {
-                        FilteredLibraryEmpty(focus: focus, onReset: resetFilters)
+                        FilteredLibraryEmpty(focus: focus, upTarget: offeredNow ? LibraryFilterIDs.button : nil, onReset: resetFilters)
                     } else {
                         GameLibrary(hostID: hostID, apps: visible, focus: focus, actions: actions,
-                                    titleWidth: metrics.infoWidth - (offeredNow ? LibraryFilterButton.reserve(compact: stage.compact) : 0))
+                                    titleWidth: metrics.infoWidth - (offeredNow ? LibraryFilterButton.reserve(compact: stage.compact) : 0),
+                                    upTarget: offeredNow ? LibraryFilterIDs.button : nil)
                     }
                 }
             }
@@ -163,6 +164,11 @@ struct HomeScreen: View {
         .onChange(of: content) { _, now in
             // Without games there is no game background
             if case .apps = now {} else { art.hero = nil }
+        }
+        // Without covers (loading, offline, no games, all hidden) the first focus the screen was opened with is nothing: the
+        // navigation has it until a cover appears and takes it
+        .onChange(of: listed.isEmpty, initial: true) { _, none in
+            if none { focus.focusFirstItem() }
         }
         .onChange(of: offeredNow, initial: true) { _, now in
             offered = now
@@ -325,11 +331,13 @@ enum LibraryFocus {
 
 /// The wrap of the row: left on the first cover goes round to the last one, right on the last one back to the first.
 enum LibraryWrap {
-    static func moves(index: Int, ids: [AnyHashable]) -> [FocusDirection: AnyHashable] {
-        guard ids.count > 1 else { return [:] }
-        if index == 0 { return [.left: ids[ids.count - 1]] }
-        if index == ids.count - 1 { return [.right: ids[0]] }
-        return [:]
+    static func moves(index: Int, ids: [AnyHashable], up: AnyHashable? = nil) -> [FocusDirection: AnyHashable] {
+        var moves: [FocusDirection: AnyHashable] = [:]
+        if let up { moves[.up] = up }
+        guard ids.count > 1 else { return moves }
+        if index == 0 { moves[.left] = ids[ids.count - 1] }
+        if index == ids.count - 1 { moves[.right] = ids[0] }
+        return moves
     }
 
     /// Whether the focus going from cover [from] to cover [to] is a wrap round the row.
@@ -445,6 +453,10 @@ struct GameLibrary: View {
     let actions: ShellActions
     /// The width the title may take: the info row's, less what stands at its end (the filter button).
     let titleWidth: Double
+    /// Where Up leads from every cover: the filter button when there is one, so it is on the way to the navigation for the first
+    /// cover as for the others (the nearest item above would be the filter button for some covers and the navigation for
+    /// others, and the button would be out of the D-pad's reach for a short row). Nil: the nearest item above.
+    var upTarget: String?
     @Environment(HostStore.self) private var hosts
     @Environment(HomeArt.self) private var art
     @Environment(GameMetadataModel.self) private var metadata
@@ -502,7 +514,7 @@ struct GameLibrary: View {
                     ForEach(Array(apps.enumerated()), id: \.element.id) { index, app in
                         let badge: CoverBadge? = app.id == running ? .running : index == 0 && app.id == last ? .lastPlayed : nil
                         FocusItem(
-                            id: Self.id(app), model: focus, moves: LibraryWrap.moves(index: index, ids: keys),
+                            id: Self.id(app), model: focus, moves: LibraryWrap.moves(index: index, ids: keys, up: upTarget),
                             menu: { actions.gameMenu(hostID: hostID, app: app) },
                             // The offer menu plays its own OPEN cue, not SELECT
                             clickCue: offersChoices(app) ? nil : .select,
@@ -1016,6 +1028,8 @@ private struct HomeMessage: View {
 /// change the filter, and a button that resets it. It has the focus; the game background is gone.
 private struct FilteredLibraryEmpty: View {
     let focus: FocusModel
+    /// Where Up leads from the button: the filter button of the title row, when it is shown.
+    let upTarget: String?
     let onReset: () -> Void
     @Environment(HomeArt.self) private var art
     @Environment(\.delosColors) private var colors
@@ -1029,7 +1043,7 @@ private struct FilteredLibraryEmpty: View {
             Text(L("metadata_filtered_note", "Y"))
                 .font(DelosFonts.figtree(stage.tpx(24)))
                 .foregroundStyle(colors.text2.color)
-            FocusItem(id: LibraryFilterIDs.emptyReset, model: focus, action: onReset) { focused in
+            FocusItem(id: LibraryFilterIDs.emptyReset, model: focus, moves: upTarget.map { [.up: AnyHashable($0)] } ?? [:], action: onReset) { focused in
                 PillButton(label: L("metadata_filtered_reset"), icon: Symbols.reset, focused: focused)
             }
             .padding(.top, stage.px(8))
