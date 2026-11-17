@@ -160,6 +160,26 @@ priority to ordinary messages; animation ticks never repost it. Actual VoiceOver
 devices is not verified. The card receives a stage zoomed by the interface scale, so its geometry, text-width cap,
 glyphs, action chip and shadows all grow together while the outer screen-edge insets stay fixed.
 
+### Connecting to a PC: the portal
+
+`ShellActions.connect(_:)` (`ShellDeviceActions.connect` of Android's DeviceFlows.kt) runs `ConnectFlow`, a state machine
+(`ConnectFlow.Phase`: starting, waking, waiting, connecting, arriving) behind two protocols so the tests drive it with a
+fake clock (`ConnectClock`) and a fake network (`ConnectEnvironment`; `AppConnectEnvironment` is the one on `HostStore`):
+
+| Step | What happens |
+|---|---|
+| Press | OPEN cue; nothing if a portal is already up |
+| PC not online | `HostStore.wake` sends the packet; the portal says "Waking up <PC>" · "Wake-up signal sent · B cancels". A PC without a MAC address (or a packet that did not go) gets "Waiting for <PC>" · "Turn the PC on · B cancels" instead, and is waited for just the same |
+| Waiting | The PC is asked again at once and every 3 s (`HostStore.refresh`; discovery finds it too) for at most 120 s. B, a tap or a click cancels without a word (BACK cue). After 120 s: ERROR cue and the toast "<PC> did not wake up"; pressing the PC again is the retry |
+| Connecting | "Connecting to <PC>" · "Vibepollo · paired" (not cancellable) for at least 2.1 s (0.6 s with reduced motion) while the PC's apps load, for at most 5 s |
+| Arrival | SELECT cue, the burst (flash and the orb flying at the viewer), the library opens 380 ms later through the usual screen transition, the burst ends 500 ms after that |
+
+`PortalOverlay` is the port of Android's `PortalOverlay`: the screen behind blurs (22 stage px, `PortalBackdropBlur`), a
+radial scrim, four rings 0.35 s apart every 2.2 s (main, second, main, third color) around a 220 px orb with the state's
+icon, the PC's name in Unbounded 36 and the note in Figtree 24. The geometry and timing are `PortalLook`. While it is up
+`DelosRoot` gives it the modal focus and every command: only B passes (on tvOS the Menu button, through a focus sink).
+Android has no way to cancel without a B; here a tap or a click on a portal that can be cancelled does it too.
+
 ## Video formats
 
 `DelosMedia` turns what the host sends into what VideoToolbox decodes, without FFmpeg:
@@ -718,11 +738,10 @@ Rename, Wake the PC (an offline PC that can be woken), Unpair (an online PC) and
 or Unpair is the confirmation. `HostStore.unpairOnPC` asks the PC to forget this client and keeps the pairing when it
 cannot (offline, not paired, no answer, still paired: `UnpairResult`, one toast sentence each); `HostStore.remove`
 forgets the PC and its pairing here only. A PC that is removed or unpaired leaves the list, stops being the default PC
-and its library is dropped from the stack (`Navigator.dropLibrary`). Connect does not wake and wait in a portal as
-Android does; waking has its own row.
+and its library is dropped from the stack (`Navigator.dropLibrary`). Connect, a press on a PC of the start screen, the
+pairing screen's list and the end of pairing all go through the portal (next section); the Wake row only sends the packet.
 
-Not ported yet: the default PC's Skip the start screen, the Devices screen's link test,
-the connect portal that wakes and waits, waking an asleep PC on A, the companion screen; in the library the compact layout, recording
+Not ported yet: the default PC's Skip the start screen, the Devices screen's link test, the companion screen; in the library the compact layout, recording
 the streaming time (the stream screen does not add to `PlaytimeStore` yet), game metadata (IGDB genres and themes,
 HowLongToBeat, HDR chips through the metadata Worker), the game menu's Artwork, Metadata, App settings and Hide, the
 game's colors in its menu tile, hidden games, wrap-around in the row and per-game settings.
