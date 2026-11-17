@@ -47,10 +47,10 @@ import Testing
     }
 
     @MainActor
-    @Test func aNewProfileCopiesTheCurrentOnesStreamSettingsAndDeletingForgetsThem() throws {
+    @Test func aNewProfileCopiesTheCurrentOnesStreamSettingsAndDeletingForgetsThem() async throws {
         let suite = "delos.tests.\(UUID().uuidString)"
         defer { UserDefaults().removePersistentDomain(forName: suite) }
-        let profiles = ProfileStore(suiteName: suite)
+        let profiles = ProfileStore(suiteName: suite, deleteGrace: .milliseconds(20))
         let stream = StreamSettingsStore(suiteName: suite)
         let ann = try #require(profiles.create(name: "Ann", avatar: 0))
         stream.save(StreamSettings(fps: 120), profile: ann.id)
@@ -60,7 +60,7 @@ import Testing
         stream.save(StreamSettings(fps: 30), profile: bob.id)
         #expect(stream.load(profile: ann.id).fps == 120)
         profiles.delete(bob.id)
-        profiles.purge(bob.id)
+        for _ in 0..<500 where stream.load(profile: bob.id) != StreamSettings() { try await Task.sleep(for: .milliseconds(10)) }
         #expect(stream.load(profile: bob.id) == StreamSettings())
     }
 
@@ -148,7 +148,7 @@ import Testing
         s.playAudioOnHost = true
         let plan = StreamPlan(
             app: HostApp(id: 7, title: "Desktop"), settings: s, display: StreamResolution(width: 1290, height: 2796),
-            decodable: [.h264, .hevc], refreshRate: 120)
+            decodable: [.h264, .hevc], refreshRate: 120, displaySupportsHDR: true)
         // No resolution chosen: the display's, capped at 1080p
         let display = StreamResolution.forDisplay(pixelWidth: 1290, pixelHeight: 2796)
         #expect(display.width <= 1920 && display.height <= 1080 && display.width > 1900)
@@ -165,7 +165,7 @@ import Testing
     @Test func thePlanUsesTheChosenResolutionAndItsDefaultBitrate() {
         let plan = StreamPlan(
             app: HostApp(id: 7, title: "Desktop"), settings: StreamSettings(resolution: StreamResolution(width: 2560, height: 1440)),
-            display: StreamResolution(width: 1290, height: 2796), decodable: [.h264, .hevc, .av1Main8], refreshRate: 60)
+            display: StreamResolution(width: 1290, height: 2796), decodable: [.h264, .hevc, .av1Main8], refreshRate: 60, displaySupportsHDR: true)
         #expect(plan.request.width == 2560 && plan.request.height == 1440)
         #expect(plan.configuration.bitrateKbps == 40000)
         #expect(plan.configuration.supportedVideoFormats == [.h264, .hevc])
@@ -182,7 +182,7 @@ import Testing
             s.hdr = hdr
             return StreamPlan(
                 app: HostApp(id: 7, title: "Desktop"), settings: s, display: StreamResolution(width: 1920, height: 1080),
-                decodable: decodable, refreshRate: 60)
+                decodable: decodable, refreshRate: 60, displaySupportsHDR: true)
         }
         // Off: no 10-bit format and no flag
         var off = plan(.automatic, hdr: false, decodable: tenBitDevice)
@@ -202,6 +202,16 @@ import Testing
         // AV1 Main10 alone carries HDR when HEVC Main10 is missing
         on = plan(.av1, hdr: true, decodable: [.h264, .hevc, .av1Main8, .av1Main10])
         #expect(on.configuration.supportedVideoFormats == [.h264, .hevc, .av1Main8, .av1Main10] && on.request.hdr)
+    }
+
+    @Test func aStoredHDRFlagIsIgnoredWhenTheDisplayCannotShowHDR() {
+        var s = StreamSettings()
+        s.hdr = true
+        let plan = StreamPlan(
+            app: HostApp(id: 7, title: "Desktop"), settings: s, display: StreamResolution(width: 1920, height: 1080),
+            decodable: tenBitDevice, refreshRate: 60, displaySupportsHDR: false)
+        #expect(!plan.request.hdr)
+        #expect(plan.configuration.supportedVideoFormats.isDisjoint(with: .tenBit))
     }
 
     @Test func hdrIsStoredLeniently() throws {

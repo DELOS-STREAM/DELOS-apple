@@ -22,9 +22,8 @@ enum LaunchFailure: Error, Equatable, Sendable {
     /// The running app is minimized on the PC (status 525).
     case appMinimized
     case resumeFailed(detail: String)
-    /// The other app running belongs to another device (status 599).
-    case quitForeign(code: Int)
-    case quitFailed(detail: String)
+    /// Another app than the one asked for runs on the PC: it is not quit without the player's choice.
+    case otherAppRunning
     case launchFailed(detail: String)
 }
 
@@ -47,10 +46,8 @@ enum StreamText {
             return ResultText(title: title, sentence: L("conn_app_minimized"), details: nil)
         case .resumeFailed(let detail):
             return ResultText(title: title, sentence: L("conn_resume_failed"), details: detail)
-        case .quitForeign(let code):
-            return ResultText(title: title, sentence: L("conn_quit_foreign", Int32(clamping: code)), details: nil)
-        case .quitFailed(let detail):
-            return ResultText(title: title, sentence: L("conn_quit_failed"), details: detail)
+        case .otherAppRunning:
+            return ResultText(title: title, sentence: L("scut_other_game_running"), details: nil)
         case .launchFailed(let detail):
             return ResultText(title: title, sentence: L("conn_launch_failed"), details: detail)
         }

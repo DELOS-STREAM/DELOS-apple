@@ -5387,136 +5387,6 @@
         }
       }
     },
-    "conn_quit_failed": {
-      "extractionState": "manual",
-      "localizations": {
-        "cs": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Předchozí relaci se nepodařilo ukončit · ukonči ji na PC"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Die vorherige Sitzung konnte nicht beendet werden · beende sie am PC"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The previous session could not be quit · quit it on the PC"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No se ha podido cerrar la sesión anterior · ciérrala en el PC"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Impossible de quitter la session précédente · quitte-la sur le PC"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "前のセッションを終了できませんでした · PCで終了してください"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "이전 세션을 종료하지 못했어요 · PC에서 종료해 주세요"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Não foi possível encerrar a sessão anterior · encerre-a no PC"
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Не вдалося завершити попередній сеанс · заверши його на ПК"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "无法退出上一个会话 · 请在 PC 上退出"
-          }
-        }
-      }
-    },
-    "conn_quit_foreign": {
-      "extractionState": "manual",
-      "localizations": {
-        "cs": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tuto relaci spustilo jiné zařízení, takže ji nelze ukončit. Ukonči stream na tom zařízení nebo na PC. (Chyba %1$d)"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Diese Sitzung wurde von einem anderen Gerät gestartet und kann deshalb nicht beendet werden. Beende den Stream auf jenem Gerät oder am PC. (Fehler %1$d)"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This session was started by another device, so it cannot be quit. End the stream on that device or on the PC. (Error %1$d)"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Esta sesión la inició otro dispositivo, así que no se puede cerrar. Termina el stream en ese dispositivo o en el PC. (Error %1$d)"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cette session a été lancée par un autre appareil et ne peut donc pas être quittée. Arrête le stream sur cet appareil ou sur le PC. (Erreur %1$d)"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "このセッションは別のデバイスで開始されたため、終了できません。そのデバイスまたはPCでストリームを終了してください。（エラー %1$d）"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "이 세션은 다른 기기에서 시작되어 종료할 수 없어요. 해당 기기나 PC에서 스트림을 종료해 주세요. (오류 %1$d)"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Esta sessão foi iniciada por outro dispositivo e, por isso, não pode ser encerrada. Encerre o stream naquele dispositivo ou no PC. (Erro %1$d)"
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Цей сеанс запустив інший пристрій, тому його не можна завершити. Заверши стрім на тому пристрої або на ПК. (Помилка %1$d)"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "此会话由其他设备启动，因此无法退出。请在该设备或 PC 上结束串流。（错误 %1$d）"
-          }
-        }
-      }
-    },
     "conn_resume_failed": {
       "extractionState": "manual",
       "localizations": {
@@ -23605,6 +23475,71 @@
           "stringUnit": {
             "state": "translated",
             "value": "重置为个人资料值"
+          }
+        }
+      }
+    },
+    "scut_other_game_running": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Už běží jiná aplikace · nejdřív ji ukonči v aplikaci Delos"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es läuft bereits eine andere App · beende sie zuerst in Delos"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another app is already running · quit it from Delos first"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ya hay otra app en ejecución · ciérrala primero desde Delos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une autre appli est déjà lancée · quitte-la d’abord depuis Delos"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "別のアプリがすでに実行中です · 先に Delosで終了してください"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다른 앱이 이미 실행 중이에요 · 먼저 Delos에서 종료해 주세요"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outro app já está em execução · saia dele pelo app Delos primeiro"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Інший застосунок уже запущено · спершу заверши його в Delos"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "另一个应用已在运行 · 请先在 Delos 中退出"
           }
         }
       }

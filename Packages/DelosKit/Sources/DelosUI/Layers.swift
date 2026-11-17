@@ -39,6 +39,8 @@ struct ContextMenu {
     let items: [MenuItem]
     var header: MenuHeader?
     var below = false
+    /// The row focused when the menu opens: a menu that is the confirmation of a destructive choice starts on the safe row.
+    var initialRow = 0
 }
 
 /// A field of a dialog (`DialogField`).
@@ -93,7 +95,7 @@ final class Layers {
     @discardableResult
     func openContextMenu(of model: FocusModel) -> Bool {
         guard let (menu, frame) = model.contextMenu() else { return false }
-        open(.context(menu, anchor: frame), focus: Self.rowID(0))
+        open(.context(menu, anchor: frame), focus: Self.rowID(menu.initialRow))
         return true
     }
 
@@ -103,10 +105,20 @@ final class Layers {
 
     /// Opens a menu a chosen menu item leads to (a list of matches after "Search"), at the frame the last menu had.
     func openContextMenu(_ menu: ContextMenu, anchor: CGRect?) {
-        open(.context(menu, anchor: anchor), focus: Self.rowID(0))
+        open(.context(menu, anchor: anchor), focus: Self.rowID(menu.initialRow))
+    }
+
+    /// When the layer opened: an A, Return or click within ``acceptGrace`` of it is the press that opened it (a double
+    /// press or double click), not a choice.
+    @ObservationIgnored private var openedAt = Date.distantPast
+    static let acceptGrace: TimeInterval = 0.3
+
+    func swallowsAccept(at now: Date = .now) -> Bool {
+        now.timeIntervalSince(openedAt) < Self.acceptGrace
     }
 
     private func open(_ next: Layer, focus first: AnyHashable) {
+        openedAt = .now
         feedback?.play(.open)
         menuPath = []
         focus = FocusModel(initial: first)
@@ -148,7 +160,7 @@ final class Layers {
     }
 
     /// A controller or keyboard command while a layer is open: it never reaches the screen behind it.
-    func handle(_ command: MenuCommand) {
+    func handle(_ command: MenuCommand, at now: Date = .now) {
         guard let layer else { return }
         switch command {
         case .back:
@@ -157,6 +169,7 @@ final class Layers {
             // The button that opened the menu closes it, submenus and all
             if case .context = layer { dismiss() }
         case .accept:
+            guard !swallowsAccept(at: now) else { return }
             if let feedback { feedback.activate(focus.acceptCue) { focus.handle(.accept) } } else { focus.handle(.accept) }
         case .up, .down:
             if focus.handle(command) { feedback?.play(.move) }

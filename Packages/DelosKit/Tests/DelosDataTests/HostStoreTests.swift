@@ -231,7 +231,7 @@ private final class MemoryStorage: SecretStorage {
         var counter: UInt8 = 0
         let plan = StreamPlan(
             app: HostApp(id: 7, title: "Desktop"), settings: StreamSettings(resolution: StreamResolution(width: 1920, height: 1080)),
-            display: StreamResolution(width: 2796, height: 1290), decodable: .h264, refreshRate: 120, randomBytes: { n in (0..<n).map { _ in counter &+= 1; return counter } })
+            display: StreamResolution(width: 2796, height: 1290), decodable: .h264, refreshRate: 120, displaySupportsHDR: true, randomBytes: { n in (0..<n).map { _ in counter &+= 1; return counter } })
         #expect(plan.request.remoteInputKey == Data(plan.configuration.remoteInputKey.key))
         // The IV starts with the key id, big-endian
         let id = plan.request.remoteInputKeyID

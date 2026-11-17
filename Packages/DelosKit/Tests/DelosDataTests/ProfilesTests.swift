@@ -112,6 +112,25 @@ private final class TestDefaults {
         #expect(ProfileStore(suiteName: suite.name).isFirstRun)
     }
 
+    @Test func theTimerOfAnEarlierDeleteNeverPurgesALaterDelete() async throws {
+        let suite = TestDefaults()
+        let store = ProfileStore(suiteName: suite.name, deleteGrace: .milliseconds(300))
+        let appearance = AppearanceStore(suiteName: suite.name)
+        let ann = try #require(store.create(name: "Ann", avatar: 0))
+        _ = try #require(store.create(name: "Bob", avatar: 1))
+        var light = Appearance()
+        light.dark = false
+        appearance.save(light, profile: ann.id)
+        store.delete(ann.id)
+        #expect(store.undoDelete(ann.id))
+        try await Task.sleep(for: .milliseconds(200))
+        store.delete(ann.id)
+        // The first timer would fire at 300 ms: the second delete still has 200 ms
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(appearance.load(profile: ann.id) == light)
+        #expect(store.undoDelete(ann.id))
+    }
+
     @Test func undoBringsADeletedProfileBackInItsPlaceWithItsSettings() throws {
         let suite = TestDefaults()
         let store = ProfileStore(suiteName: suite.name)

@@ -42,6 +42,17 @@ private let iPhone = StreamDevice(pixelWidth: 1290, pixelHeight: 2796, maxFrames
         #expect(!changed)
     }
 
+    @Test func aStoredHDRFlagOnADeviceWithoutHDRKeepsTheRowUntilItIsSwitchedOff() {
+        var stored = StreamSettings()
+        stored.hdr = true
+        var form = StreamSettingsForm(settings: stored, device: iPhone)
+        #expect(form.rows(.stream).contains { $0.id == StreamSettingsForm.hdr })
+        let cleared = form.step(StreamSettingsForm.hdr, by: 1)
+        #expect(cleared)
+        #expect(!form.settings.hdr)
+        #expect(!form.rows(.stream).contains { $0.id == StreamSettingsForm.hdr })
+    }
+
     @Test func theTabsHoldTheirRowsInAndroidsOrder() {
         let form = StreamSettingsForm(settings: StreamSettings(), device: iPhone)
         #expect(form.rows(.stream).map(\.id) == ["list_resolution", "list_fps", "seekbar_bitrate_kbps", "video_format", "frame_pacing"])

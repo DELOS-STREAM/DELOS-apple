@@ -482,10 +482,9 @@ artwork_unreachable
 conn_app_minimized
 conn_app_not_found
 conn_launch_failed
-conn_quit_failed
-conn_quit_foreign
 conn_resume_failed
 conn_resume_foreign
+scut_other_game_running
 stream_exit_disconnecting
 stream_exit_quitting
 stream_exit_quitting_game

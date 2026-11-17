@@ -6,7 +6,7 @@ import DelosMedia
 import Foundation
 
 /// The real steps of a stream (`NvConnection.startApp` and the stream start of DELOS for Android): ask the PC again
-/// over its pinned connection, launch the app (resume it when it already runs, quit another app first), then connect
+/// over its pinned connection, launch the app (resume it when it already runs; another running app is never quit here), then connect
 /// the streaming core with the video and audio outputs.
 @MainActor
 final class LiveStream: StreamSteps {
@@ -59,23 +59,21 @@ final class LiveStream: StreamSteps {
 
         let plan = StreamPlan(
             app: app, settings: settings, display: StreamResolution(width: display.pixelWidth, height: display.pixelHeight),
-            decodable: formats, refreshRate: display.maxFramesPerSecond)
+            decodable: formats, refreshRate: display.maxFramesPerSecond,
+            displaySupportsHDR: HDRDisplay.isSupported)
         let nvidia = record.isNvidiaServer
         let sessionURL: String?
-        if record.runningAppID == appID {
+        switch LaunchChoice.of(app: appID, running: record.runningAppID) {
+        case .otherAppRunning:
+            // Never quit another app unasked: the library's game menu is the confirmed way to quit it and start this one
+            throw .otherAppRunning
+        case .resume:
             do {
                 sessionURL = try await client.resume(plan.request, nvidiaServer: nvidia, pin: pin)
             } catch {
                 throw Self.resumeFailure(error)
             }
-        } else {
-            if record.runningAppID != 0 {
-                do {
-                    try await client.cancel(pin: pin)
-                } catch {
-                    throw Self.quitFailure(error)
-                }
-            }
+        case .launch:
             do {
                 sessionURL = try await client.launch(plan.request, nvidiaServer: nvidia, pin: pin)
             } catch HostError.hostStatus(code: 403, _) {
@@ -118,18 +116,22 @@ final class LiveStream: StreamSteps {
         }
     }
 
-    static func quitFailure(_ error: any Error) -> LaunchFailure {
-        switch error {
-        case HostError.hostStatus(599, _): .quitForeign(code: 599)
-        default: .quitFailed(detail: detail(error))
-        }
-    }
-
     /// The technical text behind Details: the host's own message and status, or the error.
     static func detail(_ error: any Error) -> String {
         switch error {
         case let HostError.hostStatus(code, message?): "\(message) (\(code))"
         default: String(describing: error)
         }
+    }
+}
+
+/// What a launch does with what the PC runs. Quitting another app is the player's choice, made in the library's game
+/// menu before the stream opens; a launch, a retry and the return from the background never make it.
+enum LaunchChoice: Equatable {
+    case launch, resume, otherAppRunning
+
+    /// [running]: the app id the PC reports (0: none).
+    static func of(app: Int, running: Int) -> LaunchChoice {
+        running == 0 ? .launch : running == app ? .resume : .otherAppRunning
     }
 }

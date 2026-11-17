@@ -382,9 +382,33 @@ private let iPhone = DisplayInfo(pixelWidth: 1290, pixelHeight: 2796, maxFramesP
         #expect(controller.phase == .streaming)
         controller.openMenu()
         // The menu's focus gets the directions and A; B closes the menu
-        #expect(StreamScreen.capture(.right, controller: controller, focus: focus) == false)
+        let later = Date.now.addingTimeInterval(1)
+        #expect(StreamScreen.capture(.right, controller: controller, focus: focus, at: later) == false)
         #expect(StreamScreen.capture(.back, controller: controller, focus: focus))
         #expect(!controller.menuOpen)
+    }
+
+    @Test func aDirectionOrAcceptHeldFromTheGameNeverReachesTheMenuOrWrapsOntoQuit() async {
+        let steps = FakeSteps()
+        let controller = StreamController { steps }
+        let focus = FocusModel()
+        var cancelled = 0
+        controller.menuOpened = { cancelled += 1 }
+        controller.start(display: iPhone)
+        await eventually { steps.isConnecting }
+        steps.finishConnect()
+        await eventually { controller.phase == .streaming }
+        controller.openMenu()
+        #expect(cancelled == 1)
+        // Just opened: the held direction and its repeats, and a press of A, are swallowed
+        for repeats in 0..<3 {
+            #expect(StreamScreen.capture(.left, controller: controller, focus: focus, repeatCount: repeats))
+        }
+        #expect(StreamScreen.capture(.accept, controller: controller, focus: focus))
+        // Later a new press is the player's, a repeat of a held direction still is not
+        let later = Date.now.addingTimeInterval(1)
+        #expect(StreamScreen.capture(.left, controller: controller, focus: focus, repeatCount: 0, at: later) == false)
+        #expect(StreamScreen.capture(.left, controller: controller, focus: focus, repeatCount: 3, at: later))
     }
 
     @Test func theSiriRemoteOpensTheStreamMenuWithPlayPauseAndWithoutAControllerWithMenu() async {
@@ -446,7 +470,6 @@ private let iPhone = DisplayInfo(pixelWidth: 1290, pixelHeight: 2796, maxFramesP
     @Test func theHostsLaunchAnswersMapLikeNvConnection() {
         #expect(LiveStream.resumeFailure(HostError.hostStatus(code: 470, message: nil)) == .resumeForeign(code: 470))
         #expect(LiveStream.resumeFailure(HostError.hostStatus(code: 525, message: nil)) == .appMinimized)
-        #expect(LiveStream.quitFailure(HostError.hostStatus(code: 599, message: "x")) == .quitForeign(code: 599))
         #expect(LiveStream.resumeFailure(HostError.refused) == .resumeFailed(detail: String(describing: HostError.refused)))
         #expect(LiveStream.detail(HostError.hostStatus(code: 500, message: "Busy")) == "Busy (500)")
     }
@@ -511,5 +534,15 @@ extension StreamControllerTests {
     @Test func theNameOfTheGameAndThePCAreTheLaunchScenesWords() {
         let controller = StreamController { FakeSteps() }
         #expect(controller.appName == "Desktop" && controller.pcName == "Gaming-PC")
+    }
+}
+
+@Suite struct LaunchChoiceTests {
+    @Test func aLaunchNeverQuitsAnotherRunningApp() {
+        #expect(LaunchChoice.of(app: 7, running: 0) == .launch)
+        #expect(LaunchChoice.of(app: 7, running: 7) == .resume)
+        #expect(LaunchChoice.of(app: 7, running: 9) == .otherAppRunning)
+        #expect(StreamText.launchFailure(.otherAppRunning, pcName: "PC", appName: "A").sentence
+            == "Another app is already running · quit it from Delos first")
     }
 }

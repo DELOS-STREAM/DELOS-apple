@@ -285,6 +285,7 @@ public struct DelosRoot: View {
         #endif
         input.start()
         self.input = input
+        navigator.cancelRepeats = { [weak input] in input?.cancelRepeats() }
     }
 
     #if os(tvOS)

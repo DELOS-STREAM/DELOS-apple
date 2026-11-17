@@ -25,7 +25,7 @@ struct DecoderPacingTests {
             var settings = StreamSettings(fps: 120, bitrateKbps: 80000); settings.framePacing = mode
             let plan = StreamPlan(app: HostApp(id: 7, title: "Desktop"), settings: settings,
                                   display: StreamResolution(width: 1920, height: 1080), decodable: [.h264],
-                                  refreshRate: 120, randomBytes: { [UInt8](repeating: 1, count: $0) })
+                                  refreshRate: 120, displaySupportsHDR: true, randomBytes: { [UInt8](repeating: 1, count: $0) })
             #expect(plan.request.frameRate == Double(expected))
             #expect(plan.configuration.fps == expected)
             #expect(plan.configuration.bitrateKbps == 80000)
