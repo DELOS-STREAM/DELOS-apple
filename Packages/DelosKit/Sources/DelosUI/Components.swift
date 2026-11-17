@@ -89,6 +89,8 @@ struct CircleItem: View {
     var big = true
     var avatar: Avatar?
     var selected = false
+    /// The online pulse ring (`.online-ring`): a PC that is ready to be paired.
+    var pulse = false
     var diameter: Double?
     var width: Double?
     /// The gap between the circle and its label, stage pixels (a compact stage's: the focused ring's reach and more).
@@ -121,6 +123,7 @@ struct CircleItem: View {
                     .padding(-stage.px(10))
                     .opacity(focused ? 1 : 0)
             }
+            .background { if pulse { PulseRing(side: side) } }
             .shadow(color: focused ? colors.glow.color : .clear, radius: stage.px(35), y: stage.px(26))
             .animation(.focusRing(focused: focused), value: focused)
             .overlay(alignment: .topLeading) { if selected { checkBadge(side: side) } }
@@ -147,7 +150,7 @@ struct CircleItem: View {
         }
         .frame(width: stage.px(max(width ?? 220, side)))
         .animation(.focusScale(pressed: pressed, reduced: reduceMotion), value: CirclePress(focused: focused, pressed: pressed))
-        .animation(reduceMotion ? .easeOut(duration: 0.18) : .spring(response: 0.36, dampingFraction: 0.6), value: selected)
+        .animation(reduceMotion ? .timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000) : .timingCurve(0.34, 1.56, 0.64, 1, duration: Motion.pillPop / 1000), value: selected)
     }
 
     /// `.circle::before`: a 52 px circle in the secondary color with a check, centered on the circle's edge at the top
@@ -161,7 +164,27 @@ struct CircleItem: View {
         }
         .frame(width: stage.px(badge), height: stage.px(badge))
         .offset(x: stage.px(side - edge - badge / 2), y: stage.px(edge - badge / 2))
-        .transition(reduceMotion ? .opacity : .scale(scale: 0.4).combined(with: .opacity))
+        .transition(reduceMotion ? .opacity : .scale(scale: Motion.popFromPill).combined(with: .opacity))
+    }
+}
+
+/// `.online-ring` (`pulse` of Android's `CircleItem`): a 2 px ring in the secondary color, 16 px outside the circle, that grows
+/// from .92 to 1.25 of its size while it fades out, every 2.4 s (ease-out).
+private struct PulseRing: View {
+    let side: Double
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2.4) / 2.4
+            let wave = Motion.easeOut(t)
+            let diameter = (side + 32) * (0.92 + 0.33 * wave)
+            Circle()
+                .strokeBorder(colors.accent2.color.opacity(0.7 * (1 - wave)), lineWidth: stage.px(2))
+                .frame(width: stage.px(diameter), height: stage.px(diameter))
+        }
+        .allowsHitTesting(false)
     }
 }
 

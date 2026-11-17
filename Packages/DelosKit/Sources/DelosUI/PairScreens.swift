@@ -194,7 +194,8 @@ struct PairPCScreen: View {
                     ) { focused in
                         CircleItem(
                             icon: Symbols.desktopWindows, label: host.name, meta: L(PairList.status(host)),
-                            metaDot: host.reachability == .online ? .onlineGreen : nil, selected: host.pin != nil, focused: focused
+                            metaDot: host.reachability == .online ? .onlineGreen : nil, selected: host.pin != nil,
+                            pulse: host.reachability == .online && host.pin == nil, focused: focused
                         )
                     }
                     .staggerEntrance()
@@ -223,53 +224,6 @@ struct PairPCScreen: View {
         hosts.stopDiscovery()
         hosts.startDiscovery()
         searching = true
-    }
-}
-
-/// Entering a PC's address (the address dialog of DELOS for Android): the field and "Add PC".
-struct PairAddressScreen: View {
-    let focus: FocusModel
-    let navigator: Navigator
-    let onSubmit: @MainActor (String) -> Void
-    @Environment(\.stage) private var stage
-    @State private var text = ""
-    @FocusState private var typing: Bool
-
-    var body: some View {
-        VStack(spacing: stage.px(48)) {
-            Heading(title: L("devices_address_title"), sub: L("devices_address_note"))
-                .staggerEntrance()
-            addressField
-            FocusItem(id: "add", model: focus, moves: [.up: "field"], action: { onSubmit(text) }) { focused in
-                PillButton(label: L("devices_address_action"), icon: Symbols.addLink, primary: true, focused: focused)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .entranceScope()
-        .onChange(of: typing) { _, now in navigator.textEditing(now) }
-        .onChange(of: navigator.isEditingText) { _, now in if !now { typing = false } }
-        .onAppear { typing = true }
-    }
-}
-
-extension PairAddressScreen {
-    @ViewBuilder fileprivate var addressField: some View {
-        #if os(tvOS)
-        // The text field takes the focus itself and opens the system keyboard when it is selected; a focus item around it
-        // would take the select instead. Done on the keyboard goes on to the button.
-        TextPill(
-            label: L("pairing_pc_address_hint"), icon: Symbols.mapPin, placeholder: "192.168.1.20", text: $text,
-            editing: $typing, focused: false, address: true, onSubmit: { focus.focus("add") }
-        )
-        .tvFocusSection()
-        #else
-        FocusItem(id: "field", model: focus, moves: [.down: "add"], action: { typing = true }) { focused in
-            TextPill(
-                label: L("pairing_pc_address_hint"), icon: Symbols.mapPin, placeholder: "192.168.1.20", text: $text,
-                editing: $typing, focused: focused, address: true, onSubmit: { focus.focus("add") }
-            )
-        }
-        #endif
     }
 }
 
@@ -316,7 +270,14 @@ struct PinScreen: View {
     }
 
     private func pair() async {
-        guard let host = hosts.host(hostID) else {
+        // A PC that was just added may take a moment to show up (`awaitPc(…, 5_000)` of Android's `PinScreen`)
+        var known = hosts.host(hostID)
+        for _ in 0..<50 where known == nil {
+            try? await Task.sleep(for: .milliseconds(100))
+            guard !Task.isCancelled else { return }
+            known = hosts.host(hostID)
+        }
+        guard let host = known else {
             onFailed(PairFailure.notFound.text(pcName: ""))
             return
         }
@@ -353,12 +314,14 @@ private struct PinDigits: View {
     @State private var shown = false
 
     var body: some View {
-        HStack(spacing: stage.px(26)) {
+        // A compact stage makes the digit boxes up to 20 % smaller (the digits keep their size)
+        let ds = stage.compact ? max(stage.compactScale, 0.8) : 1
+        HStack(spacing: stage.px(26 * ds)) {
             ForEach(Array(pin.enumerated()), id: \.offset) { index, digit in
                 Text(String(digit))
                     .font(DelosFonts.unbounded(stage.tpx(92)))
                     .foregroundStyle(colors.text.color)
-                    .frame(width: stage.px(148), height: stage.px(176))
+                    .frame(width: stage.px(148 * ds), height: stage.px(176 * ds))
                     .background {
                         GlassShape(RoundedRectangle(cornerRadius: stage.px(32)), tint: colors.surface2, role: .panel)
                             .overlay(RoundedRectangle(cornerRadius: stage.px(32)).strokeBorder(colors.line.color, lineWidth: stage.px(1)))
@@ -366,7 +329,7 @@ private struct PinDigits: View {
                     .opacity(shown ? 1 : 0)
                     .scaleEffect(shown ? 1 : 0.8)
                     .offset(y: shown ? 0 : stage.px(30))
-                    .animation(.spring(response: 0.5, dampingFraction: 0.62).delay(0.08 * Double(index)), value: shown)
+                    .animation(.timingCurve(0.34, 1.56, 0.64, 1, duration: 0.7).delay(0.08 * Double(index)), value: shown)
             }
         }
         .onAppear { shown = true }

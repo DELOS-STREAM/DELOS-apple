@@ -415,10 +415,8 @@ public struct DelosRoot: View {
                 focus: entry.focus,
                 onHost: { host in host.pin != nil ? actions.connect(host.id) : go { navigator.push(.pin(hostID: host.id), focus: "cancel") } },
                 onCode: { host in actions.pairWithCode(hostID: host.id) },
-                onAddress: { go { navigator.push(.pairAddress, focus: "field") } }
+                onAddress: { addByAddress() }
             )
-        case .pairAddress:
-            PairAddressScreen(focus: entry.focus, navigator: navigator, onSubmit: addAndPair)
         case .pin(let hostID):
             pinScreen(hostID: hostID, code: nil, entry: entry)
         case .pairCode(let hostID, let code):
@@ -518,23 +516,32 @@ public struct DelosRoot: View {
         feedback?.play(.move)
     }
 
-    /// "Add PC" on the address screen (`addAndPair` of DELOS for Android): asks the address who it is, then pairs with
-    /// it, or opens its library when it is paired already. What goes wrong is said in a toast.
-    private func addAndPair(_ text: String) {
+    /// "Enter address" on the pairing screen (`addByAddress` of DELOS for Android): a dialog for the address.
+    private func addByAddress() {
+        layers.openDialog(DialogSpec(
+            title: L("devices_address_title"), note: L("devices_address_note"),
+            fields: [DialogField(icon: Symbols.mapPin, placeholder: "192.168.1.20", maxLength: 64, address: true)],
+            confirm: L("devices_address_action")
+        ) { addAndPair($0[0]) })
+    }
+
+    /// "Add PC" in the address dialog (`addAndPair` of DELOS for Android): asks the address who it is, then pairs with
+    /// it, or opens its library when it is paired already. What goes wrong is said in a toast; the dialog stays on a
+    /// wrong address.
+    private func addAndPair(_ text: String) -> Bool {
         let address: HostAddress
         switch AddressEntry(text) {
         case .empty:
             feedback?.play(.error)
             toasts.show(L("devices_address_required"), icon: Symbols.error)
-            return
+            return false
         case .invalid:
             feedback?.play(.error)
             toasts.show(L("devices_add_not_an_address", text.trimmingCharacters(in: .whitespacesAndNewlines)), icon: Symbols.error)
-            return
+            return false
         case .address(let typed):
             address = typed
         }
-        navigator.isEditingText = false
         toasts.show(L("devices_address_looking", address.description), icon: Symbols.search)
         Task {
             do {
@@ -543,7 +550,6 @@ public struct DelosRoot: View {
                     if host.pin != nil {
                         actions.connect(host.id)
                     } else {
-                        _ = navigator.back()
                         navigator.push(.pin(hostID: host.id), focus: "cancel")
                     }
                 }
@@ -552,6 +558,7 @@ public struct DelosRoot: View {
                 toasts.show(L("devices_add_no_answer", address.description), icon: Symbols.error)
             }
         }
+        return true
     }
 }
 

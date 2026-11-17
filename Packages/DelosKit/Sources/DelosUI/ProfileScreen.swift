@@ -20,14 +20,18 @@ struct ProfileScreen: View {
     var body: some View {
         CenterColumn(gap: 54) {
             VStack(spacing: stage.px(18 * stage.compactScale)) {
-                // box-shadow: 0 30px 80px -24px glow
                 AvatarBadge(avatar: .of(profile.avatar), size: 240 * stage.compactScale, iconSize: 120 * stage.compactScale)
-                    .shadow(color: colors.glow.color, radius: stage.px(40), y: stage.px(30))
+                    .background {
+                        // box-shadow: 0 30px 80px -24px glow: a blur of 80 (sigma 40) of the circle shrunk by the spread
+                        Circle().fill(colors.glow.color)
+                            .padding(stage.px(24))
+                            .blur(radius: stage.px(40))
+                            .offset(y: stage.px(30))
+                    }
                 Text(profile.name)
                     .font(DelosFonts.unbounded(stage.tpx(stage.compact ? 48 : 64)))
                     .tracking(-stage.tpx(stage.compact ? 48 : 64) * 0.01)
                     .foregroundStyle(colors.text.color)
-                    .lineLimit(1)
                 Text(L("profile_signed_in", DeviceModel.name, count))
                     .font(DelosFonts.figtree(stage.tpx(26)))
                     .foregroundStyle(colors.text2.color)

@@ -12,7 +12,7 @@ struct BootScreen: View {
 
     var body: some View {
         VStack(spacing: stage.px(28)) {
-            BootLogo()
+            BootLogo(scale: stage.compactScale)
                 .padding(.bottom, stage.px(8))
             // The leading padding balances the letter spacing after the last letter
             Text(verbatim: "DELOS")
@@ -24,7 +24,7 @@ struct BootScreen: View {
                 .font(DelosFonts.figtree(stage.tpx(28)))
                 .foregroundStyle(colors.text2.color)
                 .multilineTextAlignment(.center)
-            HStack(spacing: stage.px(24)) {
+            HStack(spacing: stage.px(stage.compact ? 44 : 24)) {
                 FocusItem(id: "begin", model: focus, action: onBegin) { focused in
                     PillButton(label: L("firstrun_boot_begin"), icon: Symbols.arrowForward, primary: true, focused: focused)
                 }
@@ -44,19 +44,21 @@ struct BootScreen: View {
 struct BootLogo: View {
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
+    /// The factor of the logo on a compact stage (`compactScale`).
+    var scale = 1.0
 
     /// The drawing's square: the moon's orbit (132 px from the center) plus its 44 px glow on each side.
     private static let canvas = 360.0
 
     var body: some View {
         Color.clear
-            .frame(width: stage.px(210), height: stage.px(210))
+            .frame(width: stage.px(210 * scale), height: stage.px(210 * scale))
             .overlay {
                 TimelineView(.animation) { context in
                     let turn = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 7) / 7 * 2 * Double.pi
                     Canvas { g, size in draw(&g, size: size, turn: turn) }
                 }
-                .frame(width: stage.px(Self.canvas), height: stage.px(Self.canvas))
+                .frame(width: stage.px(Self.canvas * scale), height: stage.px(Self.canvas * scale))
                 .allowsHitTesting(false)
             }
     }
@@ -168,7 +170,7 @@ struct CreateProfileScreen: View {
         let all = Avatar.all
         let rows = stride(from: 0, to: all.count, by: columns).map { Array(all[$0..<min($0 + columns, all.count)]) }
         let k = stage.compactScale
-        return VStack(spacing: stage.px(stage.compact ? AvatarGridLayout.rowGap(144 * k) : 26)) {
+        let grid = VStack(spacing: stage.px(stage.compact ? AvatarGridLayout.rowGap(144 * k) : 26)) {
             ForEach(rows.indices, id: \.self) { row in
                 HStack(alignment: .top, spacing: stage.px(AvatarGridLayout.columnGap(stage))) {
                     ForEach(rows[row]) { a in
@@ -184,6 +186,14 @@ struct CreateProfileScreen: View {
                 }
             }
         }
+        if stage.compact { return AnyView(grid) }
+        // Both rows scroll together (a column stays a column) when the stage is narrower than the eight cells, which keep
+        // AVATAR_MARGIN (52) at each end; the focused avatar scrolls into view with the next one peeking in
+        let padded = grid.padding(.horizontal, stage.px(52))
+        return AnyView(ViewThatFits(in: .horizontal) {
+            padded
+            FocusScroll(axis: .horizontal) { padded }.scrollClipDisabled()
+        })
     }
 
     private func wrap(_ i: Int) -> [FocusDirection: AnyHashable] {
@@ -229,10 +239,12 @@ enum AvatarGridLayout {
     static func columnGap(_ stage: Stage) -> Double { stage.compact ? compactGap : wideGap }
 
     static func columns(_ stage: Stage) -> Int {
+        // A stage that is not compact keeps the eight columns and scrolls sideways when they do not fit (`ScrollRow`)
+        guard stage.compact else { return 8 }
         let room = stage.width - 2 * (CenterColumnLayout.margin + max(stage.safe.leading, stage.safe.trailing))
         let gap = columnGap(stage), width = cell * stage.compactScale
         let fit = Int(((room + gap) / (width + gap)).rounded(.down))
-        return min(stage.compact ? 4 : 8, max(fit, 2))
+        return min(4, max(fit, 2))
     }
 
     /// How far a focused circle [side] wide reaches beyond its box: half its growth and the ring.

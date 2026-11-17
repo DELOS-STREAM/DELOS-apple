@@ -14,8 +14,6 @@ public enum Screen: Hashable, Sendable {
     case profile
     /// Pairing: the PCs found on the network, entering an address, searching again.
     case pair
-    /// Entering a PC's address to add and pair it.
-    case pairAddress
     /// The PIN to type on the PC [hostID] while pairing with it waits; leaving it cancels the attempt.
     case pin(hostID: String)
     /// Pairing with the one-time [code] from the PC's web UI instead of a PIN shown here; leaving it cancels the attempt.
