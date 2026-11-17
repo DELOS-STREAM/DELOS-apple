@@ -597,6 +597,7 @@ settings_native_artwork_ready_toast
 artwork_error_no_key
 artwork_error_key_rejected
 artwork_error_api_http
+artwork_error_download_http
 artwork_error_bad_reply
 artwork_error_too_large
 artwork_error_save_failed

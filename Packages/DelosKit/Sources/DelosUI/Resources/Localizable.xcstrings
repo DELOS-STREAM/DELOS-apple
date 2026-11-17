@@ -4069,6 +4069,17 @@
         }
       }
     },
+    "artwork_error_download_http": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTP %1$d"
+          }
+        }
+      }
+    },
     "artwork_error_key_rejected": {
       "extractionState": "manual",
       "localizations": {
