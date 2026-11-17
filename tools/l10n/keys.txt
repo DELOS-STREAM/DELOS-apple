@@ -215,6 +215,7 @@ filters_section_duration
 filters_all
 filters_hdr_any
 filters_hdr_hdr
+filters_hdr_sdr
 filters_length_any
 filters_length_under_10
 filters_length_10_30

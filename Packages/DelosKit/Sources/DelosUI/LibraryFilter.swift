@@ -88,7 +88,7 @@ enum LibraryFilter {
         switch filter {
         case .any: L("filters_hdr_any")
         case .hdr: L("filters_hdr_hdr")
-        case .sdr: "SDR"
+        case .sdr: L("filters_hdr_sdr")
         case .unknown: L("metadata_hdr_unverified")
         }
     }
