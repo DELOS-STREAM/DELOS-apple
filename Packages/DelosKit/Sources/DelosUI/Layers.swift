@@ -84,6 +84,8 @@ final class Layers {
     @ObservationIgnored var feedback: Feedback?
     /// Counts every layer that opened or closed: what the layers' appearance animates on.
     private(set) var generation = 0
+    /// The element frame the last context menu opened at, in global points.
+    private(set) var menuAnchor: CGRect?
 
     var isOpen: Bool { layer != nil }
 
@@ -99,10 +101,16 @@ final class Layers {
         open(.dialog(spec), focus: DialogLayer.firstFocus(spec))
     }
 
+    /// Opens a menu a chosen menu item leads to (a list of matches after "Search"), at the frame the last menu had.
+    func openContextMenu(_ menu: ContextMenu, anchor: CGRect?) {
+        open(.context(menu, anchor: anchor), focus: Self.rowID(0))
+    }
+
     private func open(_ next: Layer, focus first: AnyHashable) {
         feedback?.play(.open)
         menuPath = []
         focus = FocusModel(initial: first)
+        if case .context(_, let anchor) = next { menuAnchor = anchor }
         layer = next
         generation += 1
     }

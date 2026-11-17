@@ -11,16 +11,19 @@ final class ShellActions {
     let toasts: Toasts
     let layers: Layers
     let artwork: ArtworkStore
+    let metadata: GameMetadataModel
     private let playtimes = PlaytimeStore()
     private let played = PlayedGames()
 
-    init(navigator: Navigator, hosts: HostStore, profiles: ProfileStore, toasts: Toasts, layers: Layers, artwork: ArtworkStore) {
+    init(navigator: Navigator, hosts: HostStore, profiles: ProfileStore, toasts: Toasts, layers: Layers, artwork: ArtworkStore,
+         metadata: GameMetadataModel) {
         self.navigator = navigator
         self.hosts = hosts
         self.profiles = profiles
         self.toasts = toasts
         self.layers = layers
         self.artwork = artwork
+        self.metadata = metadata
     }
 
     private var feedback: Feedback? { layers.feedback }
@@ -162,7 +165,7 @@ final class ShellActions {
 
     /// A game's menu in the library (`gameMenu`), depending on what runs on the PC: this game (resume, quit), another
     /// game (quit that one and start this one, or go back to it) or nothing (start). Choosing Quit is the confirmation.
-    /// Android's Artwork, Metadata, App settings and Hide wait for their features.
+    /// Android's Artwork, App settings and Hide wait for their features; Metadata shows when a metadata service is configured.
     func gameMenu(hostID: String, app: HostApp) -> ContextMenu? {
         guard let host = hosts.host(hostID) else { return nil }
         let running = host.runningAppID == 0 ? nil : hosts.apps[hostID]?.first { $0.id == host.runningAppID }
@@ -185,6 +188,9 @@ final class ShellActions {
         let other = running.flatMap { $0.id == app.id ? nil : L("home_header_other_running", $0.title) }
         let header = MenuHeader(
             status: running?.id == app.id ? L("home_header_running") : L("home_header_game"), running: running?.id == app.id, meta: other)
+        if metadata.offers(app) {
+            items.append(MenuItem(icon: Symbols.metadata, label: L("home_menu_metadata")) { [self] in openMetadataMenu(hostID: hostID, app: app) })
+        }
         return ContextMenu(title: app.title, items: items, header: header)
     }
 

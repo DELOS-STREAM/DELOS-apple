@@ -64,7 +64,7 @@ struct SettingsScreen: View {
         case .controls: AppearanceForm.haptics
         case .appearance: AppearanceForm.theme
         case .covers: CoversForm.key
-        case .about: AppLanguageSetting.id
+        case .about: AppLanguageSetting.supportsAppSettings ? AppLanguageSetting.id : GameDataSetting.firstID
         }
     }
 
@@ -75,7 +75,9 @@ struct SettingsScreen: View {
                    pcName: actions.libraryHostID.flatMap { actions.hosts.host($0)?.name })
     }
 
-    private var rows: [SettingRow] { form.rows(tab) + appearanceForm.rows(tab) + coversForm.rows(tab) + AppLanguageSetting.rows(tab) }
+    private var rows: [SettingRow] {
+        form.rows(tab) + appearanceForm.rows(tab) + coversForm.rows(tab) + AppLanguageSetting.rows(tab) + GameDataSetting.rows(tab)
+    }
     private var focusedRow: SettingRow? { rows.first { focus.focused == AnyHashable($0.id) } }
 
     var body: some View {
@@ -223,6 +225,8 @@ struct SettingsScreen: View {
         case CoversForm.key: actions.openSteamGridDBKeyDialog()
         case CoversForm.missing: Task { await actions.downloadArtwork(hostID: actions.libraryHostID, refresh: false) }
         case CoversForm.refresh: Task { await actions.downloadArtwork(hostID: actions.libraryHostID, refresh: true) }
+        case _ where GameDataSetting.website(row.id) != nil:
+            if let url = GameDataSetting.website(row.id) { openURL(url) }
         default:
             if case .appSettings = row.value {
                 #if os(iOS)

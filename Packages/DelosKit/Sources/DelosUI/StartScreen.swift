@@ -98,6 +98,8 @@ public struct DelosRoot: View {
     @State private var actions: ShellActions
     /// The library's artwork and the focused game's background.
     @State private var homeArt: HomeArt
+    /// What the library knows about its games from the metadata service (off without one).
+    @State private var metadata: GameMetadataModel
     @State private var appearance: Appearance
     @State private var input: MenuInput?
     @State private var feedback: Feedback?
@@ -128,7 +130,10 @@ public struct DelosRoot: View {
         let navigator = Navigator(root: .boot, focus: "begin")
         let homeArt = HomeArt(artwork: ArtworkStore())
         _homeArt = State(initialValue: homeArt)
-        let actions = ShellActions(navigator: navigator, hosts: hosts, profiles: profiles, toasts: toasts, layers: layers, artwork: homeArt.artwork)
+        let metadata = GameMetadataModel()
+        _metadata = State(initialValue: metadata)
+        let actions = ShellActions(navigator: navigator, hosts: hosts, profiles: profiles, toasts: toasts, layers: layers, artwork: homeArt.artwork,
+                                   metadata: metadata)
         _actions = State(initialValue: actions)
         if !profiles.isFirstRun { navigator.reset(to: .start, focus: actions.startFocus()) }
         var appearance = profiles.current.map { AppearanceStore().load(profile: $0.id) } ?? Appearance()
@@ -197,6 +202,7 @@ public struct DelosRoot: View {
         .onPreferenceChange(VideoCoversBackdrop.self) { videoCoversBackdrop = $0 }
         .environment(hosts)
         .environment(homeArt)
+        .environment(metadata)
         .environment(navigator)
         .environment(layers)
         .environment(toasts)
@@ -215,6 +221,7 @@ public struct DelosRoot: View {
         #endif
         .environment(\.delosColors, colors)
         .environment(\.reducedMotion, systemReduceMotion || appearance.reducedMotion)
+        .environment(\.matchGameColors, appearance.matchGameColors)
         .preferredColorScheme(colors.dark ? .dark : .light)
         .onChange(of: profiles.current?.id) { _, id in
             appearance = id.map { appearances.load(profile: $0) } ?? Appearance()
