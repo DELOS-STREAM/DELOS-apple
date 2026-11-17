@@ -1,3 +1,4 @@
+import DelosData
 import DelosCore
 import DelosHost
 import DelosInput
@@ -712,5 +713,158 @@ extension StreamControllerTests {
         #expect(!controller.menuOpen)
         #expect(controller.phase == .streaming)
         #expect(steps.stops == 0 && steps.quits == 0)
+    }
+}
+
+/// The connected time of a stream goes to the playtime store (`PlaytimeTracker` of DELOS for Android).
+@MainActor
+@Suite struct StreamPlaytimeTests {
+    /// A clock the test moves and the slices the tracker wrote.
+    @MainActor private final class Ledger {
+        var now = 1000.0
+        var slices: [Double] = []
+        var total: Double { slices.reduce(0, +) }
+        lazy var tracker = PlaytimeTracker(clock: { [unowned self] in now }, sink: { [unowned self] in slices.append($0) })
+    }
+
+    private func streaming(_ ledger: Ledger, steps: FakeSteps = FakeSteps(), interval: Duration = .seconds(30)) async -> StreamController {
+        let controller = StreamController(playtime: ledger.tracker, playtimeFlushInterval: interval) { steps }
+        controller.start(display: iPhone)
+        await eventually { steps.isConnecting }
+        steps.finishConnect()
+        await eventually { controller.phase == .streaming }
+        return controller
+    }
+
+    @Test func aNormalEndWritesTheConnectedTimeOnce() async {
+        let ledger = Ledger()
+        let controller = await streaming(ledger)
+        ledger.now += 125
+        await controller.leave(quit: false)
+        #expect(ledger.total == 125)
+        // Leaving again, dismissing and the screen closing add nothing
+        ledger.now += 50
+        await controller.leave(quit: false)
+        controller.dismiss()
+        #expect(ledger.slices == [125])
+    }
+
+    @Test func nothingIsRecordedBeforeTheFirstConnectedMoment() async {
+        let ledger = Ledger()
+        let steps = FakeSteps()
+        steps.holdsLaunch = true
+        let controller = StreamController(playtime: ledger.tracker) { steps }
+        controller.start(display: iPhone)
+        await eventually { steps.isLaunching }
+        ledger.now += 40
+        await controller.leave(quit: false)
+        steps.finishLaunch()
+        ledger.now += 40
+        #expect(ledger.slices.isEmpty)
+        #expect(!ledger.tracker.running)
+    }
+
+    @Test func aCancelWhileConnectingRecordsNothing() async {
+        let ledger = Ledger()
+        let steps = FakeSteps()
+        let controller = StreamController(playtime: ledger.tracker) { steps }
+        controller.start(display: iPhone)
+        await eventually { steps.isConnecting }
+        ledger.now += 20
+        await controller.leave(quit: false)
+        #expect(ledger.slices.isEmpty)
+    }
+
+    @Test func aFailedLaunchRecordsNothing() async {
+        let ledger = Ledger()
+        let steps = FakeSteps()
+        steps.launchFailure = .denied
+        let controller = StreamController(playtime: ledger.tracker) { steps }
+        controller.start(display: iPhone)
+        await eventually { controller.phase != .connecting }
+        ledger.now += 20
+        #expect(ledger.slices.isEmpty && !ledger.tracker.running)
+    }
+
+    @Test func theTimeIsFlushedWhileStreamingAndTheRestAtTheEnd() async {
+        let ledger = Ledger()
+        let controller = await streaming(ledger, interval: .milliseconds(5))
+        ledger.now += 30
+        await eventually { ledger.total == 30 }
+        #expect(ledger.total == 30, "written while the stream still runs")
+        ledger.now += 7
+        await controller.leave(quit: false)
+        #expect(ledger.total == 37)
+        let written = ledger.slices.count
+        try? await Task.sleep(for: .milliseconds(30))
+        #expect(ledger.slices.count == written, "no flush after the end")
+    }
+
+    @Test func theBackgroundEndsTheTimeAndTheReturnCountsAgainFromTheNewConnection() async {
+        let ledger = Ledger()
+        final class Made { var steps: [FakeSteps] = [] }
+        let made = Made()
+        let controller = StreamController(playtime: ledger.tracker) {
+            let steps = FakeSteps()
+            made.steps.append(steps)
+            return steps
+        }
+        controller.start(display: iPhone)
+        await eventually { made.steps[0].isConnecting }
+        made.steps[0].finishConnect()
+        await eventually { controller.phase == .streaming }
+        ledger.now += 60
+        await controller.enteredBackground()?.value
+        #expect(ledger.slices == [60])
+        // Away from the app: no time
+        ledger.now += 600
+        controller.returnedToForeground()
+        await eventually { made.steps.count == 2 && made.steps[1].isConnecting }
+        ledger.now += 15
+        #expect(ledger.slices == [60], "reconnecting is not counted")
+        made.steps[1].finishConnect()
+        await eventually { controller.phase == .streaming }
+        ledger.now += 30
+        await controller.leave(quit: false)
+        #expect(ledger.slices == [60, 30])
+    }
+
+    @Test func aDroppedConnectionWritesTheTimeUpToIt() async {
+        let ledger = Ledger()
+        let steps = FakeSteps()
+        let controller = await streaming(ledger, steps: steps)
+        ledger.now += 90
+        steps.continuation.yield(.terminated(.unexpectedEarlyTermination))
+        await eventually { controller.phase != .streaming }
+        #expect(ledger.slices == [90])
+        ledger.now += 500
+        await controller.leave(quit: false)
+        #expect(ledger.slices == [90])
+    }
+
+    @Test func tryAgainCountsOnlyTheNewConnection() async {
+        let ledger = Ledger()
+        final class Made { var steps: [FakeSteps] = [] }
+        let made = Made()
+        let controller = StreamController(playtime: ledger.tracker) {
+            let steps = FakeSteps()
+            made.steps.append(steps)
+            return steps
+        }
+        controller.start(display: iPhone)
+        await eventually { made.steps[0].isConnecting }
+        made.steps[0].finishConnect()
+        await eventually { controller.phase == .streaming }
+        ledger.now += 10
+        made.steps[0].continuation.yield(.terminated(.unexpectedEarlyTermination))
+        await eventually { controller.phase != .streaming }
+        ledger.now += 100
+        controller.retry()
+        await eventually { made.steps.count == 2 && made.steps[1].isConnecting }
+        made.steps[1].finishConnect()
+        await eventually { controller.phase == .streaming }
+        ledger.now += 5
+        await controller.leave(quit: false)
+        #expect(ledger.slices == [10, 5])
     }
 }

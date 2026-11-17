@@ -15,6 +15,8 @@ import UIKit
 struct StreamScreen: View {
     let hostID: String
     let appID: Int
+    /// The profile the streaming time is recorded for (nil: none).
+    let profileID: String?
     /// The current profile's stream settings.
     let settings: StreamSettings
     /// Keeps the statistics overlay the stream menu chose (the profile's, for its next streams).
@@ -31,9 +33,10 @@ struct StreamScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     #endif
 
-    init(hostID: String, appID: Int, settings: StreamSettings, keepStatisticsOverlay: @escaping @MainActor (StatisticsOverlay) -> Void = { _ in }) {
+    init(hostID: String, appID: Int, profileID: String? = nil, settings: StreamSettings, keepStatisticsOverlay: @escaping @MainActor (StatisticsOverlay) -> Void = { _ in }) {
         self.hostID = hostID
         self.appID = appID
+        self.profileID = profileID
         self.settings = settings
         self.keepStatisticsOverlay = keepStatisticsOverlay
     }
@@ -81,7 +84,11 @@ struct StreamScreen: View {
         // The display layer unless the debug switch asks for the Metal renderer (RendererChoice)
         let renderer = RendererChoice.current.makeRenderer(
             pacing: settings.framePacing, fps: settings.streamFPS(refreshRate: StreamDevice.current.maxFramesPerSecond))
-        let controller = StreamController(brightness: Self.deviceBrightness, statisticsOverlay: settings.statisticsOverlay) { [hosts, hostID, appID, settings] in
+        let playtime = profileID.map { profile in
+            let store = PlaytimeStore()
+            return PlaytimeTracker(sink: { [hostID, appID] in store.add($0, profile: profile, hostID: hostID, appID: appID) })
+        }
+        let controller = StreamController(brightness: Self.deviceBrightness, statisticsOverlay: settings.statisticsOverlay, playtime: playtime) { [hosts, hostID, appID, settings] in
             LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer)
         }
         controller.leavingHold = .seconds(ExitLook.handoff(reduced: reducedMotion))

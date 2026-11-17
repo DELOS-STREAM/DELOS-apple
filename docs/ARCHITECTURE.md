@@ -937,12 +937,19 @@ forgets the PC and its pairing here only. A PC that is removed or unpaired leave
 and its library is dropped from the stack (`Navigator.dropLibrary`). Connect, a press on a PC of the start screen, the
 pairing screen's list and the end of pairing all go through the portal (next section); the Wake row only sends the packet.
 
+Streaming time: `StreamController` drives a `PlaytimeTracker` (`DelosData`, Android's `PlaytimeTracker`) that adds to
+`PlaytimeStore` per profile, PC and app. It counts from the moment the core is connected until the connection ends
+(Disconnect, Quit app, leaving the screen, a dropped or terminated connection, a failure, the app going to the
+background, which closes the stream); the loader, a cancelled or failed launch and the time away are not counted, a
+return from the background or Try again counts the new connection. It writes the elapsed slice every 30 s and at the
+end (a kill loses at most 30 s); every end is idempotent, so nothing is counted twice. There is no minimum: any slice
+over zero is added, and the library shows under one minute as one minute. The library re-reads the time when it is
+shown again after the stream.
+
 Not ported yet: the default PC's Skip the start screen, the Devices screen's link test,
-the connect portal that wakes and waits, waking an asleep PC on A, the companion screen; in the library the compact layout, recording
-the streaming time (the stream screen does not add to `PlaytimeStore` yet), the game menu's Artwork, App settings and
+the connect portal that wakes and waits, waking an asleep PC on A, the companion screen; in the library the compact layout, the game menu's Artwork, App settings and
 Hide, the metadata filters (Android's filter modal and its empty-library message), the game's colors in its menu tile, hidden games, wrap-around in the row and per-game settings.
-Not ported yet: the default PC's Skip the start screen, the Devices screen's link test, the companion screen; in the library the compact layout, recording
-the streaming time (the stream screen does not add to `PlaytimeStore` yet), game metadata (IGDB genres and themes,
+Not ported yet: the default PC's Skip the start screen, the Devices screen's link test, the companion screen; in the library the compact layout, game metadata (IGDB genres and themes,
 HowLongToBeat, HDR chips through the metadata Worker), the game menu's Artwork, Metadata, App settings and Hide, the
 game's colors in its menu tile, hidden games, wrap-around in the row and per-game settings.
 

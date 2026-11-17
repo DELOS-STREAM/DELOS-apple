@@ -115,14 +115,22 @@ final class StreamController {
     /// The loader's phase and its one-shot cancel (B, Escape and the Cancel pill); a new one for each attempt.
     @ObservationIgnored private(set) var loader = LoaderCancel()
 
+    /// The connected time of the stream goes to the playtime store (nil: nothing is recorded).
+    @ObservationIgnored private let playtime: PlaytimeTracker?
+    @ObservationIgnored private let playtimeFlushInterval: Duration
+    @ObservationIgnored private var playtimeTask: Task<Void, Never>?
+
     @ObservationIgnored private let brightness: (any ScreenBrightness)?
     /// The brightness the player chose in this stream: it is set again when the app comes back from the background.
     @ObservationIgnored private var brightnessChosen: Int?
 
     init(
         capabilities: StreamMenuCapabilities = .platform, brightness: (any ScreenBrightness)? = nil,
-        statisticsOverlay: StatisticsOverlay = .off, makeSteps: @escaping @MainActor () -> any StreamSteps
+        statisticsOverlay: StatisticsOverlay = .off, playtime: PlaytimeTracker? = nil, playtimeFlushInterval: Duration = .seconds(30),
+        makeSteps: @escaping @MainActor () -> any StreamSteps
     ) {
+        self.playtime = playtime
+        self.playtimeFlushInterval = playtimeFlushInterval
         self.makeSteps = makeSteps
         self.statisticsOverlay = statisticsOverlay
         self.brightness = brightness
@@ -193,6 +201,7 @@ final class StreamController {
     @discardableResult
     private func endAttempt() -> Task<Void, Never> {
         attemptID += 1
+        stopPlaytime()
         listener?.cancel()
         attempt?.cancel()
         listener = nil
@@ -218,6 +227,7 @@ final class StreamController {
             connected()
         case .terminated(let termination):
             guard phase == .streaming || phase == .connecting else { return }
+            stopPlaytime()
             stopStatistics()
             stopInput()
             if let text = StreamText.termination(termination) { fail(text) } else { phase = .ended }
@@ -243,11 +253,36 @@ final class StreamController {
             self.input = input
         }
         startStatistics()
+        startPlaytime()
+    }
+
+    /// Time counts from the moment the core is connected (video and audio flow), like Android's `connectionStarted`;
+    /// nothing before it (the loader's waiting, a launch that was cancelled or failed) is counted.
+    private func startPlaytime() {
+        guard let playtime else { return }
+        playtime.start()
+        playtimeTask?.cancel()
+        let interval = playtimeFlushInterval
+        playtimeTask = Task { [weak playtime] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: interval)
+                guard !Task.isCancelled else { return }
+                playtime?.flush()
+            }
+        }
+    }
+
+    /// The connection ended, dropped or was closed: the rest is written; ending twice adds nothing.
+    private func stopPlaytime() {
+        playtimeTask?.cancel()
+        playtimeTask = nil
+        playtime?.end()
     }
 
     private func fail(_ text: ResultText) {
         // Once the player leaves or the app goes to the background, what the interrupted attempt throws is no failure
         guard !suspended, phase == .connecting || phase == .streaming else { return }
+        stopPlaytime()
         stopStatistics()
         stopInput()
         hideMenu()
