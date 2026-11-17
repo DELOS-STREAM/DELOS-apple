@@ -13,21 +13,52 @@ private struct ChipGlideKey: PreferenceKey {
     static func reduce(value: inout CGRect?, nextValue: () -> CGRect?) { value = nextValue() ?? value }
 }
 
-/// The one focus ring of a row of chips (`RowGlideHost(ring = FocusRing(3f, 3f), corner = 999f, focusScale = 1.05f, fill = null,
-/// glow = null)`): it glides from chip to chip (520 ms on the glide curve) instead of each chip fading its own; the first
-/// focus and reduced motion do not glide, and when the focus leaves the chips it waits 70 ms for the next one, then fades.
+/// How a gliding ring looks: the scale the focused element grows to (its layout bounds times [scale]), the ring's width, and
+/// whether the element has a soft glow under it.
+struct GlideLook: Equatable, Sendable {
+    let scale: Double
+    /// Stage px.
+    let ring: Double
+    let glow: Bool
+
+    /// The chips of the filter strip and the sheet (`FocusRing(3f, 3f)`, `focusScale = 1.05f`, no glow).
+    static let chip = GlideLook(scale: 1.05, ring: 3, glow: false)
+    /// The toolbar's pills (`PillButton(compact = true)`: scale 1.08, ring 4, the glow of `focusLook`).
+    static let pill = GlideLook(scale: 1.08, ring: 4, glow: true)
+    /// The space between neighbouring pills: the focused one grows and its ring lies beyond that, and neither may reach the
+    /// next pill (a pill is up to about 600 px wide).
+    static let pillGap = 32.0
+
+    /// How far the focused element's ring reaches beyond its own layout bounds on each side (stage px): half of the growth
+    /// and the band the ring lies in, which is twice its width.
+    func reach(width: Double) -> Double { width * (scale - 1) / 2 + 2 * ring }
+}
+
+extension EnvironmentValues {
+    /// The look of the ``ChipGlideHost`` an element is in; nil outside one (the element draws its own focus look).
+    @Entry var glideLook: GlideLook?
+}
+
+/// The one focus ring of a row of chips or pills (`RowGlideHost(ring = FocusRing(3f, 3f), corner = 999f, focusScale = 1.05f,
+/// fill = null, glow = null)`): it glides from element to element (520 ms on the glide curve) instead of each fading its own,
+/// which showed two rings at once while the focus moved (one fading out, one fading in, and the one of the focused pill
+/// reaching the pill beside it); the first focus and reduced motion do not glide, and when the focus leaves the elements it
+/// waits 70 ms for the next one, then fades.
 struct ChipGlideHost<Content: View>: View {
+    var look = GlideLook.chip
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         content()
+            .environment(\.glideLook, look)
             .coordinateSpace(name: "chipGlide")
-            .backgroundPreferenceValue(ChipGlideKey.self) { frame in ChipGlideRing(target: frame) }
+            .backgroundPreferenceValue(ChipGlideKey.self) { frame in ChipGlideRing(target: frame, look: look) }
     }
 }
 
 private struct ChipGlideRing: View {
     let target: CGRect?
+    let look: GlideLook
     @State private var previous: CGRect?
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
@@ -36,11 +67,11 @@ private struct ChipGlideRing: View {
     var body: some View {
         Group {
             if let frame = target ?? previous {
-                // The ring sits 3 px outside the chip as it grows by 5 %, and is 3 px wide
-                let grown = CGSize(width: frame.width * ArtChipLook.focusScale, height: frame.height * ArtChipLook.focusScale)
-                let outside = stage.px(2 * ArtChipLook.ring)
+                // The ring sits a band of its own width outside the element as it grows, and is that wide
+                let grown = CGSize(width: frame.width * look.scale, height: frame.height * look.scale)
+                let outside = stage.px(2 * look.ring)
                 Capsule()
-                    .strokeBorder(colors.accent.color, lineWidth: stage.px(ArtChipLook.ring))
+                    .strokeBorder(colors.accent.color, lineWidth: stage.px(look.ring))
                     .frame(width: grown.width + 2 * outside, height: grown.height + 2 * outside)
                     .position(x: frame.midX, y: frame.midY)
                     .animation(reduced ? nil : .timingCurve(0.3, 1.22, 0.42, 1, duration: SettingsPlateGeometry.duration), value: target)
@@ -58,29 +89,32 @@ private struct ChipGlideRing: View {
     }
 }
 
-enum ArtChipLook {
-    static let focusScale = 1.05
-    static let ring = 3.0
-}
-
 private struct ChipScaleState: Equatable {
     let focused: Bool
     let pressed: Bool
 }
 
-private struct ChipFocus: ViewModifier {
+/// The focus look of an element in a ``ChipGlideHost``: it reports its frame to the host's ring, grows by the host's scale
+/// and, above its neighbours, has the pills' glow; the ring is the host's, not its own.
+struct ChipFocus: ViewModifier {
     let focused: Bool
+    @Environment(\.glideLook) private var host
     @Environment(\.reducedMotion) private var reduced
     @Environment(\.pressed) private var pressed
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
 
     func body(content: Content) -> some View {
+        let look = host ?? .chip
         content
             .background {
                 GeometryReader { proxy in
                     Color.clear.preference(key: ChipGlideKey.self, value: focused ? proxy.frame(in: .named("chipGlide")) : nil)
                 }
             }
-            .scaleEffect(focusScale(focused: focused, pressed: pressed, focus: ArtChipLook.focusScale))
+            .shadow(color: focused && look.glow ? colors.glow.color : .clear, radius: look.glow ? stage.px(25) : 0, y: stage.px(18))
+            .animation(.focusRing(focused: focused), value: focused)
+            .scaleEffect(focusScale(focused: focused, pressed: pressed, focus: look.scale))
             .animation(.focusScale(pressed: pressed, reduced: reduced), value: ChipScaleState(focused: focused, pressed: pressed))
             .zIndex(focused ? 1 : 0)
     }
@@ -270,9 +304,14 @@ struct ArtworkFilterSheet: View {
                 }
                 if state.refreshing { RingSpinner(size: 30) }
                 Spacer(minLength: 0)
-                resetPill(active: filters.active)
-                FocusItem(id: Self.doneID, model: focus, clickCue: .back, action: onClose) { focused in
-                    ToolbarPill(label: L("filters_art_done"), icon: Symbols.check, focused: focused, glyph: .north)
+                // Reset and Done share one ring that glides between them, and are far enough apart for it
+                ChipGlideHost(look: .pill) {
+                    HStack(spacing: stage.px(GlideLook.pillGap)) {
+                        resetPill(active: filters.active)
+                        FocusItem(id: Self.doneID, model: focus, clickCue: .back, action: onClose) { focused in
+                            ToolbarPill(label: L("filters_art_done"), icon: Symbols.check, focused: focused, glyph: .north)
+                        }
+                    }
                 }
             }
             .padding(.bottom, stage.px(8))

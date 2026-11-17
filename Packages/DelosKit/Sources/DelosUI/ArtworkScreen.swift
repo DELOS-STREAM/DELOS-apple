@@ -302,8 +302,16 @@ private struct ArtworkContent: View, Equatable {
 
     // MARK: Parts
 
+    /// The game chip and the two pills. The pills share one ring that glides from one to the other (so exactly one is ever
+    /// shown), and are as far apart as that ring and the focused pill's growth need.
     private var toolbar: some View {
-        HStack(spacing: stage.px(16)) {
+        ChipGlideHost(look: .pill) {
+            toolbarRow
+        }
+    }
+
+    private var toolbarRow: some View {
+        HStack(spacing: stage.px(GlideLook.pillGap)) {
             ArtworkGameChip(
                 match: model.match, looking: model.looking, appName: app.title, tab: model.tab,
                 imageCount: model.total ?? (model.filters.active ? nil : model.images?.count))
@@ -611,6 +619,8 @@ struct ToolbarPill: View {
     var badge = 0
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
+    /// Inside a ``ChipGlideHost`` the host draws the ring and the pill only grows; alone it draws its own focus look.
+    @Environment(\.glideLook) private var glide
 
     var body: some View {
         HStack(spacing: stage.px(12)) {
@@ -628,7 +638,22 @@ struct ToolbarPill: View {
             GlassShape(Capsule(), tint: colors.surface)
                 .overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
         }
-        .focusLook(focused, scale: 1.08, ring: 4, glowBlur: 50, glowY: 18)
+        .modifier(PillFocusLook(focused: focused, hosted: glide != nil))
+    }
+}
+
+/// The focus look of a ``ToolbarPill``: in a ``ChipGlideHost`` it reports its frame to the host's one ring and only grows,
+/// alone it has its own ring and glow (the game's settings screen).
+private struct PillFocusLook: ViewModifier {
+    let focused: Bool
+    let hosted: Bool
+
+    func body(content: Content) -> some View {
+        if hosted {
+            content.modifier(ChipFocus(focused: focused))
+        } else {
+            content.focusLook(focused, scale: GlideLook.pill.scale, ring: GlideLook.pill.ring, glowBlur: 50, glowY: 18)
+        }
     }
 }
 
@@ -721,12 +746,14 @@ private struct NoImages: View {
                 .font(DelosFonts.figtree(stage.tpx(20), .semibold))
                 .foregroundStyle(colors.text3.color)
                 .frame(maxWidth: stage.px(min(820, stage.width - 160)))
-            HStack(spacing: stage.px(16)) {
-                FocusItem(id: ArtworkEmpty.resetID, model: focus, clickCue: nil, action: onReset) { focused in
-                    ToolbarPill(label: L("filters_art_reset"), icon: Symbols.reset, focused: focused, glyph: ArtworkEmpty.resetGlyph)
-                }
-                FocusItem(id: ArtworkEmpty.changeID, model: focus, clickCue: nil, action: onChange) { focused in
-                    ToolbarPill(label: L("filters_art_change"), icon: Symbols.filter, focused: focused, glyph: ArtworkEmpty.changeGlyph)
+            ChipGlideHost(look: .pill) {
+                HStack(spacing: stage.px(GlideLook.pillGap)) {
+                    FocusItem(id: ArtworkEmpty.resetID, model: focus, clickCue: nil, action: onReset) { focused in
+                        ToolbarPill(label: L("filters_art_reset"), icon: Symbols.reset, focused: focused, glyph: ArtworkEmpty.resetGlyph)
+                    }
+                    FocusItem(id: ArtworkEmpty.changeID, model: focus, clickCue: nil, action: onChange) { focused in
+                        ToolbarPill(label: L("filters_art_change"), icon: Symbols.filter, focused: focused, glyph: ArtworkEmpty.changeGlyph)
+                    }
                 }
             }
         }
