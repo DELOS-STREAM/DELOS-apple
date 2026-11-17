@@ -291,6 +291,8 @@ artwork_filter
 artwork_animated
 artwork_choose_title
 artwork_choose_note
+artwork_builtin_note
+artwork_builtin_back
 artwork_filtered_active
 artwork_count_all_cover
 artwork_count_of_cover

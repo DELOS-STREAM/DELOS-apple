@@ -14,6 +14,8 @@ struct ScreenHints: Equatable, Sendable {
     var filterLabel: String?
     /// What A does on the focused item of the Artwork screen (the hint bar's A button): the screen sets it as the focus moves.
     var artworkSouth = ArtworkSouth.useImage
+    /// The Artwork screen of one of DELOS's own entries: A and B both go back.
+    var artworkBuiltIn = false
 }
 
 /// The button hints of the shell (`hints` in DELOS for Android's `Shell.kt`, the prototype's `updateHints`): by screen and
@@ -108,6 +110,7 @@ enum ShellHints {
         case .pin, .pairCode: return [hint(.east, L("shell_hint_cancel"))]
         case .stream: return []
         case .artwork:
+            if c.screenHints.artworkBuiltIn { return [hint(.south, L("shell_hint_back")), back] }
             if c.screenHints.sheetOpen {
                 return [
                     hint(.south, L("shell_hint_choose")), hint(.west, L("shell_hint_reset_filters"), short: L("shell_hint_reset")),

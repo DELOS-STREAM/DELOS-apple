@@ -1,5 +1,6 @@
 import CoreGraphics
 import DelosData
+import DelosHost
 import DelosInput
 import Foundation
 
@@ -425,6 +426,16 @@ enum ArtworkSearch {
 
     static func label(_ game: SteamGridDBGame) -> String {
         game.year.map { String(format: L("artwork_game_with_year"), game.name, $0) } ?? game.name
+    }
+}
+
+/// What the grid says when the app has no SteamGridDB game (`GridMessage` of `Choices.NoGame`): a game SteamGridDB did not
+/// find, or, for an app whose artwork does not come from SteamGridDB (DELOS's own entries), "Choose what X looks like".
+enum ArtworkNoGame {
+    static func text(_ app: HostApp) -> (title: String, note: String) {
+        BundledArtwork.kind(app) == nil
+            ? (L("artwork_no_game_title", app.title), L("artwork_no_game_note"))
+            : (L("artwork_choose_title", app.title), L("artwork_choose_note", app.title))
     }
 }
 

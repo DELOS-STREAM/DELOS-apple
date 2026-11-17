@@ -1,5 +1,7 @@
 import CoreGraphics
 import DelosData
+import DelosHost
+import DelosInput
 import Foundation
 import Testing
 @testable import DelosUI
@@ -37,5 +39,21 @@ import Testing
         #expect(TakedownPlaceholder.shown(images, chosen: .unset, removed: removed).map(\.id) == [3])
         #expect(TakedownPlaceholder.shown(images, chosen: .image(2), removed: removed).map(\.id) == [2, 3])
         #expect(TakedownPlaceholder.shown(images, chosen: .none, removed: []).map(\.id) == [1, 2, 3])
+    }
+
+    @Test func anAppWithoutSteamGridDBArtworkIsAskedWhatItLooksLike() {
+        let game = ArtworkNoGame.text(HostApp(id: 1, title: "Hades"))
+        #expect(game.title == "Hades is not on SteamGridDB")
+        let desktop = ArtworkNoGame.text(HostApp(id: 2, title: "Desktop"))
+        #expect(desktop.title == "Choose what Desktop looks like")
+        #expect(desktop.note.hasSuffix("Desktop is not looked up automatically."))
+    }
+
+    @MainActor @Test func theBuiltInArtworkScreenGoesBackWithAAndB() {
+        var context = ShellHints.Context(screen: .artwork(hostID: "h", appID: 1))
+        context.screenHints.artworkBuiltIn = true
+        let hints = ShellHints.hints(context, kind: .controller)
+        #expect(hints.map(\.button) == [.pad(.south), .pad(.east)])
+        #expect(hints.map(\.label) == ["Back", "Back"])
     }
 }

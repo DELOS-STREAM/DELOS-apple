@@ -913,7 +913,10 @@ DELOS's own entries (`BundledArtwork.kind(_:)`: Remote Input and Remote Monitor 
 by name) show the fixed images in `Sources/DelosUI/Artwork/<entry>/{cover,wide,hero}.jpg` (Android's, see
 [THIRD_PARTY.md](THIRD_PARTY.md#bundled-artwork)) instead of SteamGridDB's or the PC's: `HomeArt.image(hostID:app:kind:)` decodes
 them like any other image and the library's cover, game background and header colors use them. Their logo is the rendered name.
-`downloadArtwork` leaves them out, they have no metadata and no Artwork entry in their menu.
+`downloadArtwork` leaves them out, they have no metadata and no Artwork entry in their menu. A stale navigation entry that
+still reaches the Artwork screen with one of them shows Android's `BuiltInArtworkScreen`: the name, the bundled wide cover,
+"Built-in artwork" and Back (A and B both go back). The grid's no-game message of an app whose artwork does not come from
+SteamGridDB is "Choose what <app> looks like" (`ArtworkNoGame`), as on Android.
 
 ### Hiding games
 
