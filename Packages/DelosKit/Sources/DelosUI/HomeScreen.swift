@@ -138,6 +138,7 @@ struct HomeScreen: View {
             .modifier(LayerBackdropBlur(active: sheetOpen))
             if offeredNow {
                 filterButton(filters: filters, metrics: metrics)
+                    .modifier(LayerBackdropBlur(active: sheetOpen))
             }
             sheet(filters: filters, listed: listed)
         }

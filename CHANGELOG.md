@@ -168,6 +168,7 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- The filter button of the library blurs with the rest of the screen under the filter sheet; it stayed sharp beside the sheet.
 - The library's filter sheet covers the top bar with its scrim: the brand, the navigation, the back arrow and the clock were left
   bright above the dimmed screen. The backdrop and the bar blur under it like the screen does, as on Android.
 - The hint bar is no longer blurred and dimmed under the side menu, a context menu or a dialog: as on Android it is above the
