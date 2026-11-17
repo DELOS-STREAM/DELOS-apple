@@ -30,6 +30,16 @@ public enum Screen: Hashable, Sendable {
     case artwork(hostID: String, appID: Int)
     /// The stream settings the app [appID] of the PC [hostID] overrides (`Screen.GameSettings`).
     case appSettings(hostID: String, appID: Int)
+    /// The on-screen controls without a stream (`Screen.OscPreview`: Settings → Controls → Preview on-screen controls).
+    case oscPreview
+
+    /// Full-screen screens without the top bar and the hint bar: the stream and the on-screen controls' preview.
+    var hidesChrome: Bool {
+        switch self {
+        case .stream, .oscPreview: true
+        default: false
+        }
+    }
 
     /// The screens of the top navigation (Android's `Screen.main`): the library, Settings, Profile and Devices. They show
     /// the navigation in the status bar.

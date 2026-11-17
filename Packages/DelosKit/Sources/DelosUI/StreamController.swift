@@ -129,11 +129,15 @@ final class StreamController {
     @ObservationIgnored private let brightness: (any ScreenBrightness)?
     /// The brightness the player chose in this stream: it is set again when the app comes back from the background.
     @ObservationIgnored private var brightnessChosen: Int?
+    /// The on-screen controls (iPhone and iPad; nil where there is no touchscreen): controller 0 for the PC.
+    let onScreen: OnScreenControls?
+    /// Called with the opacity the More page's slider chose: the screen keeps it in the profile.
+    @ObservationIgnored var onScreenOpacityChosen: (@MainActor (Int) -> Void)?
 
     init(
         capabilities: StreamMenuCapabilities = .platform, brightness: (any ScreenBrightness)? = nil,
         statisticsOverlay: StatisticsOverlay = .off, playtime: PlaytimeTracker? = nil, playtimeFlushInterval: Duration = .seconds(30),
-        menuButtons: Set<ShortcutButton> = [], menuSwipe: Bool = true,
+        menuButtons: Set<ShortcutButton> = [], menuSwipe: Bool = true, onScreenControls: OnScreenControls? = nil,
         makeSteps: @escaping @MainActor () -> any StreamSteps
     ) {
         self.playtime = playtime
@@ -145,8 +149,10 @@ final class StreamController {
         self.brightness = brightness
         self.capabilities = StreamMenuCapabilities(keyboard: capabilities.keyboard, brightness: capabilities.brightness && brightness != nil)
         if let brightness { brightnessPercent = Self.rounded(brightness.percent) }
+        onScreen = onScreenControls
         steps = makeSteps()
         greeting = L("stream_loader_greeting", steps.pcName)
+        onScreen?.output.send = { [weak self] state in self?.onScreenSent(state) }
     }
 
     /// Starts the stream on `display`; the first call starts it, later ones (the view laid out again) do nothing.
@@ -263,6 +269,7 @@ final class StreamController {
             // The scene is still opening over the picture: B, keys and touches are the loader's, not the game's
             input.paused = true
             self.input = input
+            syncOnScreen()
         }
         startStatistics()
         startPlaytime()
@@ -328,6 +335,7 @@ final class StreamController {
         menuOpenedAt = .now
         menuOpened?()
         input?.paused = true
+        onScreen?.releaseAll()
     }
 
     func closeMenu() {
@@ -366,7 +374,7 @@ final class StreamController {
                 StreamMenuRow(
                     id: MenuRowID.taskManager.rawValue, icon: Symbols.taskManager, label: L("stream_menu_row_task_manager"), value: .action,
                     help: L("stream_help_task_manager"), activate: { [self] in send(SpecialKeys.taskManager) }),
-            ])
+            ] + onScreenRows)
         case .brightness:
             return .rows([
                 StreamMenuRow(
@@ -478,6 +486,49 @@ final class StreamController {
     func runServerCommand(_ index: Int) {
         closeMenu()
         input?.runServerCommand(index)
+    }
+
+    // MARK: On-screen controls
+
+    /// The More page's on-screen controls rows (`StreamMenuRoot`): the toggle for this stream and the profile's opacity.
+    private var onScreenRows: [StreamMenuRow] {
+        guard let onScreen else { return [] }
+        return [
+            StreamMenuRow(
+                id: MenuRowID.onScreenControls.rawValue, icon: Symbols.joystick, label: L("stream_menu_row_onscreen_controls"),
+                value: .toggle(onScreen.visible), help: L("stream_help_on_screen_controls"),
+                activate: { [self] in toggleOnScreenControls() }),
+            StreamMenuRow(
+                id: MenuRowID.onScreenOpacity.rawValue, icon: Symbols.opacity, label: L("settings_native_osc_opacity_title"),
+                value: .slider(value: onScreen.options.opacity, range: 0...100, step: StreamSettingsForm.oscOpacityStep, unit: " %"),
+                help: L("stream_help_on_screen_controls_opacity"), activate: {}, set: { [self] in setOnScreenOpacity($0) }),
+        ]
+    }
+
+    /// The More page's toggle: the on-screen controls go away, or come up (also while a controller is in use) for the rest of
+    /// this stream (`toggleVirtualController`; the profile's setting is not changed).
+    func toggleOnScreenControls() {
+        onScreen?.toggle()
+        syncOnScreen()
+    }
+
+    /// The More page's slider: the running controls take it at once, and the profile keeps it (the same value as Settings).
+    func setOnScreenOpacity(_ percent: Int) {
+        guard let onScreen else { return }
+        onScreen.setOpacity(percent)
+        onScreenOpacityChosen?(onScreen.options.opacity)
+    }
+
+    private func onScreenSent(_ state: ControllerState) {
+        guard onScreen?.enabled == true else { return }
+        input?.setOnScreenControls(state)
+    }
+
+    /// Tells the input whether the on-screen controls are controller 0 now, and whether its rumble plays on the device.
+    private func syncOnScreen() {
+        guard let input, let onScreen else { return }
+        input.onScreenRumble = onScreen.rumblesDevice
+        input.setOnScreenControls(onScreen.enabled ? onScreen.state : nil)
     }
 
     /// The Keyboard tile: the menu closes, then the on-screen keyboard comes up or goes away.
@@ -642,8 +693,9 @@ final class StreamController {
         if phase == .streaming, !menuOpen { input?.paused = false }
     }
 
-    /// A touch on the stream, in pixels of [area]: the swipe up from the band above the bottom edge opens the menu
-    /// (unless the profile turned it off), the other touches are the PC's trackpad.
+    /// A touch on the stream, in pixels of [area]: the on-screen controls take the touches that land on them, the swipe up from
+    /// the band above the bottom edge opens the menu (unless the profile turned it off), the other touches are the PC's
+    /// trackpad. While the controls are moved or resized, the stream gets no touch.
     func touch(_ id: Int, _ touchPhase: TouchPhase, at point: CGPoint, area: TouchArea, time: TimeInterval) {
         // A touch that ends after the menu opened (its own swipe opened it) is forgotten all the same
         if touchPhase == .ended || touchPhase == .cancelled, phase != .streaming || menuOpen || loader.cancellable {
@@ -652,6 +704,17 @@ final class StreamController {
             return
         }
         guard phase == .streaming, !menuOpen, !loader.cancellable else { return }
+        if let onScreen, area.width > 0, area.height > 0 {
+            let x = Float(point.x / area.width) * Float(onScreen.panel.width), y = Float(point.y / area.height) * Float(onScreen.panel.height)
+            let oscPhase: OnScreenControls.Phase = switch touchPhase {
+            case .began: .began
+            case .moved: .moved
+            case .ended: .ended
+            case .cancelled: .cancelled
+            }
+            if onScreen.touch(id, oscPhase, x: x, y: y, time: time * 1000) { return }
+            if touchPhase == .began, onScreen.mode == .move || onScreen.mode == .resize { return }
+        }
         switch touchPhase {
         case .began:
             if menuSwipe, swipe.began(id, at: point, zone: area.swipeZone) { return }

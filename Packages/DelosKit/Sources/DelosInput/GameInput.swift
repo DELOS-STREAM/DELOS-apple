@@ -55,6 +55,12 @@ public final class GameInput {
     }
     public var adaptiveTriggerUnsupported: Bool { pads.values.contains { $0.haptics.adaptiveTriggerUnsupported } }
     private var running = false
+    /// The on-screen controls' state while they are on (controller 0, `defaultContext` of Android's `ControllerHandler`):
+    /// fused with the physical controller 0, if any, and counted in the mask. Nil: off.
+    private var onScreen: ControllerState?
+    /// Whether the host's rumble of controller 0 with no physical controller 0 plays on this device (the on-screen controls
+    /// are on, more than L3 and R3 show, `checkbox_vibrate_osc`).
+    public var onScreenRumble = false
     /// Counts down while Escape is held (``MenuKeyShortcut``).
     private var escapeHold: Task<Void, Never>?
     private let escapeHoldDuration: Duration
@@ -77,6 +83,8 @@ public final class GameInput {
         var guideTimer: Task<Void, Never>?
         /// The controller's last state, sent again when the hold makes Home Guide.
         var last = GamepadSnapshot()
+        /// The state it sent last of its own (the on-screen controls fuse theirs with it).
+        var sent = ControllerState()
 
         init(controller: GCController, number: UInt8, menuButtons: Set<ShortcutButton>) {
             self.controller = controller
@@ -170,7 +178,11 @@ public final class GameInput {
         let pad = pad(number)
         pad?.haptics.rumble(low: low, high: high)
         let supports = pad.map { ControllerHaptics.capabilities(of: $0.controller).rumble } ?? false
-        if rumbleConfiguration.usesDevice(controllerCanRumble: supports, controllerNumber: number) {
+        if pad == nil, number == 0, onScreenRumble {
+            // The on-screen controls triggered it: the device vibrates at full strength (Android's rumbleSingleVibrator); a
+            // device without a Taptic Engine (an iPad) has nothing to vibrate
+            if ControllerHaptics.deviceAvailable { deviceHaptics.rumble(low: low, high: high, strength: 100) }
+        } else if rumbleConfiguration.usesDevice(controllerCanRumble: supports, controllerNumber: number) {
             deviceHaptics.rumble(low: low, high: high)
         }
     }
@@ -227,7 +239,7 @@ public final class GameInput {
         }
         slots.remove(id)
         // The host removes a controller whose bit left the mask
-        try? sink.sendController(number: pad.number, activeGamepadMask: slots.mask, state: ControllerState())
+        try? sink.sendController(number: pad.number, activeGamepadMask: mask, state: pad.number == 0 ? onScreen ?? ControllerState() : ControllerState())
     }
 
     private func announce(_ pad: Pad) {
@@ -242,7 +254,7 @@ public final class GameInput {
             if motion.hasRotationRate { capabilities.insert(.gyroscope) }
         }
         pad.announced = (try? sink.sendControllerArrival(
-            number: pad.number, activeGamepadMask: slots.mask, type: Self.type(of: pad.controller),
+            number: pad.number, activeGamepadMask: mask, type: Self.type(of: pad.controller),
             supportedButtons: Self.supportedButtons(pad.controller), capabilities: capabilities)) != nil
     }
 
@@ -259,7 +271,9 @@ public final class GameInput {
         if open { onMenu() }
         guard !paused else { return }
         if !pad.announced { announce(pad) }
-        try? sink.sendController(number: pad.number, activeGamepadMask: slots.mask, state: state)
+        pad.sent = state
+        if pad.number == 0, let onScreen { state = .fused([state, onScreen]) }
+        try? sink.sendController(number: pad.number, activeGamepadMask: mask, state: state)
     }
 
     /// Home went down or up: a press starts the hold timer, a release before it is a tap (the menu), a release after it
@@ -294,6 +308,21 @@ public final class GameInput {
     private nonisolated static func milliseconds() -> Int64 {
         let elapsed = (ContinuousClock.now - epoch).components
         return elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000
+    }
+
+    // MARK: On-screen controls
+
+    /// The controllers the host is told about: the physical ones and, while the on-screen controls are on, controller 0.
+    private var mask: UInt16 { slots.mask | (onScreen == nil ? 0 : 1) }
+
+    /// The on-screen controls' state (``OnScreenControls`` in DelosUI); nil turns them off. Sent at once as controller 0,
+    /// fused with a physical controller 0.
+    public func setOnScreenControls(_ state: ControllerState?) {
+        let wasOn = onScreen != nil
+        onScreen = state
+        guard running, !paused, state != nil || wasOn else { return }
+        let own = pads.values.first { $0.number == 0 }?.sent ?? ControllerState()
+        try? sink.sendController(number: 0, activeGamepadMask: mask, state: .fused([own] + (state.map { [$0] } ?? [])))
     }
 
     nonisolated static func snapshot(_ pad: GCExtendedGamepad) -> GamepadSnapshot {
@@ -524,7 +553,11 @@ public final class GameInput {
     private func releaseAll() {
         cancelEscapeHold()
         for pad in pads.values {
-            try? sink.sendController(number: pad.number, activeGamepadMask: slots.mask, state: ControllerState())
+            pad.sent = ControllerState()
+            try? sink.sendController(number: pad.number, activeGamepadMask: mask, state: ControllerState())
+        }
+        if onScreen != nil, !pads.values.contains(where: { $0.number == 0 }) {
+            try? sink.sendController(number: 0, activeGamepadMask: mask, state: ControllerState())
         }
         for usage in heldKeys {
             if let vk = KeyboardMapping.virtualKey(hidUsage: usage) {

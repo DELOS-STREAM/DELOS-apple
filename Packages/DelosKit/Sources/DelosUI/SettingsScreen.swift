@@ -308,6 +308,11 @@ struct SettingsScreen: View {
         case DevicesSetting.pairID: navigator.push(.pair)
         case AboutSetting.welcomeID: actions.replayWelcome()
         case AboutSetting.basedID, AboutSetting.versionID, CoversForm.choose: return
+        case StreamSettingsForm.oscPreview: navigator.push(.oscPreview)
+        case "option_reset_osc_preference":
+            // Every on-screen control of the profile back to its default size and place (`SettingsActions`)
+            OnScreenControlsStore().reset(profile: profileID)
+            actions.toasts.show(L("settings_actions_osc_reset"), icon: Symbols.reset, kind: .success)
         case _ where GameDataSetting.website(row.id) != nil:
             if let url = GameDataSetting.website(row.id) { openURL(url) }
         case "import_special_button_file":

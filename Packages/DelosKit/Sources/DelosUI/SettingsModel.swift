@@ -269,8 +269,9 @@ struct StreamSettingsForm: Equatable {
     func nativeRows(_ tab: SettingsTab) -> [SettingRow] {
         switch tab {
         case .controls:
-            // The other on-screen controls settings are phone-only; the opacity shows wherever there is a touchscreen
-            streamMenuRows(tab) + (device.touchscreen ? [oscOpacityRow] : [])
+            // The other on-screen controls settings are phone-only; the opacity and the preview show wherever there is a
+            // touchscreen
+            streamMenuRows(tab) + (device.touchscreen ? [oscOpacityRow, oscPreviewRow] : [])
         case .display: [statsPositionRow]
         default: []
         }
@@ -285,6 +286,16 @@ struct StreamSettingsForm: Equatable {
             label: L("settings_native_osc_opacity_title"),
             value: .slider(value: settings.int(.oscOpacity), range: 0...100, step: Self.oscOpacityStep, divisor: 1, unit: " %"),
             help: L("summary_osc_opacity"))
+    }
+
+    /// "Preview on-screen controls" (Android's Debug info → On-screen controls → `osc_preview`; DELOS for Apple has no Debug
+    /// screen, so it sits with the on-screen controls' opacity): the controls without a stream (``OnScreenControlsPreview``).
+    static let oscPreview = "osc_preview"
+
+    private var oscPreviewRow: SettingRow {
+        SettingRow(
+            id: Self.oscPreview, tab: .controls, section: L("category_on_screen_controls_settings"), icon: Symbols.joystick,
+            label: L("debug_osc_label"), value: .action(label: nil), help: L("debug_osc_description"))
     }
 
     static func statsLabel(_ position: StatsPosition) -> String {

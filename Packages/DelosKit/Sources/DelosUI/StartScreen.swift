@@ -226,7 +226,7 @@ public struct DelosRoot: View {
                         .id(ObjectIdentifier(entry.focus))
                         .transition(ScreenMotion.transition(reduced: systemReduceMotion || appearance.reducedMotion))
                         .zIndex(librarySheetOpen ? 1 : 0)
-                    if case .stream = navigator.current {} else {
+                    if !navigator.current.hidesChrome {
                         TopBar(
                             brand: navigator.current != .start, navigation: navigation(entry),
                             pc: navigator.current.showsNavigation ? connectedPC : nil, wifi: device.wifi, battery: device.battery,
@@ -268,7 +268,7 @@ public struct DelosRoot: View {
                 }
                 LayerHost(layers: layers, navigator: navigator)
                 // The hint bar is above the scrim and the layers, crisp (Android's `HintBar` follows `Scrim` in `Shell`)
-                if case .stream = navigator.current {} else {
+                if !navigator.current.hidesChrome {
                     ShellHintBar(
                         hints: hints, note: libraryNote, noteLabel: libraryNote == nil ? nil : L("shell_hint_library_label"),
                         libraryRow: showsLibraryRow,
@@ -437,11 +437,16 @@ public struct DelosRoot: View {
         case .stream(let hostID, let appID):
             StreamScreen(
                 hostID: hostID, appID: appID, profileID: profiles.current?.id, settings: actions.streamSettings(hostID: hostID, appID: appID),
-                keepStatisticsOverlay: { actions.keepStatisticsOverlay($0) })
+                palette: Palette(rawValue: appearance.palette.rawValue) ?? .delos,
+                keepStatisticsOverlay: { actions.keepStatisticsOverlay($0) }, keepOnScreenOpacity: { actions.keepOnScreenOpacity($0) })
         case .settings:
             SettingsScreen(
                 profileID: profiles.current?.id ?? "", appearance: $appearance, focus: entry.focus, navigator: navigator,
                 feedback: feedback, actions: actions, tab: settingsTab)
+        case .oscPreview:
+            OnScreenControlsPreview(
+                profileID: profiles.current?.id ?? "", palette: Palette(rawValue: appearance.palette.rawValue) ?? .delos,
+                onBack: { feedback?.play(.back); go { navigator.back() } })
         }
     }
 

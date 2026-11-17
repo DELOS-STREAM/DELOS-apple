@@ -30,4 +30,13 @@ extension ShellActions {
         settings.statisticsOverlay = overlay
         streams.save(settings, profile: profile)
     }
+
+    /// Keeps the on-screen controls' opacity the stream menu's slider chose in the current profile (`OscOpacity.write`): the
+    /// same value as the Settings row.
+    func keepOnScreenOpacity(_ percent: Int) {
+        guard let profile = profiles.current?.id else { return }
+        var settings = streams.load(profile: profile)
+        settings.set(.oscOpacity, .int(percent))
+        streams.save(settings, profile: profile)
+    }
 }

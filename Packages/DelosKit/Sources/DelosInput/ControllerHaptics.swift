@@ -37,12 +37,14 @@ final class ControllerHaptics {
         return (handles, triggers)
     }
 
-    func rumble(low: UInt16, high: UInt16) {
+    /// [strength]: the device's strength in percent instead of the configured one (the on-screen controls' rumble is full).
+    func rumble(low: UInt16, high: UInt16, strength: Int? = nil) {
         last.low = low
         last.high = high
         guard configuration.enabled else { return }
         if controller == nil {
-            motor(.all, active: low != 0 || high != 0)?.set(low: low, high: high, profile: configuration.profile.profile, strength: configuration.deviceStrength)
+            motor(.all, active: low != 0 || high != 0)?.set(
+                low: low, high: high, profile: configuration.profile.profile, strength: strength ?? configuration.deviceStrength)
         } else if controller?.haptics?.supportedLocalities.contains(.leftHandle) == true
                     && controller?.haptics?.supportedLocalities.contains(.rightHandle) == true {
             motor(.leftHandle, active: low != 0)?.set(low: low, profile: configuration.profile.profile)

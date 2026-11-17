@@ -92,6 +92,7 @@ public final class ProfileStore {
     @ObservationIgnored private let hidden: HiddenGames
     @ObservationIgnored private let gameSettings: GameSettingsStore
     @ObservationIgnored private let specialKeys: CustomSpecialKeys
+    @ObservationIgnored private let onScreenControls: OnScreenControlsStore
     @ObservationIgnored private let deleteGrace: Duration
     /// The profiles deleted less than ``deleteGrace`` ago, which Undo can bring back.
     @ObservationIgnored private var deleted: [String: Deleted] = [:]
@@ -126,6 +127,7 @@ public final class ProfileStore {
         hidden = HiddenGames(suiteName: suiteName)
         gameSettings = GameSettingsStore(suiteName: suiteName)
         specialKeys = CustomSpecialKeys(suiteName: suiteName)
+        onScreenControls = OnScreenControlsStore(suiteName: suiteName)
         self.deleteGrace = deleteGrace
         let stored = defaults.data(forKey: Self.key)
             .flatMap { try? JSONDecoder().decode(Profiles.self, from: $0) } ?? Profiles()
@@ -152,6 +154,7 @@ public final class ProfileStore {
             appearance.save(appearance.load(profile: current.id), profile: profile.id)
             stream.save(stream.load(profile: current.id), profile: profile.id)
             gameSettings.copy(from: current.id, to: profile.id)
+            onScreenControls.copy(from: current.id, into: profile.id)
             startups.save(startups.load(profile: current.id), profile: profile.id)
             specialKeys.copy(from: current.id, to: profile.id)
         }
@@ -262,6 +265,7 @@ public final class ProfileStore {
         hidden.remove(profile: id)
         gameSettings.remove(profile: id)
         specialKeys.remove(profile: id)
+        onScreenControls.remove(profile: id)
     }
 
     private func save(_ next: Profiles) {

@@ -106,7 +106,7 @@ enum ShellHints {
         case .createProfile: return [select, back]
         case .pair: return [select, back] + optionsHint
         case .pin, .pairCode: return [hint(.east, L("shell_hint_cancel"))]
-        case .stream: return []
+        case .stream, .oscPreview: return []
         case .artwork:
             if c.screenHints.sheetOpen {
                 return [

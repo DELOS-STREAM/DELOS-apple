@@ -22,6 +22,10 @@ struct StreamScreen: View {
     let settings: StreamSettings
     /// Keeps the statistics overlay the stream menu chose (the profile's, for its next streams).
     let keepStatisticsOverlay: @MainActor (StatisticsOverlay) -> Void
+    /// Keeps the on-screen controls' opacity the stream menu chose (the profile's).
+    let keepOnScreenOpacity: @MainActor (Int) -> Void
+    /// The profile's palette: the on-screen controls' pressed colour (``OscStyle``).
+    let palette: Palette
     @Environment(HostStore.self) private var hosts
     @Environment(Navigator.self) private var navigator
     @Environment(Layers.self) private var layers: Layers?
@@ -34,18 +38,26 @@ struct StreamScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     #endif
 
-    init(hostID: String, appID: Int, profileID: String? = nil, settings: StreamSettings, keepStatisticsOverlay: @escaping @MainActor (StatisticsOverlay) -> Void = { _ in }) {
+    init(
+        hostID: String, appID: Int, profileID: String? = nil, settings: StreamSettings, palette: Palette = .delos,
+        keepStatisticsOverlay: @escaping @MainActor (StatisticsOverlay) -> Void = { _ in },
+        keepOnScreenOpacity: @escaping @MainActor (Int) -> Void = { _ in }
+    ) {
         self.hostID = hostID
         self.appID = appID
         self.profileID = profileID
         self.settings = settings
+        self.palette = palette
         self.keepStatisticsOverlay = keepStatisticsOverlay
+        self.keepOnScreenOpacity = keepOnScreenOpacity
     }
 
     var body: some View {
         ZStack {
             if let controller, let renderer {
-                StreamContent(controller: controller, renderer: renderer, focus: navigator.focus, hostID: hostID, appID: appID, settings: settings)
+                StreamContent(
+                    controller: controller, renderer: renderer, focus: navigator.focus, hostID: hostID, appID: appID, settings: settings,
+                    palette: palette)
             }
         }
         .onAppear(perform: begin)
@@ -95,7 +107,8 @@ struct StreamScreen: View {
         }
         let controller = StreamController(
             brightness: Self.deviceBrightness, statisticsOverlay: settings.statisticsOverlay, playtime: playtime,
-            menuButtons: ShortcutButton.parse(settings.streamMenuButtons), menuSwipe: settings.streamMenuSwipe
+            menuButtons: ShortcutButton.parse(settings.streamMenuButtons), menuSwipe: settings.streamMenuSwipe,
+            onScreenControls: makeOnScreenControls()
         ) { [hosts, hostID, appID, settings] in
             LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer)
         }
@@ -103,6 +116,7 @@ struct StreamScreen: View {
         controller.leavingHold = .seconds(ExitLook.handoff(reduced: reducedMotion))
         controller.menuOpened = { [navigator] in navigator.cancelRepeats?() }
         controller.statisticsChosen = keepStatisticsOverlay
+        controller.onScreenOpacityChosen = keepOnScreenOpacity
         self.renderer = renderer
         self.controller = controller
         navigator.takeInput(controller) { [navigator] command in
@@ -221,6 +235,24 @@ struct StreamScreen: View {
         nil
         #endif
     }
+
+    /// The on-screen controls of this stream on iPhone and iPad (`initVirtualController`): up when the profile shows them
+    /// (`checkbox_show_onscreen_controls`), hidden while a controller is in use when it says so
+    /// (`checkbox_hide_osc_when_has_gamepad`). Apple TV and the Mac have no touchscreen and no on-screen controls.
+    private func makeOnScreenControls() -> OnScreenControls? {
+        #if os(iOS)
+        var output = OscOutput()
+        if let profileID { output.storing(profile: profileID) }
+        output.announce = { [toasts] text in toasts?.show(text, icon: Symbols.settings) }
+        let haptics = OscPressHaptics()
+        output.vibrate = { haptics.play($0) }
+        return OnScreenControls(
+            options: OscOptions(settings), enabled: settings.bool(.showOnscreenControls),
+            followsGamepad: settings.bool(.hideOscWhenHasGamepad), output: output)
+        #else
+        nil
+        #endif
+    }
 }
 
 /// What the stream screen shows in each phase: the launch scene while it connects and opens (`StreamLoader` and
@@ -233,6 +265,7 @@ struct StreamContent: View {
     let hostID: String
     let appID: Int
     let settings: StreamSettings
+    let palette: Palette
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reducedMotion
     @Environment(HomeArt.self) private var art: HomeArt?
@@ -281,6 +314,15 @@ struct StreamContent: View {
                         value: controller.menuOpen)
                 }
             }
+            #if os(iOS)
+            // The on-screen controls over the picture, under the launch scene and the menu; blurred with the picture behind
+            // the menu. Their touches come from the video surface (``StreamController/touch(_:_:at:area:time:)``)
+            if let onScreen = controller.onScreen, controller.phase == .streaming {
+                OnScreenControlsCanvas(controls: onScreen, palette: palette)
+                    .ignoresSafeArea()
+                    .blur(radius: controller.menuOpen ? stage.px(StreamDockLayout.videoBlur) : 0)
+            }
+            #endif
             if let director, director.isActive, launching {
                 LaunchLoader(director: director, card: card, onCancel: {
                     layers?.feedback?.play(.back)
@@ -322,6 +364,8 @@ struct StreamContent: View {
         }
         .task { await loadLogo() }
         .task(id: controller.phase == .streaming) { await watchFirstFrame() }
+        // The on-screen controls hide while a controller is the input in use (`checkbox_hide_osc_when_has_gamepad`)
+        .onChange(of: ControllerGlyphs.shared.kind, initial: true) { _, kind in controller.onScreen?.setGamepadInUse(kind == .controller) }
         .onChange(of: controller.line) { _, line in
             if !line.isEmpty { director?.stage(line) }
         }

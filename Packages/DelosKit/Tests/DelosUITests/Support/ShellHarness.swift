@@ -135,6 +135,8 @@ struct HarnessRoot: View {
                 GameSettingsScreen(hostID: hostID, app: app, focus: entry.focus, navigator: navigator, actions: fx.actions,
                                    profileID: fx.profiles.current?.id ?? "")
             }
+        case .oscPreview:
+            OnScreenControlsPreview(profileID: fx.profiles.current?.id ?? "", palette: .delos, onBack: { navigator.back() })
         case .pin, .pairCode, .stream: Color.clear
         }
     }
