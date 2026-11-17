@@ -102,6 +102,8 @@ enum MenuRowID: String, Sendable {
     case keys = "more-keys"
     case commands = "more-commands"
     case taskManager = "more-task-manager"
+    case onScreenControls = "more-onscreen-controls"
+    case onScreenOpacity = "more-osc-opacity"
     case brightness = "brightness-screen"
 }
 

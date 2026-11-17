@@ -12,7 +12,7 @@ import UniformTypeIdentifiers
 /// router, so every screen can be opened with real-looking content in a simulator. Nothing here touches the network, the
 /// client identity or the real pairing data: the PC has no address, the stores are a separate suite, the artwork a temporary directory.
 ///   -DelosDemo YES                      the fake PC and its library, a profile
-///   -DelosScreen <name>                 (with -DelosDemo) start (default), home, devices, profile, pair, settings:<tab>, artwork, appsettings
+///   -DelosScreen <name>                 (with -DelosDemo) start (default), home, devices, profile, pair, settings:<tab>, artwork, appsettings, osc
 ///   -DelosDemoCommands "w1 menu w1 down accept"   commands routed like a controller's: up down left right accept back menu options toast prevtab nexttab, w<seconds>;
 ///                                       input kinds: touch (a finger begins a touch, through the window's probe), click (the pointer's), pad (a controller's button)
 ///   -DelosDemoApps <n>                  how many apps (default 16; 0 empty)
@@ -102,6 +102,11 @@ enum DemoHarness {
         case "appsettings":
             navigator.openHome(hostID: hostID)
             navigator.push(.appSettings(hostID: hostID, appID: 2), focus: GameSettingsScreen.firstFocus())
+        case "osc":
+            // The on-screen controls' preview, as Settings → Controls opens it
+            navigator.openHome(hostID: hostID)
+            navigator.openFromNavigation(.settings, focus: SettingsScreen.firstRow(.controls))
+            navigator.push(.oscPreview)
         default:
             if screen.hasPrefix("settings"), let tab = SettingsTab.allCases.first(where: { "\($0)" == screen.split(separator: ":").last.map(String.init) }) {
                 navigator.openHome(hostID: hostID)

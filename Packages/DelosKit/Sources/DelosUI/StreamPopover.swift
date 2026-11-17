@@ -365,11 +365,41 @@ private struct PopoverRow: View {
                     .lineLimit(1)
                     .frame(width: stage.px(M.numberMinWidth * stage.textScale), alignment: .trailing)
             }
+        case .toggle(let on):
+            PopoverSwitch(on: on)
         }
     }
 
     private var sliderStep: Int {
         if case let .slider(_, _, step, _) = row.value { step } else { 1 }
+    }
+}
+
+/// The on/off switch of a row (`MotionSwitch(on, SWITCH_WIDTH, SWITCH_HEIGHT, white 18 %)` of DELOS for Android's stream menu):
+/// 78 × 44, a light veil when off, the main colour into the secondary when on, the knob springing across while the track and
+/// the knob's colour fade.
+private struct PopoverSwitch: View {
+    let on: Bool
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+    @Environment(\.reducedMotion) private var reducedMotion
+
+    var body: some View {
+        let width = 78.0, height = 44.0, knob = height - 12
+        let fade = Animation.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000)
+        ZStack(alignment: .leading) {
+            Capsule().fill(.white.opacity(0.18)).opacity(on ? 0 : 1).animation(fade, value: on)
+            Capsule().fill(LinearGradient(colors: [colors.accent.color, colors.accent2.color], startPoint: .leading, endPoint: .trailing))
+                .opacity(on ? 1 : 0)
+                .animation(fade, value: on)
+            Circle()
+                .fill((on ? colors.onAccent : colors.text2).color)
+                .animation(fade, value: on)
+                .frame(width: stage.px(knob), height: stage.px(knob))
+                .offset(x: stage.px(6 + (on ? width - height : 0)))
+                .animation(reducedMotion ? nil : Motion.spring(Motion.focus), value: on)
+        }
+        .frame(width: stage.px(width), height: stage.px(height))
     }
 }
 

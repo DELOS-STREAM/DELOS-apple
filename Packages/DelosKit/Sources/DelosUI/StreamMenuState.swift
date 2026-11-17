@@ -8,6 +8,8 @@ struct StreamMenuRow: Identifiable {
         /// Opens a page or does something at once; shows a chevron.
         case action
         case slider(value: Int, range: ClosedRange<Int>, step: Int, unit: String)
+        /// On or off; A or a tap flips it (`RowValue.Toggle`).
+        case toggle(Bool)
     }
 
     let id: String

@@ -113,6 +113,7 @@ enum ShellHints {
         case .stream:
             return c.screenHints.streamResult
                 ? [select, hint(.east, L("shell_hint_back_to_library"), short: L("shell_hint_back"))] : []
+        case .oscPreview: return []
         case .artwork:
             if c.screenHints.artworkBuiltIn { return [hint(.south, L("shell_hint_back")), back] }
             if c.screenHints.sheetOpen {

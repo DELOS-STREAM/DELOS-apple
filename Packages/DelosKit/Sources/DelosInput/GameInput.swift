@@ -94,6 +94,12 @@ public final class GameInput {
     /// Released, a key or button that is down at the PC still gets its release.
     public private(set) var inputGrabbed = true
     private var running = false
+    /// The on-screen controls' state while they are on (controller 0, `defaultContext` of Android's `ControllerHandler`):
+    /// fused with the physical controllers of number 0, if any, and counted in the mask. Nil: off.
+    private var onScreen: ControllerState?
+    /// Whether the host's rumble of controller 0 with no physical controller 0 plays on this device (the on-screen controls
+    /// are on, more than L3 and R3 show, `checkbox_vibrate_osc`).
+    public var onScreenRumble = false
     /// Counts down while Escape is held (``MenuKeyShortcut``).
     private var escapeHold: Task<Void, Never>?
     private let escapeHoldDuration: Duration
@@ -253,7 +259,11 @@ public final class GameInput {
         let matching = pads(number)
         matching.forEach { $0.haptics.rumble(low: low, high: high) }
         let supports = matching.contains { ControllerHaptics.capabilities(of: $0.controller).rumble }
-        if rumbleConfiguration.usesDevice(controllerCanRumble: supports, controllerNumber: number) {
+        if matching.isEmpty, number == 0, onScreenRumble {
+            // The on-screen controls triggered it: the device vibrates at full strength (Android's rumbleSingleVibrator); a
+            // device without a Taptic Engine (an iPad) has nothing to vibrate
+            if ControllerHaptics.deviceAvailable { deviceHaptics.rumble(low: low, high: high, strength: 100) }
+        } else if rumbleConfiguration.usesDevice(controllerCanRumble: supports, controllerNumber: number) {
             deviceHaptics.rumble(low: low, high: high)
         }
     }
@@ -372,7 +382,8 @@ public final class GameInput {
 
     // MARK: Controllers
 
-    private var activeMask: UInt16 { options.multiController ? slots.mask : 1 }
+    /// The controllers the host is told about; while the on-screen controls are on, controller 0 is one of them.
+    private var activeMask: UInt16 { (options.multiController ? slots.mask : 1) | (onScreen == nil ? 0 : 1) }
 
     private func attachAll() {
         guard running else { return }
@@ -456,7 +467,7 @@ public final class GameInput {
             element.preferredSystemGestureState = .enabled
         }
         if options.multiController { slots.remove(id) }
-        if pads.values.contains(where: { $0.number == pad.number }) {
+        if pads.values.contains(where: { $0.number == pad.number }) || (pad.number == 0 && onScreen != nil) {
             // Another controller is still this player (multiple controllers off): its state alone, and its motion
             sendState(of: pad.number)
             applyMotion(pad.number)
@@ -546,7 +557,8 @@ public final class GameInput {
     /// The state of controller `number`: its controllers' states fused (more than one only with multiple controllers
     /// off), without the ones that are the mouse now.
     private func sendState(of number: UInt8) {
-        let states = pads(UInt16(number)).filter { $0.emulation == nil }.map(\.state)
+        var states = pads(UInt16(number)).filter { $0.emulation == nil }.map(\.state)
+        if number == 0, let onScreen { states.append(onScreen) }
         guard !states.isEmpty else { return }
         try? sink.sendController(number: number, activeGamepadMask: activeMask, state: GamepadMapping.fuse(states))
     }
@@ -633,7 +645,27 @@ public final class GameInput {
         let actions = emulation.buttons(pad.state.buttons)
         pad.emulation = emulation
         actions.forEach(perform)
-        try? sink.sendController(number: pad.number, activeGamepadMask: activeMask, state: ControllerState())
+        if pad.number == 0, onScreen != nil {
+            sendState(of: 0)
+        } else {
+            try? sink.sendController(number: pad.number, activeGamepadMask: activeMask, state: ControllerState())
+        }
+    }
+
+    // MARK: On-screen controls
+
+    /// The on-screen controls' state (``OnScreenControls`` in DelosUI); nil turns them off. Sent at once as controller 0,
+    /// fused with the physical controllers of number 0 (``GamepadMapping/fuse(_:)``).
+    public func setOnScreenControls(_ state: ControllerState?) {
+        let wasOn = onScreen != nil
+        onScreen = state
+        guard running, !paused, state != nil || wasOn else { return }
+        if state != nil || pads(0).contains(where: { $0.emulation == nil }) {
+            sendState(of: 0)
+        } else {
+            // Off with no controller 0 left: the host removes it, its bit left the mask
+            try? sink.sendController(number: 0, activeGamepadMask: activeMask, state: ControllerState())
+        }
     }
 
     private func perform(_ action: MouseEmulation.Action) {
@@ -986,7 +1018,7 @@ public final class GameInput {
     /// after the stream.
     private func releaseAll() {
         cancelEscapeHold()
-        for number in Set(pads.values.map(\.number)) {
+        for number in Set(pads.values.map(\.number) + (onScreen == nil ? [] : [0])) {
             try? sink.sendController(number: number, activeGamepadMask: activeMask, state: ControllerState())
         }
         for pad in pads.values {

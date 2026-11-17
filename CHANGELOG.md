@@ -9,6 +9,13 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- On-screen controls on iPhone and iPad, as on DELOS for Android: the D-pad, A/B/X/Y, bumpers, triggers, Back,
+  Guide, Start, L3/R3, the trackpad button and fixed or free sticks in the DELOS style, any number of fingers at
+  once, sent to the PC as controller 0. The default layout is computed for every screen shape; the gear edits it
+  (turn on or off, move, resize) and only the changed controls are stored, against their side of the screen in
+  layout units. The stream menu's More page toggles them and sets their opacity; Settings → Controls has a preview.
+  They hide while a controller is in use, vibrate on press when the profile asks, and play controller 0's rumble on
+  an iPhone. Apple TV and the Mac have no touchscreen and no on-screen controls.
 - Surround audio: Settings → Audio asks the PC for stereo, 5.1 or 7.1. Each channel plays on the speaker of its
   name on an HDMI or AirPlay receiver that has it, and fewer speakers get the layout mixed down. The stream also
   sends the resolution scale factor and asks for full-range video when chosen. Real surround receivers are not

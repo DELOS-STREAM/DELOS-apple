@@ -9910,6 +9910,266 @@
         }
       }
     },
+    "configuration_mode_disable_enable_buttons": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Režim zapínání a vypínání tlačítek"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modus: Tasten aktivieren/deaktivieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable/Disable buttons mode"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo de activar/desactivar botones"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mode activation/désactivation des boutons"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボタン有効/無効モード"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "버튼 켜기/끄기 모드"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo de ativar/desativar botões"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Режим вмикання/вимикання кнопок"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启用/禁用按键模式"
+          }
+        }
+      }
+    },
+    "configuration_mode_exiting": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ukončuji režim úprav"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konfigurationsmodus wird beendet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exiting configuration mode"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saliendo del modo de configuración"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sortie du mode configuration"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定モードを終了しています"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "구성 모드를 종료하는 중"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saindo do modo de configuração"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вихід із режиму налаштування"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在退出配置模式"
+          }
+        }
+      }
+    },
+    "configuration_mode_move_buttons": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Režim přesouvání tlačítek"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modus: Tasten verschieben"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move buttons mode"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo de mover botones"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mode déplacement des boutons"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボタン移動モード"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "버튼 이동 모드"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo de mover botões"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Режим переміщення кнопок"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移动按键模式"
+          }
+        }
+      }
+    },
+    "configuration_mode_resize_buttons": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Režim změny velikosti tlačítek"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modus: Tastengröße ändern"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resize buttons mode"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo de cambiar tamaño de botones"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mode redimensionnement des boutons"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボタンサイズ変更モード"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "버튼 크기 조절 모드"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo de redimensionar botões"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Режим зміни розміру кнопок"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "调整按键大小模式"
+          }
+        }
+      }
+    },
     "conn_app_minimized": {
       "extractionState": "manual",
       "localizations": {
@@ -10231,6 +10491,136 @@
           "stringUnit": {
             "state": "translated",
             "value": "此会话由其他设备启动，因此无法恢复。请在该设备或 PC 上结束串流后重试。（错误 %1$d）"
+          }
+        }
+      }
+    },
+    "debug_osc_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tvoje ovládání na obrazovce bez streamu: vyzkoušej každé tlačítko, D-pad i sticky, nic se neodesílá. Ozubené kolo v rohu upravuje rozložení stejně jako ve streamu."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Bildschirmsteuerung ohne Stream: Probiere jede Taste, das Steuerkreuz und die Sticks aus, es wird nichts gesendet. Das Zahnrad in der Ecke bearbeitet das Layout, wie im Stream."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your on-screen controls without a stream: try every button, the D-pad and the sticks, nothing is sent. The gear in the corner edits the layout, as in a stream."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tus controles en pantalla sin un stream: prueba cada botón, la cruceta y los sticks; no se envía nada. El engranaje de la esquina edita la distribución, como en un stream."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tes commandes à l’écran sans stream : essaie chaque bouton, la croix directionnelle et les sticks, rien n’est envoyé. L’engrenage dans le coin modifie la disposition, comme pendant un stream."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ストリームなしで画面上のコントロールを試せます。すべてのボタン、十字キー、スティックを試せますが、何も送信されません。隅の歯車で、ストリーム中と同様にレイアウトを編集できます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스트림 없이 화면 컨트롤을 써 볼 수 있어요. 모든 버튼, 방향 패드, 스틱을 시험해 보세요. 아무것도 전송되지 않아요. 모서리의 톱니바퀴로 스트림에서처럼 레이아웃을 편집해요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seus controles na tela sem um stream: teste cada botão, o direcional e os analógicos, nada é enviado. A engrenagem no canto edita o layout, como em um stream."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Твої екранні елементи керування без стріму: пробуй кожну кнопку, D-pad і стіки, нічого не надсилається. Шестерня в кутку змінює розкладку, як у стрімі."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不串流也能使用你的屏幕按键：试试每个按键、方向键和摇杆，不会发送任何内容。角落的齿轮可编辑布局，与串流中一致。"
+          }
+        }
+      }
+    },
+    "debug_osc_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Náhled ovládání na obrazovce"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bildschirmsteuerung ausprobieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preview on-screen controls"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vista previa de los controles en pantalla"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aperçu des commandes à l’écran"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面上のコントロールをプレビュー"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "화면 컨트롤 미리보기"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pré-visualizar controles na tela"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перегляд екранних елементів керування"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "预览屏幕按键"
           }
         }
       }
@@ -44489,6 +44879,71 @@
         }
       }
     },
+    "settings_actions_osc_reset": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovládání na obrazovce obnoveno"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bildschirmsteuerung zurückgesetzt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-screen controls reset"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controles en pantalla restablecidos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commandes à l’écran réinitialisées"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面上のコントロールをリセットしました"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "화면 컨트롤을 초기화했어요"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controles na tela redefinidos"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Екранні елементи керування скинуто"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "屏幕按键已重置"
+          }
+        }
+      }
+    },
     "settings_actions_save": {
       "extractionState": "manual",
       "localizations": {
@@ -56282,6 +56737,71 @@
         }
       }
     },
+    "settings_osc_preview_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Náhled ovládání na obrazovce · nic se neodesílá do PC · %1$@ = zpět"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorschau der Bildschirmsteuerung · es wird nichts an einen PC gesendet · %1$@ zum Zurückgehen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-screen controls preview · nothing is sent to a PC · %1$@ to go back"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vista previa de los controles en pantalla · no se envía nada a un PC · %1$@ para volver"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aperçu des commandes à l’écran · rien n’est envoyé à un PC · %1$@ pour revenir"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面上のコントロールのプレビュー · PCには何も送信されません · %1$@で戻る"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "화면 컨트롤 미리보기 · PC로 아무것도 전송되지 않아요 · %1$@로 뒤로 가기"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prévia dos controles na tela · nada é enviado ao PC · %1$@ para voltar"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перегляд екранних елементів керування · на ПК нічого не надсилається · %1$@, щоб вийти"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "屏幕按键预览 · 不会向 PC 发送任何内容 · 按 %1$@ 返回"
+          }
+        }
+      }
+    },
     "settings_resolution_custom": {
       "extractionState": "manual",
       "localizations": {
@@ -64124,6 +64644,136 @@
         }
       }
     },
+    "stream_help_on_screen_controls": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zobrazí nebo skryje virtuální gamepad během tohoto streamu. Neprůhlednost a rozložení se nastavují na záložce Ovládání."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeigt oder verbirgt das virtuelle Gamepad in diesem Stream. Deckkraft und Layout stellst du unter Steuerung ein."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shows or hides the virtual gamepad during this stream. Opacity and layout are set under Controls."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muestra u oculta el mando virtual durante este stream. La opacidad y la distribución se ajustan en Controles."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affiche ou masque la manette virtuelle pendant ce stream. L’opacité et la disposition se règlent dans Commandes."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このストリームの間、仮想コントローラーを表示または非表示にします。不透明度とレイアウトは「操作」で設定します。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이번 스트림 동안 가상 게임패드를 표시하거나 숨겨요. 투명도와 레이아웃은 컨트롤에서 설정해요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostra ou oculta o controle virtual durante este stream. Opacidade e layout são definidos em Controles."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показує або ховає віртуальний контролер під час цього стріму. Прозорість і розкладка задаються в розділі «Керування»."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在本次串流中显示或隐藏虚拟手柄。不透明度和布局在控制中设置。"
+          }
+        }
+      }
+    },
+    "stream_help_on_screen_controls_opacity": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neprůhlednost ovládání na obrazovce. Platí hned a uloží se do profilu, stejná hodnota jako v Nastavení."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deckkraft der Bildschirmsteuerung. Gilt sofort und wird im Profil gespeichert, derselbe Wert wie in den Einstellungen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opacity of the on-screen controls. Applies at once and is saved in the profile, the same value as in Settings."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opacidad de los controles en pantalla. Se aplica al instante y se guarda en el perfil, el mismo valor que en Ajustes."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opacité des commandes à l’écran. S’applique aussitôt et est enregistrée dans le profil, la même valeur que dans les Réglages."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面上のコントロールの不透明度です。すぐに反映され、プロフィールに保存されます。設定と同じ値です。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "화면 컨트롤의 투명도예요. 바로 적용되고 프로필에 저장돼요. 설정과 같은 값이에요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opacidade dos controles na tela. Vale na hora e fica salva no perfil, o mesmo valor que em Configurações."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Непрозорість екранних елементів керування. Діє одразу й зберігається в профілі, те саме значення, що в налаштуваннях."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "屏幕按键的不透明度。立即生效并保存到个人资料中，与设置中的数值相同。"
+          }
+        }
+      }
+    },
     "stream_help_quit_game": {
       "extractionState": "manual",
       "localizations": {
@@ -67110,6 +67760,71 @@
           "stringUnit": {
             "state": "translated",
             "value": "命令"
+          }
+        }
+      }
+    },
+    "stream_menu_row_onscreen_controls": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovládání na obrazovce"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bildschirmsteuerung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-screen controls"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controles en pantalla"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commandes à l’écran"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面上のコントロール"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "화면 컨트롤"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controles na tela"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Екранні елементи керування"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "屏幕按键"
           }
         }
       }
