@@ -69,6 +69,10 @@ public final class Navigator {
     }
 
     public private(set) var stack: [Entry]
+    /// The focus of a sheet or a list of values the screen shown has open (the library filter, the Artwork filter, Settings'
+    /// search and pickers): while it is set the focus engine of tvOS keeps every other item, the top navigation's too, from
+    /// taking the system focus (``ShellRouter/modalFocus``). Cleared when the screen changes.
+    var screenModal: FocusModel?
     /// True while a text field is being typed in: the controller and the keyboard's arrows, Return and Escape belong to
     /// the field, not to the focus.
     public var isEditingText = false {
@@ -95,28 +99,43 @@ public final class Navigator {
         #endif
     }
 
-    /// What the screen shown says about its buttons for the hint bar (adjust, reset).
+    /// What the screen shown says about its buttons for the hint bar (adjust, reset), and who said it.
     var screenHints = ScreenHints()
+    @ObservationIgnored private weak var hintsOwner: AnyObject?
+
+    /// The screen [owner] says what its buttons do now.
+    func setHints(_ hints: ScreenHints, from owner: AnyObject) {
+        hintsOwner = owner
+        screenHints = hints
+    }
+
+    /// The screen [owner] is gone: its hints go with it, unless the next screen has already said its own (a screen that is
+    /// leaving is removed after the one that comes has appeared).
+    func clearHints(of owner: AnyObject) {
+        guard hintsOwner === owner else { return }
+        hintsOwner = nil
+        screenHints = ScreenHints()
+    }
 
     /// While set, every controller and keyboard command goes here first; true: consumed (the stream screen owns the
-    /// controller).
+    /// controller). Set with ``takeInput(_:capture:)``.
     @ObservationIgnored public var commandCapture: (@MainActor (MenuCommand) -> Bool)?
-    /// The screen (its focus model) that installed ``commandCapture``.
-    @ObservationIgnored private var inputOwner: ObjectIdentifier?
+    /// The screen (its focus model, or the stream's controller) that installed ``commandCapture``.
+    @ObservationIgnored private weak var inputOwner: AnyObject?
 
     /// [owner]'s screen takes the commands before the focus gets them. A screen that is left is removed after the next one
     /// appeared (the transition), so its release must not clear what the new screen has just installed: only the owner clears.
-    func takeInput(_ owner: FocusModel, capture: @escaping @MainActor (MenuCommand) -> Bool) {
-        inputOwner = ObjectIdentifier(owner)
+    func takeInput(_ owner: AnyObject, capture: @escaping @MainActor (MenuCommand) -> Bool) {
+        inputOwner = owner
         commandCapture = capture
     }
 
-    /// [owner]'s screen is gone: its capture and its hint state go, unless another screen took them meanwhile.
-    func releaseInput(_ owner: FocusModel) {
-        guard inputOwner == ObjectIdentifier(owner) else { return }
+    /// [owner]'s screen is gone: its capture and its hints go, unless another screen took them meanwhile.
+    func releaseInput(_ owner: AnyObject) {
+        clearHints(of: owner)
+        guard inputOwner === owner else { return }
         inputOwner = nil
         commandCapture = nil
-        screenHints = ScreenHints()
     }
     /// Ends the repeats of a held direction (``MenuInput/cancelRepeats()``); set by the screen that owns the input.
     @ObservationIgnored public var cancelRepeats: (@MainActor () -> Void)?
@@ -137,6 +156,7 @@ public final class Navigator {
     /// Opens [screen] above the current one, with the focus on [focus] (nil: the first item that appears).
     public func push(_ screen: Screen, focus: AnyHashable? = nil) {
         armInputGate()
+        screenModal = nil
         stack.append(Entry(screen: screen, focus: FocusModel(initial: focus)))
     }
 
@@ -145,6 +165,7 @@ public final class Navigator {
     public func back() -> Bool {
         guard canGoBack else { return false }
         armInputGate()
+        screenModal = nil
         stack.removeLast()
         return true
     }
@@ -152,6 +173,7 @@ public final class Navigator {
     /// Replaces the whole stack with [screen] (the first run is over, or starts again).
     public func reset(to screen: Screen, focus: AnyHashable? = nil) {
         armInputGate()
+        screenModal = nil
         stack = [Entry(screen: screen, focus: FocusModel(initial: focus))]
     }
 

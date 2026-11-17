@@ -428,7 +428,7 @@ private struct ArtworkHintSync: View {
         let hints = ScreenHints(sheetOpen: model.sheetOpen, artworkSouth: ArtworkSouth.of(focus.focused))
         Color.clear
             .frame(width: 0, height: 0)
-            .onChange(of: hints, initial: true) { _, now in navigator.screenHints = now }
+            .onChange(of: hints, initial: true) { _, now in navigator.setHints(now, from: focus) }
     }
 }
 

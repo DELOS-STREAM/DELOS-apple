@@ -137,7 +137,7 @@ struct HomeScreen: View {
             sheet(filters: filters, listed: listed)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .environment(\.modalFocus, sheetOpen ? sheetFocus : nil)
+        .screenModal(sheetOpen ? sheetFocus : nil)
         .task(id: hostID) {
             art.hero = nil
             await hosts.refresh(hostID)
@@ -159,6 +159,11 @@ struct HomeScreen: View {
             // Without games there is no game background
             if case .apps = now {} else { art.hero = nil }
         }
+        // Without covers (loading, offline, no games, all hidden) the first focus the screen was opened with is nothing: the
+        // navigation has it until a cover appears and takes it
+        .onChange(of: listed.isEmpty, initial: true) { _, none in
+            if none { focus.focusFirstItem() }
+        }
         .onChange(of: offeredNow, initial: true) { _, now in
             offered = now
             if !now, sheetOpen { closeSheet(silently: true) }
@@ -170,7 +175,7 @@ struct HomeScreen: View {
             }
         }
         .onChange(of: ScreenFilter(label: offeredNow ? LibraryFilter.hintLabel(filters) : nil, open: sheetOpen), initial: true) { _, now in
-            navigator.screenHints = ScreenHints(sheetOpen: now.open, filterLabel: now.label)
+            navigator.setHints(ScreenHints(sheetOpen: now.open, filterLabel: now.label), from: focus)
         }
         .onAppear { navigator.takeInput(focus) { command in capture(command) } }
         .onDisappear { navigator.releaseInput(focus) }
@@ -304,11 +309,13 @@ enum LibraryFocus {
 
 /// The wrap of the row: left on the first cover goes round to the last one, right on the last one back to the first.
 enum LibraryWrap {
-    static func moves(index: Int, ids: [AnyHashable]) -> [FocusDirection: AnyHashable] {
-        guard ids.count > 1 else { return [:] }
-        if index == 0 { return [.left: ids[ids.count - 1]] }
-        if index == ids.count - 1 { return [.right: ids[0]] }
-        return [:]
+    static func moves(index: Int, ids: [AnyHashable], up: AnyHashable? = nil) -> [FocusDirection: AnyHashable] {
+        var moves: [FocusDirection: AnyHashable] = [:]
+        if let up { moves[.up] = up }
+        guard ids.count > 1 else { return moves }
+        if index == 0 { moves[.left] = ids[ids.count - 1] }
+        if index == ids.count - 1 { moves[.right] = ids[0] }
+        return moves
     }
 
     /// Whether the focus going from cover [from] to cover [to] is a wrap round the row.

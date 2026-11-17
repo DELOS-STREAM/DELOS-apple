@@ -104,10 +104,8 @@ public struct DelosRoot: View {
     @State private var input: MenuInput?
     @State private var feedback: Feedback?
     @State private var videoCoversBackdrop = false
-    /// The side menu's focus while it is open.
-    @State private var sideMenu: FocusModel?
-    /// The focus of the portal while it is up: nothing under it takes the focus, and B is the only command that passes.
-    @State private var portalFocus = FocusModel(initial: "portal")
+    /// Who the controller's and keyboard's commands belong to, and the side menu they may open.
+    @State private var router: ShellRouter
     /// The battery and the network for the status bar.
     @State private var device = DeviceStatus()
     private let appearances = AppearanceStore()
@@ -122,8 +120,15 @@ public struct DelosRoot: View {
     @Environment(\.scenePhase) private var scenePhase
 
     public init() {
+        #if DEBUG
+        // -DelosDemo: a separate suite, so the app's own profiles and PCs are never read or written
+        let profiles = DemoHarness.on ? ProfileStore(suiteName: DemoHarness.suite) : ProfileStore()
+        let hosts = DemoHarness.on ? HostStore(defaults: UserDefaults(suiteName: DemoHarness.suite) ?? .standard) : HostStore()
+        if DemoHarness.on { DemoHarness.seed(hosts: hosts, profiles: profiles) }
+        #else
         let profiles = ProfileStore()
         let hosts = HostStore()
+        #endif
         let toasts = Toasts()
         let layers = Layers()
         _profiles = State(initialValue: profiles)
@@ -131,14 +136,29 @@ public struct DelosRoot: View {
         _toasts = State(initialValue: toasts)
         _layers = State(initialValue: layers)
         let navigator = Navigator(root: .boot, focus: "begin")
+        #if DEBUG
+        let homeArt = HomeArt(artwork: DemoHarness.on ? DemoHarness.artwork() : ArtworkStore())
+        #else
         let homeArt = HomeArt(artwork: ArtworkStore())
+        #endif
         _homeArt = State(initialValue: homeArt)
+        #if DEBUG
+        let metadata = DemoHarness.on ? GameMetadataModel(store: DemoHarness.metadataStore()) : GameMetadataModel()
+        #else
         let metadata = GameMetadataModel()
+        #endif
         _metadata = State(initialValue: metadata)
         let actions = ShellActions(navigator: navigator, hosts: hosts, profiles: profiles, toasts: toasts, layers: layers, artwork: homeArt.artwork,
                                    metadata: metadata)
         _actions = State(initialValue: actions)
+        _router = State(initialValue: ShellRouter(navigator: navigator, layers: layers, toasts: toasts, actions: actions))
         if !profiles.isFirstRun { navigator.reset(to: .start, focus: actions.startFocus()) }
+        #if DEBUG
+        if DemoHarness.on {
+            DemoHarness.navigate(navigator, actions: actions)
+            DemoHarness.forceInput()
+        }
+        #endif
         var appearance = profiles.current.map { AppearanceStore().load(profile: $0.id) } ?? Appearance()
         var settingsTab: SettingsTab?
         #if DEBUG
@@ -172,6 +192,9 @@ public struct DelosRoot: View {
         self.settingsTab = settingsTab
     }
 
+    /// The side menu's focus while it is open.
+    private var sideMenu: FocusModel? { router.sideMenu }
+
     private var colors: DelosColors {
         DelosColors(palette: Palette(rawValue: appearance.palette.rawValue) ?? .delos, dark: appearance.dark)
     }
@@ -181,11 +204,17 @@ public struct DelosRoot: View {
             ZStack {
                 ZStack {
                     // The game background shows only behind the library (`ShellBackdrop`'s heroShown)
-                    if !videoCoversBackdrop { Backdrop(appearance: appearance, hero: showsLibrary ? homeArt.hero : nil) }
+                    // The library's filter sheet is a layer of Android's shell: its scrim covers the bar too (the screen is raised
+                    // while the sheet is open) and the backdrop and the bar blur under it like the screen does
+                    if !videoCoversBackdrop {
+                        Backdrop(appearance: appearance, hero: showsLibrary ? homeArt.hero : nil)
+                            .modifier(LayerBackdropBlur(active: librarySheetOpen))
+                    }
                     let entry = navigator.stack[navigator.stack.count - 1]
                     screen(entry)
                         .id(ObjectIdentifier(entry.focus))
                         .transition(ScreenMotion.transition(reduced: systemReduceMotion || appearance.reducedMotion))
+                        .zIndex(librarySheetOpen ? 1 : 0)
                     if case .stream = navigator.current {} else {
                         TopBar(
                             brand: navigator.current != .start, navigation: navigation(entry),
@@ -193,34 +222,34 @@ public struct DelosRoot: View {
                             clock: appearance.clock, onBack: navigator.canGoBack ? { go { navigator.back() } } : nil)
                             // The interface scale zooms the whole bar
                             .modifier(ZoomedBar())
+                            .modifier(LayerBackdropBlur(active: librarySheetOpen))
                             // The navigation's buttons belong to the focus of the screen shown
                             .id(ObjectIdentifier(entry.focus))
-                    }
-                    if case .stream = navigator.current {} else {
-                        ShellHintBar(
-                            hints: hints, note: libraryNote, noteLabel: libraryNote == nil ? nil : L("shell_hint_library_label"),
-                            libraryRow: showsLibraryRow,
-                            // The only tappable hint is the library's Filter: the screen's own Y
-                            onTap: { _ in _ = navigator.commandCapture?(.toastAction) })
                     }
                 }
                 .modifier(PortalBackdropBlur(active: actions.connection.portal.map { !$0.arriving } ?? false))
                 // The scrim of the side menu or a dialog blurs the screen under it
                 .modifier(LayerBackdropBlur(active: sideMenu != nil || layers.blursScreen))
-                if sideMenu != nil { LayerScrim(onTap: { closeSideMenu(sound: .back) }) }
+                if sideMenu != nil { LayerScrim(onTap: { router.closeSideMenu(sound: .back) }) }
                 if let sideMenu {
                     SideMenu(
                         profile: profiles.current, pc: connectedPC, focus: sideMenu, appearance: appearance, onStep: { id, direction in _ = quickStep(id, by: direction) },
                         onSettings: {
-                            closeSideMenu(sound: nil)
+                            router.closeSideMenu(sound: nil)
                             go { navigator.openFromNavigation(.settings, focus: SettingsScreen.initialFocus) }
                         },
                         hidden: actions.hiddenRow(pcName: connectedPC?.name))
                 }
                 LayerHost(layers: layers, navigator: navigator)
+                // The hint bar is above the scrim and the layers, crisp (Android's `HintBar` follows `Scrim` in `Shell`)
+                if case .stream = navigator.current {} else {
+                    ShellHintBar(
+                        hints: hints, note: libraryNote, noteLabel: libraryNote == nil ? nil : L("shell_hint_library_label"),
+                        libraryRow: showsLibraryRow)
+                }
                 ZStack {
                     if let portal = actions.connection.portal {
-                        PortalOverlay(portal: portal, burst: actions.connection.burst, focus: portalFocus, onCancel: { actions.connection.cancel() })
+                        PortalOverlay(portal: portal, burst: actions.connection.burst, focus: router.portalFocus, onCancel: { actions.connection.cancel() })
                             .transition(.asymmetric(
                                 insertion: .opacity.animation(.easeOut(duration: portal.arriving ? PortalLook.fadeInArriving : PortalLook.fadeIn)),
                                 removal: .opacity.animation(.easeOut(duration: PortalLook.fadeOut))))
@@ -236,14 +265,14 @@ public struct DelosRoot: View {
         .environment(navigator)
         .environment(layers)
         .environment(toasts)
-        .environment(\.modalFocus, actions.connection.isActive ? portalFocus : sideMenu ?? (layers.isOpen ? layers.focus : nil))
+        .environment(\.modalFocus, router.modalFocus)
         #if os(tvOS)
         // The focus engine keeps its focus on an item that can no longer take it until the next press: when the focus
         // owner changes (a layer opens or closes, another screen shows), it is asked to look for the preferred item,
         // once the items of the new owner exist
         .focusScope(focusScope)
         .environment(\.focusNamespace, focusScope)
-        .task(id: ObjectIdentifier(sideMenu ?? (layers.isOpen ? layers.focus : navigator.focus))) {
+        .task(id: ObjectIdentifier(router.modalFocus ?? navigator.focus)) {
             try? await Task.sleep(for: .milliseconds(150))
             guard !Task.isCancelled else { return }
             resetFocus(in: focusScope)
@@ -269,11 +298,20 @@ public struct DelosRoot: View {
         #if os(tvOS)
         // Menu is back (at the start screen the system's Home), Play/Pause the focused item's context menu; the
         // directions and select are the system focus engine's, a swipe or a direction also reaches `route`
-        .onExitCommand(perform: handlesExit ? { route(.back, repeatCount: 0, fromRemote: true) } : nil)
-        .onPlayPauseCommand { route(.options, repeatCount: 0, fromRemote: true) }
-        .onMoveCommand { routeMove($0) }
+        .onExitCommand(perform: router.handlesExit ? { router.route(.back, repeatCount: 0, fromRemote: true) } : nil)
+        .onPlayPauseCommand { router.route(.options, repeatCount: 0, fromRemote: true) }
+        .onMoveCommand { router.routeMove($0) }
         #endif
         .onAppear(perform: startInput)
+        #if DEBUG
+        .task {
+            for step in DemoHarness.script {
+                try? await Task.sleep(for: .seconds(step.wait))
+                if step.command == "toast-undo" { toasts.show("Profile deleted", icon: Symbols.delete, action: ToastAction(label: "Undo") {}); continue }
+                if let command = DemoHarness.command(step.command) { router.route(command, repeatCount: 0) }
+            }
+        }
+        #endif
         // The keys that scroll or move the system focus (arrows, Space, Page, Home, End) are the interface's alone
         .ownsMenuKeys(typing: navigator.isEditingText)
         // A touch or the pointer changes the kind of input the hints and the back arrow are drawn for
@@ -281,10 +319,6 @@ public struct DelosRoot: View {
         // An "up" of a key may never come after the app lost the keyboard
         .onChange(of: scenePhase) { _, now in if now != .active { input?.forgetDown() } }
     }
-
-    /// Whether Menu is ours: a layer or the side menu is open, or there is a screen to go back to. At the first screen it
-    /// is the system's (tvOS: Home).
-    private var handlesExit: Bool { sideMenu != nil || layers.isOpen || navigator.canGoBack || actions.connection.isActive }
 
     /// The sounds, and the controllers' and keyboards' commands (on tvOS only the ones the system has no event for).
     private func startInput() {
@@ -295,103 +329,16 @@ public struct DelosRoot: View {
         feedback.hapticsEnabled = appearance.haptics
         self.feedback = feedback
         layers.feedback = feedback
+        router.feedback = feedback
+        router.stepQuickSetting = { id, direction in quickStep(id, by: direction) }
         #if os(tvOS)
-        let input = MenuInput(only: MenuInput.tvCommands) { command, repeatCount in route(command, repeatCount: repeatCount) }
+        let input = MenuInput(only: MenuInput.tvCommands) { command, repeatCount in router.route(command, repeatCount: repeatCount) }
         #else
-        let input = MenuInput { command, repeatCount in route(command, repeatCount: repeatCount) }
+        let input = MenuInput { command, repeatCount in router.route(command, repeatCount: repeatCount) }
         #endif
         input.start()
         self.input = input
         navigator.cancelRepeats = { [weak input] in input?.cancelRepeats() }
-    }
-
-    #if os(tvOS)
-    /// A swipe or a controller's direction: the focus engine moves the focus on its own; only a screen that takes
-    /// over left and right (the value of a Settings row) gets them first.
-    private func routeMove(_ direction: MoveCommandDirection) {
-        if let sideMenu, direction == .left || direction == .right {
-            adjustQuickSetting(of: sideMenu, direction == .right ? 1 : -1)
-            return
-        }
-        guard sideMenu == nil, !layers.isOpen, !navigator.isEditingText, let capture = navigator.commandCapture else { return }
-        switch direction {
-        case .left: navigator.commandRepeat = 0; _ = capture(.left)
-        case .right: navigator.commandRepeat = 0; _ = capture(.right)
-        default: break
-        }
-    }
-    #endif
-
-    /// A controller, keyboard or remote command, to whoever owns it: the side menu, an open layer, the screen that
-    /// captures the commands (the stream, Settings), a text field being typed in, else the screen's focus.
-    /// [fromRemote]: the Siri Remote's Menu or Play/Pause.
-    private func route(_ command: MenuCommand, repeatCount: Int, fromRemote: Bool = false) {
-        guard let feedback else { return }
-        // The portal into a PC holds every command; B stops waiting for a PC that wakes up
-        if actions.connection.isActive {
-            if command == .back { actions.connection.cancel() }
-            return
-        }
-        navigator.commandRepeat = repeatCount
-        navigator.commandFromRemote = fromRemote
-        if let sideMenu {
-            // The side menu takes every command while it is open
-            switch command {
-            case .back, .menu: closeSideMenu(sound: .back)
-            case .accept: feedback.activate(sideMenu.acceptCue) { sideMenu.handle(.accept) }
-            case .up, .down: if sideMenu.handle(command) { feedback.play(.move) }
-            case .left, .right: adjustQuickSetting(of: sideMenu, command == .right ? 1 : -1)
-            case .previousTab, .nextTab, .options, .toastAction: break
-            }
-            return
-        }
-        if layers.isOpen {
-            // An open layer takes every command; the text field of a dialog takes the keys while it is typed in
-            if navigator.isEditingText {
-                if command == .back { navigator.isEditingText = false }
-            } else if command == .toastAction {
-                toasts.runAction()
-            } else if command != .accept || !navigator.swallowsAccept() {
-                layers.handle(command)
-            }
-            return
-        }
-        if let capture = navigator.commandCapture, capture(command) { return }
-        if command == .menu, navigator.current.hasSideMenu {
-            feedback.play(.open)
-            withAnimation(.easeOut(duration: 0.56)) { self.sideMenu = FocusModel(initial: QuickSettings.ids[0]) }
-            return
-        }
-        // While a text field is typed in, the keys belong to it; B and Escape stop typing
-        if navigator.isEditingText {
-            if command == .back { navigator.isEditingText = false }
-            return
-        }
-        switch command {
-        case .toastAction:
-            toasts.runAction()
-            return
-        case .options:
-            layers.openContextMenu(of: navigator.focus)
-            return
-        default:
-            break
-        }
-        if command == .accept, navigator.swallowsAccept() { return }
-        if command == .back {
-            if navigator.canGoBack {
-                feedback.play(.back)
-                go { navigator.back() }
-            }
-            return
-        }
-        if command == .accept {
-            // The item's own cue (a Cancel or Back goes BACK), unless its action played one
-            feedback.activate(navigator.focus.acceptCue) { navigator.focus.handle(.accept) }
-            return
-        }
-        guard navigator.focus.handle(command) else { return }
-        feedback.play(.move)
     }
 
     @ViewBuilder private func screen(_ entry: Navigator.Entry) -> some View {
@@ -484,6 +431,9 @@ public struct DelosRoot: View {
         if case .home = navigator.current { true } else { false }
     }
 
+    /// The library's filter sheet is open. The Artwork screen's sheet is part of that screen, under the bar, as on Android.
+    private var librarySheetOpen: Bool { showsLibraryRow && navigator.screenHints.sheetOpen }
+
     /// The button hints of the screen, layer and side menu in front (``ShellHints``).
     private var hints: [Hint] {
         var layer: ShellHints.Layer?
@@ -538,11 +488,6 @@ public struct DelosRoot: View {
         return nil
     }
 
-    private func closeSideMenu(sound: Cue?) {
-        if let sound { feedback?.play(sound) }
-        withAnimation(.easeOut(duration: 0.24)) { sideMenu = nil }
-    }
-
     /// A quick setting of the side menu stepped (the side menu's rows): applied at once and kept with the current
     /// profile's appearance. False when nothing changed.
     private func quickStep(_ id: String, by direction: Int) -> Bool {
@@ -554,12 +499,6 @@ public struct DelosRoot: View {
         appearance = next
         appearances.save(next, profile: profile)
         return true
-    }
-
-    /// Left or right on the side menu's focused row: a quick setting takes the next or the previous value.
-    private func adjustQuickSetting(of menu: FocusModel, _ direction: Int) {
-        guard let id = menu.focused as? String, quickStep(id, by: direction) else { return }
-        feedback?.play(.move)
     }
 
     /// "Enter address" on the pairing screen (`addByAddress` of DELOS for Android): a dialog for the address.

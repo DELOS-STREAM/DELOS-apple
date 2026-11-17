@@ -29,7 +29,6 @@ struct GameSettingsScreen: View {
     @State private var rowFrames: [String: CGRect] = [:]
     /// The row last focused, which Reset all gives the focus back to.
     @State private var lastRow: String?
-    @Environment(\.modalFocus) private var inheritedModal
 
     static let resetAllID = "game-reset-all"
     static let space = "game-settings"
@@ -104,7 +103,7 @@ struct GameSettingsScreen: View {
             }
         }
         .coordinateSpace(.named(Self.space))
-        .environment(\.modalFocus, popup?.focus ?? inheritedModal)
+        .screenModal(popup?.focus)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
             navigator.takeInput(focus) { command in capture(command) }
@@ -112,8 +111,8 @@ struct GameSettingsScreen: View {
         }
         .onDisappear { navigator.releaseInput(focus) }
         .onChange(of: HintKey(focus: focus.focused, custom: model.overrides.count), initial: true) {
-            navigator.screenHints = ScreenHints(
-                adjustable: ShellHints.adjustable(focusedRow), resetsRow: focusedRow.map { model.isCustom($0.id) } ?? false)
+            navigator.setHints(ScreenHints(
+                adjustable: ShellHints.adjustable(focusedRow), resetsRow: focusedRow.map { model.isCustom($0.id) } ?? false), from: focus)
         }
         .onChange(of: focus.focused) { _, now in
             if let id = now as? String, rows.contains(where: { $0.id == id }) { lastRow = id }

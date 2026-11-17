@@ -11,6 +11,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 - The library filter of Android on the home screen (when `DelosMetadataURL` is configured): Y, or a tap on the hint bar's Filter
   (a glyphless pill while no controller is the input), opens a glass sheet with chips for genre and theme (with the number of games each holds), HDR support and
+- A demo harness for debug builds (`-DelosDemo YES`, docs/BUILDING.md): a fake PC with games, generated artwork, fake metadata and a
+  command script, none of it touching the network, the client identity or the app's data, and `tools/sim-walkthrough.sh` to
+  screenshot any screen in a fresh simulator.
+- The library filter of Android on the home screen (when `DelosMetadataURL` is configured): Y, or the new filter button beside
+  the title, opens a glass sheet with chips for genre and theme (with the number of games each holds), HDR support and
   duration, the live count and Reset (X) and Done. The filter is kept per PC, the hint bar says how many criteria are on
   ("Filter • 2 active") and the library note counts the games shown, and a filter that lets nothing through shows
   Android's empty state with a button that resets it. The whole library's cached metadata is read when it opens, so the
@@ -168,6 +173,20 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- Moving the focus no longer jumps to the wrong row: the focus finder follows Android's (beams and weights), so Right on the
+  library's filter button or at the end of the Artwork grid stays where it is instead of jumping to a button above or a cover
+  below, and Up from every cover goes through the filter button to the navigation. A library without games, or one still
+  loading, puts the focus on the top navigation instead of on nothing, and a focus that lost its item falls to the nearest one,
+  not to a random one.
+- A screen that is leaving no longer takes the next screen's controller commands and button hints away (Settings, the library
+  and the other screens with their own commands lost L1 and R1, Y and the adjust hint after a screen change).
+- On Apple TV the top navigation and the covers cannot take the focus behind an open filter sheet, value list or search, and
+  the covers cannot behind a game menu; a tap on the side menu's panel no longer closes it.
+- The filter button of the library blurs with the rest of the screen under the filter sheet; it stayed sharp beside the sheet.
+- The library's filter sheet covers the top bar with its scrim: the brand, the navigation, the back arrow and the clock were left
+  bright above the dimmed screen. The backdrop and the bar blur under it like the screen does, as on Android.
+- The hint bar is no longer blurred and dimmed under the side menu, a context menu or a dialog: as on Android it is above the
+  scrim and the layers and stays crisp.
 - The circles of the Devices, Start, Profile, Pair and Create screens match Android's: the focus ring is no longer grown twice
   (it was 40 px too wide, so the glow showed through its gap), the glow's middle stop keeps a third of its alpha instead of
   replacing it (it was twice as bright), the discs and the profile chip are Liquid Glass tinted with Android's whole fill alpha,

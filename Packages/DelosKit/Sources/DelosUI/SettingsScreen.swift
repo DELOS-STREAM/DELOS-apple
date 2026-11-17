@@ -33,7 +33,6 @@ struct SettingsScreen: View {
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.openURL) private var openURL
-    @Environment(\.modalFocus) private var inheritedModal
     @State private var form: StreamSettingsForm
     @State private var tab: SettingsTab
     /// The popover that is open on a row (its options, or its slider), and the focus inside the options.
@@ -105,7 +104,7 @@ struct SettingsScreen: View {
         }
         .coordinateSpace(.named(Self.space))
         // The rows cannot take the system focus (tvOS) while the list of values or the search is open
-        .environment(\.modalFocus, searchFocus ?? popup?.focus ?? inheritedModal)
+        .screenModal(searchFocus ?? popup?.focus)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onChange(of: form.settings) { _, now in store.save(now, profile: profileID) }
         .onChange(of: appearance) { _, now in appearances.save(now, profile: profileID) }
@@ -116,7 +115,7 @@ struct SettingsScreen: View {
         }
         .onDisappear { navigator.releaseInput(focus) }
         .onChange(of: tab) { _, next in SettingsSession.shared.tab = next }
-        .onChange(of: focus.focused, initial: true) { navigator.screenHints = ScreenHints(adjustable: ShellHints.adjustable(focusedRow)) }
+        .onChange(of: focus.focused, initial: true) { navigator.setHints(ScreenHints(adjustable: ShellHints.adjustable(focusedRow)), from: focus) }
     }
 
     private var content: some View {

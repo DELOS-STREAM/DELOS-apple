@@ -7,27 +7,82 @@ public enum FocusDirection: Sendable {
     case up, down, left, right
 }
 
-/// Picks the item the focus moves to: the nearest item whose center lies beyond the current one in the direction,
-/// measured along the direction plus twice the sideways offset, so an item straight ahead wins over a closer one off
-/// to the side. Nil when nothing lies in that direction (the focus stays).
+/// Picks the item the focus moves to, as Android's focus finder does (`FocusFinder`, which Compose's focus search follows):
+/// a candidate lies beyond the current item in the direction, by its far edge; one in the beam (it overlaps the current item
+/// on the other axis, so it is straight ahead) beats any that is not; among those the weight `13 * major² + minor²` decides, the
+/// major axis being the gap between the facing edges and the minor one the offset of the centers. Sideways, an item outside the
+/// beam counts only when it is nearly straight ahead (at most a quarter as far aside as ahead), else it is another row and the
+/// direction leads nowhere: Right at the end of a row never jumps to a button above or a cover below. Nil when nothing qualifies
+/// (the focus stays). Ties go to the smaller id, so the answer never depends on the order of a dictionary.
 public enum FocusGeometry {
+    private static let edge: CGFloat = 0.5
+
     public static func next<ID: Hashable>(from current: CGRect, direction: FocusDirection, candidates: [ID: CGRect]) -> ID? {
-        let origin = CGPoint(x: current.midX, y: current.midY)
-        var best: (id: ID, score: CGFloat)?
+        var best: (id: ID, inBeam: Bool, weight: CGFloat)?
         for (id, frame) in candidates {
-            let dx = frame.midX - origin.x
-            let dy = frame.midY - origin.y
-            let (ahead, side): (CGFloat, CGFloat) = switch direction {
-            case .left: (-dx, dy)
-            case .right: (dx, dy)
-            case .up: (-dy, dx)
-            case .down: (dy, dx)
+            guard let (major, minor, inBeam, ahead, side) = measure(frame, from: current, direction) else { continue }
+            // Sideways, an item outside the beam must lie more ahead than aside: it is another row otherwise. Up and down may
+            // lead to an item off to the side (the navigation is centered above content that is not)
+            if !inBeam, direction == .left || direction == .right, side * 4 > ahead { continue }
+            let weight = 13 * major * major + minor * minor
+            if let best {
+                if best.inBeam != inBeam {
+                    if !inBeam { continue }
+                } else if weight > best.weight || (weight == best.weight && "\(id)" >= "\(best.id)") {
+                    continue
+                }
             }
-            guard ahead > 0.5 else { continue }
-            let score = ahead + 2 * abs(side)
-            if best == nil || score < best!.score { best = (id, score) }
+            best = (id, inBeam, weight)
         }
         return best?.id
+    }
+
+    /// How [frame] lies from [current] in [direction]: the gap between the facing edges (at least 1), the offset of the centers
+    /// on the other axis, whether the two overlap on that axis, and the centers' distance along and across the direction.
+    /// Nil when it is not beyond the current item in that direction.
+    private static func measure(_ frame: CGRect, from current: CGRect, _ direction: FocusDirection)
+        -> (major: CGFloat, minor: CGFloat, inBeam: Bool, ahead: CGFloat, side: CGFloat)?
+    {
+        let dx = frame.midX - current.midX, dy = frame.midY - current.midY
+        switch direction {
+        case .right:
+            guard frame.maxX > current.maxX + edge, frame.midX > current.midX + edge, frame.minX > current.minX + edge || current.maxX <= frame.minX + edge
+            else { return nil }
+            return (max(frame.minX - current.maxX, 1), abs(dy), overlap(frame.minY, frame.maxY, current.minY, current.maxY), dx, abs(dy))
+        case .left:
+            guard frame.minX < current.minX - edge, frame.midX < current.midX - edge, frame.maxX < current.maxX - edge || current.minX >= frame.maxX - edge
+            else { return nil }
+            return (max(current.minX - frame.maxX, 1), abs(dy), overlap(frame.minY, frame.maxY, current.minY, current.maxY), -dx, abs(dy))
+        case .down:
+            guard frame.maxY > current.maxY + edge, frame.midY > current.midY + edge, frame.minY > current.minY + edge || current.maxY <= frame.minY + edge
+            else { return nil }
+            return (max(frame.minY - current.maxY, 1), abs(dx), overlap(frame.minX, frame.maxX, current.minX, current.maxX), dy, abs(dx))
+        case .up:
+            guard frame.minY < current.minY - edge, frame.midY < current.midY - edge, frame.maxY < current.maxY - edge || current.minY >= frame.maxY - edge
+            else { return nil }
+            return (max(current.minY - frame.maxY, 1), abs(dx), overlap(frame.minX, frame.maxX, current.minX, current.maxX), -dy, abs(dx))
+        }
+    }
+
+    private static func overlap(_ a0: CGFloat, _ a1: CGFloat, _ b0: CGFloat, _ b1: CGFloat) -> Bool { a1 > b0 + edge && a0 < b1 - edge }
+}
+
+extension FocusGeometry {
+    /// The candidate nearest to [rect] (by the distance of the centers), or without a rect the first in reading order: the
+    /// top one, the leftmost of those at the same height. Ties go to the smaller id, so the result never depends on the
+    /// order a dictionary hands its keys out.
+    public static func fallback<ID: Hashable>(near rect: CGRect?, candidates: [ID: CGRect]) -> ID? {
+        func key(_ pair: (key: ID, value: CGRect)) -> (Double, Double, String) {
+            if let rect {
+                let dx = pair.value.midX - rect.midX, dy = pair.value.midY - rect.midY
+                return (Double(dx * dx + dy * dy), Double(pair.value.minY), "\(pair.key)")
+            }
+            return (Double(pair.value.minY.rounded()), Double(pair.value.minX), "\(pair.key)")
+        }
+        return candidates.min { a, b in
+            let (ka, kb) = (key(a), key(b))
+            return ka < kb
+        }?.key
     }
 }
 
@@ -49,7 +104,19 @@ public final class FocusModel {
     }
 
     public func focus(_ id: AnyHashable) {
+        watchingForFirst = false
         focused = id
+    }
+
+    /// While set, the focus is on the first item in reading order of those registered so far (``focusFirstItem()``).
+    @ObservationIgnored private var watchingForFirst = false
+
+    /// The screen has nothing the first focus it was opened with could be (an empty or loading library): until the player moves
+    /// the focus, or the screen focuses an item itself, the focus is on the first registered item in reading order. It follows
+    /// the items as they register, so the answer does not depend on which one the layout reported first.
+    func focusFirstItem() {
+        watchingForFirst = true
+        if let first = fallback(near: nil) { focused = first }
     }
 
     /// - Parameters:
@@ -65,10 +132,15 @@ public final class FocusModel {
         cues[id] = cue
         self.moves[id] = moves
         menus[id] = menu
-        if focused == nil { focused = id }
+        if watchingForFirst, let first = fallback(near: nil) {
+            focused = first
+        } else if focused == nil {
+            focused = id
+        }
     }
 
     func unregister(_ id: AnyHashable) {
+        let last = frames[id]
         frames[id] = nil
         actions[id] = nil
         moves[id] = nil
@@ -78,10 +150,20 @@ public final class FocusModel {
         // A screen that leaves unregisters all its items one after the other: its focus must stay on the item it had, for
         // the way back. So the focus moves on only if other items are still there once the layout has settled.
         Task { [weak self] in
-            guard let self, focused == id, frames[id] == nil, let next = frames.keys.first else { return }
+            guard let self, focused == id, frames[id] == nil, let next = fallback(near: last) else { return }
             focused = next
         }
     }
+
+    /// The item the focus falls to when the one it names is not there (the screen's first item is still being loaded, or the
+    /// focused item was removed): the registered item nearest to [rect], else the first in reading order. Never an arbitrary
+    /// one: the same screen gives the same answer every time.
+    func fallback(near rect: CGRect?) -> AnyHashable? {
+        FocusGeometry.fallback(near: rect, candidates: frames).map { AnyHashable($0) }
+    }
+
+    /// The items that are registered and where they are (global points): what the navigation audit's tests walk.
+    var registeredFrames: [AnyHashable: CGRect] { frames }
 
     /// The cue of A on the focused item (``FocusItem/init(id:model:moves:clickCue:action:tap:content:)``): SELECT unless
     /// the item names another or none. Whoever routes A plays it with ``Feedback/activate(_:_:)``.
@@ -119,8 +201,9 @@ public final class FocusModel {
         case .back, .previousTab, .nextTab, .menu, .options, .toastAction:
             return false
         }
+        watchingForFirst = false
         guard let focused, let current = frames[focused] else {
-            self.focused = frames.keys.first
+            self.focused = fallback(near: nil)
             return self.focused != nil
         }
         if let target = moves[focused]?[direction], frames[target] != nil {

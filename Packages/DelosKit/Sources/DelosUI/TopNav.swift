@@ -323,11 +323,17 @@ struct SideMenu: View {
             .frame(width: stage.px(frame.width), height: stage.px(frame.height))
             .background {
                 // backdropBlur(haze, 28f, surface3): the panel glass
+                // A tap on the panel stays on it (only a tap beside it reaches the scrim and closes the menu)
                 if style.kind == .box {
-                    GlassShape(RoundedRectangle(cornerRadius: stage.px(style.cornerRadius), style: .continuous), tint: colors.surface3, role: .panel)
+                    let shape = RoundedRectangle(cornerRadius: stage.px(style.cornerRadius), style: .continuous)
+                    GlassShape(shape, tint: colors.surface3, role: .panel)
+                        .contentShape(shape)
+                        .onTapGesture {}
                 } else {
                     GlassShape(Rectangle(), tint: colors.surface3, role: .panel)
                         .overlay(alignment: .trailing) { Rectangle().fill(colors.line.color).frame(width: stage.px(1)) }
+                        .contentShape(Rectangle())
+                        .onTapGesture {}
                         .ignoresSafeArea()
                 }
             }

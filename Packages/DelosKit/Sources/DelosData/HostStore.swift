@@ -10,7 +10,7 @@ public final class HostStore {
     /// Every known PC, paired first, then by name.
     public private(set) var hosts: [HostRecord] = []
     /// The apps of each PC as last loaded, by host id.
-    public private(set) var apps: [String: [HostApp]] = [:]
+    public internal(set) var apps: [String: [HostApp]] = [:]
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let identities: ClientIdentityStore

@@ -85,7 +85,12 @@ On tvOS the system focus engine moves the focus. On iPhone, iPad and Mac a game 
 focus, so `MenuInput` (DelosInput) turns the D-pad, the left stick, A, B, X, Y, L1, R1, the left menu button (View,
 Select, Create: `buttonOptions`), the right menu button (Menu, Start, Options: `buttonMenu`) and the arrow, Return,
 Escape and menu keys into commands, and `FocusModel` (DelosUI) moves the focus
-to the nearest item in the pressed direction (`FocusGeometry`). A direction held down repeats as a held key does on
+to the best item in the pressed direction (`FocusGeometry`, Android's focus finder: a candidate lies beyond the current item by
+its far edge, one in the beam, that is overlapping it on the other axis, beats any that is not, and the weight
+`13 * major² + minor²` decides; sideways an item outside the beam counts only when it is nearly straight ahead, so Right at
+the end of a row never jumps to a button above or a cover below, while Up and Down may lead to an item off to the side, the
+navigation being centered above content that is not). A focus on an item that is not there (a library that is still loading
+or has no games) falls to the first item in reading order (`FocusModel.focusFirstItem`), never to an arbitrary one. A direction held down repeats as a held key does on
 Android (after 500 ms, every 50 ms); the handler gets the number of the repeat (`Navigator.commandRepeat`), which the
 settings use to speed up a slider and to stop a held Up at the first row.
 `FocusItem` wraps a view for both engines.
@@ -115,7 +120,15 @@ the timing contract. The root provides the navigator and the one `HostStore` in 
 While a text field is typed in, `isEditingText` is true and `DelosRoot` gives the controller and keyboard commands to
 the field instead of the focus; B or Escape stops typing. The Return that ends typing also reaches `MenuInput` as a key
 press, so an accept within 0.3 s after it is ignored (`swallowsAccept`). While `commandCapture` is set (the stream
-screen, the settings), every command goes there first.
+screen, the settings), every command goes there first. A screen takes the commands and says its hints with its own focus as
+the owner (`capture(for:_:)`, `setHints(_:from:)`) and lets go of them only if they are still its own
+(`releaseCapture(of:)`, `clearHints(of:)`): a screen that is leaving is removed after the one that comes has appeared, and
+must not take the next one's commands away. `ShellRouter` (the routing half of `DelosRoot`, testable without a window) gives
+each command to the portal, the side menu, an open layer, the capturing screen or the screen's focus, in that order, and
+`ShellRouter.modalFocus` (the portal's, the side menu's, a layer's or `Navigator.screenModal`, the sheet or list of values of
+the screen, set with `View.screenModal(_:)`) is what keeps every other item, the top navigation included, from taking the
+system focus on tvOS. `NavigationGraphTests` lay the real screens out in a window that is never shown and walk their D-pad
+graph; `ShellFlowTests` press the real router's commands through them.
 
 The screens of Android's top navigation (`Screen.main`: the library, Settings, Profile and Devices; `showsNavigation`) show
 `TopNav` in the middle of the status bar: Settings, Profile and Devices (Android's order) as round buttons in a glass
@@ -155,6 +168,12 @@ stays where it was, so the element a menu belongs to keeps its focus look and ha
 `GameActions` and profile functions). Not ported: the dimming of the covers beside an open game menu, the focus
 anchor's growth (the anchor is the element's frame without its focus scale), the hint bar of a compact stage, whose
 card keeps 48 px from every edge.
+
+The order of the shell, from below (`DelosRoot` in `StartScreen.swift`, Android's `Shell`): the backdrop, the screen, the top bar
+(these blur under a layer's scrim), the scrim, the side menu or layer, the hint bar (crisp and above the layers, as on Android),
+the portal, the toasts. The library's filter sheet is a layer of Android's shell, so while it is open the home screen is
+raised above the bar and the backdrop and the bar blur like the screen; the Artwork screen's sheet stays under the bar, as
+Android's `FilterSheetLayer` is part of its screen.
 
 ### Toasts
 
