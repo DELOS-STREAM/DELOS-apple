@@ -158,6 +158,27 @@ public struct ColorConversion: Sendable, Equatable {
     }
 }
 
+/// The HDR10 metadata attached to a decoded picture (`kCVImageBufferMasteringDisplayColorVolumeKey`,
+/// `kCVImageBufferContentLightLevelInfoKey`): the 24-byte mastering display colour volume and the 4-byte content light
+/// level, big-endian. The Metal layer's EDR metadata is made from them.
+public struct HDRPictureInfo: Sendable, Equatable {
+    public var masteringDisplayColorVolume: Data?
+    public var contentLightLevelInfo: Data?
+
+    public init(masteringDisplayColorVolume: Data?, contentLightLevelInfo: Data?) {
+        self.masteringDisplayColorVolume = masteringDisplayColorVolume
+        self.contentLightLevelInfo = contentLightLevelInfo
+    }
+
+    /// Nil when the picture has neither.
+    public init?(pixelBuffer: CVPixelBuffer) {
+        let mastering = CVBufferCopyAttachment(pixelBuffer, kCVImageBufferMasteringDisplayColorVolumeKey, nil) as? Data
+        let level = CVBufferCopyAttachment(pixelBuffer, kCVImageBufferContentLightLevelInfoKey, nil) as? Data
+        guard mastering != nil || level != nil else { return nil }
+        self.init(masteringDisplayColorVolume: mastering, contentLightLevelInfo: level)
+    }
+}
+
 /// The constants of `videoFragment`; the layout matches the Metal struct of the same name (four 16-byte vectors).
 struct VideoUniforms: Equatable {
     var column0: SIMD4<Float>

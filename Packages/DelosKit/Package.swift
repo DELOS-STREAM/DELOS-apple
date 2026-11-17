@@ -33,6 +33,7 @@ let package = Package(
             dependencies: [.product(name: "OpenSSL", package: "OpenSSL-Package")],
             sources: [
                 "DelosLog.c",
+                "DelosHdr.c",
                 "core/src",
                 "core/enet/callbacks.c",
                 "core/enet/compress.c",

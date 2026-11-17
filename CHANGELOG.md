@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- HDR streaming: Settings → Stream gets Android's Enable HDR row (also an app setting) on devices whose display shows HDR and
+  whose hardware decodes HEVC Main10 (a hardware-required VideoToolbox probe, not the per-codec check). With it on, the app
+  offers HEVC Main10 (and AV1 Main 10 when AV1 is chosen), asks the host for HDR, passes the host's mastering display and
+  content light metadata to both renderers, decodes 10-bit streams to 10-bit output and lets the display layer use extended
+  dynamic range. The look on iPad and iPhone HDR displays is not verified.
 - Hiding games: the game menu has Hide app and Show app, the side menu has "Show hidden apps" with the count, and a shown
   hidden game carries an eye-slash pill. Hidden games are kept per profile and per PC.
 - The Artwork screen of the game menu: choose the cover, wide cover, background and logo among the still SteamGridDB images

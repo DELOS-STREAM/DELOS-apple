@@ -234,8 +234,27 @@ For an observed PQ or HLG picture, `LayerRetagger` uses an `rgba16Float` drawabl
 extended dynamic range with the matching BT.2100 transfer tag; returning to SDR restores `bgra8Unorm` and turns EDR
 off. The shader keeps the encoded transfer values: applying an EOTF again under a PQ/HLG layer tag would transform
 them twice. `HDRRenderingTests` checks this layer configuration and actual offscreen 10-bit BT.2020 PQ/HLG drawing
-against the CPU reference in a floating-point texture. This is an output-path foundation, not an HDR stream offer:
-display/Main10 capability gating, host HDR requests and host mastering metadata are not connected by this change.
+against the CPU reference in a floating-point texture.
+
+HDR streaming (issue #11) joins the pieces. **Offer**: `HardwareProbe` creates a hardware-required `VTDecompressionSession`
+from generated 256 x 256 HEVC Main10 parameter sets and an AV1 Main 10 sequence header (`VTIsHardwareDecodeSupported` is
+per codec and proves no profile); `DecoderSupport.device` adds `hevcMain10` / `av1Main10` only when the session exists.
+`HDRDisplay` says whether the display shows HDR (iOS: potential EDR headroom above 1 or an HDR mode; Mac: the screen's
+potential EDR value; tvOS: the system's HDR modes). Settings → Stream shows Android's "Enable HDR" row (`checkbox_enable_hdr`,
+also an app override) only with both, as Android hides it without an HDR10 display or a Main10 decoder; its stored value
+never changes the request on a device without them. `StreamPlan` then adds HEVC Main10 (HDR implies HEVC) and, with AV1
+chosen, AV1 Main 10 to the formats and sends `hdr: true` in the launch request; the H.264 choice stays SDR. **Metadata**: while
+the host's HDR mode is on, each key frame reads `LiGetHdrMetadata` (`DelosCommonGetHdrMetadata`, a flat C copy because Swift
+cannot import the anonymous nested structs). `HDRMetadata` makes the 24-byte big-endian mastering display colour volume
+(primaries green, blue, red as in the SEI, luminance as 32-bit 1/10000 nit) and the 4-byte content light level;
+`VideoSamples` puts them in the format description's `MasteringDisplayColorVolume` / `ContentLightLevelInfo` extensions
+(the display layer reads them there), and `VideoDecoder` copies them onto the decoded pictures, from which `LayerRetagger`
+makes the Metal layer's `CAEDRMetadata` (HDR10 with the PQ one-unit-is-10,000-nits scale; the plain HLG description for
+HLG; not on tvOS). **Depth**: the decoder reads the bit depth from the format (`hvcC` / `av1C`), asks VideoToolbox for P010
+output for 10-bit streams and for 8-bit output otherwise, and makes a new session when the depth changes. **Display layer**:
+`DisplayLayerRenderer.setHDR` sets `wantsExtendedDynamicRangeContent` while the chosen format is 10-bit (not on tvOS).
+Verified by tests only: the pieces with fakes and CPU references; not verified: the look of HDR on an iPad or iPhone
+display, the host's real metadata, a real HDR stream.
 
 `RendererChoice` picks the renderer. The display layer stays the default. The debug switch `-DelosRenderer metal` (a
 launch argument or a `defaults` value; `layer` names the default; release builds ignore it) selects the Metal renderer,
@@ -327,7 +346,7 @@ that talk to the PC and the core are behind the `StreamSteps` protocol, so the t
 | Step | What happens |
 |---|---|
 | Display | `VideoSurface` (a thin `UIView` host of the renderer's layer: the `AVSampleBufferDisplayLayer` or the `CAMetalLayer`, full screen, aspect fit, black) reports the screen's pixel size and highest refresh rate once it is in a window; the stream starts then. While it is shown, a display link asks for the screen's highest refresh rate (ProMotion screens otherwise slow down to 60 Hz), and the animated background is not drawn behind the video |
-| Launch | `HostStore.refresh` asks the PC again over its pinned connection: offline and "not paired" end here. The app is found in the loaded app list (else it is loaded). `StreamPlan` with the current profile's `StreamSettings` and the formats VideoToolbox decodes in hardware (`DecoderSupport`: H.264 always, HEVC and AV1 8-bit where supported; 10-bit waits for HDR), of which the chosen codec offers some. The app is resumed when the PC runs it, another running app is quit first, else it is launched (`NvConnection.startApp` of DELOS for Android) |
+| Launch | `HostStore.refresh` asks the PC again over its pinned connection: offline and "not paired" end here. The app is found in the loaded app list (else it is loaded). `StreamPlan` with the current profile's `StreamSettings` and the formats VideoToolbox decodes in hardware (`DecoderSupport`: H.264 always, HEVC and AV1 8-bit where supported, the Main10 profiles where `HardwareProbe` finds a hardware session), of which the chosen codec offers some. The app is resumed when the PC runs it, another running app is quit first, else it is launched (`NvConnection.startApp` of DELOS for Android) |
 | Connect | `StreamSession.start` with `VideoOutput(DisplayLayerRenderer)` and `AudioOutput`, the server information of the launch's session URL. Each `stageStarting` event tells a line of the stage (Android's `stream_loader_lines_*`) and adds 8 % to the progress, up to 92 % (the launch scene starts at 30 % and does the same, below) |
 | Stream | `connectionStarted`: the video shows, `GameInput` starts; rumble events go to the controllers. A termination shows the result overlay (`StreamText.termination`, Android's `describeStreamFailure`); a graceful end goes back (without Android's toast "The PC ended the stream" yet) |
 | Leave | Disconnect stops the session (the app keeps running on the PC); Quit app also asks the PC to quit it (`cancel`), and a refusal shows "The PC did not quit …". Leaving the screen any other way disconnects. From the stream menu the exit scene plays first (below) |
@@ -851,7 +870,7 @@ value. The row shows the CUSTOM badge and "Profile: <value>"; X, the row's menu 
 Reset all resets every row, each with an Undo toast that puts back only what the reset removed. A new profile copies the
 overrides with its other settings; removing a profile or a PC forgets them. A stream takes its settings from
 `ShellActions.streamSettings(hostID:appID:)` (the profile's with the app's laid over them), the one place a start reads
-them. A cover with custom settings has a tune pill beside the hidden one. Not ported: Android's Display tab (HDR, upscaler,
+them. A cover with custom settings has a tune pill beside the hidden one. Not ported: Android's Display tab (upscaler,
 scaling, virtual display), PyroWave chroma, gyro rows and the per-codec bitrate slots, none of which exist here, and the
 banner is the library's game background instead of a banner blurred on the screen itself.
 

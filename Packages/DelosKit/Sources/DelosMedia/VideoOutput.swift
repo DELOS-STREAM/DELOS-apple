@@ -12,10 +12,17 @@ public final class VideoOutput: VideoDecodeUnitSink, @unchecked Sendable {
     private var samples: VideoSamples?
     /// The frame being submitted, joined from the core's buffers, which are valid only during the call.
     private var frame: [UInt8] = []
+    /// Where the HDR metadata of the host comes from while its HDR mode is on: the core.
+    private let hdrMetadata: @Sendable () -> HDRMetadata?
+    private var hdrActive = false
 
-    public init(renderer: any VideoRenderer, supportedFormats: VideoFormats) {
+    public init(
+        renderer: any VideoRenderer, supportedFormats: VideoFormats,
+        hdrMetadata: @escaping @Sendable () -> HDRMetadata? = HDRMetadata.current
+    ) {
         self.renderer = renderer
         self.supportedFormats = supportedFormats
+        self.hdrMetadata = hdrMetadata
     }
 
     // The renderer shows each frame as it arrives; reference frame invalidation is not supported yet
@@ -40,13 +47,22 @@ public final class VideoOutput: VideoDecodeUnitSink, @unchecked Sendable {
         }
         statistics.configure(width: width, height: height, codec: name, renderer: renderer.name)
         renderer.flush()
+        renderer.setHDR(!format.isDisjoint(with: .tenBit))
         return true
+    }
+
+    private func updateHDR(_ active: Bool) {
+        guard active || hdrActive else { return }
+        hdrActive = active
+        samples?.setHDRMetadata(active ? hdrMetadata() : nil)
     }
 
     public func start() {}
     public func stop() {}
 
     public func cleanup() {
+        renderer.setHDR(false)
+        hdrActive = false
         samples = nil
         frame = []
         renderer.flush()
@@ -64,6 +80,8 @@ public final class VideoOutput: VideoDecodeUnitSink, @unchecked Sendable {
                 start: bytes.baseAddress?.assumingMemoryBound(to: UInt8.self), count: bytes.count))
         }
         let keyFrame = unit.isIDRFrame
+        // Each key frame is where the picture's description may change: the host's HDR mode and metadata are read then
+        if keyFrame { updateHDR(unit.hdrActive) }
         let sample = frame.withUnsafeBytes { try? samples!.sample(for: $0, keyFrame: keyFrame) }
         guard let sample else { return .needIDRFrame }
         return renderer.enqueue(sample) ? .ok : .needIDRFrame
