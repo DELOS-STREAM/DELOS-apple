@@ -101,6 +101,75 @@ import Testing
         #expect(InputKind.resolve(last: .controller, lastOther: nil, hasController: false, fallback: .touch) == .touch)
     }
 
+    /// What reaches ``InputKindState`` on the device, in order: the deliberate inputs and the system's notifications.
+    private enum Event {
+        case touch, click, key, button
+        /// The left stick at (x, y), through ``MenuInput``'s threshold: only a push past it is a press.
+        case stick(Float, Float)
+        /// A pad connects, the system makes it the current one again, or it goes away.
+        case connect, becameCurrent, disconnect
+    }
+
+    /// Plays [events] as ``ControllerGlyphs`` and ``MenuInput`` see them and returns the kind after each.
+    private func kinds(_ events: [Event], padAtStart: Bool = false) -> [InputKind] {
+        var state = InputKindState()
+        state.controllersChanged(hasGamepad: padAtStart)
+        var pad = padAtStart
+        var stick: MenuCommand?
+        return events.map { event in
+            switch event {
+            case .touch: state.used(.touch)
+            case .click: state.used(.pointer)
+            case .key: state.used(.keyboard)
+            case .button: state.used(.controller)
+            case .stick(let x, let y):
+                let next = MenuInput.stickCommand(x: x, y: y, previous: stick)
+                if let next, next != stick { state.used(.controller) }
+                stick = next
+            case .connect, .becameCurrent:
+                pad = true
+                state.controllersChanged(hasGamepad: pad)
+            case .disconnect:
+                pad = false
+                state.controllersChanged(hasGamepad: pad)
+            }
+            return state.kind(fallback: .touch)
+        }
+    }
+
+    @Test func aTouchWithAPadConnectedIsTouchUntilThePadIsUsed() {
+        // R2-12: a DualSense connected, the player taps the screen; the system then says the pad is current again
+        #expect(kinds([.touch, .becameCurrent, .connect], padAtStart: true) == [.touch, .touch, .touch])
+        #expect(kinds([.touch, .button], padAtStart: true) == [.touch, .controller])
+        #expect(kinds([.touch, .stick(0.6, 0)], padAtStart: true) == [.touch, .controller])
+    }
+
+    @Test func stickNoiseIsNoInput() {
+        let noise: [Event] = [.stick(0.05, -0.02), .stick(-0.12, 0.08), .stick(0.3, 0.2), .stick(0.45, 0), .stick(0, 0)]
+        #expect(kinds([.touch] + noise, padAtStart: true).allSatisfy { $0 == .touch })
+        // Held past the threshold, then wobbling above the release point: one press
+        #expect(kinds([.touch, .stick(0.7, 0), .touch, .stick(0.4, 0)], padAtStart: true) == [.touch, .controller, .touch, .touch])
+    }
+
+    @Test func theLastDeliberateInputWins() {
+        #expect(kinds([.button, .key, .click, .touch, .button], padAtStart: true) == [.controller, .keyboard, .pointer, .touch, .controller])
+    }
+
+    @Test func aPadConnectingIsNoInputButAPadAtStartIsTheController() {
+        #expect(kinds([], padAtStart: true).isEmpty)
+        #expect(InputKindState().kind(fallback: .touch) == .touch)
+        #expect(kinds([.connect]) == [.controller], "nothing used yet: the connected pad")
+        #expect(kinds([.touch, .connect]) == [.touch, .touch])
+        #expect(kinds([.key, .connect, .becameCurrent]) == [.keyboard, .keyboard, .keyboard])
+    }
+
+    @Test func thePadGoingAwayBringsBackWhatWasUsedBeforeIt() {
+        #expect(kinds([.key, .button, .disconnect], padAtStart: true) == [.keyboard, .controller, .keyboard])
+        #expect(kinds([.button, .disconnect], padAtStart: true) == [.controller, .touch])
+        // The pad was the last input: plugged in again, it is the controller again
+        #expect(kinds([.button, .disconnect, .connect], padAtStart: true) == [.controller, .touch, .controller])
+    }
+
     @MainActor @Test func notedInputsChangeTheKindLive() {
         let glyphs = ControllerGlyphs()
         let start = glyphs.kind

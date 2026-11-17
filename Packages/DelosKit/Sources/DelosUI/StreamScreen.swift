@@ -256,7 +256,7 @@ struct StreamContent: View {
                             controller.touch(id, phase, at: point, width: width, time: time)
                         },
                         ignoresPointer: { controller.hasMouse },
-                        capturesPointer: controller.phase == .streaming && !controller.menuOpen,
+                        capturesPointer: capturesPointer,
                         keyboard: controller.keyboardShown && !controller.menuOpen,
                         onText: { controller.typed($0) },
                         onBackspace: { controller.typedBackspace() },
@@ -375,6 +375,16 @@ struct StreamContent: View {
         case .connecting, .streaming: true
         case .leaving, .failed, .ended: false
         }
+    }
+
+    private var capturesPointer: Bool {
+        Self.capturesPointer(phase: controller.phase, menuOpen: controller.menuOpen, loaderUp: director?.isActive == true)
+    }
+
+    /// The pointer is the stream's (locked and hidden, ``PointerLock``): the stream runs and neither its menu, the loader
+    /// nor the result overlay is shown. Leaving, the exit scene and a stream suspended in the background free it.
+    static func capturesPointer(phase: StreamController.Phase, menuOpen: Bool, loaderUp: Bool) -> Bool {
+        phase == .streaming && !menuOpen && !loaderUp
     }
 
     /// The exit scene of a leaving from the stream menu.

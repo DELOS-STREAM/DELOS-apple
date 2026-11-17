@@ -41,7 +41,8 @@ final class LandscapeScene: NSObject, UIWindowSceneDelegate {
     }
 }
 
-/// Holds SwiftUI's hosting controller as its only child and prefers the landscape orientation locked.
+/// Holds SwiftUI's hosting controller as its only child, prefers the landscape orientation locked and, while a stream wants
+/// it, the pointer locked (iPadOS asks only the root view controller; SwiftUI's hosting controller cannot be told).
 final class OrientationLockedContainer: UIViewController {
     private let content: UIViewController
 
@@ -65,6 +66,7 @@ final class OrientationLockedContainer: UIViewController {
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }
     override var prefersInterfaceOrientationLocked: Bool { true }
+    override var prefersPointerLocked: Bool { StreamPointerLock.prefersLocked }
     override var childForStatusBarHidden: UIViewController? { content }
     override var childForHomeIndicatorAutoHidden: UIViewController? { content }
     override var childForScreenEdgesDeferringSystemGestures: UIViewController? { content }

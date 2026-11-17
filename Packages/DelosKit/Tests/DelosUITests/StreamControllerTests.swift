@@ -868,3 +868,18 @@ extension StreamControllerTests {
         #expect(ledger.slices == [10, 5])
     }
 }
+
+/// When the stream screen wants the pointer locked (``PointerLock``, issue #17): only over the running stream.
+@MainActor
+@Suite struct StreamPointerCaptureTests {
+    @Test func onlyTheRunningStreamWithNothingOverItTakesThePointer() {
+        #expect(StreamContent.capturesPointer(phase: .streaming, menuOpen: false, loaderUp: false))
+        #expect(!StreamContent.capturesPointer(phase: .streaming, menuOpen: true, loaderUp: false), "the stream menu")
+        #expect(!StreamContent.capturesPointer(phase: .streaming, menuOpen: false, loaderUp: true), "the loader opening over the picture")
+        #expect(!StreamContent.capturesPointer(phase: .connecting, menuOpen: false, loaderUp: true), "connecting, or back from the background")
+        let result = ResultText(title: "t", sentence: "s", details: nil)
+        for phase: StreamController.Phase in [.failed(result), .leaving("Disconnecting"), .ended] {
+            #expect(!StreamContent.capturesPointer(phase: phase, menuOpen: false, loaderUp: false))
+        }
+    }
+}

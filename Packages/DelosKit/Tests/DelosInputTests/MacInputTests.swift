@@ -58,6 +58,39 @@ private final class FakeBackend: PointerLockBackend {
         #expect(backend.calls == ["lock", "unlock"])
     }
 
+    @Test func aRefusedLockHidesThePointerByItsStyle() {
+        let backend = FakeBackend()
+        let lock = PointerLock(backend: backend)
+        lock.setEligible(true)
+        lock.setWanted(true)
+        // iPadOS in a Stage Manager window: asked for, not granted
+        #expect(lock.isLocked && lock.hidesPointer)
+        lock.setGranted(true)
+        #expect(!lock.hidesPointer, "the system hides it while it holds the lock")
+        lock.setGranted(false)
+        #expect(lock.hidesPointer, "the window left full screen")
+        lock.setWanted(false)
+        #expect(!lock.hidesPointer, "the stream menu: the pointer is back")
+        #expect(backend.calls == ["lock", "unlock"])
+    }
+
+    @Test func theStreamMenuTheBackgroundAndTheEndFreeThePointer() {
+        let backend = FakeBackend()
+        let lock = PointerLock(backend: backend)
+        lock.setEligible(true)
+        lock.setWanted(false) // the loader
+        lock.setWanted(true) // the stream runs
+        lock.setWanted(false) // the stream menu
+        lock.setWanted(true) // resumed
+        lock.setEligible(false) // the app goes to the background
+        lock.setEligible(true)
+        lock.release() // the stream screen is gone
+        lock.setEligible(false)
+        lock.setEligible(true)
+        #expect(backend.calls == ["lock", "unlock", "lock", "unlock", "lock", "unlock"])
+        #expect(!lock.isLocked && !lock.hidesPointer)
+    }
+
     @Test func theParkingPointIsTheMiddleOfTheWindowInDisplayCoordinates() {
         // A window 400 × 200 at (100, 300) of a 1000-point-high main screen: Cocoa counts y up, Core Graphics down
         let frame = CGRect(x: 100, y: 300, width: 400, height: 200)

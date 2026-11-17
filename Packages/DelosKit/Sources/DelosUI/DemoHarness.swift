@@ -13,9 +13,10 @@ import UniformTypeIdentifiers
 /// client identity or the real pairing data: the PC has no address, the stores are a separate suite, the artwork a temporary directory.
 ///   -DelosDemo YES                      the fake PC and its library, a profile
 ///   -DelosScreen <name>                 (with -DelosDemo) start (default), home, devices, profile, pair, settings:<tab>, artwork, appsettings
-///   -DelosDemoCommands "w1 menu w1 down accept"   commands routed like a controller's: up down left right accept back menu options toast prevtab nexttab, w<seconds>
+///   -DelosDemoCommands "w1 menu w1 down accept"   commands routed like a controller's: up down left right accept back menu options toast prevtab nexttab, w<seconds>;
+///                                       input kinds: touch (a finger begins a touch, through the window's probe), click (the pointer's), pad (a controller's button)
 ///   -DelosDemoApps <n>                  how many apps (default 16; 0 empty)
-///   -DelosDemoInput controller|touch|keyboard   the kind of input the hints and the back arrow are drawn for
+///   -DelosDemoInput controller|touch|keyboard   the kind of input the hints and the back arrow start with (controller: a pad counts as connected)
 enum DemoHarness {
     static var on: Bool { UserDefaults.standard.bool(forKey: "DelosDemo") }
     static let hostID = "demo-pc"
@@ -75,12 +76,17 @@ enum DemoHarness {
         profiles.setDefaultPC(hostID)
     }
 
-    /// -DelosDemoInput: forces the kind of input the hints are drawn for.
+    /// -DelosDemoInput: the kind of input the hints are drawn for at launch. Once only: the root view is made again whenever
+    /// the app's body is (and that body, having read the kind here, is when the kind changes), and forcing it again would
+    /// undo every touch or key after it.
     @MainActor static func forceInput() {
-        guard let name = UserDefaults.standard.string(forKey: "DelosDemoInput") else { return }
+        guard !inputForced, let name = UserDefaults.standard.string(forKey: "DelosDemoInput") else { return }
+        inputForced = true
         let kinds: [String: InputKind] = ["controller": .controller, "touch": .touch, "keyboard": .keyboard]
         if let kind = kinds[name] { ControllerGlyphs.shared.debugForce(kind) }
     }
+
+    @MainActor private static var inputForced = false
 
     /// Opens the screen named by -DelosFakeScreen.
     @MainActor static func navigate(_ navigator: Navigator, actions: ShellActions) {
@@ -115,6 +121,24 @@ enum DemoHarness {
             wait = 0.4
         }
         return out
+    }
+
+    /// The input commands of the script: `touch` and `click` begin a touch of a finger or of the pointer through the
+    /// recognizer the window holds (``TouchKindRecognizer``, so it also shows that the probe is installed), `pad` is a
+    /// controller's button press as ``MenuInput`` notes it. True when [name] was one.
+    @MainActor static func input(_ name: String) -> Bool {
+        switch name {
+        case "touch", "click":
+            #if os(iOS)
+            TouchKindRecognizer.debugBegin(indirect: name == "click")
+            #endif
+            return true
+        case "pad":
+            ControllerGlyphs.shared.note(.controller)
+            return true
+        default:
+            return false
+        }
     }
 
     static func command(_ name: String) -> MenuCommand? {

@@ -316,6 +316,7 @@ public struct DelosRoot: View {
             for step in DemoHarness.script {
                 try? await Task.sleep(for: .seconds(step.wait))
                 if step.command == "toast-undo" { toasts.show("Profile deleted", icon: Symbols.delete, action: ToastAction(label: "Undo") {}); continue }
+                if DemoHarness.input(step.command) { continue }
                 if let command = DemoHarness.command(step.command) { router.route(command, repeatCount: 0) }
             }
         }
