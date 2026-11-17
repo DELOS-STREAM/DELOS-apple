@@ -120,8 +120,15 @@ public struct DelosRoot: View {
     @Environment(\.scenePhase) private var scenePhase
 
     public init() {
+        #if DEBUG
+        // -DelosDemo: a separate suite, so the app's own profiles and PCs are never read or written
+        let profiles = DemoHarness.on ? ProfileStore(suiteName: DemoHarness.suite) : ProfileStore()
+        let hosts = DemoHarness.on ? HostStore(defaults: UserDefaults(suiteName: DemoHarness.suite) ?? .standard) : HostStore()
+        if DemoHarness.on { DemoHarness.seed(hosts: hosts, profiles: profiles) }
+        #else
         let profiles = ProfileStore()
         let hosts = HostStore()
+        #endif
         let toasts = Toasts()
         let layers = Layers()
         _profiles = State(initialValue: profiles)
@@ -129,15 +136,29 @@ public struct DelosRoot: View {
         _toasts = State(initialValue: toasts)
         _layers = State(initialValue: layers)
         let navigator = Navigator(root: .boot, focus: "begin")
+        #if DEBUG
+        let homeArt = HomeArt(artwork: DemoHarness.on ? DemoHarness.artwork() : ArtworkStore())
+        #else
         let homeArt = HomeArt(artwork: ArtworkStore())
+        #endif
         _homeArt = State(initialValue: homeArt)
+        #if DEBUG
+        let metadata = DemoHarness.on ? GameMetadataModel(store: DemoHarness.metadataStore()) : GameMetadataModel()
+        #else
         let metadata = GameMetadataModel()
+        #endif
         _metadata = State(initialValue: metadata)
         let actions = ShellActions(navigator: navigator, hosts: hosts, profiles: profiles, toasts: toasts, layers: layers, artwork: homeArt.artwork,
                                    metadata: metadata)
         _actions = State(initialValue: actions)
         _router = State(initialValue: ShellRouter(navigator: navigator, layers: layers, toasts: toasts, actions: actions))
         if !profiles.isFirstRun { navigator.reset(to: .start, focus: actions.startFocus()) }
+        #if DEBUG
+        if DemoHarness.on {
+            DemoHarness.navigate(navigator, actions: actions)
+            DemoHarness.forceInput()
+        }
+        #endif
         var appearance = profiles.current.map { AppearanceStore().load(profile: $0.id) } ?? Appearance()
         var settingsTab: SettingsTab?
         #if DEBUG
@@ -282,6 +303,15 @@ public struct DelosRoot: View {
         .onMoveCommand { router.routeMove($0) }
         #endif
         .onAppear(perform: startInput)
+        #if DEBUG
+        .task {
+            for step in DemoHarness.script {
+                try? await Task.sleep(for: .seconds(step.wait))
+                if step.command == "toast-undo" { toasts.show("Profile deleted", icon: Symbols.delete, action: ToastAction(label: "Undo") {}); continue }
+                if let command = DemoHarness.command(step.command) { router.route(command, repeatCount: 0) }
+            }
+        }
+        #endif
         // The keys that scroll or move the system focus (arrows, Space, Page, Home, End) are the interface's alone
         .ownsMenuKeys(typing: navigator.isEditingText)
         // A touch or the pointer changes the kind of input the hints and the back arrow are drawn for

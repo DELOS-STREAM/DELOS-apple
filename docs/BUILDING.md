@@ -58,6 +58,18 @@ opens Settings on that tab, focused on its first row or on `-DelosFocus <row id>
 xcrun simctl launch <UDID> io.github.meitoncz.delos.debug -DelosBackground nebula -DelosTheme light -DelosSettings appearance
 ```
 
+`-DelosDemo YES` (debug builds only, compiled out of Release) is the demo harness: a fake paired PC "Meiton-PC" with 16 games (one
+running) and a second, offline PC, generated covers, backgrounds and logos from a fake SteamGridDB, fake game metadata (genre,
+theme, HDR, length), and its own profile "Player", all in a separate defaults suite and a temporary directory: no network, no
+client identity, none of the app's own data. `-DelosScreen <name>` then opens `start` (default), `home`, `devices`, `profile`,
+`pair`, `create`, `artwork`, `appsettings` or `settings:<tab>`; `-DelosDemoApps <n>` sets the number of games (0: an empty library);
+`-DelosDemoInput controller|touch|keyboard` forces the kind of input the hints and the back arrow are drawn for;
+`-DelosDemoCommands "w3 menu w1 down accept"` routes commands through the real router like a controller would (`up down left right
+accept back menu options toast toast-undo prevtab nexttab`, `wN` waits N seconds): `menu` opens the side menu, `options` a game's menu,
+`toast` (Y) the filter sheet. `sh tools/sim-walkthrough.sh ipad home /tmp/home.png -DelosDemoCommands "w3 menu"` builds, creates a
+fresh simulator, launches the demo on that screen, saves an upright screenshot and deletes the simulator. Not in the demo: a stream
+surface for the stream menu and the loader (they need a running stream).
+
 The same arguments work on the Mac: `sh tools/mac.sh /tmp/shot.png 5 -DelosBackground nebula` ([below](#a-mac)).
 Apple TV: `sh tools/sim.sh tv /tmp/shot.png` shows the start screen in the Apple TV 4K simulator. The simulator has no remote
 input from `simctl`; a throwaway XCUITest bundle that calls `XCUIRemote.shared.press(.select)` and the like (and

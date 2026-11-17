@@ -1,0 +1,188 @@
+#if DEBUG
+import CoreGraphics
+import DelosData
+import DelosHost
+import DelosInput
+import Foundation
+import ImageIO
+import UniformTypeIdentifiers
+
+/// DEBUG only (compiled out of Release): the demo harness, `-DelosDemo YES`. A fake paired PC with games (one of them running),
+/// generated artwork and fake SteamGridDB answers, fake game metadata and a command script that drives the real command
+/// router, so every screen can be opened with real-looking content in a simulator. Nothing here touches the network, the
+/// client identity or the real pairing data: the PC has no address, the stores are a separate suite, the artwork a temporary directory.
+///   -DelosDemo YES                      the fake PC and its library, a profile
+///   -DelosScreen <name>                 (with -DelosDemo) start (default), home, devices, profile, pair, settings:<tab>, artwork, appsettings
+///   -DelosDemoCommands "w1 menu w1 down accept"   commands routed like a controller's: up down left right accept back menu options toast prevtab nexttab, w<seconds>
+///   -DelosDemoApps <n>                  how many apps (default 16; 0 empty)
+///   -DelosDemoInput controller|touch|keyboard   the kind of input the hints and the back arrow are drawn for
+enum DemoHarness {
+    static var on: Bool { UserDefaults.standard.bool(forKey: "DelosDemo") }
+    static let hostID = "demo-pc"
+    static var appCount: Int { UserDefaults.standard.object(forKey: "DelosDemoApps") != nil ? UserDefaults.standard.integer(forKey: "DelosDemoApps") : 16 }
+
+    static var apps: [HostApp] {
+        let titles = ["Desktop", "Starfall Odyssey: Definitive Edition", "Hades", "Celeste", "Portal 2", "Hollow Knight: Silksong",
+                      "Stardew Valley", "Disco Elysium - The Final Cut", "Control", "Outer Wilds", "Tunic", "Cyberpunk 2077",
+                      "Doom Eternal", "Baldur's Gate 3", "Elden Ring", "Remote Input"]
+        return titles.prefix(appCount).enumerated().map { HostApp(id: $0.offset + 1, title: $0.element, isHDRSupported: $0.offset % 3 == 0) }
+    }
+
+    struct Secrets: SecretStorage {
+        func read(account: String) throws -> Data? { Data("fake-key".utf8) }
+        func write(_ data: Data, account: String) throws {}
+        func delete(account: String) throws {}
+    }
+
+    @MainActor static func artwork() -> ArtworkStore {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "delos-demo-art-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let defaults = UserDefaults(suiteName: "delos-demo-art-\(UUID().uuidString)")!
+        return ArtworkStore(secrets: Secrets(), defaults: defaults, matches: dir,
+                            cache: DiskCache(directory: dir.appending(path: "cache"), budget: 256 << 20, maxEntryBytes: 32 << 20),
+                            transport: transport)
+    }
+
+    struct Providers: MetadataProviders {
+        let available = true
+        static let genres = [GameGenre(id: 5, name: "Shooter"), GameGenre(id: 31, name: "Adventure"), GameGenre(id: 12, name: "RPG"),
+                             GameGenre(id: 9, name: "Puzzle")]
+        func search(_ title: String) async throws -> [MetadataCandidate] {
+            let n = abs(title.hashValue % 7)
+            return [MetadataCandidate(id: Int64(n + 1), name: title, year: 2018 + n, steamAppIDs: [], genres: [Self.genres[n % 4]],
+                                      summary: "A fake game.", platformIDs: [6], ratingCount: 100,
+                                      themes: [GameGenre(id: 1 + n % 3, name: ["Fantasy", "Sci-fi", "Horror"][n % 3])])]
+        }
+        func game(_ id: Int64) async throws -> MetadataCandidate? { nil }
+        func hdr(steamAppIDs: [Int64], name: String) async throws -> HDREvidence { HDREvidence(support: name.count % 2 == 0 ? .hdr : .sdr) }
+        func completion(steamAppIDs: [Int64], name: String) async throws -> CompletionTime? {
+            CompletionTime(id: 1, name: name, seconds: Int64(name.count) * 3600, url: "")
+        }
+        func steamTags(_ steamAppIDs: [Int64]) async throws -> [String] { [] }
+    }
+
+    static func metadataStore() -> MetadataStore {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "delos-demo-meta-\(UUID().uuidString)", directoryHint: .isDirectory)
+        return MetadataStore(providers: Providers(), cache: DiskCache(directory: dir, budget: 1 << 20, maxEntryBytes: 1 << 16))
+    }
+
+    /// The separate suite the demo's profiles and PCs live in: the app's own data is never read or written.
+    static let suite = "io.github.meitoncz.delos.demo"
+
+    @MainActor static func seed(hosts: HostStore, profiles: ProfileStore) {
+        if profiles.isFirstRun { _ = profiles.create(name: "Player", avatar: 3) }
+        hosts.demoInstall(id: hostID, name: "Meiton-PC", online: true, apps: apps, running: apps.count > 3 ? apps[3].id : 0)
+        hosts.demoInstall(id: "demo-pc-2", name: "Living room PC", online: false, apps: [], running: 0)
+        profiles.setDefaultPC(hostID)
+    }
+
+    /// -DelosDemoInput: forces the kind of input the hints are drawn for.
+    @MainActor static func forceInput() {
+        guard let name = UserDefaults.standard.string(forKey: "DelosDemoInput") else { return }
+        let kinds: [String: InputKind] = ["controller": .controller, "touch": .touch, "keyboard": .keyboard]
+        if let kind = kinds[name] { ControllerGlyphs.shared.debugForce(kind) }
+    }
+
+    /// Opens the screen named by -DelosFakeScreen.
+    @MainActor static func navigate(_ navigator: Navigator, actions: ShellActions) {
+        let screen = UserDefaults.standard.string(forKey: "DelosScreen") ?? "start"
+        switch screen {
+        case "home": navigator.openHome(hostID: hostID)
+        case "devices": navigator.openHome(hostID: hostID); navigator.openFromNavigation(.devices, focus: actions.devicesFocus())
+        case "profile": navigator.openHome(hostID: hostID); navigator.openFromNavigation(.profile, focus: "change-avatar")
+        case "pair": navigator.push(.pair, focus: "address")
+        case "artwork":
+            navigator.openHome(hostID: hostID)
+            navigator.push(.artwork(hostID: hostID, appID: 2), focus: ArtworkScreen.firstFocus)
+        case "appsettings":
+            navigator.openHome(hostID: hostID)
+            navigator.push(.appSettings(hostID: hostID, appID: 2), focus: GameSettingsScreen.firstFocus())
+        default:
+            if screen.hasPrefix("settings"), let tab = SettingsTab.allCases.first(where: { "\($0)" == screen.split(separator: ":").last.map(String.init) }) {
+                navigator.openHome(hostID: hostID)
+                navigator.openFromNavigation(.settings, focus: SettingsScreen.firstRow(tab))
+            }
+        }
+    }
+
+    /// The commands of -DelosFakeCommands, with the seconds to wait before each.
+    static var script: [(wait: Double, command: String)] {
+        guard let text = UserDefaults.standard.string(forKey: "DelosDemoCommands") else { return [] }
+        var wait = 1.0
+        var out: [(Double, String)] = []
+        for token in text.split(separator: " ") {
+            if token.hasPrefix("w"), let seconds = Double(token.dropFirst()) { wait = seconds; continue }
+            out.append((wait, String(token)))
+            wait = 0.4
+        }
+        return out
+    }
+
+    static func command(_ name: String) -> MenuCommand? {
+        switch name {
+        case "up": .up
+        case "down": .down
+        case "left": .left
+        case "right": .right
+        case "accept": .accept
+        case "back": .back
+        case "menu": .menu
+        case "options": .options
+        case "toast": .toastAction
+        case "prevtab": .previousTab
+        case "nexttab": .nextTab
+        default: nil
+        }
+    }
+
+    static let transport: SteamGridDB.Transport = { request in
+        let url = request.url!
+        let ok = { (data: Data) in (data, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!) }
+        if url.host() == "cdn.example" { return ok(png(seed: Int(url.lastPathComponent.split(separator: ".")[0]) ?? 1, kind: url.pathComponents[1])) }
+        let path = String(url.path().dropFirst("/api/v2/".count))
+        let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        func param(_ name: String) -> String? { query.first { $0.name == name }?.value }
+        if path.hasPrefix("search/autocomplete/") {
+            let name = path.dropFirst("search/autocomplete/".count).removingPercentEncoding ?? ""
+            return ok(Data(#"{"success":true,"data":[{"id":\#(1000 + abs(name.hashValue % 900)),"name":"\#(name)","release_date":1600000000}]}"#.utf8))
+        }
+        let game = Int(path.split(separator: "/").last ?? "1") ?? 1
+        let kind = path.hasPrefix("heroes") ? "hero" : path.hasPrefix("logos") ? "logo" : "cover"
+        let styles = kind == "logo" ? ["official", "white", "black", "custom"] : ["alternate", "blurred", "white_logo", "material", "no_logo"]
+        let sizes = kind == "hero" ? ["1920x620", "3840x1240"] : ["600x900", "660x930", "342x482"]
+        var list: [String] = []
+        let animated = param("types") == "animated"
+        for id in 1...(animated ? 6 : 24) {
+            let style = styles[id % styles.count]
+            if let wanted = param("styles"), wanted != style { continue }
+            if param("styles") == "material" { continue }
+            let size = sizes[id % sizes.count]
+            if let wanted = param("dimensions"), !wanted.split(separator: ",").contains(Substring(size)) { continue }
+            let gid = game * 100 + id + (animated ? 1000 : 0)
+            let parts = size.split(separator: "x")
+            list.append(#"{"id":\#(gid),"url":"https://cdn.example/\#(kind)/\#(gid).png","thumb":"https://cdn.example/\#(kind)/\#(gid).png","width":\#(parts[0]),"height":\#(parts[1]),"style":"\#(style)","score":\#(id * 3 % 40),"author":{"name":"Author \#(id % 7)"},"date":\#(1_700_000_000 + id * 86400),"mime":"\#(animated ? "image/webp" : "image/png")"}"#)
+        }
+        return ok(Data(#"{"success":true,"data":[\#(list.joined(separator: ","))]}"#.utf8))
+    }
+
+    static func png(seed: Int, kind: String) -> Data {
+        let (w, h) = kind == "hero" ? (960, 310) : kind == "logo" ? (500, 250) : (400, 600)
+        let space = CGColorSpaceCreateDeviceRGB()
+        let context = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        let hue = Double(seed * 37 % 360) / 360
+        func color(_ h: Double, _ b: Double) -> CGColor {
+            CGColor(red: min(1, abs(h * 6 - 3) - 1) * b, green: min(1, 2 - abs(h * 6 - 2)) * b, blue: min(1, 2 - abs(h * 6 - 4)) * b, alpha: 1)
+        }
+        let gradient = CGGradient(colorsSpace: space, colors: [color(hue, 0.9), color((hue + 0.3).truncatingRemainder(dividingBy: 1), 0.5)] as CFArray, locations: nil)!
+        context.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: w, y: h), options: [])
+        context.setFillColor(CGColor(gray: 1, alpha: 0.35))
+        context.fillEllipse(in: CGRect(x: w / 4, y: h / 4, width: min(w, h) / 2, height: min(w, h) / 2))
+        let image = context.makeImage()!
+        let out = NSMutableData()
+        let destination = CGImageDestinationCreateWithData(out, UTType.png.identifier as CFString, 1, nil)!
+        CGImageDestinationAddImage(destination, image, nil)
+        CGImageDestinationFinalize(destination)
+        return out as Data
+    }
+}
+#endif

@@ -246,6 +246,16 @@ public final class ControllerGlyphs {
         refresh()
     }
 
+    #if DEBUG
+    /// The demo harness (`-DelosDemoInput`): [kind] is the input from now on, whether a controller is connected or not.
+    public func debugForce(_ kind: InputKind) {
+        last = kind
+        if kind != .controller { lastOther = kind }
+        hasController = kind == .controller
+        evaluate()
+    }
+    #endif
+
     /// The player used [input]: the hints show it from now on.
     public func note(_ input: InputKind) {
         last = input
