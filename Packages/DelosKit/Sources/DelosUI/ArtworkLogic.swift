@@ -1,4 +1,6 @@
+import CoreGraphics
 import DelosData
+import DelosHost
 import DelosInput
 import Foundation
 
@@ -424,5 +426,57 @@ enum ArtworkSearch {
 
     static func label(_ game: SteamGridDBGame) -> String {
         game.year.map { String(format: L("artwork_game_with_year"), game.name, $0) } ?? game.name
+    }
+}
+
+/// What the grid says when the app has no SteamGridDB game (`GridMessage` of `Choices.NoGame`): a game SteamGridDB did not
+/// find, or, for an app whose artwork does not come from SteamGridDB (DELOS's own entries), "Choose what X looks like".
+enum ArtworkNoGame {
+    static func text(_ app: HostApp) -> (title: String, note: String) {
+        BundledArtwork.kind(app) == nil
+            ? (L("artwork_no_game_title", app.title), L("artwork_no_game_note"))
+            : (L("artwork_choose_title", app.title), L("artwork_choose_note", app.title))
+    }
+}
+
+/// SteamGridDB's takedown placeholder (`Thumbnails.looksRemoved` of DELOS for Android): the API does not flag a removed
+/// image, its thumbnail does, as a black picture with one line of text. The grid leaves such a choice out unless it is
+/// the one in use.
+enum TakedownPlaceholder {
+    /// The side of the square the thumbnail is shrunk to before it is looked at.
+    static let side = 48
+
+    /// Whether [rgba] (a small thumbnail, 4 bytes per pixel, red first) is a placeholder rather than artwork: nearly all of
+    /// it opaque pure black, which real artwork, even a dark one, hardly ever is. Transparent images (logos) never qualify.
+    static func looksRemoved(rgba: [UInt8]) -> Bool {
+        let pixels = rgba.count / 4
+        guard pixels > 0 else { return false }
+        var black = 0
+        for i in 0..<pixels {
+            let p = i * 4
+            if rgba[p + 3] >= 200, rgba[p] < 6, rgba[p + 1] < 6, rgba[p + 2] < 6 { black += 1 }
+        }
+        return Double(black) >= Double(pixels) * 0.9
+    }
+
+    /// [image] shrunk to ``side`` × ``side`` and looked at.
+    static func looksRemoved(_ image: CGImage) -> Bool {
+        var rgba = [UInt8](repeating: 0, count: side * side * 4)
+        let drawn = rgba.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            else { return false }
+            context.interpolationQuality = .medium
+            context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
+            return true
+        }
+        return drawn && looksRemoved(rgba: rgba)
+    }
+
+    /// The choices the grid shows: [images] without the placeholders found so far, except the one [chosen].
+    static func shown(_ images: [SteamGridDBImage], chosen: ArtworkChoice, removed: Set<URL>) -> [SteamGridDBImage] {
+        guard !removed.isEmpty else { return images }
+        return images.filter { chosen == .image($0.id) || !removed.contains($0.previewURL) }
     }
 }

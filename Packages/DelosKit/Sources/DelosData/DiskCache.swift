@@ -23,11 +23,13 @@ public actor DiskCache {
         self.now = now
     }
 
-    /// The app's artwork cache: 256 MB under Caches/artwork, at most 32 MB per image.
+    /// The app's artwork cache under Caches/artwork: 2 GB, and a single image up to 2 GB (`SteamGridDbClient.MAX_FILE_BYTES`
+    /// and the preview budget of DELOS for Android), so a large animated background fits; downloads are moved in as
+    /// files (``store(fileAt:for:)``), never held in memory.
     public static func artwork() -> DiskCache {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         return DiskCache(directory: caches.appending(path: "artwork", directoryHint: .isDirectory),
-                         budget: 256 * 1024 * 1024, maxEntryBytes: 32 * 1024 * 1024)
+                         budget: 2048 * 1024 * 1024, maxEntryBytes: SteamGridDB.maxFileBytes)
     }
 
     /// The entry of [key], marked as used; nil when there is none.
@@ -57,6 +59,30 @@ public actor DiskCache {
         try data.write(to: url, options: .atomic)
         try? files.setAttributes([.modificationDate: now()], ofItemAtPath: url.path)
         trim(keeping: url)
+    }
+
+    /// Moves the file at [source] in as [key] (replacing what was there) and trims the folder to the budget; a file larger
+    /// than ``maxEntryBytes`` is deleted and refused. [source] must be on the same volume (the temporary folder is).
+    public func store(fileAt source: URL, for key: String) throws {
+        let size = (try? source.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
+        guard size <= maxEntryBytes else {
+            try? files.removeItem(at: source)
+            throw DiskCacheError.tooLarge
+        }
+        do {
+            try files.createDirectory(at: directory, withIntermediateDirectories: true)
+            let url = file(key)
+            if files.fileExists(atPath: url.path) {
+                _ = try files.replaceItemAt(url, withItemAt: source)
+            } else {
+                try files.moveItem(at: source, to: url)
+            }
+            try? files.setAttributes([.modificationDate: now()], ofItemAtPath: url.path)
+            trim(keeping: url)
+        } catch {
+            try? files.removeItem(at: source)
+            throw error
+        }
     }
 
     public func remove(_ key: String) {

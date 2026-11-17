@@ -450,8 +450,11 @@ the background in 0.25 s, the flat fade from 0.35 s over 0.2 s, the library at 0
 library.
 
 The result overlay is Android's `StreamResultLayer`: a sad face, the title, one sentence, Try again (focused first) and
-Back to library, and the technical text behind Details. B is Back to library. A launch the PC refused shows Android's
-`conn_*` message (resume foreign 470, app minimized 525, quit foreign 599, denied 403).
+Back to library, and the technical text behind Details. B is Back to library; the hint bar shows over it with Select and
+Back to library (Back on a cramped bar). A launch the PC refused shows Android's `conn_*` message (resume foreign 470,
+app minimized 525, quit foreign 599, denied 403). Try again first asks the PC (`StreamRetry`, Android's `retryStream`): it
+must answer as a paired PC within 4 s and list the game within 5 s. Otherwise the result closes with the ERROR cue and
+"<PC> cannot be reached" or "<game> is not available on <PC>"; a game the PC now lists under another id starts under it.
 
 During the stream the screen stays on (`isIdleTimerDisabled`), the system overlays are hidden and the system gestures
 deferred. `Navigator.commandCapture` gives the stream screen every controller and keyboard command first: while the
@@ -894,8 +897,11 @@ name is typed into its field) and the sideways scrolling avatar rows of a stage 
 
 `ArtworkStore` (DelosData) is Android's `ArtworkStore` and `BoxArtCache`: `SteamGridDB` (API v2, still images only,
 never NSFW or humor; the name as one path segment) matches each app by name and downloads the best-rated cover, wide
-cover, hero and logo. Images live in `DiskCache` (Caches/artwork, 256 MB, at most 32 MB per file, least recently used
-dropped first; file names are SHA-256 of the key); the match and each kind's chosen image URL are small JSON files
+cover, hero and logo. Images live in `DiskCache` (Caches/artwork, 2 GB, at most 2 GB per file as Android's
+`MAX_FILE_BYTES`, least recently used dropped first; file names are SHA-256 of the key). Every SteamGridDB file goes to a
+temporary file as it arrives (`FileDownload`: the announced length, then the bytes written, are checked against the limit)
+and is moved into the cache, so a large animated background is never held in memory; stored images are mapped from their
+files. The match and each kind's chosen image URL are small JSON files
 under Application Support/artwork, so an image the cache dropped is downloaded again without a new search. The PC's
 box art is cached the same way. With the key set and Download automatically on, the library downloads the artwork of
 games never looked up when it loads; a cover waits for the lookup (up to 20 s) before falling back to the box art.
@@ -910,8 +916,13 @@ score, author, date: what the reply contained). A or a tap downloads and uses th
 accent border and the "In use" badge. A kind chosen by hand is recorded in the match (`picked`) and every later refresh
 leaves it alone; matching the game by hand (`setGame`: the search menu lists at most eight games) is recorded too (`manual`),
 so the name is not searched again, and its images start over. A thumbnail is downloaded when its tile scrolls into view and
-kept in the same cache. The filter sheet (type, style, size, sort) narrows and sorts the choices; animated choices play in
-their tiles ([Animated artwork](#animated-artwork)). Not ported: the companion screen.
+kept in the same cache; a thumbnail that is SteamGridDB's takedown placeholder (shrunk to 48 × 48, at least 90 % of it
+opaque black: `TakedownPlaceholder`, Android's `Thumbnails.looksRemoved`) takes its choice out of the grid, unless it is
+the image in use. The filter sheet (type, style, size, sort) narrows and sorts the choices; animated choices play in
+their tiles ([Animated artwork](#animated-artwork)). The first lookup and each list of choices are tried again after
+500, 1200 and 2500 ms while they fail for a passing reason (429, 5xx, a network failure: `SteamGridDBRetry`, Android's
+`SgdbRetry`); the loader stays up meanwhile, and "not reachable" shows only once the fourth attempt has failed. Not
+ported: the companion screen.
 
 ### Animated artwork
 
@@ -945,7 +956,10 @@ DELOS's own entries (`BundledArtwork.kind(_:)`: Remote Input and Remote Monitor 
 by name) show the fixed images in `Sources/DelosUI/Artwork/<entry>/{cover,wide,hero}.jpg` (Android's, see
 [THIRD_PARTY.md](THIRD_PARTY.md#bundled-artwork)) instead of SteamGridDB's or the PC's: `HomeArt.image(hostID:app:kind:)` decodes
 them like any other image and the library's cover, game background and header colors use them. Their logo is the rendered name.
-`downloadArtwork` leaves them out, they have no metadata and no Artwork entry in their menu.
+`downloadArtwork` leaves them out, they have no metadata and no Artwork entry in their menu. A stale navigation entry that
+still reaches the Artwork screen with one of them shows Android's `BuiltInArtworkScreen`: the name, the bundled wide cover,
+"Built-in artwork" and Back (A and B both go back). The grid's no-game message of an app whose artwork does not come from
+SteamGridDB is "Choose what <app> looks like" (`ArtworkNoGame`), as on Android.
 
 ### Hiding games
 
@@ -1059,7 +1073,13 @@ The screens (DelosUI, as DELOS for Android's `DeviceScreens.kt`, `PairScreens.kt
   the PC's box art or placeholder art; Running and Last played badges). The running game comes first, then the games
   started from DELOS from the most recent (`PlayedGames`). A opens the stream. A game's context menu has a header
   (the tile in the main color, Running or App, another game that runs) and Start, or Resume and Quit for the running
-  game, or Quit … and start and Resume … when another one runs (the stream quits it first).
+  game, or Quit … and start and Resume … when another one runs (the stream quits it first). A PC that is not (or no
+  longer) paired shows "No PC paired yet" (`HomeContent.noPC`), an offline one its title and the note on how to wake it.
+  The info row has the Virtual display chip on Desktop when the PC can make a virtual display of its own
+  (`HostRecord.virtualDisplay`, from `VirtualDisplayCapable`). A start checks the PC first (`GameStart`): with no paired
+  address the ERROR cue and "<PC> cannot be reached" stop it; a virtual display the settings want but the PC cannot make
+  (`checkbox_use_virtual_display`, its driver not ready) is said in a warning and the main display is streamed. Quit on
+  such a PC says "DELOS is still connecting to <PC>" (`home_quit_starting`).
 
 ### Devices
 

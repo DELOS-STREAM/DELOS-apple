@@ -42,13 +42,16 @@ final class ArtworkModel {
     /// The filters of the tab, without what its kind cannot filter by.
     var filters: ArtFilters { ArtFilterRules.normalized(tab.kind, filtersByTab[tab] ?? ArtFilters()) }
 
-    /// Never looked up yet: find the game first and download its best-rated images like the automatic run. A failure is
-    /// reported through [onError].
+    /// The app's artwork comes from SteamGridDB (`ArtworkStore.eligible`): DELOS's own entries have bundled artwork.
+    var eligible: Bool { BundledArtwork.kind(app) == nil }
+
+    /// Never looked up yet: find the game first and download its best-rated images like the automatic run, retrying a
+    /// passing failure (`SgdbRetry`). A failure is reported through [onError].
     func lookup(onError: (any Error) -> Void) async {
-        if artwork.enabled, await !artwork.isSearched(hostID: hostID, appID: app.id) {
+        if artwork.enabled, eligible, await !artwork.isSearched(hostID: hostID, appID: app.id) {
             looking = true
             do {
-                try await artwork.fetch(hostID: hostID, appID: app.id, name: app.title)
+                _ = try await SteamGridDBRetry.run { try await artwork.fetch(hostID: hostID, appID: app.id, name: app.title) }
             } catch is CancellationError {
             } catch {
                 onError(error)
@@ -88,7 +91,7 @@ final class ArtworkModel {
         do {
             var asked = filters
             asked.sort = .score
-            let list = try await artwork.choices(hostID: hostID, appID: app.id, kind: kind, filters: asked)
+            let list = try await SteamGridDBRetry.run { try await artwork.choices(hostID: hostID, appID: app.id, kind: kind, filters: asked) }
             lists[key] = list
             choices = ready(list)
         } catch is CancellationError {
@@ -212,7 +215,75 @@ struct ArtworkScreen: View {
     /// focused item whether it has a menu). The content is compared first, so the screen below is drawn again only when
     /// the game, the focus, the navigator or the actions are others.
     var body: some View {
-        ArtworkContent(hostID: hostID, app: app, focus: focus, navigator: navigator, actions: actions).equatable()
+        // DELOS's own entries have bundled artwork, which is read-only: the game menu has no Artwork entry for them, but a
+        // stale navigation entry (a demo, a restored screen) may still reach this screen
+        if BundledArtwork.kind(app) != nil {
+            BuiltInArtworkScreen(hostID: hostID, app: app, focus: focus, navigator: navigator)
+        } else {
+            ArtworkContent(hostID: hostID, app: app, focus: focus, navigator: navigator, actions: actions).equatable()
+        }
+    }
+}
+
+/// The Artwork screen of one of DELOS's own entries (`BuiltInArtworkScreen`): its name, its bundled wide cover, a note that
+/// its artwork is built in, and Back (A or B).
+private struct BuiltInArtworkScreen: View {
+    let hostID: String
+    let app: HostApp
+    let focus: FocusModel
+    let navigator: Navigator
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+    @Environment(HomeArt.self) private var art
+    @State private var picture: CGImage?
+
+    static let backID = "art-builtin-back"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: stage.px(24)) {
+            Text(app.title)
+                .font(DelosFonts.unbounded(stage.tpx(46), .semibold))
+                .foregroundStyle(colors.text.color)
+            ZStack {
+                if let picture {
+                    Image(decorative: picture, scale: 1)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: stage.px(920))
+                        .aspectRatio(920.0 / 430, contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: stage.px(26)))
+                } else {
+                    RingSpinner(size: 48)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Text(L("artwork_builtin_note"))
+                .font(DelosFonts.figtree(stage.tpx(24)))
+                .foregroundStyle(colors.text2.color)
+            FocusItem(id: Self.backID, model: focus, clickCue: .back, action: { navigator.back() }) { focused in
+                PillButton(label: L("artwork_builtin_back"), icon: Symbols.arrowBack, focused: focused)
+            }
+        }
+        .padding(.leading, stage.px(150) + stage.safe.leading)
+        .padding(.trailing, stage.px(150) + stage.safe.trailing)
+        .padding(.top, stage.px(92) + stage.safe.top)
+        .padding(.bottom, stage.px(110))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(BuiltInHintSync(focus: focus, navigator: navigator))
+        .onAppear { focus.focus(Self.backID) }
+        .task { picture = await art.image(hostID: hostID, app: app, kind: .wide) }
+    }
+}
+
+/// Tells the hint bar that A and B both go back here.
+private struct BuiltInHintSync: View {
+    let focus: FocusModel
+    let navigator: Navigator
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .onAppear { navigator.setHints(ScreenHints(artworkBuiltIn: true), from: focus) }
     }
 }
 
@@ -529,14 +600,17 @@ private struct ArtworkGridView: View {
         case .noKey:
             ArtworkMessage(icon: Symbols.key, title: L("artwork_no_key_title"), text: L("artwork_no_key_note"))
         case .noGame:
-            ArtworkMessage(icon: Symbols.search, title: L("artwork_no_game_title", app.title), text: L("artwork_no_game_note"))
+            let text = ArtworkNoGame.text(app)
+            ArtworkMessage(icon: Symbols.search, title: text.title, text: text.note)
         case .failed(let text):
             ArtworkMessage(icon: Symbols.error, title: L("artwork_unreachable"), text: text)
         case .ready(_, let images, let total):
             let empty = model.empty
             let layout = ArtworkGrid(
                 width: stage.width - left - right, ratio: model.tab.ratio, columns: model.tab.columns(forStageWidth: stage.width))
-            let all: [ArtworkTile] = [.none] + images.map(ArtworkTile.image)
+            // Takedown placeholders found while the thumbnails load disappear (the chosen image always stays)
+            let shown = TakedownPlaceholder.shown(images, chosen: model.chosen, removed: actions.artwork.removedThumbnails)
+            let all: [ArtworkTile] = [.none] + shown.map(ArtworkTile.image)
             let tiles = Array(all.enumerated())
             let rows = stride(from: 0, to: tiles.count, by: layout.columns).map { tiles[$0..<min($0 + layout.columns, tiles.count)] }
             ZStack(alignment: .top) {
@@ -944,6 +1018,7 @@ struct ArtworkTileView: View, Equatable {
         guard visible, picture == nil else { return }
         if let image {
             picture = await art.thumbnail(image)
+            if let picture, TakedownPlaceholder.looksRemoved(picture) { art.artwork.markRemoved(image.previewURL) }
         } else if tab != .logo {
             picture = await art.boxArt(hostID: hostID, appID: app.id, hosts: hosts)
         }

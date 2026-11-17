@@ -55,8 +55,7 @@ extension SteamGridDBError {
         case .keyRejected: L("artwork_error_key_rejected")
         case .apiHTTP(let code): L("artwork_error_api_http", code)
         case .badReply, .insecureURL: L("artwork_error_bad_reply")
-        // Android does not translate it either
-        case .downloadHTTP(let code): "HTTP \(code)"
+        case .downloadHTTP(let code): L("artwork_error_download_http", code)
         case .imageTooLarge: L("artwork_error_too_large")
         }
     }

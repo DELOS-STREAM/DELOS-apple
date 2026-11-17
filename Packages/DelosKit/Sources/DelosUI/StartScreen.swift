@@ -267,8 +267,12 @@ public struct DelosRoot: View {
                     #endif
                 }
                 LayerHost(layers: layers, navigator: navigator)
+                // Downloading artwork or looking up metadata: above the button hints on every screen (`ArtworkProgressBar`)
+                ShellProgressPill(shown: ShellProgress.shown(
+                    artwork: actions.artwork.progress.map { ShellProgress(done: $0.done, total: $0.total) }, metadata: metadata.progress))
                 // The hint bar is above the scrim and the layers, crisp (Android's `HintBar` follows `Scrim` in `Shell`)
-                if case .stream = navigator.current {} else {
+                // Over a stream only the result of a failed one has hints (`hints` while `shell.result` is up)
+                if case .stream = navigator.current, !navigator.screenHints.streamResult {} else {
                     ShellHintBar(
                         hints: hints, note: libraryNote, noteLabel: libraryNote == nil ? nil : L("shell_hint_library_label"),
                         libraryRow: showsLibraryRow,

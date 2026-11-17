@@ -150,7 +150,10 @@ devices_add_no_answer
 
 # Home
 home_loading
+home_no_pc_title
+home_no_pc_note
 home_offline_title
+home_offline_note
 home_empty_title
 home_empty_note
 home_menu_start
@@ -176,9 +179,16 @@ shell_game_quitting
 home_quit_done
 home_quit_failed
 home_quit_other_device
+home_quit_starting
+shell_game_unreachable
+shell_game_virtual_display_missing
+shell_retry_unreachable
+shell_retry_game_missing
+shell_retry_game_missing_unnamed
 home_badge_running
 home_badge_last_played
 home_chip_running_on
+home_chip_virtual_display
 playtime_eyebrow_time
 playtime_eyebrow_last
 playtime_unit_minutes
@@ -205,6 +215,7 @@ filters_section_duration
 filters_all
 filters_hdr_any
 filters_hdr_hdr
+filters_hdr_sdr
 filters_length_any
 filters_length_under_10
 filters_length_10_30
@@ -291,6 +302,8 @@ artwork_filter
 artwork_animated
 artwork_choose_title
 artwork_choose_note
+artwork_builtin_note
+artwork_builtin_back
 artwork_filtered_active
 artwork_count_all_cover
 artwork_count_of_cover
@@ -397,6 +410,9 @@ shell_side_all_settings
 shell_side_show_hidden
 shell_side_hidden_on
 shell_side_hidden_on_this_pc
+shell_progress_artwork
+shell_progress_metadata
+shell_progress_count
 
 # Settings: frame, Stream and Audio tabs
 settings_screen_title
@@ -597,6 +613,7 @@ settings_native_artwork_ready_toast
 artwork_error_no_key
 artwork_error_key_rejected
 artwork_error_api_http
+artwork_error_download_http
 artwork_error_bad_reply
 artwork_error_too_large
 artwork_error_save_failed
@@ -742,6 +759,7 @@ toast_controller_type_changed
 # Hint bar (button hints, shown with the connected controller's glyphs) and the library note
 shell_hint_select
 shell_hint_back
+shell_hint_back_to_library
 shell_hint_close
 shell_hint_cancel
 shell_hint_change

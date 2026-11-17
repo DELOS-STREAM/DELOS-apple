@@ -61,6 +61,32 @@ private final class TestClock: Sendable {
         await #expect(throws: DiskCacheError.tooLarge) { try await cache.store(Data(count: 11), for: "big") }
         #expect(await cache.data(for: "big") == nil)
     }
+
+    @Test func aDownloadedFileIsMovedInAndATooLargeOneIsDeleted() async throws {
+        let cache = DiskCache(directory: temporaryDirectory(), budget: 1000, maxEntryBytes: 10)
+        let small = FileManager.default.temporaryDirectory.appending(path: "delos-small-\(UUID().uuidString)")
+        try Data([1, 2, 3]).write(to: small)
+        try await cache.store(fileAt: small, for: "a")
+        #expect(await cache.mappedData(for: "a") == Data([1, 2, 3]))
+        #expect(!FileManager.default.fileExists(atPath: small.path))
+        // Replacing an entry keeps one file
+        let again = FileManager.default.temporaryDirectory.appending(path: "delos-again-\(UUID().uuidString)")
+        try Data([4]).write(to: again)
+        try await cache.store(fileAt: again, for: "a")
+        #expect(await cache.data(for: "a") == Data([4]))
+        #expect(await cache.totalBytes() == 1)
+        let big = FileManager.default.temporaryDirectory.appending(path: "delos-big-\(UUID().uuidString)")
+        try Data(count: 11).write(to: big)
+        await #expect(throws: DiskCacheError.tooLarge) { try await cache.store(fileAt: big, for: "big") }
+        #expect(!FileManager.default.fileExists(atPath: big.path))
+        #expect(await cache.data(for: "big") == nil)
+    }
+
+    @Test func theArtworkCacheTakesFilesUpToTwoGigabytes() async {
+        let cache = DiskCache.artwork()
+        let (limit, budget) = await (cache.maxEntryBytes, cache.budget)
+        #expect(limit == 2048 * 1024 * 1024 && budget >= limit)
+    }
 }
 
 /// A SteamGridDB fake: answers by path, records every request.
@@ -151,6 +177,55 @@ private func image(_ id: Int, _ file: String) -> String { #"{"id":\#(id),"url":"
         let download = SteamGridDB(key: "k", transport: FakeSteamGridDB(["/big.png": (200, String(repeating: "x", count: 20)), "/gone.png": (410, "")]).transport)
         await #expect(throws: SteamGridDBError.imageTooLarge) { try await download.download(URL(string: "https://cdn.example/big.png")!, limit: 10) }
         await #expect(throws: SteamGridDBError.downloadHTTP(410)) { try await download.download(URL(string: "https://cdn.example/gone.png")!, limit: 10) }
+    }
+
+    @Test func aDownloadIsAFileOfItsOwn() async throws {
+        let client = SteamGridDB(key: "k", transport: FakeSteamGridDB(["/a.png": (200, "IMAGE")]).transport)
+        let file = try await client.download(URL(string: "https://cdn.example/a.png")!, limit: 10)
+        defer { try? FileManager.default.removeItem(at: file) }
+        #expect(try Data(contentsOf: file) == Data("IMAGE".utf8))
+    }
+
+    @Test func onlyPassingFailuresAreRetried() {
+        #expect(SteamGridDBRetry.isTransient(SteamGridDBError.apiHTTP(429)))
+        #expect(SteamGridDBRetry.isTransient(SteamGridDBError.apiHTTP(503)))
+        #expect(SteamGridDBRetry.isTransient(URLError(.networkConnectionLost)))
+        #expect(!SteamGridDBRetry.isTransient(SteamGridDBError.apiHTTP(400)))
+        #expect(!SteamGridDBRetry.isTransient(SteamGridDBError.keyRejected))
+        #expect(!SteamGridDBRetry.isTransient(SteamGridDBError.badReply))
+        #expect(!SteamGridDBRetry.isTransient(SteamGridDBError.downloadHTTP(500)))
+        #expect(!SteamGridDBRetry.isTransient(URLError(.cancelled)))
+        #expect(!SteamGridDBRetry.isTransient(CancellationError()))
+    }
+
+    @Test func retriesWaitFiveHundredTwelveHundredAndTwentyFiveHundredMilliseconds() async throws {
+        var waits: [Duration] = []
+        var attempts = 0
+        // Four attempts, then the last failure is thrown
+        await #expect(throws: SteamGridDBError.apiHTTP(502)) {
+            try await SteamGridDBRetry.run(wait: { waits.append($0) }) { () async throws -> Int in
+                attempts += 1
+                throw SteamGridDBError.apiHTTP(502)
+            }
+        }
+        #expect(attempts == 4 && waits == [.milliseconds(500), .milliseconds(1200), .milliseconds(2500)])
+        // A passing failure followed by success returns the value
+        attempts = 0
+        let value = try await SteamGridDBRetry.run(wait: { _ in }) { () async throws -> Int in
+            attempts += 1
+            if attempts < 3 { throw URLError(.timedOut) }
+            return 7
+        }
+        #expect(value == 7 && attempts == 3)
+        // A rejected key is not tried again
+        attempts = 0
+        await #expect(throws: SteamGridDBError.keyRejected) {
+            try await SteamGridDBRetry.run(wait: { _ in }) { () async throws -> Int in
+                attempts += 1
+                throw SteamGridDBError.keyRejected
+            }
+        }
+        #expect(attempts == 1)
     }
 }
 

@@ -28,6 +28,9 @@ public struct HostRecord: Equatable, Sendable, Codable {
     /// `PairStatus` of the last verified answer.
     public var hostReportsPaired: Bool
     public var runningAppID: Int
+    /// Whether the PC streams to a virtual display of its own (`vDisplaySupported` and `vDisplayDriverReady` of DELOS for
+    /// Android, `VirtualDisplayCapable` and `VirtualDisplayDriverReady` of its answer); nil until a full answer came.
+    public var virtualDisplay: VirtualDisplaySupport?
     /// The certificate pinned at pairing (DER); nil before pairing. Only `paired(with:)` sets it.
     public private(set) var pinnedCertificate: Data?
 
@@ -45,7 +48,7 @@ public struct HostRecord: Equatable, Sendable, Codable {
     private enum CodingKeys: String, CodingKey {
         case id, serverName = "name", customName, localAddress, remoteAddress, manualAddress, macAddress, httpsPort
         case externalPort, appVersion, gfeVersion, codecModeSupport, isNvidiaServer, hostReportsPaired, runningAppID
-        case pinnedCertificate, reachability, activeAddress, lastReplyVerified
+        case pinnedCertificate, reachability, activeAddress, lastReplyVerified, virtualDisplay
     }
 
     /// A record from the first answer of a host (discovery or a typed address); not paired.
@@ -137,7 +140,20 @@ public struct HostRecord: Equatable, Sendable, Codable {
         record.runningAppID = info.currentGame
         record.reachability = .online
         record.activeAddress = reply.address
+        record.virtualDisplay = VirtualDisplaySupport(
+            capable: info.virtualDisplayCapable, driverReady: info.virtualDisplayCapable && info.virtualDisplayDriverReady)
         record.lastReplyVerified = reply.source == .pinnedHTTPS
         return record
+    }
+}
+
+/// What a PC says of its virtual display: it can make one, and its driver is installed and working.
+public struct VirtualDisplaySupport: Equatable, Sendable, Codable {
+    public var capable: Bool
+    public var driverReady: Bool
+
+    public init(capable: Bool, driverReady: Bool) {
+        self.capable = capable
+        self.driverReady = driverReady
     }
 }

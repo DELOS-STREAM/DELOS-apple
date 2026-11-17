@@ -85,14 +85,21 @@ def read_elements(root: ET.Element, translated: bool) -> dict[str, object]:
 
 
 def read_resources(android: Path) -> dict[str, dict[str, object]]:
-    """language -> name -> text (str) or plural (dict category -> text)."""
+    """language -> name -> text (str) or plural (dict category -> text). A name Android marks translatable="false" has
+    its English text in every language, as Android shows it."""
     result: dict[str, dict[str, object]] = {}
+    fixed: set[str] = set()
+    for file in sorted((android / RES / "values").glob("strings*.xml")):
+        fixed.update(e.get("name") for e in ET.parse(file).getroot() if e.get("translatable") == "false" and e.get("name"))
     for qualifier, language in LANGUAGES.items():
         folder = android / RES / ("values" if not qualifier else f"values-{qualifier}")
         entries: dict[str, object] = {}
         for file in sorted(folder.glob("strings*.xml")):
             entries.update(read_elements(ET.parse(file).getroot(), translated=bool(qualifier)))
         result[language] = entries
+    for language, entries in result.items():
+        if language != "en":
+            entries.update({name: result["en"][name] for name in fixed if name in result["en"]})
     return result
 
 
