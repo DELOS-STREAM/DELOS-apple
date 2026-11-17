@@ -9,3 +9,5 @@ DerivedData
 Config/Local.xcconfig
 Packages/*/.build/
 Packages/*/.swiftpm/
+tools/bench/*/.build/
+tools/bench/*/.swiftpm/

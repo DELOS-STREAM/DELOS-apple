@@ -12,6 +12,15 @@ for binaries, checksum (rule of [ENGINEERING_RULES.md](ENGINEERING_RULES.md)).
 | nanors, Reed-Solomon FEC (submodule of delos-common-c) | `ThirdParty/delos-common-c/nanors` | [sleepybishop/nanors](https://github.com/sleepybishop/nanors) | `a9b1636f9c98dbfdd0daeaf6982ccd24d1c30f29` | MIT |
 | libopus (submodule; built as `COpus`) | `ThirdParty/opus` | [xiph/opus](https://github.com/xiph/opus) | `v1.6.1`, `22244de5a79bd1d6d623c32e72bf1954b56235be` | BSD-3-Clause |
 
+## Derived code
+
+| Code | Derived from | License |
+|---|---|---|
+| `tools/bench/pyrowave-idwt` (`IDWTShaders.swift`): the inverse wavelet transform kernel of the benchmark, ported from GLSL to Metal Shading Language | `shaders/idwt.comp` and `dwt_common.h` of [Themaister/pyrowave](https://github.com/Themaister/pyrowave) `186f0393b77f7755953b5ecde994bb1cec2e4155`, Copyright (c) 2025 Hans-Kristian Arntzen, as vendored by DELOS for Android | MIT; the notice is kept in the file |
+
+`tools/bench/moltenvk-probe/run.sh` downloads MoltenVK 1.4.2 (Apache-2.0) into a temporary directory, checks its SHA-256 and
+deletes it; nothing of MoltenVK or of PyroWave's SPIR-V is stored in this repository.
+
 ## Fonts
 
 Copied byte for byte from DELOS for Android (`app/src/main/res/font/`), where `tools/fonts/subset_fonts.py` makes them
