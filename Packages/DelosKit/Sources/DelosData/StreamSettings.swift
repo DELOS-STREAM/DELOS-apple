@@ -100,6 +100,17 @@ public struct StreamSettings: Codable, Equatable, Sendable {
         bitrateKbps ?? StreamPlan.defaultBitrateKbps(width: resolution.width, height: resolution.height, fps: fps)
     }
 
+    /// StreamDisplayPlanner.java:288–315: cap only near refresh; Warp is actual host-side oversampling.
+    public func streamFPS(refreshRate: Int) -> Int {
+        switch framePacing {
+        case .warp: fps * 2
+        case .warp2: fps * 4
+        case .capFPS:
+            refreshRate > 49 && fps >= refreshRate && fps - refreshRate <= 3 ? refreshRate - 1 : fps
+        case .latency, .balanced, .smoothness: fps
+        }
+    }
+
     private static func clampFPS(_ fps: Int) -> Int { min(max(fps, 1), 1000) }
 
     private static func clampBitrate(_ kbps: Int) -> Int { min(max(kbps, bitrateRange.lowerBound), bitrateRange.upperBound) }

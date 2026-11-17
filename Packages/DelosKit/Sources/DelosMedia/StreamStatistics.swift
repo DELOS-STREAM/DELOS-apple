@@ -154,7 +154,7 @@ public final class VideoStatistics: Sendable {
 }
 
 /// Capture the layer's main-actor getter once; query its thread-safe renderer off the main thread.
-private final class VideoPresentationReader: Sendable {
+final class VideoPresentationReader: VideoPresentationProgress {
     private nonisolated(unsafe) let renderer: AVSampleBufferVideoRenderer
 
     @MainActor
@@ -178,23 +178,29 @@ private final class VideoPresentationReader: Sendable {
 /// Core/renderer reads run off the main actor; only the immutable result crosses into the interface.
 public actor StreamStatisticsSource {
     private let video: VideoStatistics
-    private let renderer: VideoPresentationReader?
+    private let renderer: (any VideoPresentationProgress)?
     private let session: StreamSession
+    private let watchdog: WatchdogVideoRenderer
 
     @MainActor
-    public init(video: VideoStatistics, renderer: any VideoRenderer, session: StreamSession) {
+    public init(video: VideoStatistics, renderer: any VideoRenderer, session: StreamSession, watchdog: WatchdogVideoRenderer) {
         self.video = video
-        if let display = renderer as? DisplayLayerRenderer {
+        if let progress = renderer as? any VideoPresentationProgress {
+            self.renderer = progress
+        } else if let display = renderer as? DisplayLayerRenderer {
             self.renderer = VideoPresentationReader(display)
         } else {
             self.renderer = nil
         }
         self.session = session
+        self.watchdog = watchdog
     }
 
     public func sample() async -> StreamStatistics? {
         let presentation = await renderer?.presentationCounters()
         guard !Task.isCancelled else { return nil }
+        // Reuse this always-on stream sampler and its actual presentation reading; no second timer or metric query.
+        watchdog.observe(presentation, now: DispatchTime.now().uptimeNanoseconds)
         let packets = session.videoStatistics()
         // Nil once the session stops; the session orders this read before the core's teardown.
         let roundTrip = await session.estimatedRoundTrip()

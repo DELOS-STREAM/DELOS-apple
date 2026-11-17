@@ -247,13 +247,16 @@ struct StreamSettingsForm: Equatable {
             help: Self.details(value: label, explanation: Self.codecHelp(settings.codec), unavailable: selected == nil, about: L("help_video_format")))
     }
 
-    /// Android's modes that the display layer can do; the Warp modes, the FPS limit and Fast V-Sync are not offered.
+    /// Nano Pacer needs a latest-decoded-frame presentation path and is not offered as a misleading alias.
     var framePacingOptions: [(value: FramePacing, label: String)] {
         FramePacing.allCases.map { mode in
             switch mode {
             case .latency: (mode, L("pacing_latency"))
             case .balanced: (mode, L("pacing_balanced"))
+            case .capFPS: (mode, L("pacing_balanced_alt"))
             case .smoothness: (mode, L("pacing_smoothness"))
+            case .warp: (mode, L("pacing_warp"))
+            case .warp2: (mode, L("pacing_warp2"))
             }
         }
     }
@@ -265,9 +268,12 @@ struct StreamSettingsForm: Equatable {
         let explanation = switch settings.framePacing {
         case .latency: L("help_frame_pacing_latency")
         case .balanced: L("help_frame_pacing_balanced")
+        case .capFPS: L("help_frame_pacing_cap_fps")
         case .smoothness: L("help_frame_pacing_smoothness")
+        case .warp: L("help_frame_pacing_warp")
+        case .warp2: L("help_frame_pacing_warp2")
         }
-        // Android's general help is about its Warp modes, which do not exist here: the chosen mode's line is the help
+        // The chosen mode's Android help describes its trade-off without promising platform-specific decoder tuning.
         return SettingRow(
             id: Self.framePacing, tab: .stream, section: section, icon: Symbols.smoothing, label: L("title_frame_pacing"),
             value: .choice(label: label, options: options.map(\.label), selected: selected),

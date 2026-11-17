@@ -65,10 +65,16 @@ private let iPhone = StreamDevice(pixelWidth: 1290, pixelHeight: 2796, maxFrames
         #expect(form.settings.resolution == StreamResolution(width: 2796, height: 1290))
         form.step("checkbox_host_audio", by: 1)
         #expect(form.settings.playAudioOnHost)
-        // Frame pacing: Balanced by default, then Smoothest, wrapping to Lowest latency
+        // Balanced by default; every supported Android mode is reachable, then the list wraps.
         #expect(form.settings.framePacing == .balanced)
         form.step("frame_pacing", by: 1)
+        #expect(form.settings.framePacing == .capFPS)
+        form.step("frame_pacing", by: 1)
         #expect(form.settings.framePacing == .smoothness)
+        form.step("frame_pacing", by: 1)
+        #expect(form.settings.framePacing == .warp)
+        form.step("frame_pacing", by: 1)
+        #expect(form.settings.framePacing == .warp2)
         form.step("frame_pacing", by: 1)
         #expect(form.settings.framePacing == .latency)
     }

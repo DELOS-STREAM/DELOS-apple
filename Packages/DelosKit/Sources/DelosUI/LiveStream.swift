@@ -34,9 +34,10 @@ final class LiveStream: StreamSteps {
         pcName = hosts.host(hostID)?.name ?? L("stream_result_default_pc")
         appName = hosts.apps[hostID]?.first { $0.id == appID }?.title ?? ""
         formats = DecoderSupport.device
-        let video = VideoOutput(renderer: renderer, supportedFormats: formats)
+        let watchdog = WatchdogVideoRenderer(renderer: renderer)
+        let video = VideoOutput(renderer: watchdog, supportedFormats: formats)
         session = StreamSession(videoSink: video, audioSink: AudioOutput())
-        statisticsSource = StreamStatisticsSource(video: video.statistics, renderer: renderer, session: session)
+        statisticsSource = StreamStatisticsSource(video: video.statistics, renderer: renderer, session: session, watchdog: watchdog)
         events = session.events
     }
 

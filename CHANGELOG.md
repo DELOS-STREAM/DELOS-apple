@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Video frame pacing adds Android's Balanced with FPS limit, Warp Drive and Warp 2: real host FPS cap/2x/4x
+  requests with the closest display-layer presentation behavior, not generated frames. Native Nano Pacer and
+  internal decoder tuning are not falsely advertised; platform differences are documented.
+- A decoder watchdog requests a fresh key frame after five seconds of arriving video without observed presentation
+  progress. Network silence and unavailable presentation metrics do not trigger it; physical-device recovery is
+  not yet verified.
 - Pairing with a one-time code: the menu of a PC that is not paired yet offers "Pair with a PIN" and "Pair with a
   one-time code"; the latter asks for the PIN and passphrase made in the PC's web UI and says when the code was wrong.
 - Settings now keeps the last tab during the session, moves one focus plate between rows, scrolls overflowing focused

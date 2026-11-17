@@ -1,0 +1,81 @@
+# Decoder equivalents
+
+## Purpose
+
+Map the Android MediaCodec pipeline to public Apple APIs without calling a timing hint a latency guarantee or an
+unsupported setting a working feature. This change keeps the AVSampleBufferDisplayLayer path; the separate Metal
+renderer owns its explicit VideoToolbox session and presentation queue. Fit describes the mechanism, not measured
+performance. Android paths below are relative to the sibling DELOS for Android checkout; they are not Apple files.
+
+Evidence abbreviations:
+- `D`: `app/src/main/java/com/limelight/binding/video/MediaCodecDecoderRenderer.java`.
+- `H`: `app/src/main/java/com/limelight/binding/video/MediaCodecHelper.java`.
+- `P`: `app/src/main/java/com/limelight/binding/video/StreamDisplayPlanner.java`.
+- `N`: `app/src/main/java/com/limelight/binding/video/NanoPacer.java`.
+- Apple header paths are relative to `System/Library/Frameworks` of the installed Xcode iPhoneOS27.2 SDK; corresponding
+  MacOSX27.2 and AppleTVOS27.2 declarations were also checked. The minimum app systems remain iOS/tvOS 18 and macOS 15.
+- Pacing labels are Android `res/values/strings.xml:234–242`; their help is
+  `res/values/strings_settings_help.xml:126–132`. Imported translations are unchanged in all ten languages.
+
+| Android feature | What Android actually does (source:line) | Verified Apple mechanism / header:line | Fit | Implementation / boundary | Label shown |
+|---|---|---|---|---|---|
+| Lowest latency | D:1939–1943,2074–2108 drains older decoded outputs and releases the newest immediately | Host-clock sample PTS and `kCMSampleAttachmentKey_DisplayImmediately`; `AVSampleBufferDisplayLayer.h:34–54`, `CMSampleBuffer.h:1518` | Partial | Existing immediate display-layer submission; the system owns its decoded output queue, so newest-decoded-only draining cannot be promised | `pacing_latency` |
+| Balanced | D:1854–1914,2011–2031 uses Choreographer, a two-frame queue, oldest-drop and an 80%-interval gate | `controlTimebase` and scheduled output PTS, `AVSampleBufferDisplayLayer.h:34–54` | Partial | Existing one-interval jitter buffer with 0.9-interval cadence and bounded schedule reset; not a copied Android queue | `pacing_balanced` |
+| Balanced with FPS limit | P:288–309 caps to rounded refresh minus one only when selected FPS is at least refresh and no more than three above it; refresh <=49 or FPS >refresh+3 falls back | Public host request/core FPS plus the same CMTimebase presentation path | Partial | Added `capFPS`: identical integer host-FPS boundary rules; ordinary Balanced Apple presentation remains. Surface timestamp-zero/drop behavior has no identical layer control | `pacing_balanced_alt` |
+| Smoothest video | D:1965–2004 uses Surface timestamp zero; it still drains older finished outputs | Scheduled sample PTS on a host-clock timebase, `AVSampleBufferDisplayLayer.h:34–54` | Partial | Existing two-interval Apple jitter buffer; not a claim that neither platform ever drops frames | `pacing_smoothness` |
+| Warp Drive | P:311–315 and PreferenceConfiguration.java:840–845 request twice the configured FPS; immediate/latest-output path | Host launch FPS and core FPS; display-immediately sample attachment | Partial | Added real 2x host request and immediate Apple presentation. No interpolation, decoded-queue drain promise or performance guarantee | `pacing_warp` |
+| Warp 2 | Same sources, four times configured FPS | Same public request and sample timing mechanisms | Partial | Added real 4x host request; the selected base FPS and bitrate remain unchanged | `pacing_warp2` |
+| Fast V-Sync / Nano Pacer | N:21–29,84–198,211–326 locks cadence, maps PTS, drains newer decoded outputs while waiting, and bounds its final spin | `CAMetalDisplayLink` updates and `preferredFrameLatency`, `CAMetalDisplayLink.h:19–47`; CADisplayLink frame-rate range, `CADisplayLink.h:94–101` | Partial | Not offered on the display-layer path: it cannot expose/drain the latest decoded frame. Metal needs a real bounded latest-frame scheduler, not an alias | Not offered |
+| Low Frame Rendering Latency | DelosStreamActivity.java:573–583 changes output polling to 500 us and forces Balanced except Nano; D:66–83 bounds immediate release policy | Realtime VT hint only; no display-layer dequeue-poll interval control | None on this path | No fake low-latency toggle; public frame timing and the existing direct-submit path remain | Not offered |
+| Decoder low-latency flags | H:473–593 probes platform/vendor support and tries configurations with less aggressive options | `kVTDecompressionPropertyKey_RealTime`, `VTDecompressionProperties.h:188–197`, default true | Partial | An explicit VT session can set the realtime hint. Display layer exposes no decompression-property setter; no unused options dictionary is created | No new toggle |
+| Vendor extensions | H:599–701 sets NVIDIA, Qualcomm, MTK, Kirin, Exynos and Amlogic knobs conditionally | No public Apple vendor-key equivalent | None | Do not copy Android keys or private VT properties. H:1164–1196 is an uncalled extra-options helper, not active Android behavior | Not offered |
+| Hardware required/preferred or software | H:51–111,940–955,989–1069 filters software/blacklisted decoders, then checks profile | `EnableHardwareAcceleratedVideoDecoder`, `RequireHardwareAcceleratedVideoDecoder`, read-only `UsingHardwareAcceleratedVideoDecoder`, `VTDecompressionProperties.h:142–183`; iOS/tvOS 17+ | Partial | Existing `VTIsHardwareDecodeSupported` gates offered HEVC/AV1 codecs. Explicit VT sessions can require HW; the layer's internal session cannot be configured this way | Existing codec choice only |
+| Decoder enumeration, prefer/avoid lists and whitelists | H:137–205,339–449,815–877 plus D:292–398 select by device/profile/performance points | `VTIsHardwareDecodeSupported`, `VTDecompressionSession.h:321–331`; macOS-only `VTCopyVideoDecoderExtensionProperties`, `VTUtilities.h:64–73` | Partial | Codec capability is not proof of profile/chroma/resource availability. No public decoder-list API was found; exported private `_VTCopyVideoDecoderList` is not used. Encoder enumeration is unrelated | No vendor list |
+| Power efficiency and decoder pool | Android operating-rate/priority and vendor queues, H:518–701 | `MaximizePowerEfficiency` and `OutputPoolRequestedMinimumBufferCount`, `VTDecompressionProperties.h:70–91,200–211` | Partial, explicit VT only | Power efficiency defaults false. SDK explicitly forbids setting it together with RealTime, even as a supposed tuning pair. Pool property requests a minimum, not a queue maximum. Neither is set on the layer | Not offered |
+| Asynchronous decode / realtime playback | Android codec callback/output threading, AsyncCodecAdapter.java; D:1931–2047 | `kVTDecodeFrame_EnableAsynchronousDecompression` and `kVTDecodeFrame_1xRealTimePlayback`, `VTErrors.h:76–100` | Partial | Async permits but does not force asynchronous decode. 1x permits a low-power mode; it is not a low-latency flag. Flags belong only to an explicit VT decode call | No false latency switch |
+| Reference-frame invalidation | H:339–449,772–812 and D:2863–2886 selectively advertise supported RFI codecs | No public selective-reference invalidation API found. Full reset is `VTDecompressionSessionInvalidate`, `VTDecompressionSession.h:135–145` | None for selective RFI | Keep RFI capabilities off. `delos-common-c/src/Limelight.h:304–329,356–358,1091–1096` defines the distinction; `VideoDepacketizer.c:316–318,792–812` handles refresh/IDR | No RFI claim |
+| Direct submit | D:2863–2886 and H:58–74,749–750 opt into receive-thread submission where supported | Core `CAPABILITY_DIRECT_SUBMIT` and synchronous sink callback | Full | Already implemented: VideoOutput submits on the core receive thread and returns a decode result before borrowed buffers expire | No setting |
+| Decoder thread priority | D:927,1913,1931–1933,2047 raises selected Android threads | VT RealTime is a hint, not an OS priority; internal decoder QoS is not public. `VTDecompressionProperties.h:188–220,327–339` | Partial | No numeric Apple priority toggle. SuggestedQualityOfServiceTiers changes decode quality, not thread QoS. Watchdog observation shares the existing off-main statistics actor | Not offered |
+| Frame dropping / buffer bounds | D:1965–2031,2074–2108 drops old finished frames; Balanced queue is bounded | Layer sample timing/performance metrics; `AVSampleBufferVideoRenderer.h:260–268`, `AVVideoPerformanceMetrics.h:34–61` | Partial | Existing schedule bounds delay, not the private decoded queue. Do not drop arbitrary compressed interframes; retain the system's dependency handling | Existing pacing choices |
+| Surface, vsync and frame-rate hints | D:1854–1914,3055–3065 and P:493–508 set display cadence | `controlTimebase`; `CADisplayLink.preferredFrameRateRange`; Metal `preferredFrameLatency` accepts only 1 or 2, `CAMetalDisplayLink.h:19–47` and [Apple documentation](https://developer.apple.com/documentation/quartzcore/cametaldisplaylink/preferredframelatency) | Partial | Existing display-link refresh requests and timed samples. A display callback is not a guarantee of panel scanout, and Metal frame-latency tuning is not a layer decoder option | Existing FPS/pacing choices |
+| Display sleep / EDR | Android surface/stream lifecycle keeps presentation active | `preventsDisplaySleepDuringVideoPlayback`, `AVSampleBufferDisplayLayer.h:196–204`; CALayer EDR property, `CALayer.h:437–457` | Partial | Existing stream idle-timer handling stays. EDR is tonemapping/display intent, not decoder capability; inherited wantsExtendedDynamicRangeContent is unavailable on tvOS and deprecated on newer systems | No fabricated HDR toggle |
+| HDR and color | D:538–594,863–919,2316–2347 uses color keys, HDR static metadata and decoder restart on metadata changes | CoreVideo primaries/matrix/transfer keys and mastering/content-light CFData payloads, `CVImageBuffer.h:73–100,225–229` | Partial | Types support BT.2020/PQ/HLG; mastering payload is 24 big-endian bytes, content light 4 bytes. Current host offer remains SDR; full host metadata/format/device validation is outside this change | Existing SDR codec choices |
+| 4:4:4 | DelosStreamActivity.java:587–619 and docs/SETTINGS.md:97–100: current Android offer is PyroWave-only, not MediaCodec 4:4:4 | 444v/444f/x444/xf44 and packed 4:4:4 pixel types, `CVPixelBuffer.h:72–84,113–116` | Partial representation only | Pixel type existence does not prove hardware chroma decode. Do not advertise 4:4:4 from codec-level probing; no PyroWave decoder is added here | Not offered |
+| Slices / multithread decoding | H:208–217,431–432,761–768 requests four slices on selected older Qualcomm/software paths, otherwise one | Optional `kVTDecompressionPropertyKey_ThreadCount`, `VTDecompressionProperties.h:214–220` | Partial | Optional VT thread-count hint is not a host slices setting and cannot be applied to the layer. No fabricated slices/thread-count preference | Not offered |
+| Decoder errata | docs/DECODER_ERRATA.md:9–58 and D:2401–2414,2566–2669,2715–2752 handle SPS/profile/ref-count/driver quirks | Public format creation, renderer failure/flush; `AVSampleBufferVideoRenderer.h:84–105` | Partial | Existing format validation and flush/IDR remain; Android vendor errata are not copied onto Apple hardware. Android notes themselves say the inherited device claims were not reverified | No errata selector |
+| Stuck-decoder watchdog and IDR | D:2126–2177 checks input-buffer wait after its polling loop; >=5 s can report a hung decoder. Recovery returns DR_NEED_IDR at D:2153–2156,2383–2398 | Actual displayed progress from performance metrics; renderer flush requires a key frame, `AVSampleBufferVideoRenderer.h:99–105` | Partial Android match, full Apple recovery path | Added five seconds of arriving frames without observed presentation progress: flush on the next video-thread enqueue and return false, which VideoOutput maps to DR_NEED_IDR. Silence, missing metrics, reset and clock rewind do not fabricate a stall | Automatic, no setting |
+
+The display layer and its `AVSampleBufferVideoRenderer` expose **no public decoder specification/options dictionary**.
+`AVVideoDecompressionPropertiesKey` is an AVVideoSettings key (`AVVideoSettings.h:284–292`), not evidence that such a
+setter exists on the layer. No RealTime/HW/power/thread-count settings are claimed to be applied to that internal
+session. The separate explicit-VT renderer can implement supported options without inventing private keys.
+
+`copyDisplayedPixelBuffer` (`AVSampleBufferVideoRenderer.h:213–221`) is not a continuous decoded-output callback: it
+returns null at nonzero playback rate and in other documented cases. `presentationTimeExpectation` promises future
+PTS for power optimization; it can cause a later lower-PTS sample to be dropped, so it is not used as a latency knob.
+`readyForDisplay` signals initial readiness, not per-frame presentation progress. Public performance metric members
+are used despite historical [SPI] text in some header comments; unavailable legacy member aliases are not used.
+
+The watchdog's `VideoPresentationProgress` contract returns the existing `VideoPresentationCounters`; total minus
+dropped is displayed progress. The display-layer adapter reuses the statistics reader. A Metal renderer can conform
+additively. A renderer without actual progress telemetry is not monitored. The watchdog reuses the existing one-second
+stream statistics sampler and the same metrics reading, with no second timer or query; it stops before session shutdown.
+Recovery requests no IDR during network silence and never equates submission with display. Repeated stalls have a fresh timeout rather
+than an IDR storm. Android's original input-wait check is not falsely described as this same no-output watchdog.
+
+## Verification
+
+Offline Swift Testing covers fake-clock watchdog startup, continuous stalls, presentation progress, network silence,
+missing metrics, counter reset and clock rewind; immediate Warp pacing; Android FPS-cap boundaries; Warp/cap launch
+and core request values; persistence and Settings choice navigation. Localization uses the existing Android importer,
+without new English text. Package, simulator builds, repository checks and actual Settings screenshots are recorded in
+the implementation report. No live host or service is needed for these tests.
+
+## Not verified
+
+No live stream, input-to-photon latency, decoder stall on physical hardware, runtime VT property acceptance,
+120/240/480-FPS host behavior, HDR/4:4:4 decode, external-display handover or real Apple TV has been verified by this
+change. Only the owner launches streams. The initial renderer timing uses the current display maximum, while the host
+request uses the surface's reported refresh rate; dynamic display handover requires renderer reconfiguration rather
+than a promise that every display always matches. Actual Metal presentation counters and its explicit VT options must
+be verified with that renderer, not inferred from the display-layer path. No Mac app is built or launched by this helper.

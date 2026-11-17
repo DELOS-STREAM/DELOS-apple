@@ -445,7 +445,13 @@ shell_hint_back
 title_frame_pacing
 pacing_latency
 pacing_balanced
+pacing_balanced_alt
 pacing_smoothness
+pacing_warp
+pacing_warp2
 help_frame_pacing_latency
 help_frame_pacing_balanced
+help_frame_pacing_cap_fps
 help_frame_pacing_smoothness
+help_frame_pacing_warp
+help_frame_pacing_warp2

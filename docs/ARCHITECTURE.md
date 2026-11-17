@@ -189,8 +189,11 @@ holds a frame up to one frame interval and Smoothest up to two; frames are shown
 never sooner than 0.9 of a frame after the previous one (the slack follows the host's clock), and a backlog beyond the
 buffer starts the schedule again instead of carrying delay. `DisplayLayerRenderer` gives each sample that time on a
 timebase that follows the host clock; the layer shows it at the first refresh at or after it. Settings → Stream →
-Video frame pacing offers the three modes with Android's labels and help lines (Android's Warp modes, FPS limit and Fast
-V-Sync are not offered).
+Video frame pacing offers these modes plus Balanced with FPS limit, Warp Drive and Warp 2. The cap follows Android's
+near-refresh rules in both the launch request and core configuration; Warp requests 2x/4x the selected host FPS and
+uses immediate presentation, not interpolation. Nano Pacer is not offered without a genuine decoded-frame queue.
+See [Decoder equivalents](DECODER_EQUIVALENTS.md) for the verified public API boundary, platform differences and
+unverified hardware behavior; no private options are applied to the display layer's internal decoder.
 
 ## Stream output
 
@@ -206,6 +209,13 @@ has no lock.
 audio ring has no lock, so the audio render thread never waits for the decoder: one writer and one reader share
 preallocated storage, each moving its own atomic position (acquire/release), and the reader skips what is older than
 60 ms; a full ring (nothing reads) drops what does not fit.
+
+`WatchdogVideoRenderer` decorates the renderer without changing its files. Actual cumulative presentation counters
+come through `VideoPresentationProgress` (the existing display-layer metrics adapter or a conforming Metal renderer).
+Five seconds of arriving frames without displayed progress schedules a video-thread flush and a false enqueue result,
+so VideoOutput returns `needIDRFrame`. Silence, absent telemetry, counter reset and clock rewind do not invent stalls.
+It shares the existing one-second stream statistics actor and its metrics reading, with no second timer or query.
+Its policy is tested with a fake clock; recovery on physical devices is not verified.
 
 ## The stream screen
 
