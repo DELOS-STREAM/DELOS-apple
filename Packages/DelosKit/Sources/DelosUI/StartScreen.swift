@@ -408,7 +408,7 @@ public struct DelosRoot: View {
             }
         case .devices:
             DevicesScreen(
-                focus: entry.focus, activeID: actions.libraryHostID, defaultPC: profiles.startup.defaultPC, actions: actions,
+                focus: entry.focus, activeID: actions.libraryHostID, actions: actions,
                 onPair: { go { navigator.push(.pair, focus: PairPCScreen.firstFocus(hosts.hosts)) } })
         case .pair:
             PairPCScreen(

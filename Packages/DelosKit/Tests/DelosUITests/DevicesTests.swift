@@ -25,23 +25,21 @@ import Testing
     }
 
     @Test func statusLines() throws {
-        #expect(DevicesLogic.status(try host("A", "a"), active: false, isDefault: false) == L("devices_status_online"))
-        #expect(DevicesLogic.status(try host("A", "a"), active: true, isDefault: false) == L("devices_status_connected"))
-        #expect(DevicesLogic.status(try host("A", "a", online: false, mac: "AA:BB:CC:DD:EE:FF"), active: false, isDefault: false)
+        #expect(DevicesLogic.status(try host("A", "a"), active: false) == L("devices_status_online"))
+        #expect(DevicesLogic.status(try host("A", "a"), active: true) == L("devices_status_connected"))
+        #expect(DevicesLogic.status(try host("A", "a", online: false, mac: "AA:BB:CC:DD:EE:FF"), active: false)
             == L("devices_status_asleep"))
-        #expect(DevicesLogic.status(try host("A", "a", online: false), active: false, isDefault: false) == L("devices_status_offline"))
-        #expect(DevicesLogic.status(try host("A", "a"), active: true, isDefault: true)
-            == L("devices_status_with_default", L("devices_status_connected"), L("devices_status_default")))
+        #expect(DevicesLogic.status(try host("A", "a", online: false), active: false) == L("devices_status_offline"))
     }
 
     @Test func menuRowsFollowTheState() throws {
         let online = try host("A", "a")
-        #expect(DevicesLogic.actions(online, active: false, isDefault: false) == [.connect(openApps: false), .makeDefault, .rename, .unpair, .remove])
-        #expect(DevicesLogic.actions(online, active: true, isDefault: true) == [.connect(openApps: true), .clearDefault, .rename, .unpair, .remove])
+        #expect(DevicesLogic.actions(online, active: false) == [.connect(openApps: false), .rename, .unpair, .remove])
+        #expect(DevicesLogic.actions(online, active: true) == [.connect(openApps: true), .rename, .unpair, .remove])
         let asleep = try host("B", "b", online: false, mac: "AA:BB:CC:DD:EE:FF")
-        #expect(DevicesLogic.actions(asleep, active: false, isDefault: false) == [.connect(openApps: false), .makeDefault, .rename, .wake, .remove])
+        #expect(DevicesLogic.actions(asleep, active: false) == [.connect(openApps: false), .rename, .wake, .remove])
         let offline = try host("C", "c", online: false)
-        #expect(DevicesLogic.actions(offline, active: false, isDefault: false) == [.connect(openApps: false), .makeDefault, .rename, .remove])
+        #expect(DevicesLogic.actions(offline, active: false) == [.connect(openApps: false), .rename, .remove])
     }
 
     @Test func firstFocusIsTheFirstPCOrPairing() throws {
