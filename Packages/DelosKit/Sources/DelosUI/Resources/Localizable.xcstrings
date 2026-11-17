@@ -11952,6 +11952,71 @@
         }
       }
     },
+    "help_checkbox_enable_hdr": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Požádá o HDR video. Vyžaduje podporu aplikace, grafické karty v PC, dekodéru i displeje (10bitové HEVC, AV1 nebo PyroWave)."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fordert HDR-Video an. Erfordert Unterstützung durch App, Host-GPU, Decoder und Display (10-Bit-HEVC, AV1 oder PyroWave)."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests HDR video. Needs app, host GPU, decoder and display support (10-bit HEVC, AV1 or PyroWave)."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solicita vídeo HDR. Requiere compatibilidad de la app, la GPU del host, el decodificador y la pantalla (HEVC de 10 bits, AV1 o PyroWave)."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demande une vidéo HDR. Nécessite la prise en charge par l’appli, le GPU du PC, le décodeur et l’écran (HEVC 10 bits, AV1 ou PyroWave)."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HDRビデオを要求します。アプリ、ホストのGPU、デコーダー、ディスプレイの対応が必要です（10ビットのHEVC、AV1、またはPyroWave）。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HDR 비디오를 요청해요. 앱, 호스트 GPU, 디코더, 디스플레이가 모두 지원해야 해요 (10비트 HEVC, AV1 또는 PyroWave)."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solicita vídeo HDR. Requer suporte do app, da GPU do PC, do decodificador e da tela (HEVC 10 bits, AV1 ou PyroWave)."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запитує HDR-відео. Потрібна підтримка застосунку, GPU хоста, декодера й екрана (10-бітний HEVC, AV1 або PyroWave)."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请求 HDR 视频。需要应用、电脑 GPU、解码器和屏幕均支持（10-bit HEVC、AV1 或 PyroWave）。"
+          }
+        }
+      }
+    },
     "help_checkbox_host_audio": {
       "extractionState": "manual",
       "localizations": {
@@ -41768,6 +41833,71 @@
           "stringUnit": {
             "state": "translated",
             "value": "在 PC 上播放音频"
+          }
+        }
+      }
+    },
+    "title_enable_hdr": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zapnout HDR"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HDR aktivieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable HDR"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activar HDR"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activer HDR"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HDRを有効にする"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HDR 사용"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ativar HDR"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Увімкнути HDR"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启用 HDR"
           }
         }
       }

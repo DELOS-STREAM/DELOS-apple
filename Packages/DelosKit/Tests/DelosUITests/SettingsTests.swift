@@ -8,6 +8,40 @@ import Testing
 private let iPhone = StreamDevice(pixelWidth: 1290, pixelHeight: 2796, maxFramesPerSecond: 120, decodable: [.h264, .hevc])
 
 @Suite struct SettingsFormTests {
+    private let hdrPhone = StreamDevice(
+        pixelWidth: 1290, pixelHeight: 2796, maxFramesPerSecond: 120, decodable: [.h264, .hevc, .hevcMain10], hdrDisplay: true)
+
+    @Test func theHDRRowIsOfferedOnlyWithAnHDRDisplayAndAMain10Decoder() {
+        let ids = { (device: StreamDevice) in StreamSettingsForm(settings: StreamSettings(), device: device).rows(.stream).map(\.id) }
+        #expect(ids(hdrPhone).last == "checkbox_enable_hdr")
+        #expect(!ids(iPhone).contains("checkbox_enable_hdr"))
+        var noDisplay = hdrPhone
+        noDisplay.hdrDisplay = false
+        #expect(!ids(noDisplay).contains("checkbox_enable_hdr"))
+        var noDecoder = hdrPhone
+        noDecoder.decodable = [.h264, .hevc]
+        #expect(!ids(noDecoder).contains("checkbox_enable_hdr"))
+    }
+
+    @Test func theHDRRowShowsAndroidsLabelAndHelpAndToggles() throws {
+        var form = StreamSettingsForm(settings: StreamSettings(), device: hdrPhone)
+        let row = try #require(form.rows(.stream).first { $0.id == StreamSettingsForm.hdr })
+        #expect(row.label == "Enable HDR")
+        #expect(row.help == "Requests HDR video. Needs app, host GPU, decoder and display support (10-bit HEVC, AV1 or PyroWave).")
+        #expect(row.value == .toggle(false))
+        let on = form.step(StreamSettingsForm.hdr, by: 1)
+        #expect(on)
+        #expect(form.settings.hdr)
+        #expect(form.rows(.stream).last?.value == .toggle(true))
+        let off = form.step(StreamSettingsForm.hdr, by: -1)
+        #expect(off)
+        #expect(!form.settings.hdr)
+        // A device without HDR cannot switch the stored value
+        var plain = StreamSettingsForm(settings: StreamSettings(), device: iPhone)
+        let changed = plain.step(StreamSettingsForm.hdr, by: 1)
+        #expect(!changed)
+    }
+
     @Test func theTabsHoldTheirRowsInAndroidsOrder() {
         let form = StreamSettingsForm(settings: StreamSettings(), device: iPhone)
         #expect(form.rows(.stream).map(\.id) == ["list_resolution", "list_fps", "seekbar_bitrate_kbps", "video_format", "frame_pacing"])

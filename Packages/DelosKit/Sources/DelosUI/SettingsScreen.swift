@@ -322,7 +322,8 @@ extension StreamDevice {
         let size = screen.map { $0.convertRectToBacking($0.frame).size } ?? CGSize(width: 1920, height: 1080)
         let fps = screen?.maximumFramesPerSecond ?? 60
         #endif
-        return StreamDevice(pixelWidth: Int(size.width), pixelHeight: Int(size.height), maxFramesPerSecond: fps, decodable: DecoderSupport.device)
+        return StreamDevice(pixelWidth: Int(size.width), pixelHeight: Int(size.height), maxFramesPerSecond: fps, decodable: DecoderSupport.device,
+                            hdrDisplay: HDRDisplay.isSupported)
     }
 }
 

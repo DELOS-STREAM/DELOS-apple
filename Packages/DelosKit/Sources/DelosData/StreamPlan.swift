@@ -22,18 +22,21 @@ public struct StreamPlan: Sendable {
         var iv = [UInt8](repeating: 0, count: RemoteInputKey.length)
         withUnsafeBytes(of: keyID.bigEndian) { for (i, byte) in $0.enumerated() { iv[i] = byte } }
         let audio = AudioConfiguration.stereo
+        let formats = settings.codec.formats(decodable: decodable, hdr: settings.hdr)
+        // HDR is asked of the host only with a 10-bit format to carry it
+        let hdr = !formats.isDisjoint(with: .tenBit)
         let size = settings.resolution(displayWidth: display.width, displayHeight: display.height)
         let fps = settings.streamFPS(refreshRate: refreshRate)
         request = LaunchRequest(
             appID: app.id, appUUID: app.uuid, width: size.width, height: size.height,
             // Optimize game settings is GeForce Experience's; DELOS for Android always sends it off
             frameRate: Double(fps), resolutionScaleFactor: 100, optimizeGameSettings: false,
-            remoteInputKey: Data(key), remoteInputKeyID: keyID, hdr: false, virtualDisplay: false,
+            remoteInputKey: Data(key), remoteInputKeyID: keyID, hdr: hdr, virtualDisplay: false,
             playAudioOnHost: settings.playAudioOnHost, surroundAudioInfo: audio.channelMask << 16 | audio.channelCount,
             gamepadMask: 1, persistGamepadsAfterDisconnect: false, coreParameters: CoreInfo.launchQueryParameters)
         configuration = StreamConfiguration(
             width: size.width, height: size.height, fps: fps, bitrateKbps: settings.bitrate(at: size),
-            audio: audio, supportedVideoFormats: settings.codec.formats(decodable: decodable), clientRefreshRateX100: refreshRate * 100,
+            audio: audio, supportedVideoFormats: formats, clientRefreshRateX100: refreshRate * 100,
             encryption: .audio, remoteInputKey: RemoteInputKey(key: key, iv: iv)!)
     }
 

@@ -25,7 +25,8 @@ import Testing
 
     @Test func theRowsAreTheStreamSettingsThatExistHereAndFollowTheProfile() {
         let (model, _, _) = make()
-        #expect(model.rows.map(\.id) == GameSettingsOverride.Key.allCases.map(\.rawValue))
+        // The HDR row is there on a device with an HDR display and a Main10 decoder only; this one has neither
+        #expect(model.rows.map(\.id) == GameSettingsOverride.Key.allCases.map(\.rawValue).filter { $0 != StreamSettingsForm.hdr })
         #expect(model.rows.allSatisfy { $0.customLine == nil && $0.note == "From profile" })
         #expect(model.overrides.isEmpty)
     }

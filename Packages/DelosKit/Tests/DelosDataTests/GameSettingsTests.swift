@@ -122,4 +122,19 @@ import Testing
         let round = try JSONDecoder().decode(GameSettingsOverride.self, from: JSONEncoder().encode(game))
         #expect(round == game)
     }
+
+    @Test func hdrIsAnOverrideOfItsOwn() throws {
+        var game = GameSettingsOverride()
+        var after = StreamSettings()
+        after.hdr = true
+        game.record(from: StreamSettings(), to: after)
+        #expect(game.hdr == true && game.keys == [.hdr])
+        #expect(game.merged(onto: StreamSettings()).hdr)
+        let decoded = try JSONDecoder().decode(GameSettingsOverride.self, from: JSONEncoder().encode(game))
+        #expect(decoded.hdr == true)
+        game.reset(.hdr)
+        #expect(game.isEmpty)
+        game.restoreMissing(from: decoded)
+        #expect(game.hdr == true)
+    }
 }

@@ -99,6 +99,12 @@ struct StreamDevice: Equatable, Sendable {
     var maxFramesPerSecond: Int
     /// The formats VideoToolbox decodes in hardware (``DecoderSupport``).
     var decodable: VideoFormats
+    /// The display shows HDR (``HDRDisplay``).
+    var hdrDisplay = false
+
+    /// HDR streaming needs a hardware HEVC Main10 decoder and an HDR display, both as on Android
+    /// (`SettingsCapabilities`: no HDR10 display or no Main10 hides the row).
+    var supportsHDR: Bool { hdrDisplay && decodable.contains(.hevcMain10) }
 
     /// The display's resolution while the profile has not chosen one.
     var defaultResolution: StreamResolution { .forDisplay(pixelWidth: pixelWidth, pixelHeight: pixelHeight) }
@@ -122,13 +128,14 @@ struct StreamSettingsForm: Equatable {
     static let frameRate = "list_fps"
     static let bitrate = "seekbar_bitrate_kbps"
     static let codec = "video_format"
+    static let hdr = "checkbox_enable_hdr"
     static let framePacing = "frame_pacing"
     static let hostAudio = "checkbox_host_audio"
 
     /// The rows of [tab] in their order.
     func rows(_ tab: SettingsTab) -> [SettingRow] {
         switch tab {
-        case .stream: [resolutionRow, frameRateRow, bitrateRow, codecRow, framePacingRow]
+        case .stream: [resolutionRow, frameRateRow, bitrateRow, codecRow, framePacingRow] + (device.supportsHDR ? [hdrRow] : [])
         case .audio: [hostAudioRow]
         case .controls, .appearance, .covers, .about: []
         }
@@ -286,6 +293,13 @@ struct StreamSettingsForm: Equatable {
             help: "\(label)\n\(explanation)")
     }
 
+    /// Android hides the row where the display or the decoder cannot do HDR, so it is not offered either.
+    private var hdrRow: SettingRow {
+        SettingRow(
+            id: Self.hdr, tab: .stream, section: section, icon: Symbols.hdrOn, label: L("title_enable_hdr"),
+            value: .toggle(settings.hdr), help: L("help_checkbox_enable_hdr"))
+    }
+
     private var hostAudioRow: SettingRow {
         SettingRow(
             id: Self.hostAudio, tab: .audio, section: L("category_host_settings"), icon: Symbols.speaker,
@@ -315,6 +329,7 @@ struct StreamSettingsForm: Equatable {
         case Self.codec: settings.codec = Self.next(settings.codec, in: codecOptions.map(\.value), direction)
         case Self.framePacing: settings.framePacing = Self.next(settings.framePacing, in: framePacingOptions.map(\.value), direction)
         case Self.bitrate: setBitrate(effectiveBitrate + direction * StreamSettings.bitrateStep)
+        case Self.hdr where device.supportsHDR: settings.hdr.toggle()
         case Self.hostAudio: settings.playAudioOnHost.toggle()
         default: break
         }

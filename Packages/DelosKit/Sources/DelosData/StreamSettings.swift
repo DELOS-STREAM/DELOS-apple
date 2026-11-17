@@ -45,11 +45,18 @@ public enum VideoCodec: String, CaseIterable, Codable, Sendable {
 
     /// The formats offered to the host, from what this device decodes ([decodable]). A codec this device cannot decode
     /// is never offered, even when chosen (Android warns and streams without it).
-    public func formats(decodable: VideoFormats) -> VideoFormats {
+    ///
+    /// With [hdr] the 10-bit profiles are offered too: HEVC Main10 whenever HEVC is allowed (HDR implies HEVC, as on
+    /// Android), AV1 Main 10 when AV1 is chosen. H.264 has no HDR: its choice offers none.
+    public func formats(decodable: VideoFormats, hdr: Bool = false) -> VideoFormats {
         var formats: VideoFormats = .h264
         guard self != .h264 else { return formats }
         if decodable.contains(.hevc) { formats.insert(.hevc) }
         if self == .av1, decodable.contains(.av1Main8) { formats.insert(.av1Main8) }
+        if hdr {
+            if decodable.contains(.hevcMain10) { formats.insert(.hevcMain10) }
+            if self == .av1, decodable.contains(.av1Main10) { formats.insert(.av1Main10) }
+        }
         return formats
     }
 
@@ -74,6 +81,8 @@ public struct StreamSettings: Codable, Equatable, Sendable {
     /// Nil: ``StreamPlan/defaultBitrateKbps(width:height:fps:)`` for the resolution and frame rate, so it follows them.
     public var bitrateKbps: Int? { didSet { bitrateKbps = bitrateKbps.map(Self.clampBitrate) } }
     public var codec = VideoCodec.automatic
+    /// Asks the host for HDR video (`checkbox_enable_hdr`); it takes effect where the device decodes and shows HDR.
+    public var hdr = false
     /// Plays the app's audio on the PC as well (`checkbox_host_audio`).
     public var playAudioOnHost = false
     /// How frames are timed on screen. Balanced by default, unlike Android's lowest latency: on iPad the display layer
@@ -125,6 +134,7 @@ public struct StreamSettings: Codable, Equatable, Sendable {
         fps = Self.clampFPS(value(.fps, d.fps))
         bitrateKbps = value(.bitrateKbps, d.bitrateKbps).map(Self.clampBitrate)
         codec = value(.codec, d.codec)
+        hdr = value(.hdr, d.hdr)
         playAudioOnHost = value(.playAudioOnHost, d.playAudioOnHost)
         framePacing = value(.framePacing, d.framePacing)
     }

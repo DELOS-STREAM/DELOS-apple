@@ -170,4 +170,47 @@ import Testing
         #expect(plan.configuration.bitrateKbps == 40000)
         #expect(plan.configuration.supportedVideoFormats == [.h264, .hevc])
     }
+
+    // MARK: HDR
+
+    private let tenBitDevice: VideoFormats = [.h264, .hevc, .hevcMain10, .av1Main8, .av1Main10]
+
+    @Test func hdrOffersTheMain10ProfilesOfTheChosenCodecAndAsksTheHostForHDR() {
+        func plan(_ codec: VideoCodec, hdr: Bool, decodable: VideoFormats) -> StreamPlan {
+            var s = StreamSettings()
+            s.codec = codec
+            s.hdr = hdr
+            return StreamPlan(
+                app: HostApp(id: 7, title: "Desktop"), settings: s, display: StreamResolution(width: 1920, height: 1080),
+                decodable: decodable, refreshRate: 60)
+        }
+        // Off: no 10-bit format and no flag
+        var off = plan(.automatic, hdr: false, decodable: tenBitDevice)
+        #expect(off.configuration.supportedVideoFormats == [.h264, .hevc] && !off.request.hdr)
+        // Automatic: HEVC Main10 next to HEVC (HDR implies HEVC), no AV1
+        var on = plan(.automatic, hdr: true, decodable: tenBitDevice)
+        #expect(on.configuration.supportedVideoFormats == [.h264, .hevc, .hevcMain10] && on.request.hdr)
+        // AV1 chosen: both Main10 profiles
+        on = plan(.av1, hdr: true, decodable: tenBitDevice)
+        #expect(on.configuration.supportedVideoFormats == [.h264, .hevc, .hevcMain10, .av1Main8, .av1Main10] && on.request.hdr)
+        // H.264 has no HDR
+        on = plan(.h264, hdr: true, decodable: tenBitDevice)
+        #expect(on.configuration.supportedVideoFormats == .h264 && !on.request.hdr)
+        // A device without a hardware Main10 session offers none and does not ask the host for HDR
+        off = plan(.automatic, hdr: true, decodable: [.h264, .hevc])
+        #expect(off.configuration.supportedVideoFormats == [.h264, .hevc] && !off.request.hdr)
+        // AV1 Main10 alone carries HDR when HEVC Main10 is missing
+        on = plan(.av1, hdr: true, decodable: [.h264, .hevc, .av1Main8, .av1Main10])
+        #expect(on.configuration.supportedVideoFormats == [.h264, .hevc, .av1Main8, .av1Main10] && on.request.hdr)
+    }
+
+    @Test func hdrIsStoredLeniently() throws {
+        var s = StreamSettings()
+        #expect(!s.hdr)
+        s.hdr = true
+        let decoded = try JSONDecoder().decode(StreamSettings.self, from: JSONEncoder().encode(s))
+        #expect(decoded.hdr)
+        #expect(try !JSONDecoder().decode(StreamSettings.self, from: Data("{}".utf8)).hdr)
+        #expect(try !JSONDecoder().decode(StreamSettings.self, from: Data(#"{"hdr":"yes"}"#.utf8)).hdr)
+    }
 }
