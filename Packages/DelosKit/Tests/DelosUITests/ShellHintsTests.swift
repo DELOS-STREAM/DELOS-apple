@@ -38,6 +38,50 @@ import Testing
         #expect(buttons(context) == [.pad(.south), .pad(.west), .pad(.north), .pad(.east)])
     }
 
+    /// The hint of [button] on the Artwork screen with [focused] focused (nil: no such hint).
+    private func artworkHint(_ button: GlyphRole, focused: String?, sheetOpen: Bool = false) -> String? {
+        var context = ShellHints.Context(screen: .artwork(hostID: "h", appID: 1))
+        context.screenHints = ScreenHints(sheetOpen: sheetOpen, artworkSouth: ArtworkSouth.of(focused))
+        return ShellHints.hints(context).first { $0.button == .pad(button) }?.label
+    }
+
+    @Test func theArtworkScreenKeepsXForTheSearchAndOnlyTheSheetResets() {
+        // On every item of the screen X is the search by name and Y the filter sheet (Android's mapping) ...
+        let items = [
+            "art-12", ArtworkScreen.noneID, ArtworkScreen.searchID, ArtworkScreen.filterID, ArtworkScreen.tabID(.hero),
+            ArtworkEmpty.resetID, ArtworkEmpty.changeID, ArtworkFilterStrip.resetID, ArtworkFilterStrip.chipID(.style("material")),
+        ]
+        for id in items {
+            #expect(artworkHint(.west, focused: id) == L("shell_hint_search_name"), "X on \(id)")
+            #expect(artworkHint(.north, focused: id) == L("shell_hint_filter"), "Y on \(id)")
+        }
+        // ... and X resets the filters only with the sheet open
+        #expect(artworkHint(.west, focused: ArtworkEmpty.resetID, sheetOpen: true) == L("shell_hint_reset_filters"))
+        #expect(artworkHint(.north, focused: nil, sheetOpen: true) == L("shell_hint_done"))
+    }
+
+    @Test func theEmptyStateButtonsCarryOnlyGlyphsThatDoWhatTheyClaim() {
+        // Reset claims no button: neither X (the search by name) nor anything else the hint bar names for another action
+        #expect(ArtworkEmpty.resetGlyph == nil)
+        // Change filters claims Y, and Y opens the sheet
+        let change = ArtworkEmpty.changeGlyph
+        #expect(change == .north)
+        if let change { #expect(artworkHint(change, focused: ArtworkEmpty.changeID) == L("shell_hint_filter")) }
+    }
+
+    @Test func aButtonNamesWhatItDoesOnTheFocusedArtworkItem() {
+        #expect(artworkHint(.south, focused: "art-12") == L("shell_hint_use_image"))
+        #expect(artworkHint(.south, focused: ArtworkScreen.noneID) == L("shell_hint_use_image"))
+        #expect(artworkHint(.south, focused: ArtworkEmpty.resetID) == L("shell_hint_reset_filters"))
+        #expect(artworkHint(.south, focused: ArtworkFilterStrip.resetID) == L("shell_hint_reset_filters"))
+        #expect(artworkHint(.south, focused: ArtworkEmpty.changeID) == L("filters_art_change"))
+        #expect(artworkHint(.south, focused: ArtworkScreen.searchID) == L("shell_hint_search_name"))
+        #expect(artworkHint(.south, focused: ArtworkScreen.filterID) == L("shell_hint_filter"))
+        #expect(artworkHint(.south, focused: ArtworkScreen.tabID(.logo)) == L("shell_hint_select"))
+        #expect(artworkHint(.south, focused: ArtworkFilterStrip.chipID(.style("material"))) == L("shell_hint_select"))
+        #expect(artworkHint(.south, focused: nil) == L("shell_hint_use_image"))
+    }
+
     @Test func aStreamHasNoHints() {
         #expect(buttons(ShellHints.Context(screen: .stream(hostID: "h", appID: 1))).isEmpty)
     }

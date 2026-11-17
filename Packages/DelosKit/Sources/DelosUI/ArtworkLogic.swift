@@ -1,4 +1,5 @@
 import DelosData
+import DelosInput
 import Foundation
 
 /// The tab of each kind on the Artwork screen (`ArtTab` of DELOS for Android), with the columns of its grid (the
@@ -204,6 +205,64 @@ enum ArtworkChoices: Equatable {
     case failed(String)
     /// [total] is the unfiltered count when it is known (the unfiltered list was loaded).
     case ready(gameID: Int, images: [SteamGridDBImage], total: Int?)
+}
+
+/// Why a ready list has no image (`NoImages`).
+enum ArtworkEmpty: Equatable {
+    /// The filters left nothing: the message with Reset filters and Change filters and no tile. The first choice (the PC's
+    /// artwork) is not drawn: it would stand beside the message as a stray cover, and Reset gives the whole grid back.
+    case filtered
+    /// SteamGridDB has no image of this kind: the first choice stays, with a note beside it.
+    case bare
+
+    static let resetID = "art-none-reset"
+    static let changeID = "art-none-change"
+    /// The glyphs on the two buttons: the button that does the same. Reset has none: X is the search by name on this screen
+    /// (it resets the filters only inside the open sheet), so A is its button; Change filters is Y, which opens the sheet.
+    static let resetGlyph: GlyphRole? = nil
+    static let changeGlyph: GlyphRole? = .north
+
+    /// Nil: the list has images.
+    init?(images: Int, filters: ArtFilters) {
+        guard images == 0 else { return nil }
+        self = filters.active ? .filtered : .bare
+    }
+
+    /// Whether the first choice is drawn as a tile.
+    var showsFirstChoice: Bool { self == .bare }
+
+    /// The item the focus starts on.
+    var firstFocus: String { self == .filtered ? Self.resetID : ArtworkScreen.noneID }
+}
+
+/// What A does on the focused item of the Artwork screen, which the hint bar's A button says (``ScreenHints/artworkSouth``).
+/// The buttons of the whole screen are fixed, as on Android: X searches for another name (it resets the filters only in the
+/// open sheet) and Y opens the sheet. So an item that resets the filters, such as the empty state's Reset, is not marked with
+/// X, and the hint bar names what A does on it.
+enum ArtworkSouth: Equatable, Sendable {
+    case useImage, select, searchName, filter, resetFilters, changeFilters
+
+    /// What A does on the item with this id.
+    static func of(_ focused: AnyHashable?) -> ArtworkSouth {
+        guard let id = focused as? String else { return .useImage }
+        switch id {
+        case ArtworkScreen.searchID: return .searchName
+        case ArtworkScreen.filterID: return .filter
+        case ArtworkFilterStrip.resetID, ArtworkEmpty.resetID: return .resetFilters
+        case ArtworkEmpty.changeID: return .changeFilters
+        default: return id.hasPrefix("art-tab-") || id.hasPrefix("art-chip-") ? .select : .useImage
+        }
+    }
+}
+
+/// The info strip under the grid (`InfoStrip`), in stage px: as high as its content needs (the text of tvOS, 24 pt at least,
+/// and of a big interface scale needs more than the design's 84), never less than that.
+enum ArtworkInfoLayout {
+    static let minHeight = 84.0
+    /// Air above and below the content.
+    static let padding = 14.0
+    /// Between the title and the facts, and between the facts.
+    static let gap = 44.0
 }
 
 /// The labels of the filter sheet and the strip (`ArtType.label`, `ArtSort.label`/`chip`/`first`, `ActiveFilter.label`).

@@ -12,6 +12,8 @@ struct ScreenHints: Equatable, Sendable {
     var sheetOpen = false
     /// The home screen's label for Y ("Filter", "Filter • 2 active"); nil: the library has nothing to filter.
     var filterLabel: String?
+    /// What A does on the focused item of the Artwork screen (the hint bar's A button): the screen sets it as the focus moves.
+    var artworkSouth = ArtworkSouth.useImage
 }
 
 /// The button hints of the shell (`hints` in DELOS for Android's `Shell.kt`, the prototype's `updateHints`): by screen and
@@ -107,10 +109,17 @@ enum ShellHints {
                     hint(.north, L("shell_hint_done")), hint(.east, L("shell_hint_close")),
                 ]
             }
-            return tabs + [
-                hint(.south, L("shell_hint_use_image"), short: L("shell_hint_choose")),
-                hint(.west, L("shell_hint_search_name"), short: L("shell_hint_search")), hint(.north, L("shell_hint_filter")), back,
-            ]
+            let south: Hint
+            switch c.screenHints.artworkSouth {
+            case .useImage: south = hint(.south, L("shell_hint_use_image"), short: L("shell_hint_choose"))
+            case .select: south = select
+            case .searchName: south = hint(.south, L("shell_hint_search_name"), short: L("shell_hint_search"))
+            case .filter: south = hint(.south, L("shell_hint_filter"))
+            case .resetFilters: south = hint(.south, L("shell_hint_reset_filters"), short: L("shell_hint_reset"))
+            case .changeFilters: south = hint(.south, L("filters_art_change"), short: L("shell_hint_filter"))
+            }
+            // X is the search by name here and resets the filters only inside the sheet, which has its own buttons above
+            return tabs + [south, hint(.west, L("shell_hint_search_name"), short: L("shell_hint_search")), hint(.north, L("shell_hint_filter")), back]
         case .appSettings:
             return adjustHint + [hint(.south, L("shell_hint_change"))]
                 + (c.screenHints.resetsRow ? [hint(.west, L("shell_hint_reset_to_profile"), short: L("shell_hint_reset"))] : [])
