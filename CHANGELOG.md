@@ -9,6 +9,15 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Touch on settings rows (Settings, per-app settings): the first tap focuses a row and shows its help, a tap on the focused row
+  changes it; a switch and the arrows of a choice take their own taps. A choice opens a popover list with the current value checked,
+  a slider a popover with ◀ ▶ (hold to repeat), the slider and a value to tap and type (validated, snapped, clamped; the bitrate in
+  Mbit/s). The popovers grow out of the tapped row with the same caret as the context menus and the stream menu's popover. The
+  controller behaves as before. Not verified on a device.
+- The launch can be cancelled at any moment by B, Escape or a Cancel pill, also while the scene opens over the stream; it only ends
+  this client's attempt, never quits the game on the PC, and returns to the library.
+- A tap outside the stream menu closes its popover, then the menu, and never reaches the game.
+
 - HDR streaming: Settings → Stream gets Android's Enable HDR row (also an app setting) on devices whose display shows HDR and
   whose hardware decodes HEVC Main10 (a hardware-required VideoToolbox probe, not the per-codec check). With it on, the app
   offers HEVC Main10 (and AV1 Main 10 when AV1 is chosen), asks the host for HDR, passes the host's mastering display and

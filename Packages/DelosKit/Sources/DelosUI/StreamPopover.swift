@@ -66,7 +66,7 @@ private struct StreamPopover: View {
         let page = menu.shownPage
         let content = controller.menuContent(page)
         let place = placement(page: page, content: content)
-        let shape = StreamCardShape(caretX: stage.px(place.caretX), caretHeight: stage.px(M.caretHeight), caretWidth: stage.px(M.caretWidth), unit: stage.px(1))
+        let shape = StreamCardShape(caretX: stage.px(place.caretX), unit: stage.px(1))
         let tip = UnitPoint(x: place.caretX / place.width, y: (place.height + M.caretHeight / 2) / (place.height + M.caretHeight))
         let visible = appeared && !leaving
         ZStack(alignment: .topLeading) {
@@ -105,29 +105,16 @@ private struct StreamPopover: View {
         return PopoverPlacement(left: left, width: width, caretX: M.caretCenter(anchorX: anchorX, left: left, width: width), height: height)
     }
 
-    /// The card's glass with its caret: Liquid Glass in the outline, a pale sheen from the top, a 1 px rim and the soft shadow
-    /// (`0 40px 90px -20px`).
     private func glass(_ shape: StreamCardShape) -> some View {
-        GlassShape(shape, tint: colors.surface3, role: .panel)
-            .overlay {
-                LinearGradient(stops: [
-                    .init(color: colors.accent2.opacity(0.14).color, location: 0),
-                    .init(color: .white.opacity(0), location: 0.52),
-                ], startPoint: .top, endPoint: .bottom)
-                .clipShape(shape)
-                .allowsHitTesting(false)
-            }
-            .overlay { shape.stroke(.white.opacity(0.11), lineWidth: stage.px(1)) }
-            .background { shape.fill(.black.opacity(0.62)).blur(radius: stage.px(45)).offset(y: stage.px(40)).padding(stage.px(20)) }
+        PopoverGlass(shape: shape)
     }
 }
 
 /// The card and its caret as ONE outline (the prototype's `cardPath`, `caretCardPath` of DELOS for Android): a rounded
-/// rectangle with a rounded caret on its bottom edge, centered at [caretX], so the glass is continuous.
+/// rectangle with the shared ``CardCaret`` on its bottom edge, centered at [caretX], so the glass is continuous. The rect holds
+/// the caret in its last ``CardCaret/depth`` stage pixels.
 struct StreamCardShape: Shape {
     var caretX: CGFloat
-    let caretHeight: CGFloat
-    let caretWidth: CGFloat
     /// Points per stage pixel.
     let unit: CGFloat
 
@@ -137,25 +124,8 @@ struct StreamCardShape: Shape {
     }
 
     func path(in rect: CGRect) -> Path {
-        let w = rect.width
-        let h = max(rect.height - caretHeight, 0)
-        let r = max(min(StreamMenuLayout.popoverRadius * unit, h / 2 - 1), 0)
-        let a = caretWidth / 2
-        let b = caretWidth / 6
-        let d = caretHeight
-        let cx = caretX
-        var path = Path()
-        path.move(to: CGPoint(x: r, y: 0))
-        path.addArc(tangent1End: CGPoint(x: w, y: 0), tangent2End: CGPoint(x: w, y: h), radius: r)
-        path.addArc(tangent1End: CGPoint(x: w, y: h), tangent2End: CGPoint(x: 0, y: h), radius: r)
-        path.addLine(to: CGPoint(x: cx + a, y: h))
-        path.addLine(to: CGPoint(x: cx + b, y: h + d * 0.78))
-        path.addQuadCurve(to: CGPoint(x: cx - b, y: h + d * 0.78), control: CGPoint(x: cx, y: h + d * 1.15))
-        path.addLine(to: CGPoint(x: cx - a, y: h))
-        path.addArc(tangent1End: CGPoint(x: 0, y: h), tangent2End: CGPoint(x: 0, y: 0), radius: r)
-        path.addArc(tangent1End: CGPoint(x: 0, y: 0), tangent2End: CGPoint(x: w, y: 0), radius: r)
-        path.closeSubpath()
-        return path
+        let card = CGRect(x: 0, y: 0, width: rect.width, height: max(rect.height - CardCaret.depth * unit, 0))
+        return CardCaret.outline(card: card, radius: StreamMenuLayout.popoverRadius * unit, side: .bottom, center: caretX, unit: unit)
     }
 }
 

@@ -178,8 +178,8 @@ enum StreamMenuLayout {
     static let popoverGapAfterHead = 12.0
     static let popoverHelpGap = 18.0
     static let popoverTitle = 30.0
-    static let caretWidth = 60.0
-    static let caretHeight = 24.0
+    static let caretWidth = CardCaret.width
+    static let caretHeight = CardCaret.depth
     /// The popover's box ends here above the stage's bottom: the card's bottom 734, the caret's tip about 13 above the
     /// sunk tile's ring.
     static let popoverBottom = 322.0

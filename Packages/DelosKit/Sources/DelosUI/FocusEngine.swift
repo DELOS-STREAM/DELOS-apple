@@ -235,7 +235,7 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
     let moves: [FocusDirection: AnyHashable]
     let menu: (@MainActor () -> ContextMenu?)?
     let action: @MainActor () -> Void
-    let tap: (@MainActor () -> Void)?
+    let tap: (@MainActor (_ wasFocused: Bool) -> Void)?
     let clickCue: Cue?
     let content: (Bool) -> Content
     @Environment(Layers.self) private var layers: Layers?
@@ -246,14 +246,14 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
     /// - Parameters:
     ///   - moves: where a direction leads from this item instead of the nearest item that way (iPhone, iPad and Mac;
     ///     on tvOS the system focus engine decides).
-    ///   - tap: what a tap does after focusing the item, when it is not [action] (A): a settings row's choice opens its
-    ///     list on a tap, A steps it.
+    ///   - tap: what a tap does instead of [action] (A): it gets whether the item had the focus before the tap and plays its
+    ///     own cue. A settings row's first tap only focuses it, its second changes it.
     ///   - clickCue: the cue of an activation (A or a tap), the same for both: SELECT, another for an item that goes
     ///     back or opens something, nil for one that is silent (or whose action plays its own: a cue played by the action
     ///     replaces this one, see ``Feedback/activate(_:_:)``).
     public init(
         id: ID, model: FocusModel, moves: [FocusDirection: AnyHashable] = [:], clickCue: Cue? = .select,
-        action: @escaping @MainActor () -> Void, tap: (@MainActor () -> Void)? = nil, @ViewBuilder content: @escaping (Bool) -> Content
+        action: @escaping @MainActor () -> Void, tap: (@MainActor (_ wasFocused: Bool) -> Void)? = nil, @ViewBuilder content: @escaping (Bool) -> Content
     ) {
         self.init(id: id, model: model, moves: moves, menu: nil, clickCue: clickCue, action: action, tap: tap, content: content)
     }
@@ -262,7 +262,7 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
     ///   opens so it shows what is true then.
     init(
         id: ID, model: FocusModel, moves: [FocusDirection: AnyHashable] = [:], menu: (@MainActor () -> ContextMenu?)?,
-        clickCue: Cue? = .select, action: @escaping @MainActor () -> Void, tap: (@MainActor () -> Void)? = nil, @ViewBuilder content: @escaping (Bool) -> Content
+        clickCue: Cue? = .select, action: @escaping @MainActor () -> Void, tap: (@MainActor (_ wasFocused: Bool) -> Void)? = nil, @ViewBuilder content: @escaping (Bool) -> Content
     ) {
         self.id = id
         self.model = model
@@ -380,8 +380,14 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
             .onChange(of: model.focused) { _, now in revealed(now) }
             .onAppear { revealed(model.focused, animated: false) }
             .onTapGesture {
+                let wasFocused = model.focused == AnyHashable(id)
                 model.focus(AnyHashable(id))
-                activate(tap ?? action)
+                if let tap {
+                    pulse()
+                    tap(wasFocused)
+                } else {
+                    activate(action)
+                }
             }
             .environment(\.pressed, pressed)
             .id(id)

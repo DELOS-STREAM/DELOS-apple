@@ -115,8 +115,7 @@ private struct CardGlass: View {
 }
 
 /// The card's outline as one shape: a rounded rectangle inside the rect, ``ContextMenuLayout/caretDepth`` in from each
-/// side (the caret's room), with the caret on [side] centered at [caret] points along that edge (`menuCardPath`; the
-/// prototype's `.cm-caret`: a rounded tip 30 px out of the card).
+/// side (the caret's room), with the shared ``CardCaret`` on [side] centered at [caret] points along that edge.
 struct MenuCardShape: Shape {
     let side: CaretSide
     let caret: CGFloat
@@ -124,31 +123,10 @@ struct MenuCardShape: Shape {
     let unit: CGFloat
 
     func path(in rect: CGRect) -> Path {
-        let k = unit
-        let d = ContextMenuLayout.caretDepth * k
+        let d = ContextMenuLayout.caretDepth * unit
         let card = rect.insetBy(dx: d, dy: d)
-        let radius = min(ContextMenuLayout.corner * k, min(card.width, card.height) / 2)
-        let body = Path(roundedRect: card, cornerRadius: radius, style: .continuous)
-        guard side != .none else { return body }
-        // (u, v) in stage pixels: u along the edge from the caret's center, v out of the card
-        func point(_ u: CGFloat, _ v: CGFloat) -> CGPoint {
-            switch side {
-            case .left: CGPoint(x: card.minX - v * k, y: card.minY + caret + u * k)
-            case .right: CGPoint(x: card.maxX + v * k, y: card.minY + caret + u * k)
-            case .top: CGPoint(x: card.minX + caret + u * k, y: card.minY - v * k)
-            case .bottom, .none: CGPoint(x: card.minX + caret + u * k, y: card.maxY + v * k)
-            }
-        }
-        var tip = Path()
-        tip.move(to: point(-30, 0))
-        tip.addCurve(to: point(-6, 13), control1: point(-18, 0), control2: point(-11, 4))
-        tip.addQuadCurve(to: point(6, 13), control: point(0, 35))
-        tip.addCurve(to: point(30, 0), control1: point(11, 4), control2: point(18, 0))
-        // Back into the card under its edge, so the union has no seam
-        tip.addLine(to: point(30, -2))
-        tip.addLine(to: point(-30, -2))
-        tip.closeSubpath()
-        return body.union(tip)
+        let center = side == .left || side == .right ? card.minY + caret : card.minX + caret
+        return CardCaret.outline(card: card, radius: ContextMenuLayout.corner * unit, side: side, center: center, unit: unit)
     }
 }
 
