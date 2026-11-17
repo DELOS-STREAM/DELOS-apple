@@ -253,16 +253,20 @@ public actor StreamStatisticsSource {
     private let video: VideoStatistics
     private let renderer: any VideoRenderer
     private let session: StreamSession
+    private let watchdog: WatchdogVideoRenderer
 
-    public init(video: VideoStatistics, renderer: any VideoRenderer, session: StreamSession) {
+    public init(video: VideoStatistics, renderer: any VideoRenderer, session: StreamSession, watchdog: WatchdogVideoRenderer) {
         self.video = video
         self.renderer = renderer
         self.session = session
+        self.watchdog = watchdog
     }
 
     public func sample() async -> StreamStatistics? {
         let presentation = await renderer.presentationCounters()
         guard !Task.isCancelled else { return nil }
+        // Reuse this always-on stream sampler and its actual presentation reading; no second timer or metric query.
+        watchdog.observe(presentation, now: DispatchTime.now().uptimeNanoseconds)
         let packets = session.videoStatistics()
         // Nil once the session stops; the session orders this read before the core's teardown.
         let roundTrip = await session.estimatedRoundTrip()

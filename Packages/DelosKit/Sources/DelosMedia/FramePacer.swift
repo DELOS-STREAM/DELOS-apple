@@ -1,21 +1,25 @@
 import Foundation
 
-/// How frames are timed on screen (Settings → Stream → Video frame pacing of DELOS for Android, the modes that make
-/// sense with the display layer).
+/// Android's pacing choices with an honest display-layer mapping. Warp requests oversampling at the host, not generated frames.
 public enum FramePacing: String, CaseIterable, Codable, Sendable {
     /// Each frame is shown as soon as it is decoded (`latency`). Lowest delay; the network's jitter shows as uneven
     /// motion.
     case latency
     /// Frames are spaced evenly with up to one frame of buffer (`balanced`).
     case balanced
+    /// Balanced presentation with Android's host FPS cap just below the display refresh rate.
+    case capFPS = "cap-fps"
     /// Frames are spaced evenly with up to two frames of buffer (`smoothness`): steadier, one frame more delay.
     case smoothness
+    /// Lowest-latency presentation with twice/four times the configured host FPS.
+    case warp
+    case warp2
 
     /// The frames of buffer that absorb the network's jitter; 0 shows frames at once.
     var bufferFrames: Double {
         switch self {
-        case .latency: 0
-        case .balanced: 1
+        case .latency, .warp, .warp2: 0
+        case .balanced, .capFPS: 1
         case .smoothness: 2
         }
     }
@@ -41,7 +45,7 @@ public struct FramePacer: Sendable {
 
     /// When the frame that arrived at `arrival` (seconds, host clock) is shown; nil: at once.
     public mutating func presentationTime(arrival: Double) -> Double? {
-        guard pacing != .latency else { return nil }
+        guard pacing.bufferFrames > 0 else { return nil }
         let buffer = pacing.bufferFrames * interval
         var time = max(arrival + buffer, (last ?? -.infinity) + 0.9 * interval)
         if time > arrival + buffer + 2 * interval { time = arrival + buffer }

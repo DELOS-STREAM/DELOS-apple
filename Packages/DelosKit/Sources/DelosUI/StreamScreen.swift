@@ -75,7 +75,8 @@ struct StreamScreen: View {
     private func begin() {
         guard controller == nil else { return }
         // The display layer unless the debug switch asks for the Metal renderer (RendererChoice)
-        let renderer = RendererChoice.current.makeRenderer(pacing: settings.framePacing, fps: settings.fps)
+        let renderer = RendererChoice.current.makeRenderer(
+            pacing: settings.framePacing, fps: settings.streamFPS(refreshRate: StreamDevice.current.maxFramesPerSecond))
         let controller = StreamController { [hosts, hostID, appID, settings] in
             LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer)
         }
