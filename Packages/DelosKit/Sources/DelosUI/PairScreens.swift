@@ -137,7 +137,9 @@ struct CircleRow<Content: View>: View {
     @Environment(\.stage) private var stage
 
     var body: some View {
-        let row = HStack(alignment: .top, spacing: stage.px(56)) { content() }.padding(stage.px(40))
+        // The 40 px around the circles keep the ring and glow of the first and last from being cut where the row scrolls; they
+        // take no room in the layout (Android's scroll area gives them back: `bleed`), so the heading keeps its distance
+        let row = HStack(alignment: .top, spacing: stage.px(56)) { content() }.padding(stage.px(40)).padding(-stage.px(40))
             // One focus ring glides between the circles (`GlideRingHost(FocusRing(5, 5), focusScale = 1.16)`)
             .glideRingHost(focusScale: 1.16)
         ViewThatFits(in: .horizontal) {

@@ -203,16 +203,30 @@ struct GlowDisc: View {
     let blur: Double
     let color: RGBA
 
+    /// The gradient's stops as (location, share of the glow color's alpha): full up to the circle of [inner], a third of it
+    /// halfway to [outer], nothing at [outer] (`focusEffects` of DELOS for Android).
+    static func stops(inner: Double, outer: Double) -> [(location: Double, share: Double)] {
+        [(0, 1), (inner / outer, 1), ((inner / outer + 1) / 2, 0.32), (1, 0)]
+    }
+
+    /// The share of the glow color's alpha at [distance] from the center (linear between the stops).
+    static func share(at distance: Double, inner: Double, outer: Double) -> Double {
+        let t = distance / outer
+        let stops = stops(inner: inner, outer: outer)
+        guard t < 1 else { return 0 }
+        for (a, b) in zip(stops, stops.dropFirst()) where t <= b.location {
+            return b.location > a.location ? a.share + (b.share - a.share) * (t - a.location) / (b.location - a.location) : b.share
+        }
+        return 0
+    }
+
     var body: some View {
         let inner = max(radius + spread, 1)
         let outer = inner + blur
         Circle()
-            .fill(RadialGradient(stops: [
-                .init(color: color.color, location: 0),
-                .init(color: color.color, location: inner / outer),
-                .init(color: color.opacity(0.32).color, location: (inner / outer + 1) / 2),
-                .init(color: color.opacity(0).color, location: 1),
-            ], center: .center, startRadius: 0, endRadius: outer))
+            .fill(RadialGradient(
+                stops: Self.stops(inner: inner, outer: outer).map { .init(color: color.opacity(color.alpha * $0.share).color, location: $0.location) },
+                center: .center, startRadius: 0, endRadius: outer))
             .frame(width: outer * 2, height: outer * 2)
             // Not under the element itself: its glass would show the glow through it (Android's glass is a blurred copy of
             // the background, which lies over the glow)

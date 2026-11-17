@@ -111,14 +111,14 @@ struct CircleItem: View {
                 if let avatar {
                     AvatarBadge(avatar: avatar, size: side, iconSize: iconSize)
                 } else {
-                    GlassShape(Circle(), tint: colors.surface2)
+                    // `glass(colors.surface2)` on Android: the surface token over a blurred background; here Liquid Glass tinted
+                    // with the token at its whole alpha, so the disc keeps Android's color
+                    GlassShape(Circle(), tint: colors.surface2, share: 1)
                         .overlay(Circle().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
                     SymbolView(symbol: icon, size: iconSize, color: colors.text, filled: focused)
                 }
             }
             .frame(width: stage.px(side), height: stage.px(side))
-            // One ring glides between the circles of a row (`GlideRingHost`); a lone circle draws its own
-            .glideTarget(focused: focused)
             .background {
                 if glide == nil {
                     // Ring: 5 px wide, 5 px outside the circle, the gap in the background color
@@ -139,6 +139,9 @@ struct CircleItem: View {
             .overlay(alignment: .topLeading) { if selected { checkBadge(side: side) } }
             .scaleEffect(focusScale(focused: focused, pressed: pressed, focus: 1.16))
             .zIndex(focused ? 1 : 0)
+            // One ring glides between the circles of a row (`GlideRingHost`); a lone circle draws its own. The target is the
+            // circle's layout box: a view outside the scale, as a geometry reading inside it would include the growth
+            .background { Color.clear.frame(width: stage.px(side), height: stage.px(side)).glideTarget(focused: focused) }
             VStack(spacing: stage.px(8)) {
                 Text(label)
                     .font(DelosFonts.figtree(stage.tpx(26), .semibold))

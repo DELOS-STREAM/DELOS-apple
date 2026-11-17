@@ -110,5 +110,22 @@ import Testing
         // `AnyTransition` is opaque: both motions must at least build
         _ = SideMenu.transition(reducedMotion: false, stage: s)
         _ = SideMenu.transition(reducedMotion: true, stage: s)
+
+/// The look of a focused circle against the Android screenshot of the Devices screen (AYN Odin, 1920 x 1080).
+@MainActor @Suite struct CircleLookTests {
+    @Test func theRingSitsAroundTheGrownCircleAndIsNotScaledWithIt() {
+        // 220 px circle, 1.16 growth, 5 px gap and 5 px ring: 255.2 + 20, the 275 px of the screenshot
+        #expect(abs(RingGeometry.outerDiameter(layout: 220, focusScale: 1.16, ring: 5, gap: 5) - 275.2) < 0.001)
+    }
+
+    @Test func theGlowKeepsAThirdOfItsAlphaHalfwayThroughTheBlur() {
+        // `FocusGlow(26, 70, -16)` of a 220 px circle: from 94 px (full) to 164 px (nothing)
+        let (inner, outer) = (94.0, 164.0)
+        #expect(GlowDisc.share(at: 90, inner: inner, outer: outer) == 1)
+        #expect(abs(GlowDisc.share(at: outer * (94.0 / 164.0 + 1) / 2, inner: inner, outer: outer) - 0.32) < 1e-9)
+        #expect(GlowDisc.share(at: outer, inner: inner, outer: outer) == 0)
+        // 140 px from the center of the grown circle is 120.7 px in the circle's own units: a glow alpha of .45 * .48
+        let share = GlowDisc.share(at: 140 / 1.16, inner: inner, outer: outer)
+        #expect(abs(share * 0.45 - 0.217) < 0.003)
     }
 }

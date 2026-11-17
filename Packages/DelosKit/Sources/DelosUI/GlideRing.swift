@@ -62,6 +62,15 @@ extension EnvironmentValues {
     @Entry var glideRing: GlideRing?
 }
 
+/// The numbers of the ring drawn around a circle (`drawFocusRing` of DELOS for Android).
+enum RingGeometry {
+    /// The diameter of the ring's outer edge around an element [layout] wide that has grown by [focusScale]: the ring and
+    /// its gap are not scaled with it.
+    static func outerDiameter(layout: Double, focusScale: Double, ring: Double, gap: Double) -> Double {
+        layout * focusScale + 2 * (gap + ring)
+    }
+}
+
 private struct GlideRingHost: ViewModifier {
     let focusScale: Double
     let ring: Double
@@ -83,7 +92,7 @@ private struct GlideRingHost: ViewModifier {
                     ZStack {
                         // `box-shadow: 0 0 0 gap bg, 0 0 0 gap+width accent` around a round element
                         Circle().strokeBorder(colors.bg.color, lineWidth: g).frame(width: width + 2 * g, height: height + 2 * g)
-                        Circle().strokeBorder(colors.accent.color, lineWidth: r).frame(width: width + 2 * (g + r), height: height + 2 * (g + r))
+                        Circle().strokeBorder(colors.accent.color, lineWidth: r).frame(width: RingGeometry.outerDiameter(layout: rect.width, focusScale: focusScale, ring: r, gap: g), height: RingGeometry.outerDiameter(layout: rect.height, focusScale: focusScale, ring: r, gap: g))
                     }
                     .frame(width: width, height: height)
                     .opacity(model.alpha)

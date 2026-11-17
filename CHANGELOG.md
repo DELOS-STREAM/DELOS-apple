@@ -155,6 +155,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- The circles of the Devices, Start, Profile, Pair and Create screens match Android's: the focus ring is no longer grown twice
+  (it was 40 px too wide, so the glow showed through its gap), the glow's middle stop keeps a third of its alpha instead of
+  replacing it (it was twice as bright), the discs and the profile chip are Liquid Glass tinted with Android's whole fill alpha,
+  and the circle row no longer adds 40 px of air above and below the circles (the heading sat too high).
 - A hardware keyboard on the iPad (Magic Keyboard) no longer scrolls the library, Settings and the other lists on top of
   the focus: the arrow, Space, Page, Home and End keys are taken from UIKit's own keyboard scrolling and focus movement
   (priority key commands, `allowsKeyboardScrolling` off), a key the keyboard repeats by itself is not another press, and

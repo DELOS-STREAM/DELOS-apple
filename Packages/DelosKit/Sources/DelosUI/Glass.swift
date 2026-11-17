@@ -31,11 +31,15 @@ struct GlassShape<S: Shape>: View {
     let shape: S
     let tint: RGBA
     let role: GlassRole
+    /// The share of the tint token's alpha the glass gets; nil: the role's. 1 keeps Android's fill color (the token's own
+    /// alpha) on the glass, for the surfaces whose color the Android screenshots fix (the circles, the profile chip).
+    let share: Double?
     @Environment(\.glassOverMedia) private var overMedia
     @Environment(\.delosColors) private var colors
 
-    init(_ shape: S, tint: RGBA, role: GlassRole = .control) {
+    init(_ shape: S, tint: RGBA, role: GlassRole = .control, share: Double? = nil) {
         self.shape = shape
+        self.share = share
         self.tint = tint
         self.role = role
     }
@@ -51,7 +55,7 @@ struct GlassShape<S: Shape>: View {
     @available(iOS 26, tvOS 26, macOS 26, *)
     private var glass: Glass {
         // The token's alpha is meant for a flat fill; glass has its own body, so it gets a lighter share of it
-        let share: Double
+        var share: Double
         let base: Glass
         if overMedia {
             base = .clear
@@ -65,6 +69,7 @@ struct GlassShape<S: Shape>: View {
             base = .regular
             share = role == .panel ? 0.6 : 0.45
         }
+        if let override = self.share, !overMedia { share = override }
         let tinted = base.tint((overMedia ? colors.scrim : tint).opacity(tint.alpha * share).color)
         #if os(iOS)
         return role == .panel ? tinted : tinted.interactive()
