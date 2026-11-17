@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Game rumble has Original, Soft, Kick-start and Pulsing feels, live profile updates, an optional device
+  vibration fallback and a strength control. DualSense feedback, weapon and positional vibration trigger effects
+  use GameController; unsupported effects release the trigger rather than leaving resistance stuck.
+  Physical-controller and Taptic playback are not verified.
+
 - Controller hints use the approved complete Xbox, DualSense, DualShock 4 and Joy-Con font glyphs,
   with physical button positions preserved and no extra disc or connected-pad SF Symbols override. The shared
   library also includes Mac keyboard, mouse and trackpad symbols.

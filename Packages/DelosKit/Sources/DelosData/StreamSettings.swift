@@ -1,4 +1,5 @@
 import DelosCore
+import DelosInput
 import DelosMedia
 import Foundation
 
@@ -91,6 +92,7 @@ public struct StreamSettings: Codable, Equatable, Sendable {
     /// The statistics overlay the stream menu's Overlay tile last chose (Android keeps it in the profile as well); every
     /// stream of the profile starts with it.
     public var statisticsOverlay = StatisticsOverlay.off
+    public var rumble = RumbleConfiguration()
 
     /// The bitrate slider of Android (`seekbar_bitrate_kbps`): 1 to 1000 Mbps in steps of 1 Mbps.
     public static let bitrateRange = 1000...1_000_000
@@ -141,6 +143,7 @@ public struct StreamSettings: Codable, Equatable, Sendable {
         playAudioOnHost = value(.playAudioOnHost, d.playAudioOnHost)
         framePacing = value(.framePacing, d.framePacing)
         statisticsOverlay = value(.statisticsOverlay, d.statisticsOverlay)
+        rumble = value(.rumble, d.rumble)
     }
 }
 
@@ -218,6 +221,7 @@ public enum StreamChoices {
 
 /// Stores the ``StreamSettings`` of each profile in `UserDefaults`, next to its ``Appearance``.
 public struct StreamSettingsStore: Sendable {
+    public static let didSave = Notification.Name("DelosStreamSettingsDidSave")
     private let suiteName: String?
 
     /// - Parameter suiteName: a `UserDefaults` suite; nil is the app's standard defaults.
@@ -239,6 +243,7 @@ public struct StreamSettingsStore: Sendable {
     public func save(_ settings: StreamSettings, profile: String) {
         guard let data = try? JSONEncoder().encode(settings) else { return }
         defaults.set(data, forKey: key(profile))
+        NotificationCenter.default.post(name: Self.didSave, object: profile)
     }
 
     /// Forgets a removed profile's settings.

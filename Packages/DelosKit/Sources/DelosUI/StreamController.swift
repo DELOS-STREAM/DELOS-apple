@@ -106,6 +106,9 @@ final class StreamController {
     @ObservationIgnored private var cleanup: Task<Void, Never>?
     @ObservationIgnored private var statisticsTask: Task<Void, Never>?
     @ObservationIgnored private(set) var input: GameInput?
+    var rumbleConfiguration = RumbleConfiguration() {
+        didSet { input?.rumbleConfiguration = rumbleConfiguration }
+    }
     @ObservationIgnored private var trackpad = TouchTrackpad()
     @ObservationIgnored private var swipe = MenuSwipe()
     /// The app went to the background during the stream: the connection was closed and is opened again on return.
@@ -235,6 +238,8 @@ final class StreamController {
             input?.rumble(controller: controller, low: low, high: high)
         case let .triggerRumble(controller, left, right):
             input?.rumbleTriggers(controller: controller, left: left, right: right)
+        case let .adaptiveTriggers(controller, flags, typeLeft, typeRight, left, right):
+            input?.adaptiveTriggers(controller: controller, flags: flags, typeLeft: typeLeft, typeRight: typeRight, left: left, right: right)
         default:
             break
         }
@@ -247,6 +252,7 @@ final class StreamController {
         progress = 1
         if let sink = steps.input, input == nil {
             let input = GameInput(sink: sink) { [weak self] in self?.openMenu() }
+            input.rumbleConfiguration = rumbleConfiguration
             input.start()
             // The scene is still opening over the picture: B, keys and touches are the loader's, not the game's
             input.paused = true

@@ -1,5 +1,6 @@
 import DelosCore
 import DelosData
+import DelosInput
 import enum DelosMedia.FramePacing
 import Foundation
 
@@ -155,7 +156,8 @@ struct StreamSettingsForm: Equatable {
                 return row
             }
         case .audio: [hostAudioRow]
-        case .controls, .appearance, .covers, .devices, .about: []
+        case .controls: rumbleRows
+        case .appearance, .covers, .devices, .about: []
         }
     }
 
@@ -349,7 +351,7 @@ struct StreamSettingsForm: Equatable {
         case Self.bitrate: setBitrate(effectiveBitrate + direction * StreamSettings.bitrateStep)
         case Self.hdr where showsHDRRow: settings.hdr.toggle()
         case Self.hostAudio: settings.playAudioOnHost.toggle()
-        default: break
+        default: stepRumble(id, by: direction)
         }
         return settings != before
     }
@@ -361,6 +363,8 @@ struct StreamSettingsForm: Equatable {
         case Self.frameRate: if frameRateOptions.indices.contains(index) { settings.fps = frameRateOptions[index].value }
         case Self.codec: if codecOptions.indices.contains(index) { settings.codec = codecOptions[index].value }
         case Self.framePacing: if framePacingOptions.indices.contains(index) { settings.framePacing = framePacingOptions[index].value }
+        case Self.rumbleFeel where settings.rumble.enabled:
+            if RumblePreset.allCases.indices.contains(index) { settings.rumble.profile = RumblePreset.allCases[index] }
         default: break
         }
     }
