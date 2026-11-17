@@ -9,11 +9,21 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Controllers send their motion sensors (at the host's rate, up to 200 Hz, with the gyro smoothing of DELOS for
+  Android), their battery and their touchpad to the PC and take the PC's light colour; player 1 can use the iPhone's or
+  iPad's own sensors when its controller has none. Stick dead zone, flipped face buttons, Multiple controllers off,
+  the mouse emulation (hold Start) with stick scrolling, Touchpad as mouse, Select/Guide from combinations on
+  controllers without those buttons, and a quick double Start that opens the stream menu work as on Android.
+  Controllers are no longer announced with capabilities the app does not deliver.
+- The keyboard: Control + Alt + Shift with Z (release or grab the input), Q (disconnect) and C (local pointer), with
+  Command instead of Control as well; the right Option key as the Windows key; the mouse's back and forward buttons as
+  X1 and X2 only when on; every key held is released at the PC when the window loses the keyboard; keyboard keys can be
+  recorded as the stream menu's buttons. The motion axes, battery, light and touchpad are not verified with a
+  physical controller.
 - Pairing waits for the trusted paired state instead of a fixed delay, and manual-address entry reports a PC
   that was not added. The start screen retargets its initial PC focus as discovery changes. On compact stages,
   the profile chip shares the status line, clears the measured status cluster and truncates long names.
   Avatar fallback glyphs use the smaller grid size.
-
 - Game rumble has Original, Soft, Kick-start and Pulsing feels, live profile updates, an optional device
   vibration fallback and a strength control. DualSense feedback, weapon and positional vibration trigger effects
   use GameController; unsupported effects release the trigger rather than leaving resistance stuck.

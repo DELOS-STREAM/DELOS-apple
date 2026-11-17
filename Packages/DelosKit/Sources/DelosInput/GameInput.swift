@@ -1,6 +1,7 @@
 import DelosCore
 import Foundation
 import GameController
+import OSLog
 
 /// Where the input of a stream goes: the running `StreamSession`, or a fake in tests.
 public protocol StreamInputSink: Sendable {
@@ -8,11 +9,17 @@ public protocol StreamInputSink: Sendable {
         number: UInt8, activeGamepadMask: UInt16, type: ControllerType, supportedButtons: ControllerButtons,
         capabilities: ControllerCapabilities) throws(InputError)
     func sendController(number: UInt8, activeGamepadMask: UInt16, state: ControllerState) throws(InputError)
+    func sendControllerMotion(number: UInt8, sensor: MotionSensor, x: Float, y: Float, z: Float) throws(InputError)
+    func sendControllerBattery(number: UInt8, state: BatteryState, percentage: UInt8) throws(InputError)
+    func sendControllerTouch(
+        number: UInt8, _ type: TouchEventType, pointerID: UInt32, x: Float, y: Float, pressure: Float) throws(InputError)
     func sendMouseMove(deltaX: Int16, deltaY: Int16) throws(InputError)
     func sendMouseButton(_ button: MouseButton, pressed: Bool) throws(InputError)
     func sendKey(code: Int16, pressed: Bool, modifiers: KeyModifiers, nonNormalized: Bool) throws(InputError)
     func sendText(_ text: String) throws(InputError)
     func sendServerCommand(_ id: UInt8) throws(InputError)
+    func sendScroll(clicks: Int8) throws(InputError)
+    func sendHorizontalScroll(clicks: Int8) throws(InputError)
     func sendHighResolutionScroll(amount: Int16) throws(InputError)
     func sendHighResolutionHorizontalScroll(amount: Int16) throws(InputError)
 }
@@ -20,28 +27,55 @@ public protocol StreamInputSink: Sendable {
 extension StreamSession: StreamInputSink {}
 
 /// The game controllers, the hardware keyboard and the mouse during a stream: their input goes to the host, and the
-/// host's rumble comes back to the controllers.
+/// host's rumble, motion requests and light colour come back to the controllers (`ControllerHandler`,
+/// `StreamKeyHandler` and `StreamPointerHandler` of DELOS for Android).
 ///
-/// Each controller gets the lowest free controller number and is announced to the host with its type, buttons and
-/// capabilities; its state is sent whenever an element changes. The system gestures of the controllers' buttons (the
-/// Home button's Game Center overlay and the system's games overlay, a held Share button's screenshot) are off while the
-/// input runs, so the stream gets those buttons. A tap of Home opens the stream menu and sends nothing to the PC; a hold of
-/// Home (``GuideTapHold``) is Guide on the PC. The buttons the player recorded (``MenuShortcut``, none by default) open the
-/// menu too; while ``paused`` (the menu is open) nothing is sent and every held control is released at the host.
+/// Each controller gets the lowest free controller number (all of them player 1 with ``ControllerOptions/multiController``
+/// off, their states fused) and is announced to the host with its type, buttons and the capabilities this app delivers:
+/// rumble, trigger rumble, the light, the battery, the touchpad and the motion sensors. Its state is sent whenever an
+/// element changes, through the stick dead zone and flipped face buttons of ``ControllerOptions``. The system gestures of
+/// the controllers' buttons (the Home button's Game Center overlay and the system's games overlay, a held Share button's
+/// screenshot) are off while the input runs, so the stream gets those buttons. A tap of Home opens the stream menu and
+/// sends nothing to the PC; a hold of Home (``GuideTapHold``) is Guide on the PC. The buttons and keys the player recorded
+/// (``MenuShortcut``, none by default) open the menu too, and so does a quick double Start held the second time; a held
+/// Start (¾ s) toggles the mouse emulation (``MouseEmulation``). While ``paused`` (the menu is open) nothing is sent and
+/// every held control is released at the host.
 ///
 /// The handlers are GameController's profile-level `valueChangedHandler` of the gamepad and the per-key handlers of
 /// the keyboard, so ``MenuInput``'s handlers keep working next to them.
 @MainActor
 public final class GameInput {
+    /// What the input tells the stream's screen.
+    public enum Event: Equatable, Sendable {
+        /// The mouse emulation of a controller went on or off (Android's `stream_mouse_emulation_on`/`_off` toast).
+        case mouseEmulation(on: Bool)
+        /// A controller that is not a PlayStation one was announced as a generic controller, so the PC emulates one with
+        /// motion sensors (Android's `toast_controller_type_changed`).
+        case controllerTypeChanged
+        /// A keyboard combination of ``ClientKeyCombos``.
+        case keyCombo(ClientKeyCombos.Action)
+    }
+
     private let sink: any StreamInputSink
     private let onMenu: @MainActor () -> Void
+    private let options: ControllerOptions
+    /// Called with what the screen shows or does (``Event``).
+    public var onEvent: (@MainActor (Event) -> Void)?
     private var observers: [NSObjectProtocol] = []
     private var slots = ControllerSlots<ObjectIdentifier>()
     private var pads: [ObjectIdentifier: Pad] = [:]
+    /// The controllers in the order they arrived (the first one of a number gets the motion sensors).
+    private var padOrder: [ObjectIdentifier] = []
     private var heldKeys: Set<Int> = []
+    /// ``heldKeys`` in the order they went down.
+    private var keyOrder: [Int] = []
+    /// The keys physically down, sent or not (the stream menu's recorded keys).
+    private var keysDown: Set<Int> = []
     private var heldMouseButtons: Set<MouseButton> = []
     private var mouseRemainder = (x: 0.0, y: 0.0)
     private var scrollRemainder = (x: 0.0, y: 0.0)
+    private var shortcut: MenuShortcut
+    private var keyCombos = ClientKeyCombos()
     private let deviceHaptics = ControllerHaptics()
     public var rumbleConfiguration = RumbleConfiguration() {
         didSet {
@@ -54,68 +88,115 @@ public final class GameInput {
         deviceHaptics.problem ?? pads.values.lazy.compactMap { $0.haptics.problem }.first
     }
     public var adaptiveTriggerUnsupported: Bool { pads.values.contains { $0.haptics.adaptiveTriggerUnsupported } }
+    /// The gyro smoothing in use, 0…100 (``GyroSmoother``); the stream menu changes it while the stream runs.
+    public var gyroSmoothing: Int
+    /// Whether the keyboard and the mouse reach the PC (Control + Alt + Shift + Z toggles it, ``ClientKeyCombos``).
+    /// Released, a key or button that is down at the PC still gets its release.
+    public private(set) var inputGrabbed = true
     private var running = false
     /// Counts down while Escape is held (``MenuKeyShortcut``).
     private var escapeHold: Task<Void, Never>?
     private let escapeHoldDuration: Duration
+    /// The motion readings the host asked for, by controller number (kept for a controller that arrives later).
+    private var motionRequests: [UInt8: [MotionSensor: Int]] = [:]
+    private let deviceMotion = DeviceMotion()
+    private var motionRate = MotionSendRate()
+    private var motionLog: Task<Void, Never>?
+    private static let logger = Logger(subsystem: "io.github.meitoncz.delos", category: "input")
+    /// Milliseconds of the clock the timers sleep on; tests move it.
+    var clock: @MainActor () -> Int64 = { GameInput.milliseconds() }
 
     /// Moonlight's divisor of GameController's mouse motion.
     nonisolated static let mouseSpeedDivisor = 1.25
     /// High-resolution wheel units per GameController scroll unit (Moonlight).
     nonisolated static let scrollUnit = 20.0
+    /// Pointer pixels per unit of a PlayStation touchpad's axes (−1…1) when it is the mouse: the DualShock 4 and
+    /// DualSense touchpads report 1920 × 943 points, one pixel each.
+    nonisolated static let touchpadPixels = (x: 960.0, y: 471.5)
+
+    /// Where a controller's motion comes from.
+    private enum MotionSource {
+        case controller(GCMotion)
+        /// This device's sensors (player 1 with the motion fallback).
+        case device
+    }
 
     @MainActor
     private final class Pad {
         let controller: GCController
         let number: UInt8
         let haptics: ControllerHaptics
-        var shortcut: MenuShortcut
         var announced = false
         /// Home's tap or hold, whether it is down now, and the timer of its hold.
         var guide = GuideTapHold()
         var homeDown = false
         var guideTimer: Task<Void, Never>?
-        /// The controller's last state, sent again when the hold makes Home Guide.
+        /// Start's hold (mouse emulation, double Start).
+        var start = StartButtonHold()
+        var startDown = false
+        /// Running while the controller is the mouse.
+        var emulation: MouseEmulation?
+        var emulationTimer: Task<Void, Never>?
+        var combos: ButtonCombos
+        /// The controller's last reading, sent again when the hold makes Home Guide.
         var last = GamepadSnapshot()
+        /// The state for the PC that this controller adds to its number.
+        var state = ControllerState()
+        let motionSource: MotionSource?
+        var motion: [MotionSensor: MotionStream] = [:]
+        /// The touchpad's fingers (−1…1, nil when lifted) and whether it is the mouse.
+        var touches: [CGPoint?] = [nil, nil]
+        var touchpadAsMouse: Bool
+        var battery: BatteryReport?
+        var batteryTimer: Task<Void, Never>?
 
-        init(controller: GCController, number: UInt8, menuButtons: Set<ShortcutButton>) {
+        init(controller: GCController, number: UInt8, motionSource: MotionSource?, combos: ButtonCombos, touchpadAsMouse: Bool) {
             self.controller = controller
             self.number = number
+            self.motionSource = motionSource
+            self.combos = combos
+            self.touchpadAsMouse = touchpadAsMouse
             haptics = ControllerHaptics(controller: controller)
-            shortcut = MenuShortcut(buttons: menuButtons)
         }
 
-        /// Forgets Home's press and its timer.
-        func forgetGuide() {
+        /// Forgets Home's and Start's presses and Home's timer.
+        func forgetGestures() {
             guideTimer?.cancel()
             guideTimer = nil
             guide.reset()
+            start.reset()
+            startDown = false
+            combos.reset()
+        }
+
+        var touchpads: [GCControllerDirectionPad] {
+            [GCInputDualShockTouchpadOne, GCInputDualShockTouchpadTwo].compactMap { controller.physicalInputProfile.dpads[$0] }
         }
     }
 
-    /// The buttons the player recorded to open the stream menu (none by default).
-    private let menuButtons: Set<ShortcutButton>
-
     /// - Parameters:
-    ///   - menuButtons: the stream menu's own combination of controller buttons (``MenuShortcut``).
+    ///   - menuButtons: the stream menu's own combination of controller buttons and keys (``MenuShortcut``).
+    ///   - options: the controller, keyboard and mouse settings of the profile.
     ///   - onMenu: the stream menu is asked for (a tap of Home, the recorded buttons, ``MenuKeyShortcut`` on a keyboard).
     ///   - escapeHold: how long Escape is held to open the menu.
     public init(
-        sink: any StreamInputSink, menuButtons: Set<ShortcutButton> = [], escapeHold: Duration = MenuKeyShortcut.holdDuration,
-        onMenu: @escaping @MainActor () -> Void
+        sink: any StreamInputSink, menuButtons: Set<ShortcutButton> = [], options: ControllerOptions = ControllerOptions(),
+        escapeHold: Duration = MenuKeyShortcut.holdDuration, onMenu: @escaping @MainActor () -> Void
     ) {
         self.sink = sink
-        self.menuButtons = menuButtons
+        self.options = options
+        shortcut = MenuShortcut(buttons: menuButtons)
+        gyroSmoothing = options.gyroSmoothing
         self.onMenu = onMenu
         escapeHoldDuration = escapeHold
     }
 
-    /// While true (the stream menu is open) no input reaches the host; a Home press in progress is forgotten (its Guide is
-    /// released with the rest).
+    /// While true (the stream menu is open) no input reaches the host; a Home or Start press in progress is forgotten
+    /// (Guide is released with the rest).
     public var paused = false {
         didSet {
             guard paused, !oldValue else { return }
-            pads.values.forEach { $0.forgetGuide() }
+            pads.values.forEach { $0.forgetGestures() }
             releaseAll()
             deviceHaptics.stop()
             pads.values.forEach { $0.haptics.stop() }
@@ -154,7 +235,9 @@ public final class GameInput {
         running = false
         observers.forEach(NotificationCenter.default.removeObserver)
         observers.removeAll()
-        for id in Array(pads.keys) { detach(id) }
+        for id in padOrder { detach(id) }
+        motionLog?.cancel()
+        motionLog = nil
         if let keyboard = GCKeyboard.coalesced?.keyboardInput {
             for usage in KeyboardMapping.mappedUsages {
                 keyboard.button(forKeyCode: GCKeyCode(rawValue: usage))?.pressedChangedHandler = nil
@@ -167,9 +250,9 @@ public final class GameInput {
 
     public func rumble(controller number: UInt16, low: UInt16, high: UInt16) {
         guard running, !paused else { return }
-        let pad = pad(number)
-        pad?.haptics.rumble(low: low, high: high)
-        let supports = pad.map { ControllerHaptics.capabilities(of: $0.controller).rumble } ?? false
+        let matching = pads(number)
+        matching.forEach { $0.haptics.rumble(low: low, high: high) }
+        let supports = matching.contains { ControllerHaptics.capabilities(of: $0.controller).rumble }
         if rumbleConfiguration.usesDevice(controllerCanRumble: supports, controllerNumber: number) {
             deviceHaptics.rumble(low: low, high: high)
         }
@@ -177,19 +260,119 @@ public final class GameInput {
 
     public func rumbleTriggers(controller number: UInt16, left: UInt16, right: UInt16) {
         guard running, !paused else { return }
-        pad(number)?.haptics.rumbleTriggers(left: left, right: right)
+        pads(number).forEach { $0.haptics.rumbleTriggers(left: left, right: right) }
     }
 
     public func adaptiveTriggers(controller number: UInt16, flags: UInt8, typeLeft: UInt8, typeRight: UInt8, left: [UInt8], right: [UInt8]) {
         guard running, !paused else { return }
-        pad(number)?.haptics.adaptiveTriggers(flags: flags, typeLeft: typeLeft, typeRight: typeRight, left: left, right: right)
+        pads(number).forEach {
+            $0.haptics.adaptiveTriggers(flags: flags, typeLeft: typeLeft, typeRight: typeRight, left: left, right: right)
+        }
     }
 
-    private func pad(_ number: UInt16) -> Pad? {
-        pads.values.first { UInt16($0.number) == number }
+    /// The controllers of `number` in the order they arrived.
+    private func pads(_ number: UInt16) -> [Pad] {
+        padOrder.compactMap { pads[$0] }.filter { UInt16($0.number) == number }
+    }
+
+    // MARK: Light
+
+    /// The host's colour for the light of controller `number` (`handleSetControllerLED`): every controller of that number
+    /// with a light takes it.
+    public func controllerLED(controller number: UInt16, red: UInt8, green: UInt8, blue: UInt8) {
+        guard running else { return }
+        for pad in pads(number) {
+            pad.controller.light?.color = GCColor(red: Float(red) / 255, green: Float(green) / 255, blue: Float(blue) / 255)
+        }
+    }
+
+    // MARK: Motion
+
+    /// The host wants `motionType` (`LI_MOTION_TYPE_*`) of controller `number` at `reportRateHz`, 0 to stop
+    /// (`handleSetMotionEventState`). The request is kept, so a controller that arrives later gets it too; the first
+    /// controller of the number with a motion source delivers it.
+    public func motionEventState(controller number: UInt16, motionType: UInt8, reportRateHz: UInt16) {
+        guard running, let sensor = MotionSensor(rawValue: motionType), let number = UInt8(exactly: number) else { return }
+        motionRequests[number, default: [:]][sensor] = Int(reportRateHz)
+        applyMotion(number)
+    }
+
+    /// Turns the sensors of controller `number`'s motion source on or off as the host asked.
+    private func applyMotion(_ number: UInt8) {
+        guard let pad = pads(UInt16(number)).first, let source = pad.motionSource else { return }
+        for sensor in MotionSensor.allCases {
+            let rate = motionRequests[number]?[sensor] ?? 0
+            let stream = MotionStream(sensor: sensor, requestedHz: rate, smoothing: gyroSmoothing)
+            guard stream?.rateHz != pad.motion[sensor]?.rateHz else { continue }
+            pad.motion[sensor] = stream
+            if case .device = source {
+                if let stream, DeviceMotion.has(sensor) {
+                    deviceMotion.start(sensor, rateHz: stream.rateHz) { [weak self] x, y, z, time in
+                        let value = MotionAxes.device(sensor, x: x, y: y, z: z, rotation: DeviceMotion.rotation())
+                        self?.motionReading(value, sensor: sensor, at: time, number: number)
+                    }
+                } else {
+                    deviceMotion.stop(sensor)
+                }
+            }
+        }
+        if case .controller(let motion) = source {
+            let wanted = !pad.motion.isEmpty
+            if motion.sensorsRequireManualActivation { motion.sensorsActive = wanted }
+            motion.valueChangedHandler = wanted ? { [weak self] motion in
+                let a = motion.acceleration, r = motion.rotationRate
+                let accel = MotionAxes.controller(.accelerometer, x: a.x, y: a.y, z: a.z)
+                let gyro = motion.hasRotationRate ? MotionAxes.controller(.gyroscope, x: r.x, y: r.y, z: r.z) : nil
+                let time = ProcessInfo.processInfo.systemUptime
+                MainActor.assumeIsolated {
+                    self?.motionReading(accel, sensor: .accelerometer, at: time, number: number)
+                    if let gyro { self?.motionReading(gyro, sensor: .gyroscope, at: time, number: number) }
+                }
+            } : nil
+        }
+        updateMotionLog()
+    }
+
+    /// One reading on the host's axes and units: through the rate, the duplicate check and the gyro filter to the host.
+    func motionReading(_ value: (Float, Float, Float), sensor: MotionSensor, at time: TimeInterval, number: UInt8) {
+        guard let pad = pads(UInt16(number)).first, var stream = pad.motion[sensor] else { return }
+        motionRate.onSensorCallback(pad: number, sensor: sensor)
+        let out = stream.process(value, timestamp: time, smoothing: gyroSmoothing)
+        pad.motion[sensor] = stream
+        guard let out, !paused else { return }
+        let accepted = (try? sink.sendControllerMotion(number: number, sensor: sensor, x: out.0, y: out.1, z: out.2)) != nil
+        motionRate.onHandedOver(pad: number, sensor: sensor, accepted: accepted)
+    }
+
+    /// The `MotionSend` line every second while a controller's sensors are on (Android's motion rate logging).
+    private func updateMotionLog() {
+        let listening = Set(pads.values.filter { !$0.motion.isEmpty }.map(\.number))
+        if listening.isEmpty {
+            motionLog?.cancel()
+            motionLog = nil
+            return
+        }
+        guard motionLog == nil else { return }
+        motionLog = Task { [weak self] in
+            var started = ContinuousClock.now
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard let self, !Task.isCancelled else { return }
+                let now = ContinuousClock.now
+                let window = (now - started).components
+                started = now
+                let seconds = Double(window.seconds) + Double(window.attoseconds) / 1e18
+                let listening = Set(self.pads.values.filter { !$0.motion.isEmpty }.map(\.number))
+                for line in self.motionRate.drainLines(window: seconds, listening: listening) {
+                    Self.logger.info("\(line, privacy: .public)")
+                }
+            }
+        }
     }
 
     // MARK: Controllers
+
+    private var activeMask: UInt16 { options.multiController ? slots.mask : 1 }
 
     private func attachAll() {
         guard running else { return }
@@ -198,12 +381,24 @@ public final class GameInput {
         GCMouse.mice().forEach(attach)
     }
 
-    private func attach(_ controller: GCController) {
+    func attach(_ controller: GCController) {
         let id = ObjectIdentifier(controller)
-        guard pads[id] == nil, let gamepad = controller.extendedGamepad, let number = slots.number(for: id) else { return }
-        let pad = Pad(controller: controller, number: number, menuButtons: menuButtons)
+        guard pads[id] == nil, let gamepad = controller.extendedGamepad else { return }
+        let number: UInt8
+        if options.multiController {
+            guard let free = slots.number(for: id) else { return }
+            number = free
+        } else {
+            number = 0
+        }
+        let source = motionSource(of: controller, number: number)
+        let combos = ButtonCombos(
+            hasSelect: gamepad.buttonOptions != nil, hasHome: gamepad.buttonHome != nil,
+            touchpadEmulation: source != nil && Self.type(of: controller) != .playStation)
+        let pad = Pad(controller: controller, number: number, motionSource: source, combos: combos, touchpadAsMouse: options.touchpadAsMouse)
         pad.haptics.configuration = rumbleConfiguration
         pads[id] = pad
+        padOrder.append(id)
         for element in controller.physicalInputProfile.allElements {
             element.preferredSystemGestureState = .disabled
         }
@@ -213,21 +408,63 @@ public final class GameInput {
             let snapshot = Self.snapshot(gamepad)
             MainActor.assumeIsolated { self?.send(snapshot, from: id) }
         }
+        for (index, touchpad) in pad.touchpads.enumerated() {
+            touchpad.valueChangedHandler = { [weak self] _, x, y in
+                MainActor.assumeIsolated { self?.touch(index, x: x, y: y, from: id) }
+            }
+        }
+        applyMotion(number)
         send(Self.snapshot(gamepad), from: id)
+    }
+
+    /// The controller's own sensors (when on in Settings), or this device's for player 1 with the motion fallback when
+    /// the controller has none or the fallback is forced (`assignControllerNumberIfNeeded`).
+    private func motionSource(of controller: GCController, number: UInt8) -> MotionSource? {
+        let own = options.motionSensors ? controller.motion : nil
+        let deviceHasSensors = MotionSensor.allCases.contains(where: DeviceMotion.has)
+        if options.motionFallbackToDevice, number == 0, own == nil || options.forceDeviceMotion, deviceHasSensors {
+            return .device
+        }
+        return own.map(MotionSource.controller)
     }
 
     private func detach(_ id: ObjectIdentifier) {
         guard let pad = pads.removeValue(forKey: id) else { return }
-        pad.forgetGuide()
+        padOrder.removeAll { $0 == id }
+        pad.forgetGestures()
+        pad.emulationTimer?.cancel()
+        pad.batteryTimer?.cancel()
         pad.haptics.stop()
         if pad.number == 0 { deviceHaptics.stop() }
         pad.controller.extendedGamepad?.valueChangedHandler = nil
+        pad.touchpads.forEach { $0.valueChangedHandler = nil }
+        switch pad.motionSource {
+        case .controller(let motion)?:
+            motion.valueChangedHandler = nil
+            if motion.sensorsRequireManualActivation { motion.sensorsActive = false }
+        case .device? where !pad.motion.isEmpty:
+            // Only the controller the readings went to stops this device's sensors (another player 1 may follow)
+            MotionSensor.allCases.forEach(deviceMotion.stop)
+        case .device?, nil:
+            break
+        }
+        // A gyro that stops reporting leaves the PC's controller turning; a last still reading stops it (`disableSensors`)
+        if pad.motion[.gyroscope] != nil {
+            try? sink.sendControllerMotion(number: pad.number, sensor: .gyroscope, x: 0, y: 0, z: 0)
+        }
         for element in pad.controller.physicalInputProfile.allElements {
             element.preferredSystemGestureState = .enabled
         }
-        slots.remove(id)
-        // The host removes a controller whose bit left the mask
-        try? sink.sendController(number: pad.number, activeGamepadMask: slots.mask, state: ControllerState())
+        if options.multiController { slots.remove(id) }
+        if pads.values.contains(where: { $0.number == pad.number }) {
+            // Another controller is still this player (multiple controllers off): its state alone, and its motion
+            sendState(of: pad.number)
+            applyMotion(pad.number)
+        } else {
+            // The host removes a controller whose bit left the mask
+            try? sink.sendController(number: pad.number, activeGamepadMask: activeMask, state: ControllerState())
+        }
+        updateMotionLog()
     }
 
     private func announce(_ pad: Pad) {
@@ -237,29 +474,96 @@ public final class GameInput {
         if haptics.triggers { capabilities.insert(.triggerRumble) }
         if pad.controller.light != nil { capabilities.insert(.rgbLED) }
         if pad.controller.battery != nil { capabilities.insert(.batteryState) }
-        if let motion = pad.controller.motion {
-            if motion.hasGravityAndUserAcceleration { capabilities.insert(.accelerometer) }
+        if !pad.touchpads.isEmpty { capabilities.insert(.touchpad) }
+        var type = Self.type(of: pad.controller)
+        switch pad.motionSource {
+        case .controller(let motion)?:
+            // GameController reports the total acceleration of every controller with motion
+            capabilities.insert(.accelerometer)
             if motion.hasRotationRate { capabilities.insert(.gyroscope) }
+        case .device?:
+            if DeviceMotion.has(.accelerometer) { capabilities.insert(.accelerometer) }
+            if DeviceMotion.has(.gyroscope) { capabilities.insert(.gyroscope) }
+        case nil:
+            break
         }
+        let typeChanged = pad.motionSource != nil && type != .playStation
+        // The PC emulates a controller with motion sensors (a PlayStation one) only for a generic controller
+        if typeChanged { type = .unknown }
+        let wasAnnounced = pad.announced
         pad.announced = (try? sink.sendControllerArrival(
-            number: pad.number, activeGamepadMask: slots.mask, type: Self.type(of: pad.controller),
+            number: pad.number, activeGamepadMask: activeMask, type: type,
             supportedButtons: Self.supportedButtons(pad.controller), capabilities: capabilities)) != nil
+        guard pad.announced, !wasAnnounced else { return }
+        if typeChanged { onEvent?(.controllerTypeChanged) }
+        startBatteryReports(pad)
     }
 
-    private func send(_ snapshot: GamepadSnapshot, from id: ObjectIdentifier) {
+    /// The battery now and every ``BatteryReport/interval`` while the controller is connected, when on in Settings.
+    private func startBatteryReports(_ pad: Pad) {
+        guard options.batteryReport, pad.controller.battery != nil else { return }
+        pad.batteryTimer?.cancel()
+        pad.batteryTimer = Task { [weak self, weak pad] in
+            while !Task.isCancelled {
+                guard let pad else { return }
+                self?.reportBattery(pad)
+                do { try await Task.sleep(for: BatteryReport.interval) } catch { return }
+            }
+        }
+    }
+
+    private func reportBattery(_ pad: Pad) {
+        guard let battery = pad.controller.battery else { return }
+        let report = BatteryReport(state: battery.batteryState, level: battery.batteryLevel)
+        guard report != pad.battery else { return }
+        try? sink.sendControllerBattery(number: pad.number, state: report.state, percentage: report.percentage)
+        pad.battery = report
+    }
+
+    func send(_ snapshot: GamepadSnapshot, from id: ObjectIdentifier) {
         guard let pad = pads[id] else { return }
         pad.last = snapshot
-        var state = GamepadMapping.state(snapshot)
-        let (swallowed, open) = pad.shortcut.update(ShortcutButton.pressed(snapshot))
-        ShortcutButton.remove(swallowed, from: &state)
+        var state = GamepadMapping.state(snapshot, options: options)
+        let (swallowed, open) = updateShortcut(pad: ShortcutButton.pressed(snapshot), from: id)
+        ShortcutButton.remove(swallowed, from: &state, flippedFaceButtons: options.flipFaceButtons)
         home(snapshot.home && !swallowed.contains(.home), on: pad, id: id)
+        startButton(snapshot.menu && !swallowed.contains(.start), on: pad)
         // Home reaches the PC only as Guide, once it was held
         state.buttons.remove(.special)
         if pad.guide.isGuideDown { state.buttons.insert(.special) }
+        state.buttons = pad.combos.apply(state.buttons, now: clock())
+        pad.state = state
         if open { onMenu() }
         guard !paused else { return }
         if !pad.announced { announce(pad) }
-        try? sink.sendController(number: pad.number, activeGamepadMask: slots.mask, state: state)
+        if pad.emulation != nil {
+            emulateMouse(pad)
+        } else {
+            sendState(of: pad.number)
+        }
+    }
+
+    /// The state of controller `number`: its controllers' states fused (more than one only with multiple controllers
+    /// off), without the ones that are the mouse now.
+    private func sendState(of number: UInt8) {
+        let states = pads(UInt16(number)).filter { $0.emulation == nil }.map(\.state)
+        guard !states.isEmpty else { return }
+        try? sink.sendController(number: number, activeGamepadMask: activeMask, state: GamepadMapping.fuse(states))
+    }
+
+    /// The shared stream menu shortcut takes what every controller and the keyboard hold now (Android's one
+    /// `ButtonShortcut` for every key event).
+    private var padsPressed: [ObjectIdentifier: Set<ShortcutButton>] = [:]
+
+    private func updateShortcut(pad pressed: Set<ShortcutButton>, from id: ObjectIdentifier) -> (swallowed: Set<ShortcutButton>, open: Bool) {
+        padsPressed[id] = pressed
+        return updateShortcut()
+    }
+
+    private func updateShortcut() -> (swallowed: Set<ShortcutButton>, open: Bool) {
+        var all = ShortcutButton.pressed(keys: keysDown)
+        for (id, pressed) in padsPressed where pads[id] != nil { all.formUnion(pressed) }
+        return shortcut.update(all)
     }
 
     /// Home went down or up: a press starts the hold timer, a release before it is a tap (the menu), a release after it
@@ -268,7 +572,7 @@ public final class GameInput {
         guard down != pad.homeDown else { return }
         pad.homeDown = down
         if down {
-            guard !paused, pad.guide.onDown(Self.milliseconds()) else { return }
+            guard !paused, pad.guide.onDown(clock()) else { return }
             pad.guideTimer = Task { [weak self] in
                 do { try await Task.sleep(for: .milliseconds(GuideTapHold.holdMilliseconds)) } catch { return }
                 self?.homeHeld(id)
@@ -284,16 +588,102 @@ public final class GameInput {
     private func homeHeld(_ id: ObjectIdentifier) {
         guard let pad = pads[id] else { return }
         pad.guideTimer = nil
-        guard !paused, pad.guide.onHoldTimeout(Self.milliseconds()) == .guideDown else { return }
+        guard !paused, pad.guide.onHoldTimeout(clock()) == .guideDown else { return }
         send(pad.last, from: id)
     }
 
-    private nonisolated static let epoch = ContinuousClock.now
+    /// Start went down or up (``StartButtonHold``): a long press toggles the mouse emulation, a double Start opens the menu.
+    private func startButton(_ down: Bool, on pad: Pad) {
+        guard down != pad.startDown else { return }
+        pad.startDown = down
+        if down {
+            guard !paused else { return }
+            pad.start.onDown(clock())
+            return
+        }
+        switch pad.start.onUp(clock(), mouseEmulation: options.mouseEmulation) {
+        case .openMenu: onMenu()
+        case .toggleMouseEmulation: toggleMouseEmulation(pad)
+        case .none: break
+        }
+    }
 
-    /// Milliseconds on the clock the hold timer sleeps on.
-    private nonisolated static func milliseconds() -> Int64 {
-        let elapsed = (ContinuousClock.now - epoch).components
-        return elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000
+    private func toggleMouseEmulation(_ pad: Pad) {
+        pad.emulationTimer?.cancel()
+        pad.emulationTimer = nil
+        if pad.emulation == nil {
+            pad.emulation = MouseEmulation()
+            pad.emulationTimer = Task { [weak self, weak pad] in
+                while !Task.isCancelled {
+                    do { try await Task.sleep(for: MouseEmulation.period) } catch { return }
+                    guard let self, let pad, let emulation = pad.emulation else { return }
+                    guard !self.paused else { continue }
+                    emulation.tick(pad.state, scrollStick: self.options.scrollStick).forEach(self.perform)
+                }
+            }
+        } else {
+            pad.emulation = nil
+        }
+        onEvent?(.mouseEmulation(on: pad.emulation != nil))
+    }
+
+    /// The controller is the mouse: its buttons click and scroll, the PC's controller gets a neutral state.
+    private func emulateMouse(_ pad: Pad) {
+        guard var emulation = pad.emulation else { return }
+        let actions = emulation.buttons(pad.state.buttons)
+        pad.emulation = emulation
+        actions.forEach(perform)
+        try? sink.sendController(number: pad.number, activeGamepadMask: activeMask, state: ControllerState())
+    }
+
+    private func perform(_ action: MouseEmulation.Action) {
+        guard !paused else { return }
+        switch action {
+        case let .button(button, pressed):
+            if pressed { heldMouseButtons.insert(button) } else { guard heldMouseButtons.remove(button) != nil else { return } }
+            try? sink.sendMouseButton(button, pressed: pressed)
+        case let .scroll(clicks): try? sink.sendScroll(clicks: clicks)
+        case let .horizontalScroll(clicks): try? sink.sendHorizontalScroll(clicks: clicks)
+        case let .move(dx, dy): try? sink.sendMouseMove(deltaX: dx, deltaY: dy)
+        case let .highResolutionScroll(amount): try? sink.sendHighResolutionScroll(amount: amount)
+        case let .highResolutionHorizontalScroll(amount): try? sink.sendHighResolutionHorizontalScroll(amount: amount)
+        }
+    }
+
+    // MARK: Touchpad
+
+    /// A finger of a PlayStation controller's touchpad moved (x and y −1…1, both 0 when lifted, as GameController reports
+    /// it): a touch on the PC's controller (`sendControllerTouchEvent`), or the mouse when the touchpad is the mouse in
+    /// Settings or the host takes no controller touches (`tryHandleTouchpadEvent`).
+    func touch(_ index: Int, x: Float, y: Float, from id: ObjectIdentifier) {
+        guard let pad = pads[id], pad.touches.indices.contains(index) else { return }
+        let point: CGPoint? = x == 0 && y == 0 ? nil : CGPoint(x: Double(x), y: Double(y))
+        let previous = pad.touches[index]
+        pad.touches[index] = point
+        guard !paused else { return }
+        if pad.touchpadAsMouse {
+            guard index == 0, let point, let previous else { return }
+            mouseMoved(
+                dx: (point.x - previous.x) * Self.touchpadPixels.x * Self.mouseSpeedDivisor,
+                dy: (point.y - previous.y) * Self.touchpadPixels.y * Self.mouseSpeedDivisor)
+            return
+        }
+        let type: TouchEventType
+        switch (previous, point) {
+        case (nil, .some): type = .down
+        case (.some, nil): type = .up
+        case let (.some(a), .some(b)) where a != b: type = .move
+        default: return
+        }
+        // SDL's mapping of GameController's touchpad axes to 0…1 from the top left
+        guard let at = point ?? previous else { return }
+        do {
+            try sink.sendControllerTouch(
+                number: pad.number, type, pointerID: UInt32(index),
+                x: Float((1 + at.x) / 2), y: Float(1 - (1 + at.y) / 2), pressure: 0)
+        } catch .unsupportedByHost {
+            pad.touchpadAsMouse = true
+        } catch {}
     }
 
     nonisolated static func snapshot(_ pad: GCExtendedGamepad) -> GamepadSnapshot {
@@ -357,6 +747,14 @@ public final class GameInput {
         }
     }
 
+    private nonisolated static let epoch = ContinuousClock.now
+
+    /// Milliseconds on the clock the hold timers sleep on.
+    nonisolated static func milliseconds() -> Int64 {
+        let elapsed = (ContinuousClock.now - epoch).components
+        return elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000
+    }
+
     // MARK: Keyboard and mouse
 
     private func attach(_ keyboard: GCKeyboard) {
@@ -368,8 +766,17 @@ public final class GameInput {
         }
     }
 
+    /// A key went down or up (HID usage): the stream menu's recorded keys, the menu's keyboard shortcuts
+    /// (``MenuKeyShortcut``), the keyboard's own combinations (``ClientKeyCombos``), then the PC, while the input is
+    /// grabbed (`handleKeyDown`/`handleKeyUp` of DELOS for Android).
     func key(_ usage: Int, pressed: Bool) {
-        guard let vk = KeyboardMapping.virtualKey(hidUsage: usage) else { return }
+        let rightAltAsMeta = options.rightAltAsMeta
+        guard let vk = KeyboardMapping.virtualKey(hidUsage: usage, rightAltAsMeta: rightAltAsMeta) else { return }
+        if pressed { keysDown.insert(usage) } else { keysDown.remove(usage) }
+        let (swallowed, open) = updateShortcut()
+        if open { onMenu() }
+        // The key that completed the recorded shortcut never reaches the PC
+        if pressed, swallowed.contains(.key(usage)) { return }
         if pressed {
             guard !paused else { return }
             if MenuKeyShortcut.completesChord(usage: usage, held: heldKeys) {
@@ -378,15 +785,68 @@ public final class GameInput {
                 return
             }
             if usage == MenuKeyShortcut.escape { startEscapeHold() }
-            heldKeys.insert(usage)
+        } else if usage == MenuKeyShortcut.escape {
+            cancelEscapeHold()
+        }
+        let combo = keyCombos.key(usage, pressed: pressed, rightAltAsMeta: rightAltAsMeta)
+        if let action = combo.action { keyAction(action) }
+        if combo.consumed { return }
+        if pressed {
+            guard !paused, inputGrabbed, heldKeys.insert(usage).inserted else { return }
+            keyOrder.append(usage)
         } else {
-            if usage == MenuKeyShortcut.escape { cancelEscapeHold() }
-            // A key pressed while paused never reached the host
+            // A key pressed while paused or not grabbed never reached the host
             guard heldKeys.remove(usage) != nil else { return }
+            keyOrder.removeAll { $0 == usage }
         }
         try? sink.sendKey(
-            code: KeyboardMapping.keyCode(vk), pressed: pressed, modifiers: KeyboardMapping.modifiers(held: heldKeys),
-            nonNormalized: false)
+            code: KeyboardMapping.keyCode(vk), pressed: pressed,
+            modifiers: KeyboardMapping.modifiers(held: heldKeys, rightAltAsMeta: rightAltAsMeta), nonNormalized: false)
+    }
+
+    /// Control + Alt + Shift + Z toggles the grab a moment later (Android's `toggleInputGrabLater`, 250 ms) and tells the
+    /// screen once it did; C grabs the input again if it was released (`toggleMouseLocalCursor`) and the screen shows or
+    /// hides the local pointer; Q is the screen's.
+    private func keyAction(_ action: ClientKeyCombos.Action) {
+        switch action {
+        case .toggleInputGrab:
+            Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(250))
+                guard let self else { return }
+                self.setInputGrabbed(!self.inputGrabbed)
+                self.onEvent?(.keyCombo(.toggleInputGrab))
+            }
+        case .toggleLocalCursor:
+            setInputGrabbed(true)
+            onEvent?(.keyCombo(action))
+        case .quit:
+            onEvent?(.keyCombo(action))
+        }
+    }
+
+    private func setInputGrabbed(_ grabbed: Bool) {
+        inputGrabbed = grabbed
+        if !grabbed {
+            // The mouse is the system's again: the buttons it holds come up at the PC
+            for button in heldMouseButtons { try? sink.sendMouseButton(button, pressed: false) }
+            heldMouseButtons.removeAll()
+        }
+    }
+
+    /// The window lost the focus (another app or window took the keyboard): a key released meanwhile never reaches the
+    /// app, so every key down at the PC is released there now, the last pressed first (`releaseHeldKeys` of DELOS for
+    /// Android), and the modifiers start from nothing.
+    public func releaseKeys() {
+        cancelEscapeHold()
+        for usage in keyOrder.reversed() {
+            if let vk = KeyboardMapping.virtualKey(hidUsage: usage, rightAltAsMeta: options.rightAltAsMeta) {
+                try? sink.sendKey(code: KeyboardMapping.keyCode(vk), pressed: false, modifiers: [], nonNormalized: false)
+            }
+        }
+        heldKeys.removeAll()
+        keyOrder.removeAll()
+        keysDown.removeAll()
+        keyCombos.reset()
     }
 
     private func attach(_ mouse: GCMouse) {
@@ -394,10 +854,13 @@ public final class GameInput {
         input.mouseMovedHandler = { [weak self] _, dx, dy in
             MainActor.assumeIsolated { self?.mouseMoved(dx: Double(dx), dy: Double(dy)) }
         }
-        let buttons: [(GCControllerButtonInput?, MouseButton)] = [
+        var buttons: [(GCControllerButtonInput?, MouseButton)] = [
             (input.leftButton, .left), (input.rightButton, .right), (input.middleButton, .middle),
-            (input.auxiliaryButtons?.first, .x1), (input.auxiliaryButtons?.dropFirst().first, .x2),
         ]
+        // Back and forward are X1 and X2 only when on in Settings; off, they send nothing (`mouseNavButtons`)
+        if options.mouseNavButtons {
+            buttons += [(input.auxiliaryButtons?.first, .x1), (input.auxiliaryButtons?.dropFirst().first, .x2)]
+        }
         for (button, mouseButton) in buttons {
             button?.pressedChangedHandler = { [weak self] _, _, pressed in
                 MainActor.assumeIsolated { self?.mouseButton(mouseButton, pressed: pressed) }
@@ -433,7 +896,7 @@ public final class GameInput {
     }
 
     private func mouseMoved(dx: Double, dy: Double) {
-        guard !paused else { return }
+        guard !paused, inputGrabbed else { return }
         // GameController's y grows upwards, the host's downwards
         mouseRemainder.x += dx / Self.mouseSpeedDivisor
         mouseRemainder.y -= dy / Self.mouseSpeedDivisor
@@ -445,9 +908,9 @@ public final class GameInput {
         try? sink.sendMouseMove(deltaX: x, deltaY: y)
     }
 
-    private func mouseButton(_ button: MouseButton, pressed: Bool) {
+    func mouseButton(_ button: MouseButton, pressed: Bool) {
         if pressed {
-            guard !paused else { return }
+            guard !paused, inputGrabbed else { return }
             heldMouseButtons.insert(button)
         } else {
             guard heldMouseButtons.remove(button) != nil else { return }
@@ -456,7 +919,7 @@ public final class GameInput {
     }
 
     private func scrolled(x: Double, y: Double) {
-        guard !paused else { return }
+        guard !paused, inputGrabbed else { return }
         scrollRemainder.x += x
         scrollRemainder.y += y
         let h = Int(scrollRemainder.x.rounded(.towardZero)), v = Int(scrollRemainder.y.rounded(.towardZero))
@@ -519,19 +982,23 @@ public final class GameInput {
         try? sink.sendServerCommand(id)
     }
 
-    /// Releases at the host every button, key and stick held, so nothing stays pressed while the menu is open or
+    /// Releases at the host every button, key, stick and touch held, so nothing stays pressed while the menu is open or
     /// after the stream.
     private func releaseAll() {
         cancelEscapeHold()
-        for pad in pads.values {
-            try? sink.sendController(number: pad.number, activeGamepadMask: slots.mask, state: ControllerState())
+        for number in Set(pads.values.map(\.number)) {
+            try? sink.sendController(number: number, activeGamepadMask: activeMask, state: ControllerState())
         }
-        for usage in heldKeys {
-            if let vk = KeyboardMapping.virtualKey(hidUsage: usage) {
-                try? sink.sendKey(code: KeyboardMapping.keyCode(vk), pressed: false, modifiers: [], nonNormalized: false)
+        for pad in pads.values {
+            for (index, touch) in pad.touches.enumerated() where touch != nil {
+                pad.touches[index] = nil
+                if !pad.touchpadAsMouse {
+                    try? sink.sendControllerTouch(number: pad.number, .cancelAll, pointerID: 0, x: 0, y: 0, pressure: 0)
+                    break
+                }
             }
         }
-        heldKeys.removeAll()
+        releaseKeys()
         for button in heldMouseButtons { try? sink.sendMouseButton(button, pressed: false) }
         heldMouseButtons.removeAll()
     }

@@ -30,6 +30,13 @@ private final class RecordingSink: StreamInputSink, @unchecked Sendable {
     func sendServerCommand(_ id: UInt8) throws(InputError) { lock.withLock { commands.append(id) } }
     func sendHighResolutionScroll(amount: Int16) throws(InputError) {}
     func sendHighResolutionHorizontalScroll(amount: Int16) throws(InputError) {}
+    func sendControllerMotion(number: UInt8, sensor: MotionSensor, x: Float, y: Float, z: Float) throws(InputError) {}
+    func sendControllerBattery(number: UInt8, state: BatteryState, percentage: UInt8) throws(InputError) {}
+    func sendControllerTouch(
+        number: UInt8, _ type: TouchEventType, pointerID: UInt32, x: Float, y: Float, pressure: Float
+    ) throws(InputError) {}
+    func sendScroll(clicks: Int8) throws(InputError) {}
+    func sendHorizontalScroll(clicks: Int8) throws(InputError) {}
 }
 
 /// A stream that is up at once.

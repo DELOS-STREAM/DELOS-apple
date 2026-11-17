@@ -114,6 +114,16 @@ final class StreamController {
     /// How the stream menu opens besides a tap of Home (the profile's `ui_stream_menu_buttons` and `ui_stream_menu_swipe`).
     @ObservationIgnored private let menuButtons: Set<ShortcutButton>
     @ObservationIgnored private let menuSwipe: Bool
+    /// The profile's controller, keyboard and mouse settings for the stream's input.
+    @ObservationIgnored var controllerOptions = ControllerOptions()
+    /// Called with what the input asks the screen to show (``GameInput/Event``: the mouse emulation, a controller
+    /// announced as a generic one).
+    @ObservationIgnored var inputNotice: (@MainActor (GameInput.Event) -> Void)?
+    /// The keyboard and the mouse reach the PC (Control + Alt + Shift + Z releases them): the pointer is locked only then.
+    private(set) var inputGrabbed = true
+    /// The local pointer is shown over the stream (Control + Alt + Shift + C, `toggleMouseLocalCursor`): the pointer is
+    /// then not locked.
+    private(set) var localCursorVisible = false
     /// The app went to the background during the stream: the connection was closed and is opened again on return.
     @ObservationIgnored private(set) var suspended = false
     /// The leaving that runs (``leave(quit:)``).
@@ -246,6 +256,10 @@ final class StreamController {
             input?.rumbleTriggers(controller: controller, left: left, right: right)
         case let .adaptiveTriggers(controller, flags, typeLeft, typeRight, left, right):
             input?.adaptiveTriggers(controller: controller, flags: flags, typeLeft: typeLeft, typeRight: typeRight, left: left, right: right)
+        case let .motionEventState(controller, motionType, reportRateHz):
+            input?.motionEventState(controller: controller, motionType: motionType, reportRateHz: reportRateHz)
+        case let .controllerLED(controller, red, green, blue):
+            input?.controllerLED(controller: controller, red: red, green: green, blue: blue)
         default:
             break
         }
@@ -257,8 +271,10 @@ final class StreamController {
         loader.connected()
         progress = 1
         if let sink = steps.input, input == nil {
-            let input = GameInput(sink: sink, menuButtons: menuButtons) { [weak self] in self?.openMenu() }
+            let input = GameInput(sink: sink, menuButtons: menuButtons, options: controllerOptions) { [weak self] in self?.openMenu() }
             input.rumbleConfiguration = rumbleConfiguration
+            input.onEvent = { [weak self] event in self?.inputEvent(event) }
+            inputGrabbed = true
             input.start()
             // The scene is still opening over the picture: B, keys and touches are the loader's, not the game's
             input.paused = true
@@ -266,6 +282,29 @@ final class StreamController {
         }
         startStatistics()
         startPlaytime()
+    }
+
+    /// What the input asks for: the keyboard's own combinations (`StreamKeyHandler.Host` of DELOS for Android) are the
+    /// stream's, the rest the screen shows.
+    private func inputEvent(_ event: GameInput.Event) {
+        switch event {
+        case .keyCombo(.quit):
+            // Android's `quit()` finishes the stream activity: a disconnect, the game keeps running
+            Task { await leave(quit: false) }
+        case .keyCombo(.toggleInputGrab):
+            inputGrabbed = input?.inputGrabbed ?? true
+        case .keyCombo(.toggleLocalCursor):
+            inputGrabbed = input?.inputGrabbed ?? true
+            localCursorVisible.toggle()
+        case .mouseEmulation, .controllerTypeChanged:
+            inputNotice?(event)
+        }
+    }
+
+    /// The window lost the keyboard (another app or window): the keys down at the PC are released there
+    /// (`handleFocusChange` of DELOS for Android).
+    func focusLost() {
+        input?.releaseKeys()
     }
 
     /// Time counts from the moment the core is connected (video and audio flow), like Android's `connectionStarted`;
