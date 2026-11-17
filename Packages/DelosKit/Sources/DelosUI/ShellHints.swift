@@ -8,12 +8,14 @@ struct ScreenHints: Equatable, Sendable {
     var adjustable = false
     /// X resets the focused row to the profile's value (an app setting that is custom).
     var resetsRow = false
-    /// The artwork filter sheet is open (its own buttons: reset filters, done).
+    /// A filter sheet is open (the artwork's or the library's): its own buttons, reset and done or close.
     var sheetOpen = false
+    /// The home screen's label for Y ("Filter", "Filter • 2 active"); nil: the library has nothing to filter.
+    var filterLabel: String?
 }
 
 /// The button hints of the shell (`hints` in DELOS for Android's `Shell.kt`, the prototype's `updateHints`): by screen and
-/// layer, which buttons do what. Android's filter and search hints are left out where Apple has no such feature.
+/// layer, which buttons do what. The home screen's filter hint and the Artwork screen's are here too.
 enum ShellHints {
     enum Layer: Equatable, Sendable {
         /// A context menu; [root]: its first level (B closes it), else B goes back one level.
@@ -53,7 +55,12 @@ enum ShellHints {
         let adjustHint = c.screenHints.adjustable ? [adjust] : []
         let optionsHint = c.hasContextMenu ? [options] : []
         switch c.screen {
-        case .home: return [hint(.south, L("shell_hint_start")), menu] + optionsHint
+        case .home:
+            if c.screenHints.sheetOpen {
+                return [select, hint(.west, L("shell_hint_reset")), hint(.north, L("shell_hint_close")), hint(.east, L("shell_hint_close"))]
+            }
+            let filter = c.screenHints.filterLabel.map { [Hint(button: .pad(.north), label: $0)] } ?? []
+            return [hint(.south, L("shell_hint_start"))] + filter + [menu] + optionsHint
         case .settings: return adjustHint + tabs + [hint(.north, L("shell_hint_search")), hint(.south, L("shell_hint_change")), back]
         case .start: return [hint(.south, L("shell_hint_connect")), menu] + optionsHint
         case .boot: return [select] + (c.canGoBack ? [back] : [])

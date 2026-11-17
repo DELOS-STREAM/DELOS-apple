@@ -192,6 +192,32 @@ playtime_last_yesterday
 playtime_last_days
 playtime_last_weeks
 
+# Library filter (Y on the home screen)
+filters_title
+filters_result_active
+filters_result_all
+filters_hint
+filters_hint_active
+filters_section_genre
+filters_section_theme
+filters_section_hdr
+filters_section_duration
+filters_all
+filters_hdr_any
+filters_hdr_hdr
+filters_length_any
+filters_length_under_10
+filters_length_10_30
+filters_length_30_60
+filters_length_over_60
+filters_length_unknown
+filters_reset
+filters_done
+metadata_filtered_title
+metadata_filtered_note
+metadata_filtered_reset
+shell_home_apps_filtered
+
 # Artwork screen
 artwork_header
 artwork_search_other

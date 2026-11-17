@@ -58,29 +58,45 @@ struct PlaytimeTexts: Equatable {
 
 /// The info row under the title (`InfoBar` of DELOS for Android): the streaming-time block at its start, then 30 px
 /// of air and the badges (the facts, a divider and the tags). The block gives up the last-streamed column, then the long
-/// unit, when the row is too narrow; the badges scroll in the room it leaves when they do not fit.
+/// unit, when the row is too narrow; the badges scroll in the room it leaves when they do not fit. On a very narrow
+/// compact stage ([above], ``HomeCompact/blockAbove(areaWidth:scale:)``) the block stands above the badges instead.
 struct InfoRow<Facts: View, Tags: View>: View {
     let playtime: Playtime
-    /// Stage pixels: the block's height at the interface scale.
+    /// Stage pixels: the row's height; with the block [above] the badges, the gap and the block's own height are in it.
     let height: Double
     let hasFacts: Bool
     let hasTags: Bool
+    var above = false
     @ViewBuilder let facts: () -> Facts
     @ViewBuilder let tags: () -> Tags
     @Environment(\.stage) private var stage
 
     var body: some View {
         let texts = PlaytimeTexts(playtime)
-        HStack(spacing: stage.px(30)) {
-            ViewThatFits(in: .horizontal) {
-                StatRow(texts: texts, fit: .full, height: height)
-                StatRow(texts: texts, fit: .statOnly, height: height)
-                StatRow(texts: texts, fit: .short, height: height)
+        let block = above ? HomeCompact.blockHeight(stage.textScale) : height
+        Group {
+            if above {
+                VStack(alignment: .leading, spacing: stage.px(HomeCompact.blockAboveGap)) {
+                    stat(texts, height: block)
+                    BadgeStrip(hasFacts: hasFacts, hasTags: hasTags, facts: facts, tags: tags)
+                }
+            } else {
+                HStack(spacing: stage.px(HomeCompact.blockGapX)) {
+                    stat(texts, height: block)
+                        .layoutPriority(1)
+                    BadgeStrip(hasFacts: hasFacts, hasTags: hasTags, facts: facts, tags: tags)
+                }
             }
-            .layoutPriority(1)
-            BadgeStrip(hasFacts: hasFacts, hasTags: hasTags, facts: facts, tags: tags)
         }
-        .frame(height: stage.px(height))
+        .frame(height: stage.px(height), alignment: .top)
+    }
+
+    private func stat(_ texts: PlaytimeTexts, height: Double) -> some View {
+        ViewThatFits(in: .horizontal) {
+            StatRow(texts: texts, fit: .full, height: height)
+            StatRow(texts: texts, fit: .statOnly, height: height)
+            StatRow(texts: texts, fit: .short, height: height)
+        }
     }
 }
 

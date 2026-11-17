@@ -493,11 +493,16 @@ public struct DelosRoot: View {
             hasContextMenu: focus.focusedHasMenu, screenHints: navigator.screenHints))
     }
 
-    /// The library's note on the hint bar: how many apps the PC has (the home screen with nothing open).
+    /// The library's note on the hint bar: how many apps the PC has, of how many while a filter is on (the home screen with
+    /// nothing open).
     private var libraryNote: String? {
         guard case .home(let hostID) = navigator.current, !layers.isOpen, sideMenu == nil,
               let apps = hosts.apps[hostID], let host = hosts.hosts.first(where: { $0.id == hostID }) else { return nil }
-        return ShellHints.libraryNote(apps: apps.count, pc: host.name)
+        let filters = metadata.enabled ? actions.libraryFilters.filters(hostID: hostID) : MetadataFilters()
+        guard filters.active else { return ShellHints.libraryNote(apps: apps.count, pc: host.name) }
+        let listed = actions.libraryOrder(hostID: hostID, apps: apps)
+        let shown = LibraryFilter.apply(filters, to: listed) { metadata.data(for: $0) }.count
+        return LibraryFilter.filteredNote(shown: shown, total: listed.count, pc: host.name)
     }
 
     /// The top navigation of the screen [entry] shows, if it has one.

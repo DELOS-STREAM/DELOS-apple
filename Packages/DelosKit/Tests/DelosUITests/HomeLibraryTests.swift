@@ -142,7 +142,7 @@ import Testing
 @MainActor @Suite struct LibraryEndTests {
     @Test func theLastCoverIsAsFarFromTheRightEdgeAsTheFirstOneIsFromTheLeft() {
         // 150 - 988 × .055 + 300 × .055 / 2
-        let end = GameLibrary.endPadding(start: 150)
+        let end = CoverGeometry.standard.endPadding(start: 150)
         #expect(abs(end - 103.91) < 0.01)
     }
 }

@@ -97,7 +97,7 @@ def read_resources(android: Path) -> dict[str, dict[str, object]]:
 
 # Plurals whose Android quantity is the second argument ("%1$d of %2$d covers" picks its form by %2$d). Apple picks a form
 # by the first argument, so their first two placeholders swap numbers and Swift passes the quantity first.
-QUANTITY_SECOND = ("artwork_count_of_", "artwork_filtered_has_", "filters_result_active")
+QUANTITY_SECOND = ("artwork_count_of_", "artwork_filtered_has_", "filters_result_active", "shell_home_apps_filtered")
 SWAP = re.compile(r"%([12])\$")
 
 
