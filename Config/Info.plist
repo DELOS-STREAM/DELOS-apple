@@ -3,7 +3,8 @@
 <!--
 Keys of the app's Info.plist that build settings cannot express: arrays (NSBonjourServices) and keys without an
 INFOPLIST_KEY_* setting (CADisableMinimumFrameDurationOnPhone: ProMotion iPhones show more than 60 frames per second
-only with it). Xcode merges this file with the keys it generates from the INFOPLIST_KEY_* settings in
+only with it; GCSupportsGameMode: the system's Game Mode, which lowers background activity and Bluetooth
+latency of controllers and headphones while DELOS is in front). Xcode merges this file with the keys it generates from the INFOPLIST_KEY_* settings in
 Shared.xcconfig (GENERATE_INFOPLIST_FILE = YES).
 -->
 <plist version="1.0">
@@ -11,6 +12,8 @@ Shared.xcconfig (GENERATE_INFOPLIST_FILE = YES).
 	<key>DelosMetadataURL</key>
 	<string>$(DELOS_METADATA_URL)</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>GCSupportsGameMode</key>
 	<true/>
 	<key>NSBonjourServices</key>
 	<array>
