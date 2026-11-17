@@ -71,17 +71,20 @@ final class LibraryRow {
         let row = LibraryRow(count: 40)
         var counts: [Int] = []
         var input: MenuInput?
+        final class Flag: @unchecked Sendable { var on = false }
+        let released = Flag()
         input = MenuInput(repeatAfter: .milliseconds(30), repeatEvery: .milliseconds(10)) { command, count in
             counts.append(count)
             // The clock of a real hold: the press, the first repeat 500 ms later, then one every 50 ms
             row.now = Date(timeIntervalSince1970: 1000 + (count == 0 ? 0 : 0.5 + 0.05 * Double(count - 1)))
             row.handle(command)
             // The keyboard's own repeats arrive meanwhile and change nothing
-            input?.press(.right, from: "key right")
+            if !released.on { input?.press(.right, from: "key right") }
         }
         input?.press(.right, from: "key right")
         // Wait for the repeats instead of a fixed time: a busy machine delays timers
         for _ in 0..<1000 where counts.count < 6 { try await Task.sleep(for: .milliseconds(10)) }
+        released.on = true
         input?.lift("key right")
         let seen = counts.count
         #expect(seen >= 5)
