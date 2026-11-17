@@ -72,18 +72,24 @@ import Testing
         #expect(style.contentInsets(s).leading == 40 + s.safe.leading && style.contentInsets(s).top == 48 + s.safe.top)
     }
 
-    @Test func theBoxFloatsWithTheSameGapOnThreeSides() {
-        let safe = EdgeInsets(top: 24, leading: 20, bottom: 20, trailing: 20)
+    @Test func theBoxFloatsWithTheSameGapOnThreeSidesMeasuredOnTheScreen() {
+        // A status bar on top and a home indicator below must not make those gaps larger than the left one
+        let safes = [EdgeInsets(top: 24, leading: 0, bottom: 20, trailing: 0), EdgeInsets(top: 0, leading: 0, bottom: 28, trailing: 0),
+                     EdgeInsets(top: 24, leading: 20, bottom: 20, trailing: 20)]
         let sizes: [(Double, Double)] = [(2752, 2064), (2064, 2752), (1920, 1080)]
         for size in sizes {
-            let s = stage(size.0, size.1, safe: safe)
-            let style = SideMenuStyle(device: .pad, stage: s)
-            #expect(style.kind == .box)
-            let frame = style.frame(s)
-            #expect(frame.width == 680)
-            #expect(abs(frame.minX - (s.safe.leading + SideMenuStyle.inset)) < 1e-9)
-            #expect(abs(frame.minY - (s.safe.top + SideMenuStyle.inset)) < 1e-9)
-            #expect(abs(s.height - frame.maxY - (s.safe.bottom + SideMenuStyle.inset)) < 1e-9)
+            for safe in safes {
+                let s = stage(size.0, size.1, safe: safe)
+                let style = SideMenuStyle(device: .pad, stage: s)
+                #expect(style.kind == .box)
+                let frame = style.frame(s)
+                #expect(frame.width == 680)
+                let left = frame.minX, top = frame.minY, bottom = s.height - frame.maxY
+                #expect(abs(left - top) < 1e-9 && abs(top - bottom) < 1e-9)
+                // Clear of every safe area, by the inset at least
+                let least = SideMenuStyle.inset - 1e-9
+                #expect(left - s.safe.leading >= least && top - s.safe.top >= least && bottom - s.safe.bottom >= least)
+            }
         }
     }
 
@@ -107,9 +113,25 @@ import Testing
         let s = stage(1920, 1080)
         #expect(SideMenu.slideShift(s) == -68)
         #expect(abs(SideMenu.slideShift(stage(2560, 1440)) - -68 * stage(2560, 1440).scale) < 1e-9)
-        // `AnyTransition` is opaque: both motions must at least build
-        _ = SideMenu.transition(reducedMotion: false, stage: s)
-        _ = SideMenu.transition(reducedMotion: true, stage: s)
+        // `AnyTransition` is opaque: every motion must at least build
+        for kind in [SideMenuStyle.Kind.edge, .box] {
+            _ = SideMenu.transition(kind: kind, reducedMotion: false, stage: s)
+            _ = SideMenu.transition(kind: kind, reducedMotion: true, stage: s)
+        }
+    }
+
+    @Test func aDraggedPanelLeavesTheScreenAtZeroAndIsPulledAtMostTheRubberBandPastOpen() {
+        let s = stage(1920, 1080, safe: EdgeInsets(top: 0, leading: 40, bottom: 0, trailing: 0))
+        for device in [SideMenuStyle.Device.phone, .pad] {
+            let frame = SideMenuStyle(device: device, stage: s).frame(s)
+            #expect(SideMenu.dragOffset(nil, frame: frame, stage: s) == 0)
+            #expect(SideMenu.dragOffset(1, frame: frame, stage: s) == 0)
+            #expect(abs(SideMenu.dragOffset(0, frame: frame, stage: s) + frame.maxX) < 1e-9, "fully off the left edge")
+            #expect(abs(SideMenu.dragOffset(2, frame: frame, stage: s) - frame.maxX * SideMenuSwipe.rubber) < 1e-9)
+        }
+        // The edge panel's glass reaches as far past the edge as the pull goes
+        let edge = SideMenuStyle(device: .phone, stage: s).frame(s)
+        #expect(abs(SideMenu.overhang(edge, s) - edge.maxX * SideMenuSwipe.rubber) < 1e-9)
     }
 }
 

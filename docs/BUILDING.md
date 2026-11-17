@@ -67,7 +67,9 @@ client identity, none of the app's own data. `-DelosScreen <name>` then opens `s
 counts a pad as connected, which the simulator lacks);
 `-DelosDemoCommands "w3 menu w1 down accept"` routes commands through the real router like a controller would (`up down left right
 accept back menu options toast toast-undo prevtab nexttab`, `wN` waits N seconds): `menu` opens the side menu, `options` a game's menu,
-`toast` (Y) the filter sheet. The input commands change only the kind of input: `touch` and `click` begin a touch of a finger or of
+`toast` (Y) the filter sheet. `swipe-open`, `swipe-peek` and `swipe-close` drag the side menu as a finger would through the
+router's drag handling (to 70 % of the panel's width and released, to 30 % so it springs back, 70 % to the left), since the
+simulator takes no scripted touch drag. The input commands change only the kind of input: `touch` and `click` begin a touch of a finger or of
 the pointer through the recognizer the window holds (`InputKindProbe`), `pad` is a controller's button press (`-DelosDemoInput
 controller -DelosDemoCommands "w4 touch"` shows a touch with a pad connected). `sh tools/sim-walkthrough.sh ipad home /tmp/home.png -DelosDemoCommands "w3 menu"` builds, creates a
 fresh simulator, launches the demo on that screen, saves an upright screenshot and deletes the simulator. Not in the demo: a stream

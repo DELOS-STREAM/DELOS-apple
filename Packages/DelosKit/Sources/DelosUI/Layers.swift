@@ -199,33 +199,37 @@ final class Layers {
 /// The scrim under a layer (`Scrim` of DELOS for Android): it fades in over ``Motion/scrim`` ms and out over
 /// ``Motion/exit`` ms with CSS `ease`; a tap on it closes the layer. The context menu's is the [light] one that only dims
 /// (4, 8, 16 at 26 %); every other layer's is the theme's scrim token, and the screen beneath it blurs
-/// (``LayerBackdropBlur``).
+/// (``LayerBackdropBlur``). While a touch drag moves the side menu, [progress] is its opening progress: the scrim follows
+/// it instead of fading in and out.
 struct LayerScrim: View {
     var light = false
+    var progress: Double? = nil
     let onTap: @MainActor () -> Void
     @Environment(\.delosColors) private var colors
 
     var body: some View {
         Rectangle()
             .fill(light ? RGBA(red: 4 / 255, green: 8 / 255, blue: 16 / 255, alpha: 0.26).color : colors.scrim.color)
+            .opacity(progress.map { min(max($0, 0), 1) } ?? 1)
             .ignoresSafeArea()
             .contentShape(Rectangle())
             .onTapGesture(perform: onTap)
-            .transition(.asymmetric(
+            .transition(progress != nil ? .identity : .asymmetric(
                 insertion: .opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.scrim / 1000)),
                 removal: .opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.exit / 1000))))
     }
 }
 
 /// The screen under a layer's scrim blurs by 6 stage pixels (`Modifier.backdropBlur(haze, 6f, scrim)` of `Scrim`), with the
-/// scrim's fades.
+/// scrim's fades; while a touch drag moves the side menu, by its opening [progress] of that.
 struct LayerBackdropBlur: ViewModifier {
     let active: Bool
+    var progress: Double? = nil
     @Environment(\.stage) private var stage
 
     func body(content: Content) -> some View {
         content
-            .blur(radius: active ? stage.px(6) : 0)
+            .blur(radius: active ? stage.px(6) * CGFloat(progress.map { min(max($0, 0), 1) } ?? 1) : 0)
             .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: (active ? Motion.scrim : Motion.exit) / 1000), value: active)
     }
 }

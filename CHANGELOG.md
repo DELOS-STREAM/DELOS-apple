@@ -168,6 +168,13 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - Streams no longer ask GeForce Experience to optimize the game's settings, as DELOS for Android.
 - The profile chip on the start screen opens the profiles menu instead of the profile screen, as on Android; a PC that
   sleeps and can be woken says so.
+- The side menu follows the finger: a drag in from the left edge pulls the panel, the scrim and the blur with it (a
+  little past fully open with a rubber band), and on release it opens past 40 % of its width or with a quick flick and
+  springs back otherwise; a drag to the left on the open menu closes it the same way. With reduced motion the drag only
+  toggles the menu once it is long enough. On iPad and Apple TV the floating glass box has the same, larger gap to the
+  left, top and bottom edges of the screen (the status bar and the home indicator no longer widen one of them) and
+  materialises from the left edge (growing, sharpening from a blur, on a spring) and goes back into it; with reduced
+  motion it fades. Not verified on a device yet.
 
 ### Removed
 

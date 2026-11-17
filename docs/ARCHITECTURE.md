@@ -139,14 +139,28 @@ capsule; Settings, Profile and Devices take each other's place on the stack; the
 row reaches them. On those screens and on the start screen (`hasSideMenu`), the left menu button opens the side menu
 (`SideMenu`, Android's `SideMenuLayer`): the profile and the connected PC at the top and All settings; it takes every
 command while it is open, and B, the menu button or a tap beside it closes it. The quick settings (theme, background, sounds, haptics) are in it; the rows scroll
-(`FocusScroll` with edge fades) where the stage is too short, the panel is 680 px wide (glass, `panel` role), docked to the left edge at full height (`SideMenuStyle`: on iPad and Apple TV it is a floating box instead, with continuous 40 px corners and a 32 px gap to the left, top and bottom edges and the safe area; an Apple-only presentation decision, Android keeps its edge panel; iPhone, a narrow iPad window and Mac keep the edge panel) and arrives from
-a tenth of its width to its left (`sideEnter`: 560 ms ease-out with a 280 ms fade; it leaves over 240 ms ease-in; only
-fading with reduced motion) under the root's scrim (`LayerScrim`: the scrim token, fading in over 420 ms, out over 240 ms),
+(`FocusScroll` with edge fades) where the stage is too short, the panel is 680 px wide (glass, `panel` role), docked to the left edge at full height (`SideMenuStyle`: on iPad and Apple TV it is a floating box instead, with continuous 40 px corners and the same gap to the left, top and bottom edges of the screen, `SideMenuStyle.gap`: 48 px beyond the deepest of the three safe areas, so a status bar or the home indicator does not make one gap larger; iPhone, a narrow iPad window and Mac keep the edge panel). The edge panel arrives from
+a tenth of its width to its left (`sideEnter`: 560 ms ease-out with a 280 ms fade; it leaves over 240 ms ease-in); the
+floating glass box materialises from the left edge instead (`SideBoxMaterialize`: from 90 % scale anchored at the left edge,
+a tenth of the width to the left and blurred by 24 px, on the geometry spring of damping ratio 0.8 and stiffness 190, with
+the 280 ms fade; it goes back the same way over 240 ms ease-in); both only fade with reduced motion. It lies over the root's
+scrim (`LayerScrim`: the scrim token, fading in over 420 ms, out over 240 ms),
 while the screen behind it blurs by 6 stage pixels (`LayerBackdropBlur`, also behind dialogs; the context menu's scrim only
 dims). One plate glides between its rows, as in Settings. The top navigation wraps from the last button to the first; while
 the focus moves between two buttons an accent pill glides behind them (`NavPill`: both edges springs, the one in the
-direction of travel stiffer) and the focused button's own fill fades in over it. Android has no touch way to the side menu; on the start
-screen the profile chip opens the profiles menu (as on Android), so touch reaches Profile and Settings through a PC's
+direction of travel stiffer) and the focused button's own fill fades in over it.
+
+Touch opens the side menu with a drag in from the left edge, and the panel follows the finger (`SideMenuSwipe`,
+`SideMenuDrag`, `ShellRouter.beginSideDrag` / `moveSideDrag` / `endSideDrag`): a drag that starts within 40 pt of the left
+edge (`SideMenuEdgeStrip`, only that strip takes the touch) and goes more sideways than up or down past a 10 pt slop takes
+the menu; the panel's offset, the scrim's opacity and the screen's blur then show the drag's progress (0 closed, 1 open,
+the travel measured against the panel's width) instead of their transitions, damped past fully open to at most 6 % of the
+width (the edge panel's glass reaches that far past the left edge, so no gap shows). On release, 600 pt/s or faster goes
+the way the finger moves; otherwise the menu opens past 40 % of the width and springs back below it, on the geometry spring
+from the finger's speed; a drag to the left on the open menu (the scrim or the panel) closes it by the same rules, and a
+new drag catches a settling panel where it is. While a drag owns the menu, the menu button and B wait for it to settle.
+With reduced motion the panel does not follow: the drag only toggles the menu once it has covered 40 % of the width. On
+the start screen the profile chip opens the profiles menu, so touch also reaches Profile and Settings through a PC's
 library and its top navigation.
 
 ### Who captures the commands

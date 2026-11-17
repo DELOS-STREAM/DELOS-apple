@@ -141,6 +141,27 @@ enum DemoHarness {
         }
     }
 
+    /// `swipe-open` (a drag in from the edge to 70 % of the panel, released slowly), `swipe-peek` (to 30 %: springs back) and
+    /// `swipe-close` (to the left by 70 %): a finger's drag of the side menu fed to the router's drag handling at 60 Hz, as
+    /// the edge strip and the open menu give it (the simulator has no scripted touch drag). True when [name] was one.
+    @MainActor static func sideDrag(_ name: String, router: ShellRouter) async -> Bool {
+        let (opening, share): (Bool, Double)
+        switch name {
+        case "swipe-open": (opening, share) = (true, 0.7)
+        case "swipe-peek": (opening, share) = (true, 0.3)
+        case "swipe-close": (opening, share) = (false, -0.7)
+        default: return false
+        }
+        let travel = router.sideWidth * share, steps = 30
+        router.beginSideDrag(opening: opening)
+        for step in 1...steps {
+            try? await Task.sleep(for: .milliseconds(16))
+            router.moveSideDrag(travel: travel * Double(step) / Double(steps))
+        }
+        router.endSideDrag(opening: opening, travel: travel, velocity: 0)
+        return true
+    }
+
     static func command(_ name: String) -> MenuCommand? {
         switch name {
         case "up": .up
