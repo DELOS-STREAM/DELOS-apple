@@ -9,8 +9,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
-- The library filter of Android on the home screen (when `DelosMetadataURL` is configured): Y, or the new filter button beside
-  the title, opens a glass sheet with chips for genre and theme (with the number of games each holds), HDR support and
+- The library filter of Android on the home screen (when `DelosMetadataURL` is configured): Y, or a tap on the hint bar's Filter
+  (a glyphless pill while no controller is the input), opens a glass sheet with chips for genre and theme (with the number of games each holds), HDR support and
   duration, the live count and Reset (X) and Done. The filter is kept per PC, the hint bar says how many criteria are on
   ("Filter • 2 active") and the library note counts the games shown, and a filter that lets nothing through shows
   Android's empty state with a button that resets it. The whole library's cached metadata is read when it opens, so the

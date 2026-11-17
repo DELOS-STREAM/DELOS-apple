@@ -85,7 +85,7 @@ struct HomeScreen: View {
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reducedMotion
     @State private var loadFailed = false
-    /// The library filter's sheet (Y or the filter button): its focus is new each time it opens.
+    /// The library filter's sheet (Y, or a tap on the hint bar's Filter): its focus is new each time it opens.
     @State private var sheetOpen = false
     @State private var sheetFocus = FocusModel()
     /// The item that had the focus before the sheet opened, to return to it.
@@ -113,7 +113,6 @@ struct HomeScreen: View {
         let listed = self.listed
         let filters = self.filters
         let visible = LibraryFilter.apply(filters, to: listed) { metadata.data(for: $0) }
-        let metrics = HomeMetrics(stage: stage)
         let offeredNow = metadata.enabled && !listed.isEmpty
         ZStack {
             Group {
@@ -128,17 +127,13 @@ struct HomeScreen: View {
                     } else if visible.isEmpty {
                         FilteredLibraryEmpty(focus: focus, onReset: resetFilters)
                     } else {
-                        GameLibrary(hostID: hostID, apps: visible, focus: focus, actions: actions,
-                                    titleWidth: metrics.infoWidth - (offeredNow ? LibraryFilterButton.reserve(compact: stage.compact) : 0))
+                        GameLibrary(hostID: hostID, apps: visible, focus: focus, actions: actions)
                     }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // The screen under the sheet blurs like under every layer
             .modifier(LayerBackdropBlur(active: sheetOpen))
-            if offeredNow {
-                filterButton(filters: filters, metrics: metrics)
-            }
             sheet(filters: filters, listed: listed)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -187,20 +182,7 @@ struct HomeScreen: View {
         let open: Bool
     }
 
-    // MARK: Filter button and sheet
-
-    /// The filter button at the title row's end: touch and the focus reach the filter as well as Y.
-    private func filterButton(filters: MetadataFilters, metrics: HomeMetrics) -> some View {
-        FocusItem(id: LibraryFilterIDs.button, model: focus, clickCue: nil, action: { openSheet() }) { focused in
-            LibraryFilterButton(count: filters.activeCount, focused: focused)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-        .padding(.top, stage.px(metrics.titleTop + max(metrics.titleBox - LibraryFilterButton.height, 0) / 2))
-        .padding(.trailing, stage.px((metrics.compact ? HomeCompact.side : 150) + stage.safe.trailing))
-        // Behind an open context menu it dims with the info block
-        .opacity(CoverTone.info(menuOpen: { if case .context = layers.layer { true } else { false } }()))
-        .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: layers.generation)
-    }
+    // MARK: Filter sheet
 
     @ViewBuilder private func sheet(filters: MetadataFilters, listed: [HostApp]) -> some View {
         if sheetOpen {
@@ -440,8 +422,6 @@ struct GameLibrary: View {
     let apps: [HostApp]
     let focus: FocusModel
     let actions: ShellActions
-    /// The width the title may take: the info row's, less what stands at its end (the filter button).
-    let titleWidth: Double
     @Environment(HostStore.self) private var hosts
     @Environment(HomeArt.self) private var art
     @Environment(GameMetadataModel.self) private var metadata
@@ -488,7 +468,7 @@ struct GameLibrary: View {
         let keys = apps.map { AnyHashable(Self.id($0)) }
         ZStack(alignment: .topLeading) {
             GameInfo(hostID: hostID, app: focused, pcName: host?.name ?? "", running: running == focused.id,
-                     playtime: actions.playtime(hostID: hostID, appID: focused.id), metrics: metrics, titleWidth: titleWidth)
+                     playtime: actions.playtime(hostID: hostID, appID: focused.id), metrics: metrics)
                 .padding(.leading, stage.px(metrics.infoStart))
                 .padding(.top, stage.px(metrics.titleTop))
                 // Behind an open context menu the info block dims to 40 %
@@ -656,8 +636,6 @@ private struct GameInfo: View {
     let running: Bool
     let playtime: Playtime
     let metrics: HomeMetrics
-    /// The width the title may take: the info row's, less what stands at the title's end (the filter button).
-    let titleWidth: Double
     @Environment(GameMetadataModel.self) private var metadata
     @Environment(HomeArt.self) private var art
     @Environment(\.matchGameColors) private var matchGameColors
@@ -673,7 +651,7 @@ private struct GameInfo: View {
         // The colors of the animated background: the cover's, the game background's while those are unknown
         let gameColors = matchGameColors ? art.gameColors(GameArt.key(hostID, app.id)) : nil
         VStack(alignment: .leading, spacing: 0) {
-            GameTitle(hostID: hostID, app: app, metrics: metrics, width: titleWidth)
+            GameTitle(hostID: hostID, app: app, metrics: metrics, width: metrics.infoWidth)
             Spacer().frame(height: stage.px(metrics.titleGap))
             InfoRow(playtime: playtime, height: metrics.infoHeight,
                     hasFacts: running || hdr != nil || completion != nil,

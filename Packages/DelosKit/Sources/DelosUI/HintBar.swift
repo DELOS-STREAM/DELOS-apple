@@ -1,3 +1,4 @@
+import DelosInput
 import SwiftUI
 
 /// The bottom bar (`HintBar` of DELOS for Android's `shell/ui/Bars.kt`): an optional note on the left, the button hints on
@@ -11,9 +12,12 @@ struct HintBar: View {
     /// How far above the bottom edge of the window the bar's middle is, in points (``HintBarLayout``): nil keeps the bar
     /// on the bottom safe edge.
     var centerFromBottom: CGFloat?
+    /// A tappable hint was pressed (touch, pointer).
+    var onTap: ((Hint) -> Void)?
     @State private var widths: [String: Double] = [:]
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
+    @Environment(\.reducedMotion) private var reduced
 
     private static let height = 92.0, inset = 72.0, gap = 34.0, compactGap = 28.0, noteGap = 34.0
 
@@ -28,7 +32,6 @@ struct HintBar: View {
         .padding(.trailing, stage.px(Self.inset + stage.safe.trailing))
         .padding(.bottom, centerFromBottom.map { max($0 - stage.px(Self.height) / 2, 0) } ?? stage.px(stage.safe.bottom))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        .allowsHitTesting(false)
     }
 
     private var regularBody: some View {
@@ -97,17 +100,43 @@ struct HintBar: View {
         }
     }
 
-    /// One hint: its button and, by `detail`, its full label, its short label or nothing.
-    private func cell(_ hint: Hint, _ detail: HintDetail) -> some View {
-        HStack(spacing: stage.px(12)) {
-            GlyphButton(button: hint.button)
-            if detail != .bare {
-                Text(detail == .short ? hint.shortLabel ?? hint.label : hint.label)
-                    .font(DelosFonts.figtree(stage.tpx(21)))
-                    .foregroundStyle(colors.text2.color)
-                    .lineLimit(1)
+    /// One hint: its button and, by `detail`, its full label, its short label or nothing. A tappable hint is a glyphless pill
+    /// that takes touches while no controller is the input (``ControllerGlyphs/kind``), and fades into the hint when one is.
+    @ViewBuilder private func cell(_ hint: Hint, _ detail: HintDetail) -> some View {
+        let pill = hint.tappable && ControllerGlyphs.shared.kind != .controller
+        let label = detail == .short ? hint.shortLabel ?? hint.label : hint.label
+        Group {
+            if pill {
+                Button { onTap?(hint) } label: {
+                    Text(label)
+                        .font(DelosFonts.figtree(stage.tpx(21), .semibold))
+                        .foregroundStyle(colors.text.color)
+                        .lineLimit(1)
+                        .padding(.horizontal, stage.px(24))
+                        .frame(height: stage.px(44))
+                        .background {
+                            GlassShape(Capsule(), tint: colors.surface)
+                                .overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
+                        }
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .transition(.opacity.combined(with: .scale(scale: Motion.popFromScale)))
+            } else {
+                HStack(spacing: stage.px(12)) {
+                    GlyphButton(button: hint.button)
+                    if detail != .bare {
+                        Text(label)
+                            .font(DelosFonts.figtree(stage.tpx(21)))
+                            .foregroundStyle(colors.text2.color)
+                            .lineLimit(1)
+                    }
+                }
+                .allowsHitTesting(false)
+                .transition(.opacity)
             }
         }
+        .animation(reduced ? .easeOut(duration: Motion.fade / 1000) : Motion.out(Motion.rowIn), value: pill)
         .accessibilityElement(children: .combine)
     }
 }
@@ -150,6 +179,7 @@ struct ShellHintBar: View {
     var noteLabel: String?
     /// The library row is on the screen.
     var libraryRow = false
+    var onTap: ((Hint) -> Void)?
     @Environment(\.stage) private var stage
 
     var body: some View {
@@ -157,7 +187,7 @@ struct ShellHintBar: View {
             ? HintBarLayout.rowBottom(scale: stage.textScale, safeTop: stage.safe.top, stageHeight: stage.height) : nil
         let center = HintBarLayout.centerFromBottom(
             stageHeight: stage.height, safeBottom: stage.safe.bottom, contentBottom: contentBottom, zoom: stage.textScale)
-        HintBar(hints: hints, note: note, noteLabel: noteLabel, centerFromBottom: stage.px(center))
+        HintBar(hints: hints, note: note, noteLabel: noteLabel, centerFromBottom: stage.px(center), onTap: onTap)
             // The interface scale zooms the whole bar
             .modifier(ZoomedBar())
     }

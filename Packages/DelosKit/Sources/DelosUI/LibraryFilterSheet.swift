@@ -22,8 +22,6 @@ enum LibraryFilterIDs {
     static func length(_ filter: LengthFilter) -> String { "filter-length-\(filter.rawValue)" }
     static let reset = "filter-reset"
     static let done = "filter-done"
-    /// The home screen's filter button.
-    static let button = "library-filter"
     /// The reset row of the filtered-empty state.
     static let emptyReset = "filter-empty-reset"
 
@@ -347,43 +345,5 @@ private struct LibraryChipGlideRing: View {
         .onChange(of: target, initial: true) { _, frame in if let frame { previous = frame } }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
-    }
-}
-
-// MARK: Home button
-
-/// The filter button of the home screen, at the title row's end: the glass pill of the Artwork toolbar with the filter
-/// symbol, its name, the number of criteria and Y's glyph; on a compact stage the symbol and the number alone.
-struct LibraryFilterButton: View {
-    let count: Int
-    let focused: Bool
-    @Environment(\.delosColors) private var colors
-    @Environment(\.stage) private var stage
-
-    static let height = 64.0
-
-    /// The width the title leaves free for the button and the air before it, stage pixels.
-    static func reserve(compact: Bool) -> Double { compact ? 64 + 24 + 32 : 340 }
-
-    var body: some View {
-        HStack(spacing: stage.px(12)) {
-            SymbolView(symbol: Symbols.filter, size: 30, color: colors.text, filled: focused || count > 0)
-            if !stage.compact {
-                Text(L("filters_hint"))
-                    .font(DelosFonts.figtree(stage.tpx(24), .semibold))
-                    .foregroundStyle(colors.text.color)
-                    .lineLimit(1)
-            }
-            if count > 0 { ArtCountBadge(count: count) }
-            if !stage.compact { GlyphButton(.north, size: 32) }
-        }
-        .padding(.horizontal, stage.px(stage.compact ? 16 : 28))
-        .frame(minWidth: stage.px(Self.height), minHeight: stage.px(Self.height), maxHeight: stage.px(Self.height))
-        .background {
-            GlassShape(Capsule(), tint: colors.surface)
-                .overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
-        }
-        .focusLook(focused, scale: 1.08, ring: 4, glowBlur: 50, glowY: 18)
-        .accessibilityLabel(L("filters_hint"))
     }
 }

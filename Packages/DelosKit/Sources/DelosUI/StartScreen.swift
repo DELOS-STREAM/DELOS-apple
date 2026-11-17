@@ -199,7 +199,9 @@ public struct DelosRoot: View {
                     if case .stream = navigator.current {} else {
                         ShellHintBar(
                             hints: hints, note: libraryNote, noteLabel: libraryNote == nil ? nil : L("shell_hint_library_label"),
-                            libraryRow: showsLibraryRow)
+                            libraryRow: showsLibraryRow,
+                            // The only tappable hint is the library's Filter: the screen's own Y
+                            onTap: { _ in _ = navigator.commandCapture?(.toastAction) })
                     }
                 }
                 .modifier(PortalBackdropBlur(active: actions.connection.portal.map { !$0.arriving } ?? false))

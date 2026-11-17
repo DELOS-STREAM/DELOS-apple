@@ -36,6 +36,9 @@ struct Hint: Hashable, Sendable {
     var button: HintButton
     var label: String
     var shortLabel: String?
+    /// A touch, a pointer or a keyboard can press it in the bar (Filter): it is then a glyphless pill; a controller has the
+    /// button itself, and the hint stays a hint.
+    var tappable = false
 }
 
 /// What a glyph is drawn with: the disc (the text color) and the mark on it (the background color).

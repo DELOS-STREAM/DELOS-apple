@@ -133,6 +133,12 @@ direction of travel stiffer) and the focused button's own fill fades in over it.
 screen the profile chip opens the profiles menu (as on Android), so touch reaches Profile and Settings through a PC's
 library and its top navigation.
 
+### Who captures the commands
+
+`Navigator.captureCommands(owner:_:)` and `releaseCommands(owner:)` replace the plain `commandCapture` variable: the next screen
+shows before the old one's `onDisappear`, which cleared the new screen's capture and hint-bar state, so Y and X were dead on
+Home and Artwork after a round trip. A screen releases only what is still its own.
+
 ### Layers
 
 `Layers` (DelosUI, the layer half of Android's `ShellState`) holds the one layer above the screen: a context menu or a
@@ -1013,8 +1019,9 @@ duration), the one Android keeps for all. `LibraryFilter.apply` lets the games t
 DELOS's own entries pass only while nothing is filtered. The home screen (`HomeScreen`) asks `GameMetadataModel.ensureLibrary`
 for the whole library when it opens (the cached records first, then the due ones three at a time) so the chips are
 complete, shows the library through the filter and, while the service is configured and the library has games, offers the
-filter: Y (`MenuCommand.toastAction`, which a toast with its own action keeps), the filter button at the end of the title
-row (icon only on a compact stage) or a tap. `LibraryFilterSheet` is Android's `FilterModal`: a glass panel (1240 stage
+filter: Y (`MenuCommand.toastAction`, which a toast with its own action keeps) or, without a controller, a tap on the hint bar's Filter, which
+is a glyphless pill (`Hint.tappable`, `HintBar.onTap`, faded in and out by the input kind) and presses the screen's Y. Android has
+no touch way to the filter at all. or a tap. `LibraryFilterSheet` is Android's `FilterModal`: a glass panel (1240 stage
 pixels, the compact stage's margin of 48) with a title and the live count, a section per criterion with one row of chips
 that scrolls sideways (the genre and theme chips with their icon and the number of games), and Reset (X) and Done (Y, B)
 under them; the sections scroll when they do not fit and the focused one is brought into view. The choices apply at

@@ -170,3 +170,16 @@ private func game(genres: [Int] = [], themes: [Int] = [], hdr: NativeHDR = .unkn
         #expect(PlaceholderTitle.widestWord("a bb", size: 30) > 0)
     }
 }
+
+@MainActor @Suite struct LibraryFilterHintTests {
+    @Test func aTappableHintIsOnlyTheFilterAndOnlyWhenTheLibraryOffersIt() {
+        var context = ShellHints.Context(screen: .home(hostID: "h"))
+        #expect(ShellHints.hints(context).allSatisfy { !$0.tappable })
+        context.screenHints.filterLabel = "Filter"
+        #expect(ShellHints.hints(context, kind: .controller).filter(\.tappable).map(\.button) == [.pad(.north)])
+        // Without a controller the other hints go, the Filter pill stays
+        for kind in [InputKind.touch, .pointer, .keyboard] {
+            #expect(ShellHints.hints(context, kind: kind).filter(\.tappable).map(\.label) == ["Filter"], "\(kind)")
+        }
+    }
+}
