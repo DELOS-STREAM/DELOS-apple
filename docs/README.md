@@ -9,3 +9,4 @@
 ## Living specifications
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): modules, dependencies, stage, focus, backgrounds
+- [PYROWAVE_APPLE.md](PYROWAVE_APPLE.md): PyroWave on Apple (issue #13): the Android decoder, MoltenVK against a Metal port, measurements, recommendation
