@@ -1,14 +1,49 @@
+import DelosData
 import DelosMedia
 import Foundation
 import SwiftUI
 
-/// Android's full StreamStats panel. Technical units match Android; every phrase comes from its catalog.
+/// Android's statistics overlay (`StreamStatsPanel`): the full panel in the top left corner, or the compact line at the top
+/// center. Technical units match Android; every phrase comes from its catalog.
 struct StreamStatsOverlay: View {
     let statistics: StreamStatistics
+    let overlay: StatisticsOverlay
     @Environment(\.stage) private var stage
     @Environment(\.delosColors) private var colors
 
     var body: some View {
+        switch overlay {
+        case .off: EmptyView()
+        case .full: fullPanel
+        case .compact: compactLine
+        }
+    }
+
+    /// The compact line: one capsule of text at the top center (`CompactLine`): 18 px text, 24 px beside it and 8 px
+    /// above and below, 20 px under the top of the stage. A compact stage may break it in two balanced, centered lines, only after a
+    /// separator.
+    private var compactLine: some View {
+        let wraps = stage.compact
+        let line = StatisticsLine.text(statistics, tail: L("stream_stats_compact_tail"))
+        let shape = Capsule()
+        return Text(verbatim: wraps ? StatisticsLine.keepingFiguresTogether(line) : line)
+            .font(DelosFonts.figtree(stage.tpx(StreamMenuLayout.statsCompactTextSize)))
+            .lineSpacing(stage.tpx(StreamMenuLayout.statsCompactTextSize) * (StreamMenuLayout.statsCompactLineHeight - 1.2))
+            .multilineTextAlignment(.center)
+            .monospacedDigit()
+            .foregroundStyle(colors.text.color)
+            .padding(.horizontal, stage.px(24))
+            .padding(.vertical, stage.px(StreamMenuLayout.statsCompactPaddingY))
+            .background { GlassShape(shape, tint: colors.surface, role: .panel) }
+            .overlay { shape.stroke(colors.line.color, lineWidth: stage.px(1)) }
+            .padding(.horizontal, stage.px(40 + max(stage.safe.leading, stage.safe.trailing)))
+            .padding(.top, stage.px(StreamMenuLayout.statsCompactTop + stage.safe.top))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .environment(\.glassOverMedia, true)
+            .allowsHitTesting(false)
+    }
+
+    @ViewBuilder private var fullPanel: some View {
         let readings = rows
         VStack(alignment: .leading, spacing: stage.px(10)) {
             HStack(spacing: 0) {
@@ -71,10 +106,7 @@ struct StreamStatsOverlay: View {
         if let delay = statistics.presentationDelayMilliseconds {
             result.append((L("stream_stats_render_latency"), "\(number(delay, places: 2)) ms"))
         }
-        let kib = statistics.bandwidthKiBPerSecond
-        let bytes = kib >= 1000 ? "\(number(kib / 1024)) MB/s" : "\(Int(kib)) KB/s"
-        let mbps = kib * 1024 * 8 / 1_000_000
-        result.append((L("stream_stats_bandwidth"), "\(bytes) · \(number(mbps, places: mbps >= 100 ? 0 : 1)) Mb/s"))
+        result.append((L("stream_stats_bandwidth"), StatisticsLine.bandwidth(kibPerSecond: statistics.bandwidthKiBPerSecond)))
         if let loss = statistics.lostFramesPercent {
             result.append((L("stream_stats_lost_frames"), "\(number(loss, places: 2)) %"))
         }

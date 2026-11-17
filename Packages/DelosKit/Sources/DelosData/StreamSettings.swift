@@ -88,6 +88,9 @@ public struct StreamSettings: Codable, Equatable, Sendable {
     /// How frames are timed on screen. Balanced by default, unlike Android's lowest latency: on iPad the display layer
     /// showed the network's jitter as uneven motion (owner, iPad Pro M5, 120 fps, 2026-11-16).
     public var framePacing = FramePacing.balanced
+    /// The statistics overlay the stream menu's Overlay tile last chose (Android keeps it in the profile as well); every
+    /// stream of the profile starts with it.
+    public var statisticsOverlay = StatisticsOverlay.off
 
     /// The bitrate slider of Android (`seekbar_bitrate_kbps`): 1 to 1000 Mbps in steps of 1 Mbps.
     public static let bitrateRange = 1000...1_000_000
@@ -137,6 +140,7 @@ public struct StreamSettings: Codable, Equatable, Sendable {
         hdr = value(.hdr, d.hdr)
         playAudioOnHost = value(.playAudioOnHost, d.playAudioOnHost)
         framePacing = value(.framePacing, d.framePacing)
+        statisticsOverlay = value(.statisticsOverlay, d.statisticsOverlay)
     }
 }
 

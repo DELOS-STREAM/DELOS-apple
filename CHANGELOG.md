@@ -21,6 +21,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   titles shrink to fit their longest word.
 - The artwork of DELOS's own entries (Desktop, Remote Input, Remote Monitor, Steam Big Picture) is bundled, copied from
   Android: their cover, wide cover and background show without SteamGridDB, which never looks them up.
+- The stream menu's Overlay tile goes round Android's three statistics overlays: off, the full panel and the compact line at
+  the top center (frame rate, bandwidth, network and decoding delay, lost frames), with Off, On and Compact in its pill. The
+  profile keeps the last choice for its next streams. The line leaves out Android's Total delay and 1 % low, which neither
+  renderer reports.
 - HDR streaming: Settings → Stream gets Android's Enable HDR row (also an app setting) on devices whose display shows HDR and
   whose hardware decodes HEVC Main10 (a hardware-required VideoToolbox probe, not the per-codec check). With it on, the app
   offers HEVC Main10 (and AV1 Main 10 when AV1 is chosen), asks the host for HDR, passes the host's mastering display and
@@ -159,6 +163,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   (it was 40 px too wide, so the glow showed through its gap), the glow's middle stop keeps a third of its alpha instead of
   replacing it (it was twice as bright), the discs and the profile chip are Liquid Glass tinted with Android's whole fill alpha,
   and the circle row no longer adds 40 px of air above and below the circles (the heading sat too high).
+- The Keyboard tile of the stream menu raises the system keyboard on the iPhone and the iPad again and keeps it up: the key
+  window's return to the app no longer takes the keyboard's first responder back for the interface's arrow keys, which are
+  given back when the keyboard goes down, a raise the system refuses is tried again and shown honestly on the tile, the
+  keyboard goes away with the running stream, and the keys of a hardware keyboard are no longer typed twice into the PC
+  while it is up. Not yet verified on the iPad.
 - A hardware keyboard on the iPad (Magic Keyboard) no longer scrolls the library, Settings and the other lists on top of
   the focus: the arrow, Space, Page, Home and End keys are taken from UIKit's own keyboard scrolling and focus movement
   (priority key commands, `allowsKeyboardScrolling` off), a key the keyboard repeats by itself is not another press, and

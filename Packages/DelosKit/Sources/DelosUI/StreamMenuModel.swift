@@ -158,6 +158,13 @@ enum StreamMenuLayout {
     static let labelDimmed = 0.4
     static let scrimPopover = 0.22
 
+    /// The compact statistics line at the top center (`StreamMenuLayout.STATS_COMPACT_*`): its top gap, its vertical padding, its
+    /// text size and its line height.
+    static let statsCompactTop = 20.0
+    static let statsCompactPaddingY = 8.0
+    static let statsCompactTextSize = 18.0
+    static let statsCompactLineHeight = 1.4
+
     // The popover
     static let popoverRadius = 44.0
     static let popoverPaddingX = 40.0

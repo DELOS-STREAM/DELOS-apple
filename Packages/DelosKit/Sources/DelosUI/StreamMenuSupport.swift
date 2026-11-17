@@ -1,3 +1,4 @@
+import DelosData
 import Foundation
 #if os(iOS)
 import UIKit
@@ -43,6 +44,15 @@ final class DeviceBrightness: ScreenBrightness {
 /// The texts of the stream menu that are chosen by name (the Send keys labels), so that every name stays a literal the
 /// usage check of the String Catalog can find.
 enum StreamMenuText {
+    /// The Overlay tile's pill (`StreamMenuRoot`): Off, On for the full panel, Compact for the line.
+    static func overlayState(_ overlay: StatisticsOverlay) -> String {
+        switch overlay {
+        case .off: L("common_off")
+        case .full: L("common_on")
+        case .compact: L("stream_menu_overlay_compact")
+        }
+    }
+
     static func specialKey(_ name: String) -> String {
         switch name {
         case "game_menu_send_keys_esc": L("game_menu_send_keys_esc")

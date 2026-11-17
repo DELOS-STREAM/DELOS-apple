@@ -66,8 +66,13 @@ extension MenuKeys.Key {
 /// back, and takes it again when the typing ends.
 @MainActor
 public final class MenuKeyOwnerView: UIView {
+    /// Posted when a text input that had the first responder let go of it (the stream's on-screen keyboard went away): the
+    /// keys belong to the interface again, whatever the key window did meanwhile.
+    public static let reclaim = Notification.Name("io.github.meitoncz.delos.menuKeyOwner.reclaim")
+
     private var typing = false
     private var observer: NSObjectProtocol?
+    private var reclaimObserver: NSObjectProtocol?
     private lazy var commands: [UIKeyCommand] = MenuKeys.Key.allCases.map { key in
         let command = UIKeyCommand(input: key.input, modifierFlags: [], action: #selector(swallow))
         command.wantsPriorityOverSystemBehavior = true
@@ -89,9 +94,11 @@ public final class MenuKeyOwnerView: UIView {
         if typing { resignFirstResponder() } else { claim() }
     }
 
-    /// Takes the first responder, unless a text field is typed in.
+    /// Takes the first responder, unless a text field is typed in or another text input holds it: the on-screen keyboard
+    /// of a stream (a key window event must not take it away again: the keyboard went down the moment it came up).
     private func claim() {
         guard !typing, window != nil, !isFirstResponder else { return }
+        if let holder = UIResponder.current, holder is UIKeyInput { return }
         becomeFirstResponder()
     }
 
@@ -99,12 +106,32 @@ public final class MenuKeyOwnerView: UIView {
         super.didMoveToWindow()
         observer.map(NotificationCenter.default.removeObserver)
         observer = nil
+        reclaimObserver.map(NotificationCenter.default.removeObserver)
+        reclaimObserver = nil
         guard window != nil else { return }
         claim()
+        reclaimObserver = NotificationCenter.default.addObserver(forName: Self.reclaim, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.claim() }
+        }
         // Another window (a share sheet, a system alert) took the key and gave it back: so does the first responder
         observer = NotificationCenter.default.addObserver(forName: UIWindow.didBecomeKeyNotification, object: window, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.claim() }
         }
+    }
+}
+
+extension UIResponder {
+    private static weak var found: UIResponder?
+
+    /// The first responder of the app, if any (a message sent to nobody goes to it first).
+    @MainActor static var current: UIResponder? {
+        found = nil
+        UIApplication.shared.sendAction(#selector(reportAsFirstResponder), to: nil, from: nil, for: nil)
+        return found
+    }
+
+    @objc private func reportAsFirstResponder() {
+        Self.found = self
     }
 }
 

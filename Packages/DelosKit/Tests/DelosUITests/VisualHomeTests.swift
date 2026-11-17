@@ -110,6 +110,8 @@ import Testing
         // `AnyTransition` is opaque: both motions must at least build
         _ = SideMenu.transition(reducedMotion: false, stage: s)
         _ = SideMenu.transition(reducedMotion: true, stage: s)
+    }
+}
 
 /// The look of a focused circle against the Android screenshot of the Devices screen (AYN Odin, 1920 x 1080).
 @MainActor @Suite struct CircleLookTests {

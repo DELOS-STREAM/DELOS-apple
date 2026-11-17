@@ -623,6 +623,7 @@ stream_menu_hint_back
 stream_menu_tile_resume
 stream_menu_tile_keyboard
 stream_menu_tile_overlay
+stream_menu_overlay_compact
 stream_menu_tile_brightness
 stream_menu_tile_more
 stream_menu_tile_disconnect
@@ -662,6 +663,7 @@ game_menu_send_keys_ctrl_alt_shift_f12
 game_menu_send_keys_alt_b
 common_on
 common_off
+stream_stats_compact_tail
 stream_stats_decoder
 stream_stats_incoming
 stream_stats_rendering
