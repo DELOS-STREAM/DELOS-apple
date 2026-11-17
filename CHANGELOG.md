@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   are byte-identical to Android; the shared library also includes Mac keyboard, mouse and trackpad symbols.
   Physical-device rendering is not verified.
 - The library filter of Android on the home screen (when `DelosMetadataURL` is configured): Y, or a tap on the hint bar's Filter
-  (a glyphless pill while no controller is the input), opens a glass sheet with chips for genre and theme (with the number of games each holds), HDR support and
+  (a 52 px glass pill with the filter symbol before its label while no controller is the input), opens a glass sheet with chips for genre and theme (with the number of games each holds), HDR support and
 - A demo harness for debug builds (`-DelosDemo YES`, docs/BUILDING.md): a fake PC with games, generated artwork, fake metadata and a
   command script, none of it touching the network, the client identity or the app's data, and `tools/sim-walkthrough.sh` to
   screenshot any screen in a fresh simulator.

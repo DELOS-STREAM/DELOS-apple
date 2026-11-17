@@ -180,6 +180,8 @@ private func game(genres: [Int] = [], themes: [Int] = [], hdr: NativeHDR = .unkn
         // Without a controller the other hints go, the Filter pill stays
         for kind in [InputKind.touch, .pointer, .keyboard] {
             #expect(ShellHints.hints(context, kind: kind).filter(\.tappable).map(\.label) == ["Filter"], "\(kind)")
+            // The pill carries the filter symbol before its label, so it reads as a button
+            #expect(ShellHints.hints(context, kind: kind).filter(\.tappable).map(\.icon) == [Symbols.filter], "\(kind)")
         }
     }
 }

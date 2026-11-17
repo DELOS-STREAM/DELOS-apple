@@ -100,25 +100,30 @@ struct HintBar: View {
         }
     }
 
-    /// One hint: its button and, by `detail`, its full label, its short label or nothing. A tappable hint is a glyphless pill
-    /// that takes touches while no controller is the input (``ControllerGlyphs/kind``), and fades into the hint when one is.
+    /// One hint: its button and, by `detail`, its full label, its short label or nothing. A tappable hint is a 52 px glass pill
+    /// with its symbol before its label (a button, and it looks like one) that takes touches while no controller is the input
+    /// (``ControllerGlyphs/kind``), and fades into the hint when one is.
     @ViewBuilder private func cell(_ hint: Hint, _ detail: HintDetail) -> some View {
         let pill = hint.tappable && ControllerGlyphs.shared.kind != .controller
         let label = detail == .short ? hint.shortLabel ?? hint.label : hint.label
         Group {
             if pill {
                 Button { onTap?(hint) } label: {
-                    Text(label)
-                        .font(DelosFonts.figtree(stage.tpx(21), .semibold))
-                        .foregroundStyle(colors.text.color)
-                        .lineLimit(1)
-                        .padding(.horizontal, stage.px(24))
-                        .frame(height: stage.px(44))
-                        .background {
-                            GlassShape(Capsule(), tint: colors.surface)
-                                .overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
-                        }
-                        .contentShape(Capsule())
+                    HStack(spacing: stage.px(10)) {
+                        if let icon = hint.icon { SymbolView(symbol: icon, size: 26, color: colors.text) }
+                        Text(label)
+                            .font(DelosFonts.figtree(stage.tpx(21), .semibold))
+                            .foregroundStyle(colors.text.color)
+                            .lineLimit(1)
+                    }
+                    .padding(.leading, stage.px(hint.icon == nil ? 24 : 18))
+                    .padding(.trailing, stage.px(24))
+                    .frame(height: stage.px(52))
+                    .background {
+                        GlassShape(Capsule(), tint: colors.surface)
+                            .overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
+                    }
+                    .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
                 .transition(.opacity.combined(with: .scale(scale: Motion.popFromScale)))
