@@ -183,9 +183,12 @@ import Testing
         _ = start
     }
 
-    @Test func theSystemNamesTheMenuButtons() {
-        let pad = PadDescriptor(profile: .dualSense, menuLeftSymbol: "square.and.arrow.up", menuRightSymbol: "line.3.horizontal")
-        #expect(pad.menuLeftSymbol == "square.and.arrow.up")
-        #expect(ControllerGlyphs.choosePad(current: nil, connected: [pad])?.menuRightSymbol == "line.3.horizontal")
+    @Test func dpadAndGuideHaveNonTextualMarks() {
+        for family in PadFamily.allCases {
+            #expect(family.mark(.dpad) == .dpad)
+            #expect(family.mark(.guide) == .guide)
+            #expect(family.mark(.dpad).text == nil)
+            #expect(family.mark(.guide).text == nil)
+        }
     }
 }
