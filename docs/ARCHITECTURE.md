@@ -686,7 +686,8 @@ and tilts on Android's 25 s orbit (`HeroMotion`, 15°, overscan 1.02; still with
 background's base gradient fades to 12 % and repaints at 30 Hz. With Match the app's colors the animated background
 takes the game's three colors (`GameColors.dominant`, Android's `dominantHues` with a port of material-color-utilities'
 CAM16/HCT; from the cover, the game background's while the cover's are unknown), smoothed per frame
-(`BackdropTints`). Not ported: animated (WebP) heroes, the vignette, and Android's Material You path.
+(`BackdropTints`). An animated hero plays over its still render (`HeroLive`, see [Animated artwork](#animated-artwork)).
+Not ported: the vignette, and Android's Material You path.
 
 ## Settings
 
@@ -852,8 +853,34 @@ score, author, date: what the reply contained). A or a tap downloads and uses th
 accent border and the "In use" badge. A kind chosen by hand is recorded in the match (`picked`) and every later refresh
 leaves it alone; matching the game by hand (`setGame`: the search menu lists at most eight games) is recorded too (`manual`),
 so the name is not searched again, and its images start over. A thumbnail is downloaded when its tile scrolls into view and
-kept in the same cache. Not ported: the filter sheet (type, style, size, sort) and animated images (the store asks
-for still images only, and nothing here plays an animation), and the companion screen.
+kept in the same cache. The filter sheet (type, style, size, sort) narrows and sorts the choices; animated choices play in
+their tiles ([Animated artwork](#animated-artwork)). Not ported: the companion screen.
+
+### Animated artwork
+
+An image ImageIO reads as more than one frame (animated WebP, GIF, APNG) on a canvas of at most 100 million pixels plays
+(`AnimatedImageInfo`, DelosData); the stored file is the downloaded one, so the still readers decode its first frame and
+`ArtworkStore.animation(hostID:appID:kind:)` maps the same file for playing. `AnimatedArtLayer` (DelosUI) draws the
+animation over the still view, cropped or fitted the same way and fading in once its first frame is decoded; the still is
+hidden once it has faded in (a transparent animation never shows the first frame through it) and back as soon as it stops.
+`AnimatedFrameDecoder` decodes one frame at a time off the main actor, no larger than `AnimatedPlayback.decodeSize` gives
+for the view's pixels (an Artwork tile at most 520 px across, a game background frame at most 1050), and holds the shown
+frame and the next one. `FrameClock` times the frames: each lasts the delay its file gives (ImageIO's unclamped delay; a
+GIF delay of 10 ms or less is 100 ms, any other is kept, 0 included), measured from when it was due, at most one frame
+changes per display frame (`TimelineView(.animation)`), and a frame that came late keeps its whole time. A layer exists
+only while it plays, so a paused one costs no memory and starts from its first frame again; it restarts too when the app
+comes back to the foreground.
+
+What plays (`AnimatedPlayback.shouldPlay`): in the library, the covers on screen (`onScrollVisibilityChange`) and the
+focused game's logo, while no dialog, filter sheet, side menu or portal covers the screen (a context menu does not:
+the covers beside it keep playing) and motion is not reduced (the profile's Animations or the system's Reduce Motion); on
+the Artwork screen, the animated choices on screen while no sheet or layer is open, each fetching its thumbnail, else the
+full file of a WebP, PNG or GIF, once (`ArtworkStore.animation(of:)`, the download's progress in
+`animationProgress`). The game background (`HeroArt`) starts after the game has stayed focused for 500 ms, renders every
+frame like the still one (`HeroRender.frame`, over the still first frame's extension), and loops through
+`LoopedAnimation`: a pass of 1.5 s or more plays once and the next pass, decoded 500 ms before, fades in over its last
+700 ms (a third of the loop at most, `HeroLoopTimeline`); a shorter one repeats by itself. When it stops while the game
+background stays (a portal opens, motion is reduced) it holds its frame for 1 s before the still returns.
 
 ### Bundled artwork
 

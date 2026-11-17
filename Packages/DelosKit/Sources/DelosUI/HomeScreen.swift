@@ -84,6 +84,8 @@ struct HomeScreen: View {
     @Environment(Navigator.self) private var navigator
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reducedMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.shellCoversArt) private var shellCoversArt
     @State private var loadFailed = false
     /// The library filter's sheet (Y, or a tap on the hint bar's Filter): its focus is new each time it opens.
     @State private var sheetOpen = false
@@ -127,7 +129,12 @@ struct HomeScreen: View {
                     } else if visible.isEmpty {
                         FilteredLibraryEmpty(focus: focus, onReset: resetFilters)
                     } else {
+                        // Animated artwork (covers, the wide cover, the logo) plays only while nothing covers or stops it
+                        // (`rememberArtworkMotion`); each cover adds whether it is on screen
                         GameLibrary(hostID: hostID, apps: visible, focus: focus, actions: actions)
+                            .environment(\.artMotion, AnimatedPlayback.shouldPlay(
+                                visible: !shellCoversArt && !AnimatedPlayback.layerStopsLibraryArt(layers.layer) && !sheetOpen,
+                                foreground: true, streaming: false, reducedMotion: reducedMotion, systemReduceMotion: systemReduceMotion))
                     }
                 }
             }
@@ -502,10 +509,10 @@ struct GameLibrary: View {
         .task(id: focused.id) { metadata.ensure(focused) }
         // The game background follows the focus with a short delay, so it does not flicker while scrolling fast
         .task(id: "\(GameArt.key(hostID, focused.id))#\(art.artwork.version)") {
-            let image = await heroImage(focused)
+            let (image, animation) = await heroImage(focused)
             try? await Task.sleep(for: .milliseconds(140))
             guard !Task.isCancelled else { return }
-            art.hero = GameArt(hostID: hostID, app: focused, image: image)
+            art.hero = GameArt(hostID: hostID, app: focused, image: image, animation: animation)
         }
     }
 
@@ -556,15 +563,18 @@ struct GameLibrary: View {
         }
     }
 
-    /// The game background's image: the SteamGridDB hero, else the cover, else the PC's box art.
-    private func heroImage(_ app: HostApp) async -> CGImage? {
+    /// The game background's image: the SteamGridDB hero, else the cover, else the PC's box art; and the hero's animation
+    /// when it is one (it plays as the game background, the image being its first frame).
+    private func heroImage(_ app: HostApp) async -> (CGImage?, AnimatedSource?) {
         // DELOS's own entries have bundled artwork; a game has SteamGridDB's, else the PC's box art
-        if BundledArtwork.kind(app) != nil { return await art.image(hostID: hostID, app: app, kind: .hero) }
+        if BundledArtwork.kind(app) != nil { return (await art.image(hostID: hostID, app: app, kind: .hero), nil) }
         if art.artwork.enabled {
-            if let hero = await art.image(hostID: hostID, appID: app.id, kind: .hero) { return hero }
-            if let cover = await art.image(hostID: hostID, appID: app.id, kind: .cover) { return cover }
+            if let hero = await art.image(hostID: hostID, appID: app.id, kind: .hero) {
+                return (hero, await art.animation(hostID: hostID, app: app, kind: .hero))
+            }
+            if let cover = await art.image(hostID: hostID, appID: app.id, kind: .cover) { return (cover, nil) }
         }
-        return await art.boxArt(hostID: hostID, appID: app.id, hosts: hosts)
+        return (await art.boxArt(hostID: hostID, appID: app.id, hosts: hosts), nil)
     }
 
     static func id(_ app: HostApp) -> String { "app-\(app.id)" }
@@ -686,18 +696,32 @@ private struct GameTitle: View {
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
+    @Environment(\.artMotion) private var artMotion
+    @Environment(\.displayScale) private var displayScale
     @State private var logo: CGImage?
     @State private var resolved = false
+    /// The logo's animation when it is one.
+    @State private var animation: AnimatedSource?
+    /// The animation has faded in over the logo: the still under it is hidden.
+    @State private var animating = false
 
     var body: some View {
         let key = GameArt.key(hostID, app.id)
         ZStack(alignment: .leading) {
             if let logo {
+                let box = CGSize(width: stage.px(min(metrics.logoWidth(stageWidth: stage.width), width)),
+                                 height: stage.px(metrics.titleBox - 2 * metrics.logoPad))
                 Image(decorative: logo, scale: 1)
                     .resizable()
                     .scaledToFit()
-                    .frame(maxWidth: stage.px(min(metrics.logoWidth(stageWidth: stage.width), width)),
-                           maxHeight: stage.px(metrics.titleBox - 2 * metrics.logoPad), alignment: .leading)
+                    .opacity(animating ? 0 : 1)
+                    .frame(maxWidth: box.width, maxHeight: box.height, alignment: .leading)
+                    // The chosen animated logo plays over its first frame, fitted into the same box (start-aligned like the still)
+                    // while anything may play: the focused game's logo is always on screen
+                    .overlay {
+                        AnimatedArtLayer(source: animation, playing: artMotion, width: Int(box.width * displayScale),
+                                         height: Int(box.height * displayScale), fit: true, alignment: .leading, covering: $animating)
+                    }
                     .accessibilityLabel(app.title)
                     .modifier(TitleEntrance(key: key + "/logo", reduced: reduceMotion))
             } else if resolved {
@@ -718,6 +742,7 @@ private struct GameTitle: View {
         }
         .frame(height: stage.px(metrics.titleBox), alignment: .leading)
         .task(id: "\(key)#\(art.artwork.version)") {
+            animation = nil
             // Bundled entries keep their name as the logo
             if BundledArtwork.kind(app) != nil {
                 logo = nil
@@ -727,9 +752,12 @@ private struct GameTitle: View {
             let cached = art.cachedImage(hostID: hostID, appID: app.id, kind: .logo)
             logo = cached
             resolved = cached != nil || !art.artwork.enabled
-            guard cached == nil, art.artwork.enabled else { return }
-            logo = await art.image(hostID: hostID, appID: app.id, kind: .logo)
-            resolved = true
+            guard art.artwork.enabled else { return }
+            if cached == nil {
+                logo = await art.image(hostID: hostID, appID: app.id, kind: .logo)
+                resolved = true
+            }
+            if logo != nil { animation = await art.animation(hostID: hostID, app: app, kind: .logo) }
         }
     }
 }
@@ -802,7 +830,15 @@ private struct Cover: View {
     @Environment(HomeArt.self) private var art
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
+    @Environment(\.artMotion) private var artMotion
+    @Environment(\.displayScale) private var displayScale
     @State private var shown: CGImage?
+    /// The animation of the SteamGridDB cover shown, when it is one.
+    @State private var animation: AnimatedSource?
+    /// The animation has faded in over the cover: the still under it is hidden.
+    @State private var animating = false
+    /// Some of the cover is on screen.
+    @State private var visible = false
 
     /// A lookup that never finishes (offline, failed) stops being waited for after this long.
     static let lookupGiveUp = Duration.seconds(20)
@@ -817,7 +853,16 @@ private struct Cover: View {
             ZStack {
                 if let shown {
                     Image(decorative: shown, scale: 1).resizable().scaledToFill()
+                        .opacity(animating ? 0 : 1)
                         .frame(width: stage.px(width), height: stage.px(geometry.height))
+                        // The chosen animated cover plays over its still first frame, cropped and muted exactly like it, only while
+                        // the cover is on screen; decoded no bigger than the cover (its focused size) needs
+                        .overlay {
+                            let pixels = displayScale * CoverGeometry.focusScale
+                            AnimatedArtLayer(source: animation, playing: artMotion && visible,
+                                             width: Int((stage.px(width) * pixels).rounded()), height: Int((stage.px(geometry.height) * pixels).rounded()),
+                                             covering: $animating)
+                        }
                         // The idle and menu filters (`IdleCoverFilter`, `menuDimCoverFilter`); the placeholder art has none
                         .saturation(tone.saturation)
                         .colorMultiply(Color(white: tone.brightness))
@@ -869,6 +914,7 @@ private struct Cover: View {
             }
         }
         .frame(width: stage.px(width), height: stage.px(geometry.height))
+        .onScrollVisibilityChange(threshold: 0.01) { visible = $0 }
         .clipShape(shape)
         // The online pulse of the start screen, around the selected game (`focusPulse`), inside the scaled layer
         .background { if focused { FocusPulse(corner: geometry.corner) } }
@@ -884,6 +930,7 @@ private struct Cover: View {
         let artwork = art.artwork
         // DELOS's own entries have bundled artwork and nothing to look up: the placeholder stays while it decodes
         if BundledArtwork.kind(app) != nil {
+            animation = nil
             let cover = await art.image(hostID: hostID, app: app, kind: .cover)
             guard let tile = wide ? await art.image(hostID: hostID, app: app, kind: .wide) : cover else { return }
             shown = tile
@@ -898,6 +945,7 @@ private struct Cover: View {
                 shown = tile
                 // The game's colors come from its cover, worked out as soon as it is decoded
                 art.analyzeCover(key, cover ?? tile)
+                animation = await art.animation(hostID: hostID, app: app, kind: wide ? .wide : .cover)
                 return
             }
             if artwork.lookupExpected, !(await artwork.lookupSettled(hostID: hostID, appID: app.id)) {
@@ -907,6 +955,7 @@ private struct Cover: View {
             }
         }
         guard let box = await art.boxArt(hostID: hostID, appID: app.id, hosts: hosts) else { return }
+        animation = nil
         shown = box
         art.analyzeCover(key, cover ?? box)
     }

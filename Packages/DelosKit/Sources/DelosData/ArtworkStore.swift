@@ -54,6 +54,11 @@ public final class ArtworkStore {
     public private(set) var progress: (done: Int, total: Int)?
     /// The image being downloaded for a kind of a game ("host/app/kind" → the image's id, ``noImage`` for none).
     private(set) var applyingImages: [String: Int] = [:]
+    /// How far the animations the Artwork screen's tiles fetch are downloaded (0…1) by URL; absent: not started, or its size
+    /// is not known (`Thumbnails.progress`).
+    public private(set) var animationProgress: [URL: Double] = [:]
+    /// The URLs whose file was found to be (true) or not to be (false) an animation that plays (`Thumbnails.animatedKnown`).
+    private var animatedKnown: [URL: Bool] = [:]
 
     @ObservationIgnored private let files: ArtworkFiles
     @ObservationIgnored private let secrets: any SecretStorage
@@ -136,6 +141,50 @@ public final class ArtworkStore {
         guard let match = await files.match(hostID: hostID, appID: appID), match.id == nil || match.chosen != nil else { return false }
         settled.insert(game)
         return true
+    }
+
+    // MARK: Animations
+
+    /// The stored image of [kind] when it is an animation that plays (``AnimatedImageInfo``), mapped from the cache; nil for
+    /// a still image, none, or one the cache dropped (``image(hostID:appID:kind:)`` downloads that again and bumps
+    /// ``version``). The file is stored as downloaded, so the animation stays; the still readers decode its first frame
+    /// (`animatedFile`).
+    public func animation(hostID: String, appID: Int, kind: ArtKind) async -> Data? {
+        await files.animation(key: ArtworkFiles.imageKey(hostID, appID, kind))
+    }
+
+    /// The file types SteamGridDB serves that play as animations: the full file of a choice is fetched for its tile only in
+    /// one of these.
+    public static let animatedMimes: Set<String> = ["image/webp", "image/png", "image/gif"]
+
+    /// The animation of an animated choice ([image] `animated`) to play in its tile: its thumbnail, else the full file when
+    /// that is another URL of a type that animates; nil when neither plays (`Thumbnails.loadAnimation`). Each URL is
+    /// downloaded once and kept in the cache; ``animationProgress`` follows the download.
+    public func animation(of image: SteamGridDBImage) async -> Data? {
+        guard enabled, image.animated else { return nil }
+        if let data = await probe(image.previewURL, key: ArtworkFiles.thumbnailKey(image)) { return data }
+        guard Self.animatedMimes.contains(image.mime ?? ""), image.url != image.previewURL else { return nil }
+        return await probe(image.url, key: ArtworkFiles.animationKey(image))
+    }
+
+    /// Whether [image]'s animation was looked for and nothing plays (its tile keeps the first frame): `hasNoAnimation`.
+    public func hasNoAnimation(_ image: SteamGridDBImage) -> Bool {
+        animatedKnown[image.previewURL] == false
+            && (!Self.animatedMimes.contains(image.mime ?? "") || image.url == image.previewURL || animatedKnown[image.url] == false)
+    }
+
+    /// The file at [url] (cache [key]) when it plays; a download that fails is not remembered, so it is tried again.
+    private func probe(_ url: URL, key: String) async -> Data? {
+        if animatedKnown[url] == false { return nil }
+        let (updates, progress) = AsyncStream.makeStream(of: Double.self, bufferingPolicy: .bufferingNewest(1))
+        let watcher = Task { for await share in updates { animationProgress[url] = share } }
+        let result = await files.animation(url: url, key: key, client: client) { progress.yield($0) }
+        progress.finish()
+        await watcher.value
+        animationProgress[url] = nil
+        guard let result else { return nil }
+        animatedKnown[url] = result.animation != nil
+        return result.animation
     }
 
     // MARK: Downloads
@@ -299,6 +348,31 @@ actor ArtworkFiles {
 
     static func imageKey(_ hostID: String, _ appID: Int, _ kind: ArtKind) -> String { "sgdb/\(hostID)/\(appID)/\(kind.rawValue)" }
     static func boxArtKey(_ hostID: String, _ appID: Int) -> String { "boxart/\(hostID)/\(appID)" }
+    static func thumbnailKey(_ image: SteamGridDBImage) -> String { "thumb/\(image.id)" }
+    /// The full file of an animated choice whose thumbnail does not play.
+    static func animationKey(_ image: SteamGridDBImage) -> String { "anim/\(image.id)" }
+
+    /// The entry of [key], mapped, when it is an animation that plays.
+    func animation(key: String) async -> Data? {
+        guard let data = await cache.mappedData(for: key), AnimatedImageInfo.of(data) != nil else { return nil }
+        return data
+    }
+
+    /// What fetching a file for its animation found: nil when the download failed, else the animation (nil: it does not play).
+    struct Probe: Sendable {
+        let animation: Data?
+    }
+
+    /// The file at [url] as cache entry [key] (downloaded once, [progress] hearing how far), and whether it plays.
+    func animation(url: URL, key: String, client: SteamGridDB, progress: @escaping @Sendable (Double) -> Void) async -> Probe? {
+        if let data = await cache.mappedData(for: key) { return Probe(animation: AnimatedImageInfo.of(data) != nil ? data : nil) }
+        let (cache, limit) = (cache, cache.maxEntryBytes)
+        guard let data = await download(key, work: { try await client.download(url, limit: limit, progress: progress) },
+                                        store: { try? await cache.store($0, for: key) }) else { return nil }
+        guard AnimatedImageInfo.of(data) != nil else { return Probe(animation: nil) }
+        // Played from the file rather than held in memory, when it was stored
+        return Probe(animation: await cache.mappedData(for: key) ?? data)
+    }
 
     func image(hostID: String, appID: Int, kind: ArtKind, client: SteamGridDB?) async -> Data? {
         let key = Self.imageKey(hostID, appID, kind)
@@ -405,7 +479,7 @@ actor ArtworkFiles {
 
     /// A thumbnail of a choice, kept in the cache.
     func thumbnail(_ image: SteamGridDBImage, client: SteamGridDB) async -> Data? {
-        let key = "thumb/\(image.id)"
+        let key = Self.thumbnailKey(image)
         if let data = await cache.data(for: key) { return data }
         let (cache, limit, url) = (cache, cache.maxEntryBytes, image.previewURL)
         return await download(key) { try await client.download(url, limit: limit) } store: { try? await cache.store($0, for: key) }

@@ -38,6 +38,15 @@ public actor DiskCache {
         return data
     }
 
+    /// The entry of [key] mapped from its file rather than read (an animation is played from it for as long as it shows),
+    /// marked as used; nil when there is none. The mapping stays valid when the entry is replaced or dropped meanwhile.
+    public func mappedData(for key: String) -> Data? {
+        let url = file(key)
+        guard let data = try? Data(contentsOf: url, options: .alwaysMapped), !data.isEmpty else { return nil }
+        try? files.setAttributes([.modificationDate: now()], ofItemAtPath: url.path)
+        return data
+    }
+
     public func contains(_ key: String) -> Bool { files.fileExists(atPath: file(key).path) }
 
     /// Stores [data] as [key] (replacing what was there) and trims the folder to the budget.
