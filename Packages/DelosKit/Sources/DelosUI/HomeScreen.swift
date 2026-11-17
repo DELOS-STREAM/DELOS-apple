@@ -180,6 +180,21 @@ enum LibraryWrap {
     }
 }
 
+/// What the row does when the focus goes from one cover to another: the one scroll target of that focus step.
+enum LibraryScroll {
+    enum Step: Equatable {
+        /// Round the row from the first cover to the last or back (``LibraryWrap``).
+        case wrap
+        /// The row brings cover [to] to its start: a glide for a single move, one short step while the focus is moving
+        /// fast (a held arrow).
+        case follow(to: Int, pace: ScrollPace.Pace)
+    }
+
+    static func step(from old: Int?, to new: Int, count: Int, pace: ScrollPace.Pace) -> Step {
+        LibraryWrap.isWrap(from: old, to: new, count: count) ? .wrap : .follow(to: new, pace: pace)
+    }
+}
+
 /// The covers of a state of the context menu: the ones beside the focused cover idle slightly muted
 /// (`saturate(.86) brightness(.92)`) and dim further while a context menu is open (`.6` and `.5`), so the cover the
 /// menu belongs to stands out. The focused cover keeps its colors.
@@ -263,7 +278,7 @@ struct GameLibrary: View {
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
     @State private var position = ScrollPosition(edge: .leading)
-    @State private var lastFocusMove = Date.distantPast
+    @State private var pace = ScrollPace()
     /// Where the focused game stood, for the one that takes its place when it disappears.
     @State private var lastIndex = 0
     @State private var ends = ScrollEnds()
@@ -344,6 +359,7 @@ struct GameLibrary: View {
                 .padding(.leading, stage.px(start))
                 .padding(.trailing, stage.px(end))
                 .padding(.vertical, stage.px(Self.rowPad))
+                .focusDrivenScroll()
             }
             .entranceScope()
             .scrollClipDisabled()
@@ -359,7 +375,6 @@ struct GameLibrary: View {
             }
             .padding(.top, stage.px(layout.coverTop - Self.rowPad))
             .modifier(RowEdgeFade(back: ends.back ? 1 : 0, forward: ends.forward ? 1 : 0, width: stage.width, overdraw: stage.px(1000)))
-                .focusDrivenScroll()
             .animation(.easeInOut(duration: 0.3), value: ends)
             .opacity(rowAlpha)
             .offset(x: stage.px(rowBounce))
@@ -376,18 +391,16 @@ struct GameLibrary: View {
                 guard let now else { return }
                 lastIndex = now
                 actions.rememberHomeGame(hostID: hostID, appID: apps[now].id)
-                if LibraryWrap.isWrap(from: old, to: now, count: apps.count) {
+                // One focus step, one scroll target: this is the only thing that scrolls the row
+                switch LibraryScroll.step(from: old, to: now, count: apps.count, pace: pace.move()) {
+                case .wrap:
                     glide(to: now, from: old ?? now)
-                    return
+                case .follow(let index, let speed):
+                    wrap?.cancel()
+                    rowAlpha = 1
+                    rowBounce = 0
+                    scroll(to: index, animation: speed == .held ? ScrollPace.heldStep : .timingCurve(0.33, 1, 0.68, 1, duration: 0.2))
                 }
-                wrap?.cancel()
-                rowAlpha = 1
-                rowBounce = 0
-                // A held arrow moves the focus every 50 ms: overlapping 200 ms animations lagged behind it, so a fast
-                // move scrolls in one short step and a single press glides
-                let fast = Date.now.timeIntervalSince(lastFocusMove) < 0.12
-                lastFocusMove = .now
-                scroll(to: now, animation: fast ? .linear(duration: 0.05) : .timingCurve(0.33, 1, 0.68, 1, duration: 0.2))
             }
             // The focused game disappeared (hidden, removed): its neighbour takes the focus
             .onChange(of: ids) { _, now in

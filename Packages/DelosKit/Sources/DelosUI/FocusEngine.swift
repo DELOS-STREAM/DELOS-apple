@@ -166,6 +166,7 @@ struct FocusScroll<Content: View>: View {
     @ViewBuilder let content: () -> Content
     @State private var reveal = FocusReveal()
     @Environment(\.reducedMotion) private var reducedMotion
+    @State private var pace = ScrollPace()
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -175,7 +176,8 @@ struct FocusScroll<Content: View>: View {
                 .onAppear {
                     reveal.attach { id, animated in
                         if animated && !reducedMotion {
-                            withAnimation(Motion.out(Motion.rowFocus)) { proxy.scrollTo(id, anchor: .center) }
+                            // A held arrow moves the focus every 50 ms: one short step each, not overlapping glides
+                            withAnimation(pace.animation(Motion.out(Motion.rowFocus))) { proxy.scrollTo(id, anchor: .center) }
                         } else {
                             proxy.scrollTo(id, anchor: .center)
                         }

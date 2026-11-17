@@ -39,6 +39,7 @@ struct SettingsScreen: View {
     /// The row whose list of values is open, and the focus inside the list.
     @State private var picker: (id: String, focus: FocusModel)?
     @State private var rowFrames: [String: CGRect] = [:]
+    @State private var pace = ScrollPace()
     private let store = StreamSettingsStore()
     private let appearances = AppearanceStore()
 
@@ -181,8 +182,8 @@ struct SettingsScreen: View {
                 .padding(.horizontal, stage.px(18))
                 .padding(.top, stage.px(14))
                 .padding(.bottom, stage.px(140))
-            }
                 .focusDrivenScroll()
+            }
             .focusable(false)
             .scrollClipDisabled()
             .scrollEdgeFades(
@@ -190,7 +191,7 @@ struct SettingsScreen: View {
                 bottom: stage.compact ? SettingsLayout.compactFadeBottom : SettingsLayout.fadeBottom)
             .onChange(of: focus.focused) { _, now in
                 guard let id = now as? String, rows.contains(where: { $0.id == id }) else { return }
-                withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(id) }
+                withAnimation(pace.animation(.easeOut(duration: 0.3))) { proxy.scrollTo(id) }
             }
         }
         .frame(maxWidth: .infinity)
@@ -872,8 +873,8 @@ struct ChoicePicker: View {
                             .id(Self.optionID(index))
                         }
                     }
-                }
                     .focusDrivenScroll()
+                }
                 .focusable(false)
                 .frame(height: listHeight)
                 .onAppear { proxy.scrollTo(Self.optionID(selected ?? 0)) }
