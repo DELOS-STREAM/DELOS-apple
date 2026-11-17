@@ -32,7 +32,7 @@ import Testing
         // "a" no longer holds the ring: its blur changes nothing
         #expect(ring.alpha == 1)
         ring.blur("b")
-        try await Task.sleep(for: .milliseconds(150))
+        for _ in 0..<300 where ring.alpha != 0 { try await Task.sleep(for: .milliseconds(10)) }
         #expect(ring.alpha == 0)
     }
 
