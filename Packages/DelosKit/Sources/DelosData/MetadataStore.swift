@@ -15,11 +15,23 @@ public actor MetadataStore {
     public init(providers: any MetadataProviders = HTTPMetadataProviders(), cache: DiskCache? = nil,
                 now: @escaping @Sendable () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
         self.providers = providers
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        self.cache = cache ?? DiskCache(directory: support.appendingPathComponent("game-metadata", isDirectory: true),
+        self.cache = cache ?? DiskCache(directory: Self.defaultDirectory(),
                                         budget: 32 * 1024 * 1024, maxEntryBytes: 1024 * 1024)
         self.now = now
     }
+
+    /// Where the lookups are kept: Application Support/game-metadata; on tvOS, which allows writes only under the
+    /// caches, Caches/game-metadata (a lost lookup is asked again). [tvOS] is a parameter so a test can use that path.
+    static func defaultDirectory(tvOS: Bool = MetadataStore.isTVOS) -> URL {
+        let base = FileManager.default.urls(for: tvOS ? .cachesDirectory : .applicationSupportDirectory, in: .userDomainMask)[0]
+        return base.appendingPathComponent("game-metadata", isDirectory: true)
+    }
+
+    #if os(tvOS)
+    static let isTVOS = true
+    #else
+    static let isTVOS = false
+    #endif
 
     /// Whether a metadata service is configured; without one every lookup answers "unavailable" and nothing is requested.
     public nonisolated var available: Bool { providers.available }
