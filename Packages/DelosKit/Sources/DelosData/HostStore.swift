@@ -214,7 +214,8 @@ public final class HostStore {
     /// Loads a paired PC's apps.
     @discardableResult
     public func loadApps(_ id: String) async throws -> [HostApp] {
-        guard let record = host(id), let pin = record.pin, let address = record.activeAddress ?? record.localAddress else { return [] }
+        guard let record = host(id), let pin = record.pin,
+              let address = record.activeAddress ?? record.localAddress ?? record.manualAddress else { return [] }
         let generation = trustGeneration(id)
         let list = try await client(address).appList(pin: pin)
         // The apps of a PC that was unpaired meanwhile are not kept
