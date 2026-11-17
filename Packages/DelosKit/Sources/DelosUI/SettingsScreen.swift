@@ -65,7 +65,7 @@ struct SettingsScreen: View {
         case .controls: AppearanceForm.haptics
         case .appearance: AppearanceForm.theme
         case .covers: CoversForm.key
-        case .about: AppLanguageSetting.supportsAppSettings ? AppLanguageSetting.id : GameDataSetting.firstID
+        case .about: AboutSetting.firstID
         }
     }
 
@@ -77,7 +77,7 @@ struct SettingsScreen: View {
     }
 
     private var rows: [SettingRow] {
-        form.rows(tab) + appearanceForm.rows(tab) + coversForm.rows(tab) + AppLanguageSetting.rows(tab) + GameDataSetting.rows(tab)
+        form.rows(tab) + appearanceForm.rows(tab) + coversForm.rows(tab) + AboutSetting.rows(tab) + AppLanguageSetting.rows(tab) + GameDataSetting.rows(tab)
     }
     private var focusedRow: SettingRow? { rows.first { focus.focused == AnyHashable($0.id) } }
 
@@ -251,6 +251,8 @@ struct SettingsScreen: View {
         case CoversForm.key: actions.openSteamGridDBKeyDialog()
         case CoversForm.missing: Task { await actions.downloadArtwork(hostID: actions.libraryHostID, refresh: false) }
         case CoversForm.refresh: Task { await actions.downloadArtwork(hostID: actions.libraryHostID, refresh: true) }
+        case AboutSetting.welcomeID: actions.replayWelcome()
+        case AboutSetting.basedID, CoversForm.choose: return
         case _ where GameDataSetting.website(row.id) != nil:
             if let url = GameDataSetting.website(row.id) { openURL(url) }
         default:
@@ -306,7 +308,7 @@ struct SettingsScreen: View {
         case .appSettings, .action:
             feedback?.play(.open)
             activate(row)
-        case .slider:
+        case .slider, .info:
             break
         }
     }
@@ -537,6 +539,11 @@ struct SettingRowView: View {
             labelled(label, arrows: arrows)
         case .appSettings(let language):
             labelled(language, arrows: arrows)
+        case .info(let text):
+            MarqueeLabel(text: text, active: focused)
+                .font(DelosFonts.figtree(stage.tpx(23)))
+                .foregroundStyle(colors.text2.color)
+                .frame(maxWidth: stage.px(360), alignment: .trailing)
         }
     }
 

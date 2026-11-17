@@ -73,3 +73,18 @@ import Testing
     }
 }
 
+@Suite struct AboutRowsTests {
+    @Test func aboutLeadsWithWhatDelosIsBasedOnAndReplayingTheWelcome() {
+        let rows = AboutSetting.rows(.about)
+        #expect(rows.map(\.id) == [AboutSetting.basedID, AboutSetting.welcomeID])
+        #expect(rows[0].value == .info("Artemis · Moonlight"))
+        #expect(AboutSetting.rows(.stream).isEmpty)
+        #expect(AboutSetting.firstID == SettingsScreen.firstRow(.about))
+    }
+
+    @Test func coversSaysWhereToChooseArtwork() {
+        let rows = CoversForm(enabled: false, automatic: true, pcName: nil).rows(.covers)
+        #expect(rows.last?.id == CoversForm.choose)
+        guard case .info = rows.last?.value else { Issue.record("not an info row"); return }
+    }
+}

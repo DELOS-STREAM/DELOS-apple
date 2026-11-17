@@ -659,7 +659,9 @@ when selection, size, motion preference or view lifetime changes. `PolishMotionT
 plate target, session memory, and localized announcement text/priority.
 
 
-Not ported yet: the Display, Covers and Devices tabs, the rest of About, the other rows of Audio and Controls, search, the impact
+About also has Based on (an info row, `SettingValue.info`) and Replay the welcome (the boot screen again above Settings; Create then ends
+at the start screen); Covers' Choose artwork row only says where the game menu's Artwork screen is. Not ported yet: the Display and Devices
+tabs, the rest of About (version: its text says Android; updates; diagnostics, issue #71), the other rows of Audio and Controls, search, the impact
 chips, and
 Android's link guidance rows.
 
