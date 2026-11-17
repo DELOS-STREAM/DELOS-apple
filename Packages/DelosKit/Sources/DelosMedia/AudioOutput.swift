@@ -1,5 +1,6 @@
 import AVFAudio
 import DelosCore
+import Foundation
 
 /// Plays the stream's audio: the core's Opus packets are decoded on the core's audio thread into an ``AudioRing``,
 /// and an `AVAudioEngine` source node pulls them on its render thread. The ring holds at most 60 ms, so a burst from
@@ -25,6 +26,15 @@ public final class AudioOutput: AudioSampleSink, @unchecked Sendable {
     private var ring: AudioRing?
     private var decoding: Decoding?
     private var engine: AVAudioEngine?
+    private var restarter: AudioRestarter?
+    private var observers: [any NSObjectProtocol] = []
+    /// The notifications arrive here, one after another, never on the core's threads.
+    private let notifications: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "io.github.meitoncz.delos.audio.restart"
+        queue.maxConcurrentOperationCount = 1
+        return queue
+    }()
 
     public init() {}
 
@@ -50,7 +60,36 @@ public final class AudioOutput: AudioSampleSink, @unchecked Sendable {
         engine.attach(source)
         engine.connect(source, to: engine.mainMixerNode, format: format)
         self.engine = engine
+        observe(engine)
         return true
+    }
+
+    /// Starts the engine again when the system stopped it (route or device change, interruption).
+    private func observe(_ engine: AVAudioEngine) {
+        let restarter = AudioRestarter(isRunning: { engine.isRunning }, restart: { (try? engine.start()) != nil })
+        self.restarter = restarter
+        let center = NotificationCenter.default
+        func watch(_ name: Notification.Name, object: Any?, _ event: @escaping @Sendable (Notification) -> AudioRestarter.Event?) {
+            observers.append(center.addObserver(forName: name, object: object, queue: notifications) { notification in
+                if let event = event(notification) { restarter.handle(event) }
+            })
+        }
+        watch(.AVAudioEngineConfigurationChange, object: engine) { _ in .configurationChange }
+        #if !os(macOS)
+        let session = AVAudioSession.sharedInstance()
+        watch(AVAudioSession.routeChangeNotification, object: session) { _ in .routeChange }
+        watch(AVAudioSession.interruptionNotification, object: session) { notification in
+            let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            switch raw.flatMap(AVAudioSession.InterruptionType.init(rawValue:)) {
+            case .began: return .interruptionBegan
+            case .ended:
+                // The session was deactivated by the interruption: activate it again before the engine starts
+                try? session.setActive(true)
+                return .interruptionEnded
+            default: return nil
+            }
+        }
+        #endif
     }
 
     /// The standard format for the stream's channels. Surround needs a channel layout: the host sends Windows' order
@@ -95,14 +134,25 @@ public final class AudioOutput: AudioSampleSink, @unchecked Sendable {
     }
 
     public func start() {
+        restarter?.setWanted(true)
         try? engine?.start()
     }
 
     public func stop() {
+        restarter?.setWanted(false)
         engine?.stop()
     }
 
     public func cleanup() {
+        restarter?.setWanted(false)
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers = []
+        restarter = nil
+        engine?.stop()
+        #if !os(macOS)
+        // Give the sound back to what played before the stream
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        #endif
         engine = nil
         decoding = nil
         ring = nil

@@ -75,6 +75,8 @@ public enum SteamGridDBError: Error, Equatable, Sendable {
     case downloadHTTP(Int)
     /// An image larger than the cache takes.
     case imageTooLarge
+    /// An image address that is not https.
+    case insecureURL
 }
 
 /// The SteamGridDB API (v2) with the user's own key (`SteamGridDbClient` of DELOS for Android). Only still images are
@@ -90,10 +92,20 @@ public struct SteamGridDB: Sendable {
 
     let key: String
     let transport: Transport
+    /// Fetches a file and stops reading once it is larger than the limit (the second argument).
+    typealias Downloader = @Sendable (URLRequest, Int64) async throws -> (Data, HTTPURLResponse)
+    let downloader: Downloader
 
-    public init(key: String, transport: @escaping Transport = SteamGridDB.urlSession) {
+    /// - Parameter transport: replaces the network for the API and the downloads (tests); nil uses URLSession, and
+    ///   downloads stop at their size limit while they are read.
+    public init(key: String, transport: Transport? = nil) {
         self.key = key
-        self.transport = transport
+        self.transport = transport ?? SteamGridDB.urlSession
+        if let transport {
+            downloader = { request, _ in try await transport(request) }
+        } else {
+            downloader = SteamGridDB.boundedDownload
+        }
     }
 
     /// URLSession with Android's time-outs (10 s to connect, 30 s to read).
@@ -102,6 +114,31 @@ public struct SteamGridDB: Sendable {
         request.timeoutInterval = 30
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw SteamGridDBError.badReply }
+        return (data, http)
+    }
+
+    /// A download that is refused as soon as the announced length, or the bytes read so far, pass [limit]: a huge
+    /// reply is never held whole. A reply that is not 2xx is not read.
+    static let boundedDownload: Downloader = { request, limit in
+        var request = request
+        request.timeoutInterval = 30
+        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        guard let http = response as? HTTPURLResponse else { throw SteamGridDBError.badReply }
+        guard (200..<300).contains(http.statusCode) else { return (Data(), http) }
+        guard response.expectedContentLength <= limit else { throw SteamGridDBError.imageTooLarge }
+        var data = Data()
+        var chunk = [UInt8]()
+        chunk.reserveCapacity(64 * 1024)
+        for try await byte in bytes {
+            chunk.append(byte)
+            if chunk.count == 64 * 1024 {
+                data.append(contentsOf: chunk)
+                chunk.removeAll(keepingCapacity: true)
+                guard Int64(data.count) <= limit else { throw SteamGridDBError.imageTooLarge }
+            }
+        }
+        data.append(contentsOf: chunk)
+        guard Int64(data.count) <= limit else { throw SteamGridDBError.imageTooLarge }
         return (data, http)
     }
 
@@ -169,7 +206,8 @@ public struct SteamGridDB: Sendable {
 
     /// The file at [url], at most [limit] bytes.
     public func download(_ url: URL, limit: Int64) async throws -> Data {
-        let (data, response) = try await transport(URLRequest(url: url))
+        guard url.scheme == "https" else { throw SteamGridDBError.insecureURL }
+        let (data, response) = try await downloader(URLRequest(url: url), limit)
         guard (200..<300).contains(response.statusCode) else { throw SteamGridDBError.downloadHTTP(response.statusCode) }
         guard Int64(data.count) <= limit else { throw SteamGridDBError.imageTooLarge }
         return data
@@ -215,10 +253,10 @@ public struct SteamGridDB: Sendable {
     static func parseImages(_ reply: Data?) throws -> [SteamGridDBImage] {
         try dataList(reply)?.compactMap { entry in
             guard let id = number(entry["id"]), let text = entry["url"] as? String, let url = URL(string: text),
-                  url.scheme == "https" || url.scheme == "http" else { return nil }
+                  url.scheme == "https" else { return nil }
             let mime = entry["mime"] as? String
             if mime == "image/webm" || text.lowercased().hasSuffix(".webm") { return nil }
-            let thumb = (entry["thumb"] as? String).flatMap(URL.init(string:)).flatMap { $0.scheme == "https" || $0.scheme == "http" ? $0 : nil }
+            let thumb = (entry["thumb"] as? String).flatMap(URL.init(string:)).flatMap { $0.scheme == "https" ? $0 : nil }
             // Newer answers may list several styles: the first is shown
             let style = ((entry["style"] as? [String])?.first ?? entry["style"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             return SteamGridDBImage(

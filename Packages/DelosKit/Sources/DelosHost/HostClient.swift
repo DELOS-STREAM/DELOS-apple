@@ -119,9 +119,17 @@ public struct HostClient: Sendable {
     public let identity: ClientIdentity
     public let deviceName: String
 
-    /// Time limits: a `serverinfo` poll is short; requests that wait for the user or a game have none.
+    /// Time limits: a `serverinfo` poll is short; only the first pairing step, which waits for the user, has none.
     static let pollTimeout: Duration = .seconds(5)
     static let requestTimeout: Duration = .seconds(10)
+    /// Quitting an app answers within seconds; a host that stalls must not leave "Quitting" on screen for good.
+    static let cancelTimeout: Duration = .seconds(30)
+    /// The host answers a launch or a resume when the game runs, which can take a while, but not without end.
+    static let launchTimeout: Duration = .seconds(120)
+
+    /// The limits `cancel` and `launch`/`resume` use (tests shorten them).
+    var cancelLimit = HostClient.cancelTimeout
+    var launchLimit = HostClient.launchTimeout
     static let xmlLimit = 1 << 20
     static let assetLimit = 16 << 20
 
@@ -159,7 +167,7 @@ public struct HostClient: Sendable {
         return data
     }
 
-    /// Starts an app. The host answers when the app runs; there is no time limit. Returns the RTSP session URL when
+    /// Starts an app. The host answers when the app runs; ``launchTimeout`` is the limit. Returns the RTSP session URL when
     /// the host names one (`sessionUrl0`).
     public func launch(_ request: LaunchRequest, nvidiaServer: Bool, pin: HostPin) async throws -> String? {
         try await launchOrResume("launch", resultField: "gamesession", request, nvidiaServer: nvidiaServer, pin: pin)
@@ -172,7 +180,7 @@ public struct HostClient: Sendable {
 
     /// Quits the app that runs. Throws `refused` when the host says it did not quit it.
     public func cancel(pin: HostPin) async throws {
-        let root = try HostXML.root(await get("cancel", pin: pin, timeout: nil, limit: Self.xmlLimit))
+        let root = try HostXML.root(await get("cancel", pin: pin, timeout: cancelLimit, limit: Self.xmlLimit))
         guard let value = root.child("cancel") else { throw HostError.malformedResponse("no cancel") }
         if value == "0" { throw HostError.refused }
     }
@@ -186,7 +194,7 @@ public struct HostClient: Sendable {
         _ verb: String, resultField: String, _ request: LaunchRequest, nvidiaServer: Bool, pin: HostPin
     ) async throws -> String? {
         let query = request.query(nvidiaServer: nvidiaServer)
-        let root = try HostXML.root(await perform(verb, query: query, pin: pin, timeout: nil, limit: Self.xmlLimit))
+        let root = try HostXML.root(await perform(verb, query: query, pin: pin, timeout: launchLimit, limit: Self.xmlLimit))
         guard let value = root.child(resultField) else { throw HostError.malformedResponse("no \(resultField)") }
         if value == "0" { throw HostError.refused }
         return root.child("sessionUrl0")

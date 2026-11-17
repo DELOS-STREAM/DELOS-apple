@@ -62,4 +62,28 @@ import Testing
     func rejectsAnythingThatCouldLeaveADirectory(id: String) {
         #expect(!HostID.isValid(id))
     }
+
+    @Test(arguments: ["192.168.1.20", "desk.local", "2001:db8::1", "::1"])
+    func aNetworkAddressThatIsOnlyAHostIsValid(text: String) {
+        #expect(HostAddress.isValidHost(text))
+    }
+
+    @Test(arguments: ["", "192.168.1.20:47989", "[::1]", "desk\r\nX-Evil: 1", "a b", "a/b", " 10.0.0.1", "10.0.0.1 ", "x\u{0}y"])
+    func anythingElseIsNotAHost(text: String) {
+        #expect(!HostAddress.isValidHost(text))
+    }
+
+    @Test func discoveryAdmitsAtMostThirtyTwoServicesAndAFreedNameMakesRoom() {
+        var limit = ServiceLimit()
+        var admitted = 0
+        for index in 0..<ServiceLimit.maximum where limit.admit("pc\(index)") { admitted += 1 }
+        #expect(admitted == 32)
+        let overflow = limit.admit("one more")
+        #expect(!overflow)
+        let again = limit.admit("pc0")
+        #expect(again)
+        limit.release("pc0")
+        let room = limit.admit("one more")
+        #expect(room)
+    }
 }

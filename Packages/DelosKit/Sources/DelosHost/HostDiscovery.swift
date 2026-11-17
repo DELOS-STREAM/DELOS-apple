@@ -17,6 +17,23 @@ public enum DiscoveryEvent: Hashable, Sendable {
     case failed(String)
 }
 
+/// The services one browse accepts: a hostile network cannot make the app resolve and list any number of them.
+struct ServiceLimit {
+    static let maximum = 32
+    private(set) var names: Set<String> = []
+
+    /// A service that went away makes room for another.
+    mutating func release(_ name: String) { names.remove(name) }
+
+    /// True for a service already admitted or one that still fits.
+    mutating func admit(_ name: String) -> Bool {
+        if names.contains(name) { return true }
+        guard names.count < Self.maximum else { return false }
+        names.insert(name)
+        return true
+    }
+}
+
 /// Finds GameStream hosts with Bonjour (`_nvstream._tcp`). Each service is resolved by opening a TCP connection to it
 /// and reading the remote address; the connection is closed right away.
 public struct HostDiscovery: Sendable {
@@ -35,6 +52,7 @@ public struct HostDiscovery: Sendable {
         let (stream, continuation) = AsyncStream.makeStream(of: DiscoveryEvent.self)
         let browser = NWBrowser(for: .bonjour(type: serviceType, domain: "local."), using: NWParameters())
         let resolving = Resolutions()
+        let admitted = Mutex(ServiceLimit())
         let queue = DispatchQueue(label: "io.github.meitoncz.delos.host.discovery")
         let timeout = resolveTimeout
 
@@ -50,12 +68,13 @@ public struct HostDiscovery: Sendable {
             for change in changes {
                 switch change {
                 case .added(let result):
-                    guard case .service(let name, _, _, _) = result.endpoint else { continue }
+                    guard case .service(let name, _, _, _) = result.endpoint, admitted.withLock({ $0.admit(name) }) else { continue }
                     Self.resolve(result.endpoint, name: name, on: queue, timeout: timeout, resolving: resolving) {
                         continuation.yield(.found($0))
                     }
                 case .removed(let result):
                     guard case .service(let name, _, _, _) = result.endpoint else { continue }
+                    admitted.withLock { $0.release(name) }
                     continuation.yield(.lost(serviceName: name))
                 default: break
                 }

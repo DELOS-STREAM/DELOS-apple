@@ -39,6 +39,18 @@ import Testing
         #expect(!record.lastReplyVerified)
     }
 
+    @Test func addressesFromTheAnswerMustBeHostNamesOrIPLiterals() throws {
+        let hostile = Documents.sunshine
+            .replacingOccurrences(of: "192.168.1.20", with: "evil.example\r\nX: y")
+        let record = HostRecord(firstReply: try reply(hostile, .plainHTTP))
+
+        #expect(record.localAddress == nil)
+        // apolloBusy carries an ExternalIP
+        let apollo = Documents.apolloBusy.replacingOccurrences(of: "203.0.113.9", with: "203.0.113.9:80\r\nHost: x")
+        #expect(HostRecord(firstReply: try reply(apollo, .plainHTTP)).remoteAddress == nil)
+        #expect(HostRecord(firstReply: try reply(Documents.apolloBusy, .plainHTTP)).remoteAddress?.host == "203.0.113.9")
+    }
+
     @Test func aPinnedAnswerUpdatesEverythingButThePin() throws {
         let record = try pairedRecord()
         let renamed = Documents.sunshine

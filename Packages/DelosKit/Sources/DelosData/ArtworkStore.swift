@@ -58,7 +58,7 @@ public final class ArtworkStore {
     @ObservationIgnored private let files: ArtworkFiles
     @ObservationIgnored private let secrets: any SecretStorage
     @ObservationIgnored private let defaults: UserDefaults
-    @ObservationIgnored private let transport: SteamGridDB.Transport
+    @ObservationIgnored private let transport: SteamGridDB.Transport?
     /// Games whose lookup has finished (matched with every kind stored, or not found).
     @ObservationIgnored private var settled: Set<String> = []
     @ObservationIgnored private var running: [String: Task<Bool, any Error>] = [:]
@@ -88,7 +88,7 @@ public final class ArtworkStore {
         defaults: UserDefaults = .standard,
         matches: URL? = nil,
         cache: DiskCache = .artwork(),
-        transport: @escaping SteamGridDB.Transport = SteamGridDB.urlSession
+        transport: SteamGridDB.Transport? = nil
     ) {
         self.secrets = secrets
         self.defaults = defaults
@@ -125,7 +125,7 @@ public final class ArtworkStore {
     }
 
     /// The PC's box art of the app: from the cache, else from [fetch] (the PC's `appasset`), which is then kept.
-    public func boxArt(hostID: String, appID: Int, fetch: @Sendable () async throws -> Data) async -> Data? {
+    public func boxArt(hostID: String, appID: Int, fetch: @escaping @Sendable () async throws -> Data) async -> Data? {
         await files.boxArt(hostID: hostID, appID: appID, fetch: fetch)
     }
 
@@ -272,6 +272,11 @@ public final class ArtworkStore {
 actor ArtworkFiles {
     let matches: URL
     let cache: DiskCache
+    /// At most this many images are downloaded at once, whatever number of tiles ask for one.
+    static let parallelDownloads = 4
+    private let gate = MetadataRequestGate(permits: ArtworkFiles.parallelDownloads)
+    /// The downloads under way by cache key: tiles that ask for the same image wait for one download.
+    private var inflight: [String: Task<Data?, Never>] = [:]
 
     init(matches: URL, cache: DiskCache) {
         self.matches = matches
@@ -304,18 +309,36 @@ actor ArtworkFiles {
         let key = Self.imageKey(hostID, appID, kind)
         if let data = await cache.data(for: key) { return data }
         // The cache dropped it: the chosen image is downloaded again
-        guard let client, let url = match(hostID: hostID, appID: appID)?.chosen?[kind.rawValue]?.url,
-              let data = try? await client.download(url, limit: cache.maxEntryBytes) else { return nil }
-        try? await cache.store(data, for: key)
+        guard let client, let url = match(hostID: hostID, appID: appID)?.chosen?[kind.rawValue]?.url else { return nil }
+        let (cache, limit) = (cache, cache.maxEntryBytes)
+        return await download(key) { try await client.download(url, limit: limit) } store: { try? await cache.store($0, for: key) }
+    }
+
+    /// Runs [work] once per [key] at a time, and at most ``parallelDownloads`` at a time; every asker gets its result.
+    private func download(_ key: String, work: @escaping @Sendable () async throws -> Data,
+                          store: @escaping @Sendable (Data) async -> Void) async -> Data? {
+        if let running = inflight[key] { return await running.value }
+        let gate = gate
+        let task = Task<Data?, Never> {
+            guard let data = try? await gate.withPermit(work) else { return nil }
+            await store(data)
+            return data
+        }
+        inflight[key] = task
+        let data = await task.value
+        inflight[key] = nil
         return data
     }
 
-    func boxArt(hostID: String, appID: Int, fetch: @Sendable () async throws -> Data) async -> Data? {
+    func boxArt(hostID: String, appID: Int, fetch: @escaping @Sendable () async throws -> Data) async -> Data? {
         let key = Self.boxArtKey(hostID, appID)
         if let data = await cache.data(for: key) { return data }
-        guard let data = try? await fetch(), Int64(data.count) <= Self.boxArtLimit else { return nil }
-        try? await cache.store(data, for: key)
-        return data
+        let cache = cache
+        return await download(key) {
+            let data = try await fetch()
+            guard Int64(data.count) <= Self.boxArtLimit else { throw SteamGridDBError.imageTooLarge }
+            return data
+        } store: { try? await cache.store($0, for: key) }
     }
 
     /// `fetchNow` of DELOS for Android. A kind picked by hand stays; a game matched by hand is not searched for again.
@@ -389,8 +412,7 @@ actor ArtworkFiles {
     func thumbnail(_ image: SteamGridDBImage, client: SteamGridDB) async -> Data? {
         let key = "thumb/\(image.id)"
         if let data = await cache.data(for: key) { return data }
-        guard let data = try? await client.download(image.previewURL, limit: cache.maxEntryBytes) else { return nil }
-        try? await cache.store(data, for: key)
-        return data
+        let (cache, limit, url) = (cache, cache.maxEntryBytes, image.previewURL)
+        return await download(key) { try await client.download(url, limit: limit) } store: { try? await cache.store($0, for: key) }
     }
 }

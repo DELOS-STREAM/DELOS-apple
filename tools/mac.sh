@@ -54,8 +54,7 @@ if [ -n "${DELOS_PROFILE:-}" ]; then
     id=$(uuidgen | tr 'A-Z' 'a-z')
     json=$(printf '{"all":[{"id":"%s","name":"%s","avatar":0}],"currentID":"%s"}' "$id" "$DELOS_PROFILE" "$id")
     defaults write "$prefs" profiles -data "$(printf %s "$json" | xxd -p | tr -d '\n')"
-    # The preferences daemon may still hold the old file
-    killall cfprefsd 2>/dev/null || true
+    # defaults writes through the preferences daemon, so the daemon and the file agree; no need to restart it
 fi
 
 open -n "$app" --args "$@"

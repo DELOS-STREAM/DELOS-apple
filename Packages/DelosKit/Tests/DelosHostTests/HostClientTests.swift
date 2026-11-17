@@ -194,4 +194,23 @@ import Testing
 
         await #expect(throws: HostError.responseTooLarge) { try await HTTPTransport.get(request) }
     }
+
+    @Test func quittingLaunchingAndResumingGiveUpOnAHostThatStalls() async throws {
+        let host = try await FakeHost(identity: TestIdentities.host) { _ in .init(body: Data(), silent: true) }
+        var client = HostClient(address: host.httpAddress, identity: TestIdentities.client)
+        client.cancelLimit = .milliseconds(200)
+        client.launchLimit = .milliseconds(200)
+        let pin = host.pin()
+        let request = LaunchRequestTests.request()
+
+        await #expect(throws: HostError.timedOut) { try await client.cancel(pin: pin) }
+        await #expect(throws: HostError.timedOut) { _ = try await client.launch(request, nvidiaServer: false, pin: pin) }
+        await #expect(throws: HostError.timedOut) { _ = try await client.resume(request, nvidiaServer: false, pin: pin) }
+    }
+
+    @Test func theDefaultLimitsAreSetForEverySlowRequest() {
+        let client = HostClient(address: HostAddress(host: "127.0.0.1", port: 1), identity: TestIdentities.client)
+        #expect(client.cancelLimit == .seconds(30))
+        #expect(client.launchLimit == .seconds(120))
+    }
 }
