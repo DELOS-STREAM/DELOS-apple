@@ -23,6 +23,8 @@ struct TabRow<ID: Hashable>: View {
     /// The content's edges in stage px (what a title or a button beside the row leaves): see ``TabRowLayout``.
     var left = SettingsLayout.titleX
     var right = Stage.designWidth - SettingsLayout.titleX
+    /// Exactly centred on the stage, or (false) flush with [right] (the artwork screen's).
+    var centred = true
     let onSelect: (ID) -> Void
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
@@ -47,7 +49,7 @@ struct TabRow<ID: Hashable>: View {
     var body: some View {
         // Exactly centred on the stage, or flush with the right edge; a row wider than the room between the edges scrolls in it
         let placement = TabRowLayout.place(
-            stageWidth: stage.width, rowWidth: natural / stage.scale, outset: ShoulderLabel.outset, left: left, right: right, spill: !stage.compact)
+            stageWidth: stage.width, rowWidth: natural / stage.scale, outset: ShoulderLabel.outset, left: left, right: right, centred: centred, spill: !stage.compact)
         ZStack(alignment: .topLeading) {
             if placement.scrolls {
                 ScrollView(.horizontal, showsIndicators: false) { row }

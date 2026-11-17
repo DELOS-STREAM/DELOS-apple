@@ -196,10 +196,11 @@ struct ArtworkScreen: View {
             }
             .frame(width: stage.px(560), alignment: .leading)
             .offset(x: stage.px(left), y: stage.px(104 + top))
-            ArtworkTabs(selected: model.tab, focus: focus) { select($0, sound: .select) }
+            // The tabs end exactly at the content's right edge, on every stage width
+            TabRow(
+                tabs: ArtworkTab.allCases.map { TabSpec(id: $0, icon: $0.icon, label: $0.label) }, selected: model.tab, focus: focus,
+                focusID: Self.tabID, left: left, right: stage.width - right, centred: false) { select($0, sound: .select) }
                 .frame(height: stage.px(66))
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.trailing, stage.px(right))
                 .tvFocusSection()
                 .offset(y: stage.px(124 + top))
             toolbar
@@ -484,76 +485,6 @@ enum ArtworkDescribed: Equatable {
         case .firstChoice: chosen == .none
         case .image(let image): chosen == .image(image.id)
         }
-    }
-}
-
-// MARK: Tabs
-
-/// The tabs between the L1 and R1 badges; on tvOS each is also an item of the focus, since the remote has no shoulders.
-private struct ArtworkTabs: View {
-    let selected: ArtworkTab
-    let focus: FocusModel
-    let onSelect: (ArtworkTab) -> Void
-    @Environment(\.delosColors) private var colors
-    @Environment(\.stage) private var stage
-    @Environment(\.reducedMotion) private var reduceMotion
-    @Namespace private var pill
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ShoulderBadge(label: "L1")
-            ForEach(ArtworkTab.allCases, id: \.self) { tab in tabView(tab) }
-            ShoulderBadge(label: "R1")
-        }
-        .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.8), value: selected)
-    }
-
-    @ViewBuilder private func tabView(_ tab: ArtworkTab) -> some View {
-        #if os(tvOS)
-        FocusItem(id: ArtworkScreen.tabID(tab), model: focus, action: { onSelect(tab) }) { focused in
-            pillView(tab).focusLook(focused, scale: 1.06, ring: 3, glowBlur: 0, glowY: 0)
-        }
-        .padding(.horizontal, stage.px(4))
-        #else
-        pillView(tab)
-            .contentShape(Capsule())
-            .onTapGesture { onSelect(tab) }
-            .padding(.horizontal, stage.px(4))
-        #endif
-    }
-
-    private func pillView(_ tab: ArtworkTab) -> some View {
-        let on = tab == selected
-        return HStack(spacing: stage.px(12)) {
-            SymbolView(symbol: tab.icon, size: 30, color: on ? colors.onAccent : colors.text2, filled: on)
-            Text(tab.label)
-                .font(DelosFonts.figtree(stage.tpx(22), .semibold))
-                .foregroundStyle((on ? colors.onAccent : colors.text2).color)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, stage.px(22))
-        .frame(height: stage.px(66))
-        .background {
-            if on { Capsule().fill(colors.accent.color).matchedGeometryEffect(id: "pill", in: pill) }
-        }
-        .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
-    }
-}
-
-/// The L1 / R1 hint beside the tabs.
-private struct ShoulderBadge: View {
-    let label: String
-    @Environment(\.delosColors) private var colors
-    @Environment(\.stage) private var stage
-
-    var body: some View {
-        Text(label)
-            .font(DelosFonts.figtree(stage.tpx(18), .bold))
-            .foregroundStyle(colors.text3.color)
-            .padding(.horizontal, stage.px(12))
-            .padding(.vertical, stage.px(6))
-            .overlay(RoundedRectangle(cornerRadius: stage.px(10)).strokeBorder(colors.line.color, lineWidth: stage.px(1)))
-            .padding(.horizontal, stage.px(10))
     }
 }
 
