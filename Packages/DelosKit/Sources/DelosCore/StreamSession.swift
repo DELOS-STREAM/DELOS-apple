@@ -28,6 +28,8 @@ public actor StreamSession {
     private var state = State.idle
     /// `stop` calls that wait for a start or a stop in progress to end.
     private var stopWaiters: [CheckedContinuation<Void, Never>] = []
+    /// What the running connection encrypts; nil before it started.
+    public private(set) var encryption: StreamEncryption?
 
     /// Sinks left out receive nothing; the core discards their data.
     public init(videoSink: (any VideoDecodeUnitSink)? = nil, audioSink: (any AudioSampleSink)? = nil) {
@@ -84,6 +86,7 @@ public actor StreamSession {
                 await stop()
                 throw .cancelled
             }
+            encryption = StreamEncryption.read(serverAppVersion: server.appVersion)
             return
         }
 

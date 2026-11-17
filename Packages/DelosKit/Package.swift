@@ -34,6 +34,7 @@ let package = Package(
             sources: [
                 "DelosLog.c",
                 "DelosHdr.c",
+                "DelosEncryption.c",
                 "core/src",
                 "core/enet/callbacks.c",
                 "core/enet/compress.c",
