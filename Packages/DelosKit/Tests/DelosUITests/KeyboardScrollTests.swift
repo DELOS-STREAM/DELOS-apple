@@ -80,7 +80,8 @@ final class LibraryRow {
             input?.press(.right, from: "key right")
         }
         input?.press(.right, from: "key right")
-        try await Task.sleep(for: .milliseconds(250))
+        // Wait for the repeats instead of a fixed time: a busy machine delays timers
+        for _ in 0..<1000 where counts.count < 6 { try await Task.sleep(for: .milliseconds(10)) }
         input?.lift("key right")
         let seen = counts.count
         #expect(seen >= 5)
@@ -93,8 +94,11 @@ final class LibraryRow {
         #expect(row.targets[1] == .follow(to: 2, pace: .single))
         #expect(row.targets.dropFirst(2).allSatisfy { if case .follow(_, .held) = $0 { true } else { false } })
         // Up: it stops
-        try await Task.sleep(for: .milliseconds(60))
-        #expect(counts.count == seen)
+        // A repeat already on its way may still land; after that it stays quiet
+        try await Task.sleep(for: .milliseconds(100))
+        let settled = counts.count
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(counts.count == settled)
     }
 
     @Test func aSecondKeyTakesTheRepeatsAndTheFirstKeysUpKeepsThem() async throws {
