@@ -36,7 +36,7 @@ struct Backdrop: View {
 
     var body: some View {
         let heroOn = appearance.heroBackground && hero != nil && appearance.heroOpacity > 0
-        let matching = heroOn && appearance.matchGameColors
+        let matching = heroOn && appearance.matchGameColors && !colors.materialYou
         let gameColors = matching ? hero.flatMap { art.gameColors($0.id) } : nil
         // A game whose colors are not worked out yet keeps the previous game's, so nothing flashes in between
         let pending = matching && !(hero.map { art.colorsKnown($0.id) } ?? true)

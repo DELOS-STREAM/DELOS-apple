@@ -44,6 +44,10 @@ struct SettingsScreen: View {
     /// The focus of the search while it is open, and what it looks for.
     @State private var searchFocus: FocusModel?
     @State private var query = ""
+    /// The kind of a second screen (device-wide, `display_second_role`).
+    @State private var secondDisplay = SecondDisplayRole.load()
+    /// The file picker of Import Custom Keys is open.
+    @State private var importingSpecialKeys = false
     private let store = StreamSettingsStore()
     private let appearances = AppearanceStore()
 
@@ -62,32 +66,40 @@ struct SettingsScreen: View {
         _form = State(initialValue: StreamSettingsForm(settings: StreamSettingsStore().load(profile: profileID), device: .current))
     }
 
-    /// The first row of [tab], which the screen opens with on that tab.
+    /// The first row of [tab], which the screen opens with on that tab (the shell's own rows come first, as on Android).
     static func firstRow(_ tab: SettingsTab) -> String {
         switch tab {
         case .stream: StreamSettingsForm.resolution
-        case .audio: StreamSettingsForm.hostAudio
-        case .controls: StreamSettingsForm.rumbleEnabled
+        case .display: StreamSettingsForm.statsPosition
+        case .audio: AppearanceForm.sounds
+        case .controls: AppearanceForm.haptics
         case .appearance: AppearanceForm.theme
         case .covers: CoversForm.key
-        case .devices: DevicesSetting.firstID
+        case .devices: StartupSetting.defaultPCID
         case .about: AboutSetting.firstID
         }
     }
 
-    private var appearanceForm: AppearanceForm { AppearanceForm(appearance: appearance) }
+    private var appearanceForm: AppearanceForm {
+        AppearanceForm(appearance: appearance, offersMaterialYou: SystemAccent.supported, systemHue: SystemAccent.hue)
+    }
 
     private var coversForm: CoversForm {
         CoversForm(enabled: actions.artwork.enabled, automatic: actions.artwork.automatic,
                    pcName: actions.libraryHostID.flatMap { actions.hosts.host($0)?.name })
     }
 
+    private var startupSetting: StartupSetting {
+        StartupSetting(startup: actions.profiles.startup, pcs: actions.hosts.paired.map { ($0.id, $0.name) })
+    }
+
     private var rows: [SettingRow] { rows(for: tab) }
 
+    /// The rows of [tab] in Android's order (`nativeSettings` + the catalog), each section's rows together.
     private func rows(for tab: SettingsTab) -> [SettingRow] {
-        form.rows(tab) + appearanceForm.rows(tab) + form.streamMenuRows(tab) + coversForm.rows(tab) + DevicesSetting.rows(tab)
-            + AboutSetting.rows(tab) + AppLanguageSetting.rows(tab)
-            + GameDataSetting.rows(tab)
+        (appearanceForm.rows(tab) + form.nativeRows(tab) + DisplaySetting.rows(tab, role: secondDisplay) + startupSetting.rows(tab)
+            + DevicesSetting.rows(tab) + coversForm.rows(tab) + AboutSetting.rows(tab) + GameDataSetting.rows(tab)
+            + form.catalogRows(tab) + AppLanguageSetting.rows(tab)).groupedBySection()
     }
 
     /// The rows of every tab, which the search looks through.
@@ -116,6 +128,11 @@ struct SettingsScreen: View {
             SettingsSession.shared.tab = tab
         }
         .onDisappear { navigator.releaseInput(focus) }
+        #if !os(tvOS)
+        .fileImporter(isPresented: $importingSpecialKeys, allowedContentTypes: [.json, .plainText]) { result in
+            importSpecialKeys(result)
+        }
+        #endif
         .onChange(of: tab) { _, next in SettingsSession.shared.tab = next }
         .onChange(of: focus.focused, initial: true) { navigator.setHints(ScreenHints(adjustable: ShellHints.adjustable(focusedRow)), from: focus) }
     }
@@ -290,9 +307,16 @@ struct SettingsScreen: View {
         case DevicesSetting.manageID: navigator.openFromNavigation(.devices)
         case DevicesSetting.pairID: navigator.push(.pair)
         case AboutSetting.welcomeID: actions.replayWelcome()
-        case AboutSetting.basedID, CoversForm.choose: return
+        case AboutSetting.basedID, AboutSetting.versionID, CoversForm.choose: return
         case _ where GameDataSetting.website(row.id) != nil:
             if let url = GameDataSetting.website(row.id) { openURL(url) }
+        case "import_special_button_file":
+            #if os(tvOS)
+            // Apple TV has no file picker (`settings_actions_no_file_picker`)
+            actions.toasts.show(L("settings_actions_no_file_picker"), icon: Symbols.error)
+            #else
+            importingSpecialKeys = true
+            #endif
         default:
             if case .appSettings = row.value {
                 #if os(iOS)
@@ -300,17 +324,94 @@ struct SettingsScreen: View {
                 #endif
                 return
             }
+            if case .text = row.value {
+                openTextDialog(row)
+                return
+            }
+            if let spec = SettingsCatalog.spec(row.id), case .action(let url?) = spec.kind {
+                // A web page (`WebLauncherPreference`); no app for it says so
+                openURL(url) { accepted in
+                    if !accepted { actions.toasts.show(L("settings_actions_no_app_for_link"), icon: Symbols.error) }
+                }
+                return
+            }
             step(row.id, by: 1)
         }
     }
 
-    /// Steps row [id] of the stream settings, of the appearance (which changes live) or of Covers. A step of the stream menu's
-    /// buttons records new ones.
+    /// A TEXT row's dialog (`settingsActions`' text dialog of DELOS for Android): the row's name, its help, one field with
+    /// the value, Save. A value that does not fit says why in a toast and keeps the dialog open.
+    private func openTextDialog(_ row: SettingRow) {
+        guard case .text(let value) = row.value else { return }
+        let spec = SettingsCatalog.spec(row.id)
+        actions.layers.openDialog(DialogSpec(
+            title: row.label, note: spec?.help ?? "",
+            fields: [DialogField(icon: row.icon, initial: value, maxLength: 32)],
+            confirm: L("settings_actions_save")
+        ) { [self] values in
+            if let error = form.setText(row.id, values.first ?? "") {
+                feedback?.play(.error)
+                actions.toasts.show(error, icon: Symbols.error)
+                return false
+            }
+            return true
+        })
+    }
+
+    #if !os(tvOS)
+    /// The custom keys file picked for Import Custom Keys, with Android's toasts.
+    private func importSpecialKeys(_ result: Result<URL, any Error>) {
+        let message: String
+        var failed = true
+        switch result {
+        case .failure:
+            message = L("settings_actions_file_open_failed")
+        case .success(let url):
+            let access = url.startAccessingSecurityScopedResource()
+            defer { if access { url.stopAccessingSecurityScopedResource() } }
+            if let data = try? Data(contentsOf: url, options: .mappedIfSafe) {
+                do {
+                    try CustomSpecialKeys().importFile(data, profile: profileID)
+                    message = L("settings_actions_imported")
+                    failed = false
+                } catch .tooLarge {
+                    message = L("settings_actions_file_too_large")
+                } catch .noShortcutData {
+                    message = L("settings_actions_no_shortcut_data")
+                } catch {
+                    message = L("settings_actions_import_failed")
+                }
+            } else {
+                message = L("settings_actions_file_open_failed")
+            }
+        }
+        if failed { feedback?.play(.error) }
+        actions.toasts.show(message, icon: failed ? Symbols.error : Symbols.checkCircle)
+    }
+    #endif
+
+    /// Steps row [id] of the stream settings, of the appearance (which changes live), of Covers, of the second display
+    /// or of the startup.
     @discardableResult
     private func step(_ id: String, by direction: Int) -> Bool {
-        if id == CoversForm.automaticID {
+        switch id {
+        case CoversForm.automaticID:
             actions.artwork.automatic.toggle()
             return true
+        case DisplaySetting.secondDisplayID:
+            secondDisplay = DisplaySetting.step(secondDisplay, by: direction)
+            SecondDisplayRole.save(secondDisplay)
+            return true
+        case StartupSetting.defaultPCID:
+            let next = startupSetting.steppedDefault(by: direction)
+            guard next != actions.profiles.startup.defaultPC else { return false }
+            setDefaultPC(next)
+            return true
+        case StartupSetting.skipStartID:
+            actions.profiles.setSkipStart(!actions.profiles.startup.skipStart)
+            return true
+        default:
+            break
         }
         if id == StreamSettingsForm.menuButtons {
             recordMenuButtons()
@@ -323,16 +424,21 @@ struct SettingsScreen: View {
         return true
     }
 
-    /// A slider's value set on its track by touch: the bitrate, the interface scale, the app background's blur or opacity.
+    /// A new default PC keeps "Skip the start screen" only while it is a PC.
+    private func setDefaultPC(_ hostID: String?) {
+        let skip = actions.profiles.startup.skipStart
+        actions.profiles.setDefaultPC(hostID)
+        if hostID != nil, skip { actions.profiles.setSkipStart(true) }
+    }
+
+    /// A slider's value set on its track by touch.
     private func slide(_ id: String, to value: Int) {
         if AppearanceForm.ids.contains(id) {
             var next = appearanceForm
             next.slide(id, to: value)
             appearance = next.appearance
-        } else if id == StreamSettingsForm.bitrate {
-            form.setBitrate(value)
-        } else if id == StreamSettingsForm.rumbleStrength {
-            form.settings.rumble.deviceStrength = value
+        } else {
+            form.slide(id, to: value)
         }
     }
 
@@ -375,6 +481,14 @@ struct SettingsScreen: View {
             closePopup()
             recordMenuButtons()
             return
+        } else if id == DisplaySetting.secondDisplayID {
+            if SecondDisplayRole.allCases.indices.contains(index) {
+                secondDisplay = SecondDisplayRole.allCases[index]
+                SecondDisplayRole.save(secondDisplay)
+            }
+        } else if id == StartupSetting.defaultPCID {
+            let choices = startupSetting.choices
+            if choices.indices.contains(index) { setDefaultPC(choices[index].id) }
         } else {
             form.pick(id, option: index)
         }
@@ -440,19 +554,34 @@ struct SettingsScreen: View {
 }
 
 extension StreamDevice {
-    /// This device's display and decoders.
+    /// This device's display, decoders and hardware.
     @MainActor static var current: StreamDevice {
         #if canImport(UIKit)
         let screen = UIScreen.main
         let size = screen.nativeBounds.size
         let fps = screen.maximumFramesPerSecond
+        // The safe area of the window in pixels: smaller than the panel around a notch or the Dynamic Island
+        let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+        let safe = window.map { $0.bounds.inset(by: $0.safeAreaInsets).size }
+            .map { CGSize(width: $0.width * screen.nativeScale, height: $0.height * screen.nativeScale) }
         #elseif canImport(AppKit)
         let screen = NSScreen.main
         let size = screen.map { $0.convertRectToBacking($0.frame).size } ?? CGSize(width: 1920, height: 1080)
         let fps = screen?.maximumFramesPerSecond ?? 60
+        let safe: CGSize? = nil
         #endif
-        return StreamDevice(pixelWidth: Int(size.width), pixelHeight: Int(size.height), maxFramesPerSecond: fps, decodable: DecoderSupport.device,
-                            hdrDisplay: HDRDisplay.isSupported)
+        var device = StreamDevice(
+            pixelWidth: Int(size.width), pixelHeight: Int(size.height), maxFramesPerSecond: fps, decodable: DecoderSupport.device,
+            hdrDisplay: HDRDisplay.isSupported)
+        if let safe {
+            device.safePixelWidth = Int(safe.width.rounded())
+            device.safePixelHeight = Int(safe.height.rounded())
+        }
+        device.touchscreen = DeviceHardware.touchscreen
+        device.deviceMotion = DeviceHardware.motion
+        device.haptics = DeviceHardware.haptics
+        device.pictureInPicture = DeviceHardware.pictureInPicture
+        return device
     }
 }
 
@@ -586,9 +715,11 @@ struct SettingRowView: View {
                 .frame(maxWidth: stage.px(stage.compact ? 260 + (row.swatch == nil ? 0 : 38) : row.swatch == nil ? 360 : 398), alignment: .trailing)
             }
         case let .slider(value, range, step, divisor, unit):
-            SettingSlider(value: value, range: range, step: step, divisor: divisor, unit: unit, focused: focused, onChange: onSlide)
+            SettingSlider(value: value, range: range, step: step, divisor: divisor, unit: unit, minText: row.sliderMinText, focused: focused, onChange: onSlide)
         case .action(let label):
             labelled(label, arrows: arrows)
+        case .text(let value):
+            labelled(value, arrows: arrows)
         case .appSettings(let language):
             labelled(language, arrows: arrows)
         case .info(let text):
@@ -658,6 +789,8 @@ private struct SettingSlider: View {
     let step: Int
     let divisor: Int
     let unit: String
+    /// The text at the minimum instead of the number ("0 % (off)").
+    var minText: String? = nil
     let focused: Bool
     let onChange: (Int) -> Void
     @Environment(\.delosColors) private var colors
@@ -723,7 +856,8 @@ private struct SettingSlider: View {
     }
 
     private func label(_ number: Int) -> String {
-        SliderSpec(value: number, min: range.lowerBound, max: range.upperBound, step: step, divisor: divisor, unit: unit).label(number)
+        if number == range.lowerBound, let minText { return minText }
+        return SliderSpec(value: number, min: range.lowerBound, max: range.upperBound, step: step, divisor: divisor, unit: unit).label(number)
     }
 }
 
@@ -838,7 +972,7 @@ private struct CompactHelpDock: View {
                             .font(DelosFonts.figtree(stage.tpx(18)))
                             .foregroundStyle(colors.text3.color)
                     }
-                    if case .action(let text?) = row?.value {
+                    if let text = row?.value.heldText {
                         Text(text)
                             .font(DelosFonts.figtree(stage.tpx(22)))
                             .lineSpacing(stage.tpx(22 * 0.3))
@@ -897,7 +1031,7 @@ private struct DescriptionPanel: View {
                             .foregroundStyle(colors.text3.color)
                     }
                     // A row that opens a dialog shows what it holds (`RowValue.Text`) in the accent color
-                    if case .action(let text?) = row?.value {
+                    if let text = row?.value.heldText {
                         Text(text)
                             .font(DelosFonts.figtree(stage.tpx(22)))
                             .lineSpacing(stage.tpx(22 * 0.3))

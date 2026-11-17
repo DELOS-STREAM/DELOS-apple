@@ -12,8 +12,8 @@ private let iPhone = StreamDevice(pixelWidth: 1290, pixelHeight: 2796, maxFrames
         pixelWidth: 1290, pixelHeight: 2796, maxFramesPerSecond: 120, decodable: [.h264, .hevc, .hevcMain10], hdrDisplay: true)
 
     @Test func theHDRRowIsOfferedOnlyWithAnHDRDisplayAndAMain10Decoder() {
-        let ids = { (device: StreamDevice) in StreamSettingsForm(settings: StreamSettings(), device: device).rows(.stream).map(\.id) }
-        #expect(ids(hdrPhone).last == "checkbox_enable_hdr")
+        let ids = { (device: StreamDevice) in StreamSettingsForm(settings: StreamSettings(), device: device).rows(.display).map(\.id) }
+        #expect(ids(hdrPhone).contains("checkbox_enable_hdr"))
         #expect(!ids(iPhone).contains("checkbox_enable_hdr"))
         var noDisplay = hdrPhone
         noDisplay.hdrDisplay = false
@@ -25,14 +25,14 @@ private let iPhone = StreamDevice(pixelWidth: 1290, pixelHeight: 2796, maxFrames
 
     @Test func theHDRRowShowsAndroidsLabelAndHelpAndToggles() throws {
         var form = StreamSettingsForm(settings: StreamSettings(), device: hdrPhone)
-        let row = try #require(form.rows(.stream).first { $0.id == StreamSettingsForm.hdr })
+        let row = try #require(form.rows(.display).first { $0.id == StreamSettingsForm.hdr })
         #expect(row.label == "Enable HDR")
         #expect(row.help == "Requests HDR video. Needs app, host GPU, decoder and display support (10-bit HEVC, AV1 or PyroWave).")
         #expect(row.value == .toggle(false))
         let on = form.step(StreamSettingsForm.hdr, by: 1)
         #expect(on)
         #expect(form.settings.hdr)
-        #expect(form.rows(.stream).last?.value == .toggle(true))
+        #expect(form.catalogRow(StreamSettingsForm.hdr)?.value == .toggle(true))
         let off = form.step(StreamSettingsForm.hdr, by: -1)
         #expect(off)
         #expect(!form.settings.hdr)
@@ -46,53 +46,50 @@ private let iPhone = StreamDevice(pixelWidth: 1290, pixelHeight: 2796, maxFrames
         var stored = StreamSettings()
         stored.hdr = true
         var form = StreamSettingsForm(settings: stored, device: iPhone)
-        #expect(form.rows(.stream).contains { $0.id == StreamSettingsForm.hdr })
+        #expect(form.rows(.display).contains { $0.id == StreamSettingsForm.hdr })
         let cleared = form.step(StreamSettingsForm.hdr, by: 1)
         #expect(cleared)
         #expect(!form.settings.hdr)
-        #expect(!form.rows(.stream).contains { $0.id == StreamSettingsForm.hdr })
+        #expect(!form.rows(.display).contains { $0.id == StreamSettingsForm.hdr })
     }
 
     @Test func theTabsHoldTheirRowsInAndroidsOrder() {
         let form = StreamSettingsForm(settings: StreamSettings(), device: iPhone)
-        #expect(form.rows(.stream).map(\.id) == ["list_resolution", "list_fps", "seekbar_bitrate_kbps", "video_format", "frame_pacing"])
-        #expect(form.rows(.audio).map(\.id) == ["checkbox_host_audio"])
-        #expect(Set(form.rows(.stream).map(\.section)) == ["Video Settings"])
-        #expect(form.rows(.audio)[0].section == "Host Settings")
-        #expect(SettingsTab.allCases == [.stream, .audio, .controls, .appearance, .covers, .devices, .about])
-        #expect(SettingsTab.stream.step(1) == .audio)
+        #expect(form.rows(.stream).prefix(5).map(\.id) == ["list_resolution", "list_fps", "seekbar_bitrate_kbps", "seekbar_metered_bitrate_kbps", "frame_pacing"])
+        #expect(form.rows(.audio).map(\.id) == ["list_audio_config", "checkbox_host_audio"])
+        #expect(Set(form.rows(.stream).map(\.section)) == ["Video Settings", "Advanced Settings"])
+        #expect(form.rows(.audio)[1].section == "Host Settings")
+        #expect(SettingsTab.allCases == [.stream, .display, .audio, .controls, .appearance, .covers, .devices, .about])
+        #expect(SettingsTab.stream.step(1) == .display)
         #expect(SettingsTab.appearance.step(1) == .covers)
         #expect(SettingsTab.covers.step(1) == .devices)
-        #if os(iOS)
         #expect(SettingsTab.stream.step(-1) == .about)
         #expect(SettingsTab.devices.step(1) == .about)
         #expect(SettingsTab.about.step(1) == .stream)
-        #else
-        #expect(SettingsTab.stream.step(-1) == .devices)
-        #expect(SettingsTab.devices.step(1) == .stream)
-        #endif
     }
 
     @Test func theRowsShowAndroidsLabels() throws {
         let form = StreamSettingsForm(settings: StreamSettings(), device: iPhone)
         let rows = form.rows(.stream)
+        func value(_ id: String) -> SettingValue? { rows.first { $0.id == id }?.value }
         let display = StreamResolution.forDisplay(pixelWidth: 1290, pixelHeight: 2796)
-        guard case let .choice(resolution, options, selected) = rows[0].value else { Issue.record("resolution"); return }
+        guard case let .choice(resolution, options, selected) = value("list_resolution") else { Issue.record("resolution"); return }
         #expect(resolution == "Automatic · \(display.text)")
         #expect(selected == 0)
         #expect(options == ["Automatic · \(display.text)", "360p", "480p", "720p", "1080p", "1440p", "4K", "Native (2796x1290)"])
-        guard case let .choice(fps, rates, _) = rows[1].value else { Issue.record("fps"); return }
+        guard case let .choice(fps, rates, _) = value("list_fps") else { Issue.record("fps"); return }
         #expect(fps == "60 FPS")
         #expect(rates == ["30 FPS", "60 FPS", "90 FPS", "120 FPS"])
-        guard case let .slider(kbps, range, step, divisor, unit) = rows[2].value else { Issue.record("bitrate"); return }
+        guard case let .slider(kbps, range, step, divisor, unit) = value("seekbar_bitrate_kbps") else { Issue.record("bitrate"); return }
         #expect(kbps == StreamPlan.defaultBitrateKbps(width: display.width, height: display.height, fps: 60))
         #expect(range == 1000...1_000_000 && step == 1000 && divisor == 1000 && unit == " Mbps")
-        guard case let .choice(codec, codecs, _) = rows[3].value else { Issue.record("codec"); return }
+        guard case let .choice(codec, codecs, _) = value("video_format") else { Issue.record("codec"); return }
         #expect(codec == "Automatic")
         #expect(codecs == ["Automatic", "HEVC (H.265)", "H.264"])
-        #expect(rows[3].help.hasPrefix("Automatic\nPicks H.264 or HEVC."))
-        #expect(form.rows(.audio)[0].value == .toggle(false))
-        #expect(form.rows(.audio)[0].label == "Play audio on PC")
+        #expect(rows.first { $0.id == "video_format" }?.help.hasPrefix("Automatic\nPicks H.264 or HEVC.") == true)
+        let hostAudio = form.rows(.audio).first { $0.id == "checkbox_host_audio" }
+        #expect(hostAudio?.value == .toggle(false))
+        #expect(hostAudio?.label == "Play audio on PC")
     }
 
     @Test func leftAndRightStepThroughTheChoicesAndWrap() {
@@ -111,16 +108,18 @@ private let iPhone = StreamDevice(pixelWidth: 1290, pixelHeight: 2796, maxFrames
         #expect(form.settings.resolution == StreamResolution(width: 2796, height: 1290))
         form.step("checkbox_host_audio", by: 1)
         #expect(form.settings.playAudioOnHost)
-        // Balanced by default; every supported Android mode is reachable, then the list wraps.
+        // Balanced by default; Android's order (Warp 2, Warp, latency, balanced, cap, smoothness, Fast V-Sync), wrapping
         #expect(form.settings.framePacing == .balanced)
         form.step("frame_pacing", by: 1)
         #expect(form.settings.framePacing == .capFPS)
         form.step("frame_pacing", by: 1)
         #expect(form.settings.framePacing == .smoothness)
         form.step("frame_pacing", by: 1)
-        #expect(form.settings.framePacing == .warp)
+        #expect(form.settings.framePacing == .fastVSync)
         form.step("frame_pacing", by: 1)
         #expect(form.settings.framePacing == .warp2)
+        form.step("frame_pacing", by: 1)
+        #expect(form.settings.framePacing == .warp)
         form.step("frame_pacing", by: 1)
         #expect(form.settings.framePacing == .latency)
     }

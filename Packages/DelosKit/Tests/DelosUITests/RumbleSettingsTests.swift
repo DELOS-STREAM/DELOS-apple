@@ -20,7 +20,8 @@ struct RumbleSettingsTests {
     }
 
     @Test func disabledDependenciesCannotChangeAndPresetChoicePersists() {
-        let device = StreamDevice(pixelWidth: 1920, pixelHeight: 1080, maxFramesPerSecond: 120, decodable: [.h264])
+        // A device with a vibration motor: without one Android hides the device rumble rows and the feel
+        let device = StreamDevice(pixelWidth: 1920, pixelHeight: 1080, maxFramesPerSecond: 120, decodable: [.h264], haptics: true)
         var form = StreamSettingsForm(settings: StreamSettings(), device: device)
         let changedWhileDisabled = form.step(StreamSettingsForm.rumbleStrength, by: 10)
         #expect(!changedWhileDisabled)
@@ -35,6 +36,8 @@ struct RumbleSettingsTests {
         #expect(disabledRumble)
         let changedDisabledFeel = form.step(StreamSettingsForm.rumbleFeel, by: 1)
         #expect(!changedDisabledFeel)
-        #expect(form.rows(.controls).filter { !$0.enabled }.count == 4)
+        let rumbleIDs: Set = [StreamSettingsForm.rumbleFeel, StreamSettingsForm.rumbleFallback, StreamSettingsForm.rumbleDevice,
+                              StreamSettingsForm.rumbleStrength]
+        #expect(form.rows(.controls).filter { rumbleIDs.contains($0.id) && !$0.enabled }.count == 4)
     }
 }

@@ -134,10 +134,21 @@ enum LetterPicker {
 enum SettingsSearch {
     static let maxLength = 80
 
-    /// The extra words a row can be found by besides its own texts (`SearchAliases`): the earlier English names of renamed rows
-    /// and the localized synonyms, which are never shown.
+    /// The extra words a row can be found by besides its own texts (`SearchAliases`): the English words (earlier names and the
+    /// terms gamers search for in any language; data, not interface text) and the localized synonyms, which are never shown.
+    /// The link test rows' aliases come with those rows.
     static func aliases(_ id: String) -> String {
         switch id {
+        case SettingKey.gamepadMotionSensors.rawValue:
+            "allow use of gamepad motion sensors motion sensor " + L("settings_search_alias_motion_sensors")
+        case SettingKey.gamepadMotionFallback.rawValue:
+            "emulate gamepad motion sensor support motion sensors " + L("settings_search_alias_motion_sensors")
+        case SettingKey.forceDeviceMotion.rawValue:
+            "always use device's motion sensors motion sensors " + L("settings_search_alias_motion_sensors")
+        case SettingKey.gyroSmoothing.rawValue:
+            "gyroscope stabilisation stabilization motion sensors " + L("settings_search_alias_gyro_smoothing")
+        case SettingKey.vrr.rawValue:
+            "vrr arr adaptive refresh rate freesync g-sync variable"
         case AppearanceForm.matchColors, AppearanceForm.heroBackground, AppearanceForm.heroBlur, AppearanceForm.heroOpacity,
              CoversForm.choose:
             "game " + L("settings_search_alias_game")

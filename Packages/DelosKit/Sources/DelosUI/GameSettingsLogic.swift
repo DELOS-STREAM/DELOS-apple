@@ -30,16 +30,26 @@ final class GameSettingsModel {
         profile = streams.load(profile: profileID)
     }
 
-    /// The rows over what a stream of the app uses.
-    var form: StreamSettingsForm { StreamSettingsForm(settings: overrides.merged(onto: profile), device: device) }
+    /// The rows over what a stream of the app uses; a codec change keeps the bitrate for the codec left only when the app
+    /// owns its bitrate.
+    var form: StreamSettingsForm {
+        var form = StreamSettingsForm(settings: overrides.merged(onto: profile), device: device)
+        form.ownsBitrate = overrides.bitrateKbps != nil
+        return form
+    }
     private var profileForm: StreamSettingsForm { StreamSettingsForm(settings: profile, device: device) }
+
+    /// The app's rows of [form] in the order of ``GameSettingsOverride/Key``, with the hardware rules and dependencies of
+    /// Settings (a row this device does not have is left out).
+    private static func keyRows(_ form: StreamSettingsForm) -> [SettingRow] {
+        GameSettingsOverride.Key.allCases.compactMap { form.catalogRow($0.rawValue) }
+    }
 
     /// The rows in the order of the screen: each says where its value comes from.
     var rows: [SettingRow] {
-        let profileRows = Dictionary((profileForm.rows(.stream) + profileForm.rows(.audio)).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let profileRows = Dictionary(Self.keyRows(profileForm).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let custom = overrides.keys
-        let form = form
-        return (form.rows(.stream) + form.rows(.audio)).map { row in
+        return Self.keyRows(form).map { row in
             var row = row
             if let key = GameSettingsOverride.Key(rawValue: row.id), custom.contains(key) {
                 row.customLine = L("settings_game_profile_line", profileRows[row.id].map(Self.valueLabel) ?? "")
@@ -56,7 +66,7 @@ final class GameSettingsModel {
 
     /// The profile's value of row [id] and the app's current one, as the rows show them.
     func profileLabel(_ id: String) -> String {
-        (profileForm.rows(.stream) + profileForm.rows(.audio)).first { $0.id == id }.map(Self.valueLabel) ?? ""
+        Self.keyRows(profileForm).first { $0.id == id }.map(Self.valueLabel) ?? ""
     }
 
     func currentLabel(_ id: String) -> String { rows.first { $0.id == id }.map(Self.valueLabel) ?? "" }
@@ -69,6 +79,7 @@ final class GameSettingsModel {
         case let .slider(value, _, _, divisor, unit):
             (value % divisor == 0 ? String(value / divisor) : String(format: "%.1f", Double(value) / Double(divisor))) + unit
         case .action(let label): label ?? ""
+        case .text(let value): value
         case .appSettings(let language): language
         case .info(let text): text
         }
@@ -83,8 +94,8 @@ final class GameSettingsModel {
     /// A value picked from a choice row's list.
     func pick(_ id: String, option index: Int) { edit { $0.pick(id, option: index) } }
 
-    /// The bitrate set on the slider's track.
-    func slide(to kbps: Int) { edit { $0.setBitrate(kbps) } }
+    /// A slider's value set on its track (the bitrate, the gyro smoothing, the upscaler's sharpness, the scale factor).
+    func slide(_ id: String = StreamSettingsForm.bitrate, to value: Int) { edit { $0.slide(id, to: value) } }
 
     @discardableResult
     private func edit(_ change: (inout StreamSettingsForm) -> Void) -> Bool {
@@ -123,7 +134,8 @@ final class GameSettingsModel {
 }
 
 /// The tabs of the App settings screen (`GameSettingsStore.STREAM_KEYS` and `DISPLAY_KEYS` of DELOS for Android): the stream
-/// rows, and Display, which holds HDR here (the one display setting that exists). Display shows only where it has a row.
+/// rows, and Display (HDR, full range, scaling, VRR, resolution scale, virtual display, display mode, the upscaler). A tab
+/// shows only where it has a row.
 enum GameSettingsTab: Hashable, CaseIterable, Sendable {
     case stream, display
 
@@ -131,7 +143,7 @@ enum GameSettingsTab: Hashable, CaseIterable, Sendable {
     var icon: String { self == .stream ? Symbols.cast : Symbols.monitor }
 
     /// The rows that belong to Display; every other row is a Stream row.
-    static let displayRows: Set<String> = [StreamSettingsForm.hdr]
+    static let displayRows: Set<String> = Set(GameSettingsOverride.Key.display.map(\.rawValue))
 
     func step(_ direction: Int, among tabs: [GameSettingsTab]) -> GameSettingsTab {
         guard let index = tabs.firstIndex(of: self) else { return tabs.first ?? .stream }

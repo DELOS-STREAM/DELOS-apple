@@ -86,9 +86,11 @@ extension Palette {
 }
 
 /// The color tokens of the interface, derived from a palette by the formulas of the prototype (`applyTheme()`) and
-/// of `delosColors()` in DELOS for Android. Material You has no counterpart on Apple platforms.
+/// of `delosColors()` in DELOS for Android, or from the system's color (Material You, ``SystemAccent``).
 public struct DelosColors: Equatable, Sendable {
     public let dark: Bool
+    /// The colors follow the system's color, not a palette.
+    public let materialYou: Bool
     public let baseHue: Double
     public let accentHue: Double
     public let accent2Hue: Double
@@ -109,19 +111,34 @@ public struct DelosColors: Equatable, Sendable {
     public let glow: RGBA
     public let scrim: RGBA
 
-    public init(palette: Palette, dark: Bool) {
-        let base = palette.base, acc = palette.accent, acc2 = palette.accent2, acc3 = palette.accent3
-        let soft = palette.soft
+    /// Material You without a system color (Android 11 and older there, a gray accent here): Mint's main hue.
+    static let fallbackSystemHue = 150.0
+
+    /// The colors of [palette]; with [materialYou] those of the system's hue [systemHue] instead (nil: none, the fallback
+    /// hue), by the formulas of `delosColors()` in DELOS for Android. The system has no tertiary hue here, so the third
+    /// color is 150° from the main one, as Android does without one.
+    public init(palette: Palette, dark: Bool, materialYou: Bool = false, systemHue: Double? = nil) {
+        let my = materialYou
+        var base = palette.base, acc = palette.accent, acc2 = palette.accent2, acc3 = palette.accent3
+        if my {
+            let h = systemHue ?? Self.fallbackSystemHue
+            base = h
+            acc = h
+            acc2 = (h + 52).truncatingRemainder(dividingBy: 360)
+            acc3 = (h + 150).truncatingRemainder(dividingBy: 360)
+        }
+        let soft = !my && palette.soft
         self.dark = dark
+        self.materialYou = my
         baseHue = base
         accentHue = acc
         accent2Hue = acc2
         accent3Hue = acc3
         if dark {
-            let sat = palette.baseSat
+            let sat = my ? 30 : palette.baseSat
             // Surfaces and text keep a floor and a ceiling, so the muted palettes stay almost neutral
-            let surf = { (drop: Double) in max(2, sat - drop) }
-            let txt = { (cap: Double) in min(cap, sat) }
+            let surf = { (drop: Double) in my ? sat - drop : max(2, sat - drop) }
+            let txt = { (cap: Double) in my ? cap : min(cap, sat) }
             bg = hsl(base, sat, 7)
             bg2 = hsl(base, sat - 4, 11)
             surface = hsl(base, surf(10), 14, 0.72)
@@ -131,16 +148,16 @@ public struct DelosColors: Equatable, Sendable {
             text = hsl(base, txt(30), 96)
             text2 = hsl(base, txt(16), 76)
             text3 = hsl(base, txt(12), 58)
-            accent = soft ? hsl(acc, 70, 70) : hsl(acc, 95, 62)
-            accent2 = soft ? hsl(acc2, 62, 68) : hsl(acc2, 85, 62)
-            accent3 = soft ? hsl(acc3, 60, 72) : hsl(acc3, 85, 68)
+            accent = my ? hsl(acc, 78, 72) : soft ? hsl(acc, 70, 70) : hsl(acc, 95, 62)
+            accent2 = my ? hsl(acc2, 70, 66) : soft ? hsl(acc2, 62, 68) : hsl(acc2, 85, 62)
+            accent3 = my ? hsl(acc3, 70, 70) : soft ? hsl(acc3, 60, 72) : hsl(acc3, 85, 68)
             onAccent = hsl(acc, 55, 12)
-            glow = hsl(acc, soft ? 70 : 95, 58, 0.45)
+            glow = my ? hsl(acc, 80, 60, 0.42) : hsl(acc, soft ? 70 : 95, 58, 0.45)
             scrim = hsl(base, 50, 3, 0.62)
         } else {
-            let sat = palette.baseSat + 2
+            let sat = my ? 45 : palette.baseSat + 2
             bg = hsl(base, sat, 95)
-            bg2 = hsl(base, palette.baseSat - 4, 90)
+            bg2 = hsl(base, my ? sat - 6 : palette.baseSat - 4, 90)
             surface = hsl(base, 60, 99, 0.74)
             surface2 = hsl(base, 50, 99, 0.9)
             surface3 = hsl(base, 40, 98, 0.97)
@@ -148,13 +165,20 @@ public struct DelosColors: Equatable, Sendable {
             text = hsl(base, 40, 12)
             text2 = hsl(base, 18, 32)
             text3 = hsl(base, 12, 46)
-            accent = soft ? hsl(acc - 6, 65, 46) : hsl(acc - 6, 92, 52)
-            accent2 = soft ? hsl(acc2, 55, 40) : hsl(acc2, 80, 40)
-            accent3 = soft ? hsl(acc3, 50, 44) : hsl(acc3, 75, 44)
-            onAccent = hsl(acc, 60, 12)
+            accent = my ? hsl(acc, 58, 40) : soft ? hsl(acc - 6, 65, 46) : hsl(acc - 6, 92, 52)
+            accent2 = my || soft ? hsl(acc2, 55, 40) : hsl(acc2, 80, 40)
+            accent3 = my ? hsl(acc3, 55, 42) : soft ? hsl(acc3, 50, 44) : hsl(acc3, 75, 44)
+            onAccent = my ? RGBA(red: 1, green: 1, blue: 1) : hsl(acc, 60, 12)
             glow = hsl(acc, 85, 50, 0.34)
             scrim = hsl(base, 30, 20, 0.35)
         }
+    }
+
+    /// The colors [appearance] chooses, with the system's color where it follows it.
+    @MainActor public init(_ appearance: Appearance) {
+        self.init(
+            palette: Palette(appearance.palette), dark: appearance.dark,
+            materialYou: appearance.materialYou && SystemAccent.supported, systemHue: SystemAccent.hue)
     }
 
     /// What sits on an ``accent3`` fill: dark on the light colors of the dark theme, white on the light theme's.

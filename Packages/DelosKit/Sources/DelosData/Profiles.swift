@@ -91,6 +91,7 @@ public final class ProfileStore {
     @ObservationIgnored private let played: PlayedGames
     @ObservationIgnored private let hidden: HiddenGames
     @ObservationIgnored private let gameSettings: GameSettingsStore
+    @ObservationIgnored private let specialKeys: CustomSpecialKeys
     @ObservationIgnored private let deleteGrace: Duration
     /// The profiles deleted less than ``deleteGrace`` ago, which Undo can bring back.
     @ObservationIgnored private var deleted: [String: Deleted] = [:]
@@ -124,6 +125,7 @@ public final class ProfileStore {
         played = PlayedGames(suiteName: suiteName)
         hidden = HiddenGames(suiteName: suiteName)
         gameSettings = GameSettingsStore(suiteName: suiteName)
+        specialKeys = CustomSpecialKeys(suiteName: suiteName)
         self.deleteGrace = deleteGrace
         let stored = defaults.data(forKey: Self.key)
             .flatMap { try? JSONDecoder().decode(Profiles.self, from: $0) } ?? Profiles()
@@ -151,6 +153,7 @@ public final class ProfileStore {
             stream.save(stream.load(profile: current.id), profile: profile.id)
             gameSettings.copy(from: current.id, to: profile.id)
             startups.save(startups.load(profile: current.id), profile: profile.id)
+            specialKeys.copy(from: current.id, to: profile.id)
         }
         save(Profiles(all: profiles.all + [profile], currentID: profile.id))
         return profile
@@ -185,11 +188,19 @@ public final class ProfileStore {
         save(Profiles(all: profiles.all, currentID: id))
     }
 
-    /// Makes [hostID] the current profile's default PC; nil: none.
+    /// Makes [hostID] the current profile's default PC; nil: none, which also turns "Skip the start screen" off.
     public func setDefaultPC(_ hostID: String?) {
         guard let current = profiles.current else { return }
         var next = startup
         next.defaultPC = hostID
+        startups.save(next, profile: current.id)
+        startup = next
+    }
+
+    /// Turns "Skip the start screen" on or off for the current profile; it stays off without a default PC.
+    public func setSkipStart(_ on: Bool) {
+        guard let current = profiles.current else { return }
+        let next = Startup(defaultPC: startup.defaultPC, skipStart: on)
         startups.save(next, profile: current.id)
         startup = next
     }
@@ -250,6 +261,7 @@ public final class ProfileStore {
         played.remove(profile: id)
         hidden.remove(profile: id)
         gameSettings.remove(profile: id)
+        specialKeys.remove(profile: id)
     }
 
     private func save(_ next: Profiles) {

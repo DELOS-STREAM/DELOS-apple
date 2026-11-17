@@ -6,11 +6,17 @@ import Foundation
 /// with its blur and opacity, interface scale and animations; the interface sounds under Audio and the interface
 /// haptics under Controls, where Android has them. Each change applies at once.
 ///
-/// Not ported: Material You (no counterpart on Apple platforms).
+/// Material You colors (`ui_material_you`) is offered where the system has a color to follow (the Mac's accent color,
+/// ``SystemAccent``); while it is on, the palette and the game's colors are unavailable, as on Android.
 struct AppearanceForm: Equatable {
     var appearance: Appearance
+    /// The platform has a system color (``SystemAccent/supported``): the Material You row is shown.
+    var offersMaterialYou = false
+    /// The system color's hue, nil when it has none (the row then says which palette's colors stand in).
+    var systemHue: Double?
 
     static let theme = "ui_dark"
+    static let materialYou = "ui_material_you"
     static let palette = "ui_palette"
     static let matchColors = "ui_match_game_colors"
     static let clock = "ui_clock"
@@ -25,7 +31,7 @@ struct AppearanceForm: Equatable {
 
     /// The ids of every row this form owns.
     static let ids: Set<String> = [
-        theme, palette, matchColors, clock, background, heroBackground, heroBlur, heroOpacity, scale, motion, sounds, haptics,
+        theme, materialYou, palette, matchColors, clock, background, heroBackground, heroBlur, heroOpacity, scale, motion, sounds, haptics,
     ]
 
     /// The interface scale's slider, in percent.
@@ -39,11 +45,12 @@ struct AppearanceForm: Equatable {
     /// The rows of [tab] in Android's order.
     func rows(_ tab: SettingsTab) -> [SettingRow] {
         switch tab {
-        case .stream, .covers, .devices, .about: []
+        case .stream, .display, .covers, .devices, .about: []
         case .audio: [soundsRow]
         case .controls: [hapticsRow]
         case .appearance:
-            [themeRow, paletteRow, matchColorsRow, clockRow, backgroundRow, heroBackgroundRow, heroBlurRow, heroOpacityRow, scaleRow, motionRow]
+            [themeRow] + (offersMaterialYou ? [materialYouRow] : [])
+                + [paletteRow, matchColorsRow, clockRow, backgroundRow, heroBackgroundRow, heroBlurRow, heroOpacityRow, scaleRow, motionRow]
         }
     }
 
@@ -148,8 +155,21 @@ struct AppearanceForm: Equatable {
         return SettingRow(
             id: Self.palette, tab: .appearance, section: interface, icon: Symbols.palette, label: L("settings_native_palette_title"),
             value: .choice(label: label, options: PaletteName.allCases.map(Self.label), selected: PaletteName.allCases.firstIndex(of: appearance.palette)),
-            help: Self.details(value: label, explanation: nil, about: L("settings_native_palette_description")),
-            swatch: Self.swatch(appearance.palette))
+            help: Self.details(
+                value: label, explanation: nil,
+                about: L(materialYouOn ? "settings_native_needs_material_you_off" : "settings_native_palette_description")),
+            swatch: Self.swatch(appearance.palette), enabled: !materialYouOn)
+    }
+
+    /// Material You is on where it is offered (a profile from elsewhere keeps the palette).
+    private var materialYouOn: Bool { offersMaterialYou && appearance.materialYou }
+
+    private var materialYouRow: SettingRow {
+        SettingRow(
+            id: Self.materialYou, tab: .appearance, section: interface, icon: Symbols.systemColors,
+            label: L("settings_native_material_you_title"), value: .toggle(appearance.materialYou),
+            help: systemHue != nil ? L("settings_native_material_you_description")
+                : L("settings_native_material_you_fallback_description", Self.label(.mint)))
     }
 
     private var backgroundRow: SettingRow {
@@ -193,7 +213,9 @@ struct AppearanceForm: Equatable {
         SettingRow(
             id: Self.matchColors, tab: .appearance, section: interface, icon: Symbols.matchColors,
             label: L("settings_native_match_colors_title"),
-            value: .toggle(appearance.matchGameColors), help: L("settings_native_match_colors_description"))
+            value: .toggle(appearance.matchGameColors),
+            help: L(materialYouOn ? "settings_native_needs_material_you_off" : "settings_native_match_colors_description"),
+            enabled: !materialYouOn)
     }
 
     private var heroBackgroundRow: SettingRow {
@@ -243,6 +265,7 @@ struct AppearanceForm: Equatable {
         let before = appearance
         switch id {
         case Self.theme: appearance.dark = Self.next(appearance.dark, in: Self.themes, direction)
+        case Self.materialYou where offersMaterialYou: appearance.materialYou.toggle()
         case Self.palette: appearance.palette = Self.next(appearance.palette, in: PaletteName.allCases, direction)
         case Self.matchColors: appearance.matchGameColors.toggle()
         case Self.clock: appearance.clock = Self.next(appearance.clock, in: ClockFormat.allCases, direction)

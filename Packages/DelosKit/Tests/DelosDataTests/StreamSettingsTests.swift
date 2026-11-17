@@ -7,7 +7,7 @@ import Testing
 @Suite struct StreamSettingsTests {
     @Test func unknownAndMissingValuesFallBackOneByOne() throws {
         // A codec removed in a later version, numbers out of range and a broken resolution keep the rest
-        let json = #"{"codec":"pyrowave","fps":0,"bitrateKbps":5000000,"resolution":{"width":-4,"height":720},"playAudioOnHost":true}"#
+        let json = #"{"codec":"h266","fps":0,"bitrateKbps":5000000,"resolution":{"width":-4,"height":720},"playAudioOnHost":true}"#
         let s = try JSONDecoder().decode(StreamSettings.self, from: Data(json.utf8))
         #expect(s.codec == .automatic)
         #expect(s.fps == 1)

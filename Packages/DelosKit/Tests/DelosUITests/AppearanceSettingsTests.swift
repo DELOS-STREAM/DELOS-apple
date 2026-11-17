@@ -14,10 +14,14 @@ import Testing
         #expect(form.rows(.controls).map(\.id) == ["ui_haptics"])
         #expect(form.rows(.stream).isEmpty)
         #expect(Set(SettingsTab.allCases.flatMap { form.rows($0) }.map(\.section)) == ["Interface"])
-        #expect(Set(SettingsTab.allCases.flatMap { form.rows($0) }.map(\.id)) == AppearanceForm.ids)
+        #expect(Set(SettingsTab.allCases.flatMap { form.rows($0) }.map(\.id)) == AppearanceForm.ids.subtracting([AppearanceForm.materialYou]))
+        // The screen lists each tab's own rows first, then the catalog's, grouped by section
+        let startup = StartupSetting(startup: Startup(), pcs: [])
         for tab in SettingsTab.availableCases {
-            let all = StreamSettingsForm(settings: StreamSettings(), device: device).rows(tab)
-                + form.rows(tab) + CoversForm(enabled: false, automatic: true, pcName: nil).rows(tab) + DevicesSetting.rows(tab) + AppLanguageSetting.rows(tab)
+            let stream = StreamSettingsForm(settings: StreamSettings(), device: device)
+            let all = (form.rows(tab) + stream.nativeRows(tab) + DisplaySetting.rows(tab, role: .automatic) + startup.rows(tab)
+                + DevicesSetting.rows(tab) + CoversForm(enabled: false, automatic: true, pcName: nil).rows(tab) + AboutSetting.rows(tab)
+                + stream.catalogRows(tab) + AppLanguageSetting.rows(tab)).groupedBySection()
             #expect(all.first?.id == SettingsScreen.firstRow(tab))
         }
     }

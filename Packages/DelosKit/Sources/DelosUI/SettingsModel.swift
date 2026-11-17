@@ -5,21 +5,20 @@ import enum DelosMedia.FramePacing
 import enum DelosInput.ShortcutButton
 import Foundation
 
-/// A tab of Settings (`SettingsTab` of DELOS for Android), as far as its rows are ported, in Android's order: Stream
-/// (resolution, frame rate, bitrate, codec), Audio (playing audio on the PC, interface sounds), Controls (interface
-/// haptics, the stream menu's buttons and swipe), Appearance (``AppearanceForm``), Covers (``CoversForm``: SteamGridDB), Devices (``DevicesSetting``: the
-/// paired PCs and pairing a new one) and About (the system app-language action on iPhone/iPad).
+/// A tab of Settings (`SettingsTab` of DELOS for Android), in Android's order: Stream, Display, Audio, Controls,
+/// Appearance (``AppearanceForm``), Covers (``CoversForm``: SteamGridDB), Devices (the default PC, skipping the start
+/// screen, the paired PCs and pairing a new one) and About. The rows of the preference catalog are
+/// ``SettingsCatalog``; the shell's own rows come from their forms.
 enum SettingsTab: CaseIterable, Hashable, Sendable {
-    case stream, audio, controls, appearance, covers, devices, about
+    case stream, display, audio, controls, appearance, covers, devices, about
 
-    /// About has the app-language action (iPhone and iPad) and the game data providers (with a metadata service); do not
-    /// expose an empty tab where it has neither.
-    static let availableCases: [SettingsTab] = AppLanguageSetting.supportsAppSettings || GameDataSetting.configured
-        ? allCases : allCases.filter { $0 != .about }
+    /// Every tab has rows on every platform (About has at least the version).
+    static let availableCases: [SettingsTab] = allCases
 
     var label: String {
         switch self {
         case .stream: L("settings_tab_stream")
+        case .display: L("settings_tab_display")
         case .audio: L("settings_tab_audio")
         case .controls: L("settings_tab_controls")
         case .appearance: L("settings_tab_appearance")
@@ -32,6 +31,7 @@ enum SettingsTab: CaseIterable, Hashable, Sendable {
     var icon: String {
         switch self {
         case .stream: Symbols.cast
+        case .display: Symbols.monitor
         case .audio: Symbols.graphicEq
         case .controls: Symbols.sportsEsports
         case .appearance: Symbols.appearance
@@ -45,6 +45,7 @@ enum SettingsTab: CaseIterable, Hashable, Sendable {
     var help: String {
         switch self {
         case .stream: L("settings_tab_stream_description")
+        case .display: L("settings_tab_display_description")
         case .audio: L("settings_tab_audio_description")
         case .controls: L("settings_tab_controls_description")
         case .appearance: L("settings_tab_appearance_description")
@@ -71,10 +72,23 @@ enum SettingValue: Equatable {
     case slider(value: Int, range: ClosedRange<Int>, step: Int, divisor: Int, unit: String)
     /// Opens something (a screen, a dialog) or runs it; [label] is shown before the chevron (the API key's "Added").
     case action(label: String?)
+    /// A value typed into a dialog (`RowValue.Text`): the custom resolution, bitrate and refresh rate.
+    case text(String)
     /// Shows the effective app language and opens its system Settings page, not an in-app picker.
     case appSettings(language: String)
     /// Shows a fact and does nothing (`RowValue.Info` of DELOS for Android): the app's origin.
     case info(String)
+}
+
+extension SettingValue {
+    /// What a row that opens a dialog holds (`RowValue.Text`): the API key's state, a typed value.
+    var heldText: String? {
+        switch self {
+        case .action(let label): label
+        case .text(let value): value
+        default: nil
+        }
+    }
 }
 
 /// One row of Settings: the key of the same setting in DELOS for Android, where it is, what it shows and its help.
@@ -100,9 +114,25 @@ struct SettingRow: Identifiable, Equatable {
     /// What the current value costs (GPU, latency, network): three chips on their own line above the label, which the row
     /// reserves room for (`SettingsItem.impact`).
     var impact: SettingImpact? = nil
+    /// A slider's text at its minimum instead of the number (`RowValue.Slider.minText`: Gyro smoothing's "0 % (off)").
+    var sliderMinText: String? = nil
 }
 
-/// What this device offers Settings → Stream (`SettingsCapabilities` of DELOS for Android).
+extension Array where Element == SettingRow {
+    /// The rows with each section's rows together, the sections in the order they first appear (Android groups a tab's
+    /// rows by section, so a category split across tabs still has one heading per tab).
+    func groupedBySection() -> [SettingRow] {
+        var order: [String] = []
+        var bySection: [String: [SettingRow]] = [:]
+        for row in self {
+            if bySection[row.section] == nil { order.append(row.section) }
+            bySection[row.section, default: []].append(row)
+        }
+        return order.flatMap { bySection[$0] ?? [] }
+    }
+}
+
+/// What this device offers Settings (`SettingsCapabilities` of DELOS for Android).
 struct StreamDevice: Equatable, Sendable {
     var pixelWidth: Int
     var pixelHeight: Int
@@ -111,6 +141,22 @@ struct StreamDevice: Equatable, Sendable {
     var decodable: VideoFormats
     /// The display shows HDR (``HDRDisplay``).
     var hdrDisplay = false
+    /// The safe area in pixels where it is smaller than the display (a notch or the Dynamic Island): the resolutions
+    /// then have a fullscreen variant, as Android's for a display cutout.
+    var safePixelWidth: Int? = nil
+    var safePixelHeight: Int? = nil
+    /// A touchscreen: the on-screen controls and their key layouts (Android's touchscreen-only categories).
+    var touchscreen = false
+    /// The device's own gyroscope and accelerometer (Core Motion): the built-in motion rows.
+    var deviceMotion = false
+    /// A vibration motor the app can drive (Core Haptics): the device rumble rows and the rumble feel.
+    var haptics = false
+    /// Picture in Picture for the stream.
+    var pictureInPicture = false
+    /// A GPU upscaler for the stream (Metal on every supported device).
+    var upscaler = true
+    /// A PyroWave decoder.
+    var pyroWave = false
 
     /// HDR streaming needs a hardware HEVC Main10 decoder and an HDR display, both as on Android
     /// (`SettingsCapabilities`: no HDR10 display or no Main10 hides the row).
@@ -118,20 +164,47 @@ struct StreamDevice: Equatable, Sendable {
 
     /// The display's resolution while the profile has not chosen one.
     var defaultResolution: StreamResolution { .forDisplay(pixelWidth: pixelWidth, pixelHeight: pixelHeight) }
+
+    /// The catalog rows this device does not have (`SettingsCapabilities.hidden` plus the touchscreen-only categories).
+    func hides(_ spec: CatalogSpec) -> Bool {
+        if spec.phoneOnly { return true }
+        if !touchscreen, ["category_onscreen_controls", "category_special_key_layout"].contains(spec.category) { return true }
+        switch spec.id {
+        case SettingKey.upscaler.rawValue, SettingKey.upscalerMode.rawValue, SettingKey.upscalerSharpness.rawValue,
+             SettingKey.upscalerSupersampling.rawValue:
+            return !upscaler && !pyroWave
+        case SettingKey.gamepadMotionFallback.rawValue, SettingKey.forceDeviceMotion.rawValue: return !deviceMotion
+        case SettingKey.enablePip.rawValue: return !pictureInPicture
+        case "checkbox_vibrate_fallback", "seekbar_vibrate_fallback_strength", "checkbox_enable_device_rumble", "list_rumble_feel",
+             SettingKey.vibrateOsc.rawValue, SettingKey.vibrateKeyboard.rawValue:
+            return !haptics
+        default: return false
+        }
+    }
 }
 
-/// The rows of Settings → Stream and → Audio over one profile's ``StreamSettings``, and the changes the controller and
-/// touch make to them. Everything a row shows and does is here; the view only draws it.
+/// The rows of the preference catalog over one profile's ``StreamSettings`` (Stream, Display, Audio, Controls and the
+/// catalog's Appearance rows), the profile's own shell rows (stream menu swipe, on-screen controls opacity, statistics
+/// position), and the changes the controller and touch make to them. Everything a row shows and does is here; the view
+/// only draws it.
 struct StreamSettingsForm: Equatable {
     var settings: StreamSettings
     let device: StreamDevice
+    /// Whether the bitrate is chosen here (an app's bitrate override; nil: it is whenever the settings have one), which
+    /// decides if a codec change keeps it for the codec left.
+    var ownsBitrate: Bool? = nil
 
     init(settings: StreamSettings, device: StreamDevice) {
         // Choices the device does not offer are replaced when the screen opens, as on Android
-        self.settings = StreamChoices.normalized(
-            settings, displayWidth: device.pixelWidth, displayHeight: device.pixelHeight,
-            maxFramesPerSecond: device.maxFramesPerSecond, decodable: device.decodable)
+        self.settings = Self.normalized(settings, device: device)
         self.device = device
+    }
+
+    private static func normalized(_ settings: StreamSettings, device: StreamDevice) -> StreamSettings {
+        StreamChoices.normalized(
+            settings, displayWidth: device.pixelWidth, displayHeight: device.pixelHeight,
+            maxFramesPerSecond: device.maxFramesPerSecond, decodable: device.decodable,
+            safeWidth: device.safePixelWidth, safeHeight: device.safePixelHeight, pyroWave: device.pyroWave)
     }
 
     static let resolution = "list_resolution"
@@ -141,15 +214,14 @@ struct StreamSettingsForm: Equatable {
     static let hdr = "checkbox_enable_hdr"
     static let framePacing = "frame_pacing"
     static let hostAudio = "checkbox_host_audio"
+    static let perfOverlay = "checkbox_enable_perf_overlay"
+    static let perfOverlayLite = "checkbox_enable_perf_overlay_lite"
+    static let oscOpacity = "seekbar_osc_opacity"
+    static let statsPosition = SettingKey.statsPosition.rawValue
+    /// The profile's shell rows (`nativeSettings`): stream menu buttons and swipe, on-screen controls opacity,
+    /// statistics position.
     static let menuButtons = "ui_stream_menu_buttons"
     static let menuSwipe = "ui_stream_menu_swipe"
-
-    /// The stream menu's rows of Settings → Controls (`ui_stream_menu_buttons`, `ui_stream_menu_swipe`), which follow the
-    /// interface rows there.
-    func streamMenuRows(_ tab: SettingsTab) -> [SettingRow] {
-        tab == .controls ? [menuButtonsRow, menuSwipeRow] : []
-    }
-
     /// The buttons that open the stream menu, none by default.
     var menuButtonsChosen: Set<ShortcutButton> { ShortcutButton.parse(settings.streamMenuButtons) }
 
@@ -158,51 +230,133 @@ struct StreamSettingsForm: Equatable {
         settings.streamMenuButtons = ShortcutButton.stored(buttons)
     }
 
-    /// The rows of [tab] in their order.
     /// The HDR row shows where HDR can work, and also while `hdr` is stored as on where it cannot (a profile from
     /// another device, another monitor): the row is then the way to switch it off.
     private var showsHDRRow: Bool { device.supportsHDR || settings.hdr }
 
-    func rows(_ tab: SettingsTab) -> [SettingRow] {
-        switch tab {
-        case .stream:
-            // The cost chips of the rows that have them (`impact` of DELOS for Android)
-            ([resolutionRow, frameRateRow, bitrateRow, codecRow, framePacingRow] + (showsHDRRow ? [hdrRow] : [])).map { row in
-                var row = row
-                row.impact = settingImpact(id: row.id, context: impactContext)
-                return row
-            }
-        case .audio: [hostAudioRow]
-        case .controls: rumbleRows
-        case .appearance, .covers, .devices, .about: []
+    /// Every row of [tab]: the shell's own rows first, then the catalog's, as Android lists them.
+    func rows(_ tab: SettingsTab) -> [SettingRow] { nativeRows(tab) + catalogRows(tab) }
+
+    /// The catalog rows of [tab] in Android's order, without the ones this device does not have, with their cost chips.
+    func catalogRows(_ tab: SettingsTab) -> [SettingRow] {
+        let context = impactContext
+        return SettingsCatalog.all.filter { $0.tab == tab && visible($0) }.compactMap { spec in
+            guard var row = row(spec) else { return nil }
+            row.impact = settingImpact(id: row.id, context: context)
+            return row
         }
     }
 
-    // MARK: The values of each row
+    /// Every catalog row of every tab, by id (the App settings screen picks its rows from them).
+    func catalogRow(_ id: String) -> SettingRow? {
+        guard let spec = SettingsCatalog.spec(id), visible(spec), var row = row(spec) else { return nil }
+        row.impact = settingImpact(id: row.id, context: impactContext)
+        return row
+    }
 
-    /// The resolutions: the display's own (nil: Android has no such row; it is the default here), the presets, the native.
+    private func visible(_ spec: CatalogSpec) -> Bool {
+        guard !device.hides(spec) else { return false }
+        return spec.id != Self.hdr || showsHDRRow
+    }
+
+    // MARK: The shell's own rows of the profile
+
+    /// The stream menu's rows of Settings → Controls (`ui_stream_menu_buttons`, `ui_stream_menu_swipe`).
+    func streamMenuRows(_ tab: SettingsTab) -> [SettingRow] {
+        tab == .controls ? [menuButtonsRow, menuSwipeRow] : []
+    }
+
+    func nativeRows(_ tab: SettingsTab) -> [SettingRow] {
+        switch tab {
+        case .controls:
+            // The other on-screen controls settings are phone-only; the opacity shows wherever there is a touchscreen
+            streamMenuRows(tab) + (device.touchscreen ? [oscOpacityRow] : [])
+        case .display: [statsPositionRow]
+        default: []
+        }
+    }
+
+    /// The on-screen controls' opacity (`OscOpacity`): 0 to 100 % in steps of 5, the stream menu's More slider too.
+    static let oscOpacityStep = 5
+
+    private var oscOpacityRow: SettingRow {
+        SettingRow(
+            id: Self.oscOpacity, tab: .controls, section: L("category_on_screen_controls_settings"), icon: Symbols.opacity,
+            label: L("settings_native_osc_opacity_title"),
+            value: .slider(value: settings.int(.oscOpacity), range: 0...100, step: Self.oscOpacityStep, divisor: 1, unit: " %"),
+            help: L("summary_osc_opacity"))
+    }
+
+    static func statsLabel(_ position: StatsPosition) -> String {
+        switch position {
+        case .topLeft: L("settings_native_stats_top_left")
+        case .topRight: L("settings_native_stats_top_right")
+        case .bottomLeft: L("settings_native_stats_bottom_left")
+        case .bottomRight: L("settings_native_stats_bottom_right")
+        }
+    }
+
+    private static func statsHelp(_ position: StatsPosition) -> String {
+        switch position {
+        case .topLeft: L("settings_native_help_stats_top_left")
+        case .topRight: L("settings_native_help_stats_top_right")
+        case .bottomLeft: L("settings_native_help_stats_bottom_left")
+        case .bottomRight: L("settings_native_help_stats_bottom_right")
+        }
+    }
+
+    private var statsPositionRow: SettingRow {
+        let position = settings.statsPosition
+        let label = Self.statsLabel(position)
+        return SettingRow(
+            id: Self.statsPosition, tab: .display, section: L("settings_native_section_statistics"), icon: Symbols.statsPosition,
+            label: L("settings_native_stats_position_title"),
+            value: .choice(label: label, options: StatsPosition.allCases.map(Self.statsLabel), selected: StatsPosition.allCases.firstIndex(of: position)),
+            help: AppearanceForm.details(value: label, explanation: Self.statsHelp(position), about: L("settings_native_stats_position_description")))
+    }
+
+    // MARK: The values of the typed rows
+
+    /// The resolutions: the display's own (nil: Android has no such row; it is the default here), the presets, the native
+    /// ones and the custom one.
     var resolutionOptions: [(value: StreamResolution?, label: String)] {
         [(nil, L("settings_screen_dot_join", L("videoformat_auto"), device.defaultResolution.text))]
-            + StreamChoices.resolutions(displayWidth: device.pixelWidth, displayHeight: device.pixelHeight).map { choice in
+            + StreamChoices.resolutions(
+                displayWidth: device.pixelWidth, displayHeight: device.pixelHeight, safeWidth: device.safePixelWidth,
+                safeHeight: device.safePixelHeight, custom: StreamChoices.customResolution(settings)
+            ).map { choice in
                 switch choice {
                 case .preset(let r): (r, Self.presetLabel(r) ?? r.text)
-                case .native(let r, let portrait):
-                    (r, portrait ? L("settings_resolution_native_portrait", r.text) : L("settings_resolution_native", r.text))
+                case .native(let r, let portrait, let fullscreen): (r, Self.nativeLabel(r, portrait: portrait, fullscreen: fullscreen))
+                case .custom(let r): (r, L("settings_resolution_custom", r.text))
                 }
             }
     }
 
+    private static func nativeLabel(_ r: StreamResolution, portrait: Bool, fullscreen: Bool) -> String {
+        switch (fullscreen, portrait) {
+        case (true, true): L("settings_resolution_native_fullscreen_portrait", r.text)
+        case (true, false): L("settings_resolution_native_fullscreen", r.text)
+        case (false, true): L("settings_resolution_native_portrait", r.text)
+        case (false, false): L("settings_resolution_native", r.text)
+        }
+    }
+
     var frameRateOptions: [(value: Int, label: String)] {
-        StreamChoices.frameRates(maxFramesPerSecond: device.maxFramesPerSecond).map { choice in
+        StreamChoices.frameRates(
+            maxFramesPerSecond: device.maxFramesPerSecond, unlocked: settings.bool(.unlockFps),
+            custom: StreamChoices.customFrameRate(settings)
+        ).map { choice in
             switch choice {
             case .preset(let fps): (fps, Self.presetLabel(fps: fps))
             case .native(let fps): (fps, L("settings_fps_native", fps))
+            case .custom(let fps, let text): (fps, L("settings_fps_custom", text))
             }
         }
     }
 
     var codecOptions: [(value: VideoCodec, label: String)] {
-        VideoCodec.choices(decodable: device.decodable).map { ($0, Self.codecLabel($0)) }
+        VideoCodec.choices(decodable: device.decodable, pyroWave: device.pyroWave).map { ($0, Self.codecLabel($0)) }
     }
 
     private static func presetLabel(_ r: StreamResolution) -> String? {
@@ -233,15 +387,17 @@ struct StreamSettingsForm: Equatable {
         case .av1: L("help_video_format_forceav1")
         case .hevc: L("help_video_format_forceh265")
         case .h264: L("help_video_format_neverh265")
+        case .pyroWave: L("help_video_format_pyrowave")
         }
     }
 
-    private static func codecLabel(_ codec: VideoCodec) -> String {
+    static func codecLabel(_ codec: VideoCodec) -> String {
         switch codec {
         case .automatic: L("videoformat_auto")
         case .av1: L("videoformat_av1always")
         case .hevc: L("videoformat_hevcalways")
         case .h264: L("videoformat_h264always")
+        case .pyroWave: L("videoformat_pyrowave")
         }
     }
 
@@ -251,96 +407,150 @@ struct StreamSettingsForm: Equatable {
     /// The bitrate the slider shows: the chosen one, else the default for the resolution and frame rate.
     var effectiveBitrate: Int { settings.bitrate(at: effectiveResolution) }
 
-    // MARK: Rows
-
-    private var section: String { L("category_video_settings") }
-
-    private var resolutionRow: SettingRow {
-        let options = resolutionOptions
-        let selected = options.firstIndex { $0.value == settings.resolution }
-        let label = selected.map { options[$0].label } ?? L("settings_choice_unavailable", effectiveResolution.text)
-        let explanation = L("help_dynamic_resolution", "\(effectiveResolution.width) × \(effectiveResolution.height)")
-        return SettingRow(
-            id: Self.resolution, tab: .stream, section: section, icon: Symbols.resolution, label: L("title_resolution_list"),
-            value: .choice(label: label, options: options.map(\.label), selected: selected),
-            help: Self.details(value: label, explanation: explanation, unavailable: selected == nil, about: L("help_list_resolution")))
-    }
-
-    private var frameRateRow: SettingRow {
-        let options = frameRateOptions
-        let selected = options.firstIndex { $0.value == settings.fps }
-        let label = selected.map { options[$0].label } ?? L("settings_choice_unavailable", "\(settings.fps)")
-        // Android's line for the chosen rate names its Warp modes, which do not exist here: the help says what the row does
-        return SettingRow(
-            id: Self.frameRate, tab: .stream, section: section, icon: Symbols.frameRate, label: L("title_fps_list"),
-            value: .choice(label: label, options: options.map(\.label), selected: selected),
-            help: Self.details(value: label, explanation: nil, unavailable: selected == nil, about: L("help_list_fps")))
-    }
-
-    private var bitrateRow: SettingRow {
-        SettingRow(
-            id: Self.bitrate, tab: .stream, section: section, icon: Symbols.networkCheck, label: L("title_seekbar_bitrate"),
-            value: .slider(
-                value: effectiveBitrate, range: StreamSettings.bitrateRange, step: StreamSettings.bitrateStep, divisor: 1000,
-                unit: " " + L("suffix_seekbar_bitrate_mbps")),
-            // Android's own help points to the stream menu's bitrate, which is not ported: its summary is the help here
-            help: L("summary_seekbar_bitrate"))
-    }
-
-    private var codecRow: SettingRow {
-        let options = codecOptions
-        let selected = options.firstIndex { $0.value == settings.codec }
-        let label = selected.map { options[$0].label } ?? L("settings_choice_unavailable", Self.codecLabel(settings.codec))
-        return SettingRow(
-            id: Self.codec, tab: .stream, section: section, icon: Symbols.codec, label: L("title_video_format"),
-            value: .choice(label: label, options: options.map(\.label), selected: selected),
-            help: Self.details(value: label, explanation: Self.codecHelp(settings.codec), unavailable: selected == nil, about: L("help_video_format")))
-    }
-
-    /// Nano Pacer needs a latest-decoded-frame presentation path and is not offered as a misleading alias.
+    /// The frame pacing modes in Android's order; Fast V-Sync not with PyroWave (`SettingsCapabilities.choices`).
     var framePacingOptions: [(value: FramePacing, label: String)] {
-        FramePacing.allCases.map { mode in
-            switch mode {
-            case .latency: (mode, L("pacing_latency"))
-            case .balanced: (mode, L("pacing_balanced"))
-            case .capFPS: (mode, L("pacing_balanced_alt"))
-            case .smoothness: (mode, L("pacing_smoothness"))
-            case .warp: (mode, L("pacing_warp"))
-            case .warp2: (mode, L("pacing_warp2"))
-            }
+        let order: [FramePacing] = [.warp2, .warp, .latency, .balanced, .capFPS, .smoothness, .fastVSync]
+        return order.filter { $0 != .fastVSync || settings.codec != .pyroWave }.map { ($0, Self.pacingLabel($0)) }
+    }
+
+    private static func pacingLabel(_ mode: FramePacing) -> String {
+        switch mode {
+        case .latency: L("pacing_latency")
+        case .balanced: L("pacing_balanced")
+        case .capFPS: L("pacing_balanced_alt")
+        case .smoothness: L("pacing_smoothness")
+        case .warp: L("pacing_warp")
+        case .warp2: L("pacing_warp2")
+        case .fastVSync: L("pacing_fast_vsync")
         }
     }
 
-    private var framePacingRow: SettingRow {
-        let options = framePacingOptions
-        let selected = options.firstIndex { $0.value == settings.framePacing }
-        let label = selected.map { options[$0].label } ?? options[1].label
-        let explanation = switch settings.framePacing {
+    private static func pacingHelp(_ mode: FramePacing) -> String {
+        switch mode {
         case .latency: L("help_frame_pacing_latency")
         case .balanced: L("help_frame_pacing_balanced")
         case .capFPS: L("help_frame_pacing_cap_fps")
         case .smoothness: L("help_frame_pacing_smoothness")
         case .warp: L("help_frame_pacing_warp")
         case .warp2: L("help_frame_pacing_warp2")
+        case .fastVSync: L("help_frame_pacing_fast_vsync")
         }
-        // The chosen mode's Android help describes its trade-off without promising platform-specific decoder tuning.
+    }
+
+    // MARK: Rows
+
+    /// The row of [spec], nil for a row another part of the app builds (the language row, the rumble rows of
+    /// ``typedRow(_:)``).
+    private func row(_ spec: CatalogSpec) -> SettingRow? {
+        let enabled = isEnabled(spec)
+        let row: SettingRow?
+        switch spec.kind {
+        case .typed:
+            row = typedRow(spec)
+        case .toggle:
+            row = SettingRow(
+                id: spec.id, tab: spec.tab, section: spec.section, icon: spec.icon, label: spec.label,
+                value: .toggle(spec.key.map(settings.bool) ?? false), help: details(spec, value: nil, explanation: nil))
+        case .choice:
+            let options = choices(spec)
+            let current = spec.key.map(settings.text) ?? ""
+            let selected = options.firstIndex { $0.value == current }
+            let known = selected.map { options[$0] } ?? allChoices(spec).first { $0.value == current }
+            let label = selected.map { options[$0].label } ?? L("settings_choice_unavailable", known?.label ?? current)
+            row = SettingRow(
+                id: spec.id, tab: spec.tab, section: spec.section, icon: spec.icon, label: spec.label,
+                value: .choice(label: label, options: options.map(\.label), selected: selected),
+                help: details(spec, value: known?.label, explanation: known?.help ?? Self.dynamicHelp(spec.id), unavailable: selected == nil))
+        case let .slider(range, step, divisor, unit):
+            row = SettingRow(
+                id: spec.id, tab: spec.tab, section: spec.section, icon: spec.icon, label: spec.label,
+                value: .slider(value: spec.key.map(settings.int) ?? range.lowerBound, range: range, step: step, divisor: divisor, unit: unit),
+                help: details(spec, value: nil, explanation: nil),
+                sliderMinText: spec.id == SettingKey.gyroSmoothing.rawValue ? L("settings_screen_gyro_off", 0) : nil)
+        case .text:
+            row = SettingRow(
+                id: spec.id, tab: spec.tab, section: spec.section, icon: spec.icon, label: spec.label,
+                value: .text(spec.key.map(settings.text) ?? ""), help: details(spec, value: nil, explanation: nil))
+        case .action:
+            row = SettingRow(
+                id: spec.id, tab: spec.tab, section: spec.section, icon: spec.icon, label: spec.label,
+                value: .action(label: nil), help: details(spec, value: nil, explanation: nil))
+        }
+        guard var row else { return nil }
+        row.enabled = row.enabled && enabled
+        return row
+    }
+
+    /// An explanation of the chosen value that no `help_<key>_<value>` text has (`SettingsHelp.choice`).
+    private static func dynamicHelp(_ id: String) -> String? {
+        id == "keyboard_axi_list" ? L("help_dynamic_keyboard_layout") : nil
+    }
+
+    /// The rows with a field of their own in ``StreamSettings``. The five rumble rows (`checkbox_enable_rumble`,
+    /// `list_rumble_feel`, `checkbox_vibrate_fallback`, `checkbox_enable_device_rumble`, `seekbar_vibrate_fallback_strength`)
+    /// belong to the rumble settings (`StreamSettings.rumble`), which build them in this slot; the language row is
+    /// ``AppLanguageSetting``'s.
+    private func typedRow(_ spec: CatalogSpec) -> SettingRow? {
+        switch spec.id {
+        case Self.resolution: resolutionRow(spec)
+        case Self.frameRate: frameRateRow(spec)
+        case Self.bitrate: bitrateRow(spec)
+        case Self.codec: codecRow(spec)
+        case Self.framePacing: framePacingRow(spec)
+        case Self.hdr: toggleRow(spec, settings.hdr)
+        case Self.hostAudio: toggleRow(spec, settings.playAudioOnHost)
+        case Self.perfOverlay: toggleRow(spec, settings.statisticsOverlay.isShown)
+        case Self.perfOverlayLite: toggleRow(spec, settings.statisticsOverlay == .compact)
+        case Self.rumbleEnabled, Self.rumbleFeel, Self.rumbleFallback, Self.rumbleDevice, Self.rumbleStrength:
+            rumbleRows.first { $0.id == spec.id }
+        default: nil
+        }
+    }
+
+    private func toggleRow(_ spec: CatalogSpec, _ on: Bool) -> SettingRow {
+        SettingRow(
+            id: spec.id, tab: spec.tab, section: spec.section, icon: spec.icon, label: spec.label, value: .toggle(on),
+            help: details(spec, value: nil, explanation: nil))
+    }
+
+    private func resolutionRow(_ spec: CatalogSpec) -> SettingRow {
+        let options = resolutionOptions
+        let selected = options.firstIndex { $0.value == settings.resolution }
+        let label = selected.map { options[$0].label } ?? L("settings_choice_unavailable", effectiveResolution.text)
+        let explanation = L("help_dynamic_resolution", "\(effectiveResolution.width) × \(effectiveResolution.height)")
         return SettingRow(
-            id: Self.framePacing, tab: .stream, section: section, icon: Symbols.smoothing, label: L("title_frame_pacing"),
+            id: spec.id, tab: spec.tab, section: spec.section, icon: spec.icon, label: spec.label,
             value: .choice(label: label, options: options.map(\.label), selected: selected),
-            help: "\(label)\n\(explanation)")
+            help: details(spec, value: label, explanation: explanation, unavailable: selected == nil))
     }
 
-    /// Android hides the row where the display or the decoder cannot do HDR, so it is not offered either.
-    private var hdrRow: SettingRow {
-        SettingRow(
-            id: Self.hdr, tab: .stream, section: section, icon: Symbols.hdrOn, label: L("title_enable_hdr"),
-            value: .toggle(settings.hdr), help: L("help_checkbox_enable_hdr"))
+    private func frameRateRow(_ spec: CatalogSpec) -> SettingRow {
+        let options = frameRateOptions
+        let selected = options.firstIndex { $0.value == settings.fps }
+        let label = selected.map { options[$0].label } ?? L("settings_choice_unavailable", "\(settings.fps)")
+        return SettingRow(
+            id: spec.id, tab: spec.tab, section: spec.section, icon: spec.icon, label: spec.label,
+            value: .choice(label: label, options: options.map(\.label), selected: selected),
+            help: details(spec, value: label, explanation: L("help_dynamic_fps", "\(settings.fps)"), unavailable: selected == nil))
     }
 
-    private var hostAudioRow: SettingRow {
+    private func bitrateRow(_ spec: CatalogSpec) -> SettingRow {
         SettingRow(
-            id: Self.hostAudio, tab: .audio, section: L("category_host_settings"), icon: Symbols.speaker,
-            label: L("title_checkbox_host_audio"), value: .toggle(settings.playAudioOnHost), help: L("help_checkbox_host_audio"))
+            id: spec.id, tab: spec.tab, section: spec.section, icon: spec.icon, label: spec.label,
+            value: .slider(
+                value: effectiveBitrate, range: StreamSettings.bitrateRange, step: StreamSettings.bitrateStep, divisor: 1000,
+                unit: CatalogSpec.unit(L("suffix_seekbar_bitrate_mbps"))),
+            help: details(spec, value: nil, explanation: nil))
+    }
+
+    private func codecRow(_ spec: CatalogSpec) -> SettingRow {
+        let options = codecOptions
+        let selected = options.firstIndex { $0.value == settings.codec }
+        let label = selected.map { options[$0].label } ?? L("settings_choice_unavailable", Self.codecLabel(settings.codec))
+        return SettingRow(
+            id: spec.id, tab: spec.tab, section: spec.section, icon: spec.icon, label: spec.label,
+            value: .choice(label: label, options: options.map(\.label), selected: selected),
+            help: details(spec, value: label, explanation: Self.codecHelp(settings.codec), unavailable: selected == nil))
     }
 
     /// "Not set" or the recorded buttons; the list clears them or records new ones, and a step records (the row's own
@@ -362,14 +572,108 @@ struct StreamSettingsForm: Equatable {
             help: L("settings_native_menu_swipe_description"))
     }
 
-    /// `SettingsHelp.details`: the chosen value with its explanation and the note that it is unavailable, a blank line,
-    /// then what the setting does.
-    static func details(value: String, explanation: String?, unavailable: Bool, about: String) -> String {
+    private func framePacingRow(_ spec: CatalogSpec) -> SettingRow {
+        let options = framePacingOptions
+        let selected = options.firstIndex { $0.value == settings.framePacing }
+        let label = Self.pacingLabel(settings.framePacing)
+        return SettingRow(
+            id: spec.id, tab: spec.tab, section: spec.section, icon: spec.icon, label: spec.label,
+            value: .choice(label: selected == nil ? L("settings_choice_unavailable", label) : label, options: options.map(\.label), selected: selected),
+            help: details(spec, value: label, explanation: Self.pacingHelp(settings.framePacing), unavailable: selected == nil))
+    }
+
+    // MARK: Choices, availability and help
+
+    /// Every value of a list row with its label, as the catalog has them.
+    private func allChoices(_ spec: CatalogSpec) -> [CatalogChoice] {
+        guard case .choice(let choices) = spec.kind else { return [] }
+        // The classic array repeats one label for the five layouts: number them (`settings_layout_number`)
+        if spec.id == SettingKey.keyLayout.rawValue {
+            return choices.enumerated().map { CatalogChoice(value: $1.value, label: L("settings_layout_number", $0 + 1), help: $1.help) }
+        }
+        return choices
+    }
+
+    /// The values of a list row this device offers (`SettingsCapabilities.choices`).
+    func choices(_ spec: CatalogSpec) -> [CatalogChoice] { allChoices(spec) }
+
+    /// Whether the row can change (`StreamSettingsStore.enabled`): the rules between settings, then the dependency chain
+    /// (`android:dependency`: the row it depends on is on, and so is that one's).
+    func isEnabled(_ spec: CatalogSpec) -> Bool {
+        let pyro = settings.codec == .pyroWave
+        switch spec.id {
+        // PyroWave has its own decoder; the hardware decoder's options do not apply
+        case SettingKey.asyncDecode.rawValue, SettingKey.ultraLowLatency.rawValue: if pyro { return false }
+        case SettingKey.lowLatencyFrameBalance.rawValue: if pyro || settings.framePacing == .fastVSync { return false }
+        // 4:4:4 is PyroWave-only and never offered with HDR (the HDR path is 4:2:0)
+        case SettingKey.pyrowaveChroma.rawValue: if !pyro || settings.hdr { return false }
+        case SettingKey.upscaler.rawValue, SettingKey.upscalerMode.rawValue, SettingKey.upscalerSharpness.rawValue:
+            if !device.upscaler && !pyro { return false }
+        case SettingKey.upscalerSupersampling.rawValue:
+            if !device.upscaler && !pyro { return false }
+            // Sharpen only never scales, so there is no supersampling quality to choose
+            if settings.text(.upscalerMode) == "sharpen" { return false }
+        case SettingKey.gyroSmoothing.rawValue: if !gyroSourceOn { return false }
+        default: break
+        }
+        var seen: Set<String> = []
+        var parent = spec.dependency
+        while let id = parent {
+            guard seen.insert(id).inserted else { return false }
+            guard let parentSpec = SettingsCatalog.spec(id) else { return true }
+            guard dependencyValue(parentSpec) else { return false }
+            parent = parentSpec.dependency
+        }
+        return true
+    }
+
+    /// Whether a gyroscope source is on, which Gyro smoothing acts on (`gyroSourceEnabled`): the gamepad's sensors
+    /// (GameController reads them on every supported system) or the device's own.
+    var gyroSourceOn: Bool { settings.bool(.gamepadMotionSensors) || settings.bool(.gamepadMotionFallback) }
+
+    /// A row's value as a dependency sees it: on, or not empty.
+    private func dependencyValue(_ spec: CatalogSpec) -> Bool {
+        if spec.id == Self.perfOverlay { return settings.statisticsOverlay.isShown }
+        guard let key = spec.key else { return true }
+        switch settings.value(key) {
+        case .bool(let on): return on
+        case .text(let text): return !text.isEmpty
+        case .int: return true
+        }
+    }
+
+    /// The note that the other settings add to a row's help (`SettingsHelp.context`).
+    private func contextNote(_ id: String) -> String? {
+        let pyro = settings.codec == .pyroWave
+        switch id {
+        case Self.bitrate:
+            return settings.pyroWaveRecommendedKbps(displayResolution: device.defaultResolution)
+                .map { L("help_note_pyrowave_recommends", $0 / 1000) }
+        case Self.framePacing where settings.framePacing == .fastVSync: return L("help_note_fast_vsync_lfr")
+        case Self.framePacing where settings.bool(.lowLatencyFrameBalance): return L("help_note_lfr_balanced")
+        case SettingKey.asyncDecode.rawValue, SettingKey.ultraLowLatency.rawValue, SettingKey.lowLatencyFrameBalance.rawValue:
+            return pyro ? L("help_note_not_with_pyrowave") : nil
+        case SettingKey.pyrowaveChroma.rawValue where !pyro: return L("help_note_needs_pyrowave")
+        case SettingKey.pyrowaveChroma.rawValue where settings.hdr: return L("help_note_hdr_420")
+        case SettingKey.upscalerMode.rawValue where pyro: return L("help_note_pyrowave_modes")
+        case SettingKey.upscalerSupersampling.rawValue where settings.text(.upscalerMode) == "sharpen": return L("help_note_sharpen_only")
+        default: return nil
+        }
+    }
+
+    private func details(_ spec: CatalogSpec, value: String?, explanation: String?, unavailable: Bool = false) -> String {
+        Self.details(value: value, explanation: explanation, unavailable: unavailable, note: contextNote(spec.id), about: spec.help)
+    }
+
+    /// `SettingsHelp.details`: the chosen [value] with its [explanation], the note that it is unavailable and the [note] the
+    /// other settings add, a blank line, then what the setting does ([about]).
+    static func details(value: String?, explanation: String?, unavailable: Bool, note: String? = nil, about: String?) -> String {
         let state = [
-            explanation.map { "\(value)\n\($0)" },
+            value.flatMap { value in explanation.map { "\(value)\n\($0)" } },
             unavailable ? L("help_note_unavailable") : nil,
+            note,
         ].compactMap { $0 }.joined(separator: "\n")
-        return [state, about].filter { !$0.isEmpty }.joined(separator: "\n\n")
+        return [state, about ?? ""].filter { !$0.isEmpty }.joined(separator: "\n\n")
     }
 
     // MARK: Changes
@@ -382,30 +686,81 @@ struct StreamSettingsForm: Equatable {
         switch id {
         case Self.resolution: settings.resolution = Self.next(settings.resolution, in: resolutionOptions.map(\.value), direction)
         case Self.frameRate: settings.fps = Self.next(settings.fps, in: frameRateOptions.map(\.value), direction)
-        case Self.codec: settings.codec = Self.next(settings.codec, in: codecOptions.map(\.value), direction)
+        case Self.codec: setCodec(Self.next(settings.codec, in: codecOptions.map(\.value), direction))
         case Self.framePacing: settings.framePacing = Self.next(settings.framePacing, in: framePacingOptions.map(\.value), direction)
         case Self.bitrate: setBitrate(effectiveBitrate + direction * StreamSettings.bitrateStep)
         case Self.hdr where showsHDRRow: settings.hdr.toggle()
         case Self.hostAudio: settings.playAudioOnHost.toggle()
+        case Self.perfOverlay: settings.statisticsOverlay = settings.statisticsOverlay.isShown ? .off : .full
+        case Self.perfOverlayLite where settings.statisticsOverlay.isShown:
+            settings.statisticsOverlay = settings.statisticsOverlay == .compact ? .full : .compact
         case Self.menuSwipe: settings.streamMenuSwipe.toggle()
-        default: stepRumble(id, by: direction)
+        case Self.oscOpacity: setSlider(.oscOpacity, settings.int(.oscOpacity) + direction * Self.oscOpacityStep, step: Self.oscOpacityStep)
+        case Self.statsPosition:
+            settings.set(.statsPosition, .text(Self.next(settings.statsPosition, in: StatsPosition.allCases, direction).rawValue))
+        default:
+            guard let spec = SettingsCatalog.spec(id), let key = spec.key else { stepRumble(id, by: direction); break }
+            switch spec.kind {
+            case .toggle: settings.set(key, .bool(!settings.bool(key)))
+            case .choice:
+                let values = choices(spec).map(\.value)
+                settings.set(key, .text(Self.next(settings.text(key), in: values, direction)))
+            case let .slider(_, step, _, _): setSlider(key, settings.int(key) + direction * step, step: step)
+            case .typed, .text, .action: break
+            }
         }
+        settled(after: before)
         return settings != before
     }
 
     /// A value picked from a choice row's list.
     mutating func pick(_ id: String, option index: Int) {
+        let before = settings
         switch id {
         case Self.resolution: if resolutionOptions.indices.contains(index) { settings.resolution = resolutionOptions[index].value }
         case Self.frameRate: if frameRateOptions.indices.contains(index) { settings.fps = frameRateOptions[index].value }
-        case Self.codec: if codecOptions.indices.contains(index) { settings.codec = codecOptions[index].value }
+        case Self.codec: if codecOptions.indices.contains(index) { setCodec(codecOptions[index].value) }
         case Self.framePacing: if framePacingOptions.indices.contains(index) { settings.framePacing = framePacingOptions[index].value }
+        case Self.statsPosition: if StatsPosition.allCases.indices.contains(index) { settings.set(.statsPosition, .text(StatsPosition.allCases[index].rawValue)) }
         case Self.rumbleFeel where settings.rumble.enabled:
             if RumblePreset.allCases.indices.contains(index) { settings.rumble.profile = RumblePreset.allCases[index] }
         // "Not set"; "Record buttons" is the screen's (it opens the recording)
         case Self.menuButtons: if index == 0 { settings.streamMenuButtons = [] }
-        default: break
+        default:
+            guard let spec = SettingsCatalog.spec(id), let key = spec.key else { break }
+            let options = choices(spec)
+            if options.indices.contains(index) { settings.set(key, .text(options[index].value)) }
         }
+        settled(after: before)
+    }
+
+    /// A slider's value set on its track by touch.
+    mutating func slide(_ id: String, to value: Int) {
+        switch id {
+        case Self.bitrate: setBitrate(value)
+        case Self.oscOpacity: setSlider(.oscOpacity, value, step: Self.oscOpacityStep)
+        case Self.rumbleStrength: settings.rumble.deviceStrength = value
+        default:
+            guard let spec = SettingsCatalog.spec(id), let key = spec.key,
+                  case let .slider(_, step, _, _) = spec.kind else { return }
+            setSlider(key, value, step: step)
+        }
+    }
+
+    /// What follows a change, as Android's store writes it: PyroWave's bitrate follows the resolution, frame rate, HDR
+    /// and chroma, and the choices are normalized again when "Unlock all FPS" changes.
+    private mutating func settled(after before: StreamSettings) {
+        if settings.codec == .pyroWave, settings.codec == before.codec,
+           settings.resolution != before.resolution || settings.fps != before.fps || settings.hdr != before.hdr
+            || settings.text(.pyrowaveChroma) != before.text(.pyrowaveChroma) {
+            settings.followPyroWave(displayResolution: device.defaultResolution)
+        }
+        if settings.bool(.unlockFps) != before.bool(.unlockFps) { settings = Self.normalized(settings, device: device) }
+    }
+
+    /// The codec, with each codec's own bitrate (``StreamSettings/changeCodec(to:displayResolution:ownsBitrate:)``).
+    mutating func setCodec(_ codec: VideoCodec) {
+        settings.changeCodec(to: codec, displayResolution: device.defaultResolution, ownsBitrate: ownsBitrate)
     }
 
     /// The bitrate from the slider, snapped to whole Mbps within the range. Once moved it stays: it no longer follows
@@ -414,6 +769,42 @@ struct StreamSettingsForm: Equatable {
         let range = StreamSettings.bitrateRange, step = StreamSettings.bitrateStep
         let snapped = range.lowerBound + Int((Double(kbps - range.lowerBound) / Double(step)).rounded()) * step
         settings.bitrateKbps = min(max(snapped, range.lowerBound), range.upperBound)
+    }
+
+    /// A catalog slider's value snapped to its grid (from its minimum) within its range.
+    private mutating func setSlider(_ key: SettingKey, _ value: Int, step: Int) {
+        guard let range = key.range else { return }
+        let snapped = range.lowerBound + Int((Double(value - range.lowerBound) / Double(step)).rounded()) * step
+        settings.set(key, .int(min(max(snapped, range.lowerBound), range.upperBound)))
+    }
+
+    /// Text typed into a TEXT row's dialog (`StreamSettingsStore.writeText`): the custom resolution `<width>x<height>`, the
+    /// custom refresh rate (above 0, up to 1000) or the bitrate in Mbps (above 0, up to 9999, which also sets the bitrate).
+    /// Returns the error to show, or nil once the value is stored.
+    mutating func setText(_ id: String, _ input: String) -> String? {
+        let value = input.trimmingCharacters(in: .whitespaces).lowercased()
+        switch id {
+        case SettingKey.customResolution.rawValue:
+            let parts = value.split(separator: "x", omittingEmptySubsequences: false).map { Int($0) }
+            guard parts.count == 2, let w = parts[0], let h = parts[1], (1...32768).contains(w), (1...32768).contains(h) else {
+                return L("settings_error_resolution_format")
+            }
+            settings.set(.customResolution, .text("\(w)x\(h)"))
+        case SettingKey.customRefreshRate.rawValue:
+            guard let fps = Double(value), fps.isFinite, fps > 0, fps <= 1000 else { return L("settings_error_fps_range") }
+            var text = String(format: "%.3f", locale: Locale(identifier: "en_US_POSIX"), fps)
+            while text.hasSuffix("0") { text.removeLast() }
+            if text.hasSuffix(".") { text.removeLast() }
+            settings.set(.customRefreshRate, .text(text))
+        case SettingKey.customBitrate.rawValue:
+            guard let mbps = Double(value), mbps.isFinite, mbps > 0, mbps <= 9999 else { return L("settings_error_bitrate_range") }
+            settings.set(.customBitrate, .text(value))
+            settings.bitrateKbps = Int((mbps * 1000).rounded())
+        default:
+            guard let key = SettingKey(rawValue: id) else { return nil }
+            settings.set(key, .text(input.trimmingCharacters(in: .whitespaces)))
+        }
+        return nil
     }
 
     private static func next<T: Equatable>(_ value: T, in list: [T], _ direction: Int) -> T {
@@ -436,12 +827,100 @@ struct StreamSettingsForm: Equatable {
     }
 }
 
-/// Android's Devices tab rows that have a counterpart here (`devices_manage`, `devices_pair`): the Devices screen and pairing a
-/// new PC. The default PC and "skip the start screen" belong to a start screen that connects by itself, which this one does not.
+/// Settings → Display → Second display (`SecondDisplayOverride` of DELOS for Android): the kind of a second screen of this
+/// device, kept for the device. Android's "Main screen" and the idle dimming of the second screen show only with a panel
+/// built into the device, which Apple devices do not have.
+enum DisplaySetting {
+    static let secondDisplayID = SecondDisplayRole.key
+
+    static func label(_ role: SecondDisplayRole) -> String {
+        switch role {
+        case .automatic: L("settings_native_second_display_automatic")
+        case .external: L("settings_native_second_display_external")
+        case .builtIn: L("settings_native_second_display_built_in")
+        }
+    }
+
+    private static func help(_ role: SecondDisplayRole) -> String {
+        switch role {
+        case .automatic: L("settings_native_help_second_display_automatic")
+        case .external: L("settings_native_help_second_display_external")
+        case .builtIn: L("settings_native_help_second_display_built_in")
+        }
+    }
+
+    static func rows(_ tab: SettingsTab, role: SecondDisplayRole) -> [SettingRow] {
+        guard tab == .display else { return [] }
+        let label = label(role)
+        return [SettingRow(
+            id: secondDisplayID, tab: .display, section: L("settings_native_section_displays"), icon: Symbols.externalDisplay,
+            label: L("settings_native_second_display_title"),
+            value: .choice(label: label, options: SecondDisplayRole.allCases.map(Self.label), selected: SecondDisplayRole.allCases.firstIndex(of: role)),
+            help: AppearanceForm.details(value: label, explanation: help(role), about: L("settings_native_second_display_description")))]
+    }
+
+    /// The role after a step of [direction], wrapping around.
+    static func step(_ role: SecondDisplayRole, by direction: Int) -> SecondDisplayRole {
+        let all = SecondDisplayRole.allCases
+        let index = all.firstIndex(of: role) ?? 0
+        return all[((index + direction) % all.count + all.count) % all.count]
+    }
+}
+
+/// Settings → Devices → Startup (`ui_default_pc`, `ui_skip_start`): the default PC among the paired ones (None first,
+/// then by name) and connecting to it straight away when DELOS starts. Without paired PCs the default cannot be chosen;
+/// without a default PC there is nothing to skip to.
+struct StartupSetting: Equatable {
+    var startup: Startup
+    /// The paired PCs: id and name.
+    var pcs: [(id: String, name: String)]
+
+    static let defaultPCID = "ui_default_pc"
+    static let skipStartID = "ui_skip_start"
+
+    static func == (a: StartupSetting, b: StartupSetting) -> Bool {
+        a.startup == b.startup && a.pcs.map(\.id) == b.pcs.map(\.id) && a.pcs.map(\.name) == b.pcs.map(\.name)
+    }
+
+    /// None, then the paired PCs alphabetically.
+    var choices: [(id: String?, name: String)] {
+        [(nil, L("settings_native_default_pc_none"))]
+            + pcs.sorted { $0.name.lowercased() < $1.name.lowercased() }.map { (Optional($0.id), $0.name) }
+    }
+
+    func rows(_ tab: SettingsTab) -> [SettingRow] {
+        guard tab == .devices else { return [] }
+        let section = L("settings_native_section_startup")
+        let choices = choices
+        let index = choices.firstIndex { $0.id == startup.defaultPC } ?? 0
+        let label = choices[index].name
+        return [
+            SettingRow(
+                id: Self.defaultPCID, tab: .devices, section: section, icon: Symbols.star, label: L("settings_native_default_pc_title"),
+                value: .choice(label: label, options: choices.map(\.name), selected: index),
+                help: AppearanceForm.details(
+                    value: label,
+                    explanation: L(choices[index].id == nil ? "settings_native_help_default_pc_none" : "settings_native_help_default_pc_set"),
+                    about: L("settings_native_default_pc_description")),
+                enabled: choices.count > 1),
+            SettingRow(
+                id: Self.skipStartID, tab: .devices, section: section, icon: Symbols.fastForward, label: L("settings_native_skip_start_title"),
+                value: .toggle(startup.skipStart), help: L("settings_native_skip_start_description"), enabled: startup.defaultPC != nil),
+        ]
+    }
+
+    /// The default PC after a step of [direction] (wrapping around); a new default keeps skipping only while it is a PC.
+    func steppedDefault(by direction: Int) -> String? {
+        let choices = choices
+        let index = choices.firstIndex { $0.id == startup.defaultPC } ?? 0
+        return choices[((index + direction) % choices.count + choices.count) % choices.count].id
+    }
+}
+
+/// Android's Devices tab rows for the paired PCs (`devices_manage`, `devices_pair`): the Devices screen and pairing a new PC.
 enum DevicesSetting {
     static let manageID = "devices_manage"
     static let pairID = "devices_pair"
-    static var firstID: String { manageID }
 
     static func rows(_ tab: SettingsTab) -> [SettingRow] {
         guard tab == .devices else { return [] }
@@ -457,20 +936,28 @@ enum DevicesSetting {
     }
 }
 
-/// Android's About → Delos rows that mean something here: what DELOS is based on, and replaying the welcome (the boot
-/// screen again; profiles and paired PCs are kept). The version row is left out: its text says "Delos for Android".
-/// The update rows and the diagnostics belong to Android's distribution and to issue #71.
+/// Android's About → Delos rows: the version, what DELOS is based on, and replaying the welcome (the boot screen again;
+/// profiles and paired PCs are kept). Android's update rows are left out: an App Store app does not update itself
+/// (App Review guideline 2.5.2). The diagnostics belong to issue #71.
 enum AboutSetting {
+    static let versionID = "about_version"
     static let basedID = "about_based"
     static let welcomeID = "about_welcome"
-    /// A product name: Android does not translate the section either.
-    static let section = "Delos"
 
-    static var firstID: String { basedID }
+    static var firstID: String { versionID }
 
-    static func rows(_ tab: SettingsTab) -> [SettingRow] {
+    /// The app's version as the App Store shows it (`CFBundleShortVersionString`).
+    static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "" }
+
+    static func rows(_ tab: SettingsTab, version: String = version) -> [SettingRow] {
         guard tab == .about else { return [] }
+        // A product name: Android does not translate the section either
+        let section = "Delos"
+        // Android's description of the row names its own platform: the panel shows the product and its version
         return [
+            SettingRow(
+                id: versionID, tab: .about, section: section, icon: Symbols.version, label: L("settings_native_version_title"),
+                value: .info(version), help: "DELOS \(version)"),
             SettingRow(
                 id: basedID, tab: .about, section: section, icon: Symbols.accountTree, label: L("settings_native_based_title"),
                 value: .info("Artemis · Moonlight"), help: L("settings_native_based_description")),

@@ -25,7 +25,7 @@ enum RowTouch: Equatable {
     static func of(_ value: SettingValue, wasFocused: Bool, enabled: Bool, canPopup: Bool = true) -> RowTouch {
         switch value {
         case .info: return .none
-        case .action, .appSettings: return enabled ? .activate : .error
+        case .action, .text, .appSettings: return enabled ? .activate : .error
         case .toggle, .choice, .slider: break
         }
         guard wasFocused else { return .focusOnly }
@@ -47,7 +47,7 @@ enum RowPopupKind: Equatable {
         switch row.value {
         case .choice(_, let options, _): options.isEmpty ? nil : .options
         case .slider: .slider
-        case .toggle, .action, .appSettings, .info: nil
+        case .toggle, .action, .text, .appSettings, .info: nil
         }
     }
 }

@@ -206,9 +206,8 @@ public struct DelosRoot: View {
     /// The side menu's opening progress while a touch drag owns it (nil: the panel and the scrim run their transitions).
     private var sideProgress: Double? { router.sideDrag.engaged ? router.sideDrag.progress : nil }
 
-    private var colors: DelosColors {
-        DelosColors(palette: Palette(rawValue: appearance.palette.rawValue) ?? .delos, dark: appearance.dark)
-    }
+    /// The palette's colors, or the system's with Material You colors (Mac).
+    private var colors: DelosColors { DelosColors(appearance) }
 
     public var body: some View {
         StageReader(textScale: Double(appearance.uiScale) / 100) {
@@ -311,7 +310,8 @@ public struct DelosRoot: View {
         .environment(\.delosColors, colors)
         .environment(\.reducedMotion, systemReduceMotion || appearance.reducedMotion)
         .environment(\.shellCoversArt, sideMenu != nil || actions.connection.portal != nil)
-        .environment(\.matchGameColors, appearance.matchGameColors)
+        // Material You colors leave the game's colors out, as on Android
+        .environment(\.matchGameColors, appearance.matchGameColors && !colors.materialYou)
         .onChange(of: systemReduceMotion || appearance.reducedMotion, initial: true) { _, now in
             actions.connection.reducedMotion = now
             router.reducedMotion = now
@@ -325,6 +325,8 @@ public struct DelosRoot: View {
             feedback?.hapticsEnabled = now.haptics
         }
         .onAppear { device.start() }
+        // "Skip the start screen": straight into the default PC, once, when DELOS opens
+        .task { await actions.skipStartIfChosen() }
         #if os(iOS)
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)

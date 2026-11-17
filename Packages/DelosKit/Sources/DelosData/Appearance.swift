@@ -17,9 +17,11 @@ public enum ClockFormat: String, CaseIterable, Codable, Sendable {
 
 /// Settings → Appearance. The defaults are the first-run look of DELOS for Android (owner, 2026-11-16): DELOS palette,
 /// dark theme, Contour background, game colors and game backgrounds on (blur 5, opacity 80 %), interface scale 100 %.
-/// Material You has no counterpart on Apple platforms.
 public struct Appearance: Codable, Equatable, Sendable {
     public var dark = true
+    /// The interface takes its colors from the system instead of the palette (`ui_material_you`): on the Mac the accent
+    /// color of System Settings → Appearance. iPhone, iPad and Apple TV have no system color to follow.
+    public var materialYou = false
     public var palette = PaletteName.delos
     public var clock = ClockFormat.system
     /// The animated background takes on the main color of the focused game's background image.
@@ -45,6 +47,7 @@ public struct Appearance: Codable, Equatable, Sendable {
         let d = Appearance()
         func value<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T { (try? c.decodeIfPresent(T.self, forKey: key)) ?? fallback }
         dark = value(.dark, d.dark)
+        materialYou = value(.materialYou, d.materialYou)
         palette = value(.palette, d.palette)
         clock = value(.clock, d.clock)
         matchGameColors = value(.matchGameColors, d.matchGameColors)
