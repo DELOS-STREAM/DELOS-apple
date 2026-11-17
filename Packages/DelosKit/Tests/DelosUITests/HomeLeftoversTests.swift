@@ -77,4 +77,14 @@ import Testing
         #expect(hints.map(\.label) == ["Select", "Back to library"])
         #expect(hints[1].shortLabel == "Back")
     }
+    @Test func theProgressPillShowsArtworkBeforeMetadata() {
+        #expect(ShellProgress.shown(artwork: nil, metadata: nil)?.progress == nil)
+        let metadata = ShellProgress.shown(artwork: nil, metadata: ShellProgress(done: 1, total: 4))
+        #expect(metadata?.label.isEmpty == false)
+        #expect(metadata?.progress.fraction == 0.25)
+        let artwork = ShellProgress.shown(artwork: ShellProgress(done: 0, total: 2), metadata: ShellProgress(done: 1, total: 4))
+        #expect(artwork?.progress == ShellProgress(done: 0, total: 2))
+        #expect(artwork?.label != metadata?.label)
+        #expect(ShellProgress(done: 0, total: 0).fraction == 0)
+    }
 }

@@ -24,6 +24,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   connecting to it.
 - Try again on a failed stream first checks that the PC answers and still has the game, and otherwise returns to the
   library saying why; the hint bar over the result shows Select and Back to library.
+- While artwork downloads or game info is looked up, a glass pill above the button hints shows what runs, "x of N" and
+  a bar. Strings Android does not translate have their English text in every language of the catalog.
 - Pairing waits for the trusted paired state instead of a fixed delay, and manual-address entry reports a PC
   that was not added. The start screen retargets its initial PC focus as discovery changes. On compact stages,
   the profile chip shares the status line, clears the measured status cluster and truncates long names.

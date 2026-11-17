@@ -16,6 +16,12 @@ final class GameMetadataModel {
     private(set) var states: [String: GameMetadataState] = [:]
     /// Titles looked up in this session: a game is asked for once, the store decides from its cache and policy.
     @ObservationIgnored private var asked: Set<String> = []
+    /// Games being looked up: how far the largest batch is (the library's refresh, or the one game a lookup or a choice is
+    /// for), nil when none runs (`GameMetadataStore.progress`); the shell's progress pill shows it.
+    private(set) var progress: ShellProgress?
+    @ObservationIgnored private var batches: [ProgressBatch] = []
+    /// The time the refresh policy is checked at, in milliseconds (the store's clock).
+    @ObservationIgnored var now: @MainActor () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
 
     init(store: MetadataStore = MetadataStore()) {
         self.store = store
@@ -38,16 +44,37 @@ final class GameMetadataModel {
         let key = Self.key(app.title)
         guard !key.isEmpty, asked.insert(key).inserted else { return }
         let title = app.title
-        Task { await load(key: key, title: title) }
+        Task { await load(key: key, title: title, progress: .own) }
     }
 
-    private func load(key: String, title: String) async {
+    /// Whose progress a lookup counts in: a batch of its own when it refreshes, the library's batch, or none.
+    private enum LoadProgress: Sendable {
+        case own
+        case batch(ProgressBatch)
+        case none
+    }
+
+    private func load(key: String, title: String, progress: LoadProgress) async {
         let cached = await store.state(for: title)
         if states[key] == nil { states[key] = cached }
-        do {
-            states[key] = try await store.lookup(title: title)
-        } catch {
-            asked.remove(key)
+        let lookup = { [self] in
+            do {
+                states[key] = try await store.lookup(title: title)
+            } catch {
+                asked.remove(key)
+            }
+        }
+        switch progress {
+        case .own where MetadataPolicy.refreshDue(cached.data, now: now()):
+            await withProgress(total: 1) { batch in
+                await lookup()
+                finish(batch)
+            }
+        case .batch(let batch):
+            await lookup()
+            finish(batch)
+        case .own, .none:
+            await lookup()
         }
     }
 
@@ -67,22 +94,25 @@ final class GameMetadataModel {
             let key = Self.key(app.title)
             if !key.isEmpty, asked.insert(key).inserted { todo.append((key, app.title)) }
         }
+        // The games whose refresh is due count in the progress; the others only read their record
+        let due = Set(todo.filter { MetadataPolicy.refreshDue(states[$0.key]?.data, now: now()) }.map(\.key))
         var started = 0
-        await withTaskGroup(of: Void.self) { group in
-            while started < min(Self.libraryConcurrency, todo.count) {
-                let (key, title) = todo[started]
-                started += 1
-                group.addTask { await self.load(key: key, title: title) }
-            }
-            while await group.next() != nil {
-                guard !Task.isCancelled else {
-                    group.cancelAll()
-                    break
+        await withProgress(total: due.count) { batch in
+            await withTaskGroup(of: Void.self) { group in
+                func start() {
+                    let (key, title) = todo[started]
+                    started += 1
+                    let progress: LoadProgress = due.contains(key) ? .batch(batch) : .none
+                    group.addTask { await self.load(key: key, title: title, progress: progress) }
                 }
-                guard started < todo.count else { continue }
-                let (key, title) = todo[started]
-                started += 1
-                group.addTask { await self.load(key: key, title: title) }
+                while started < min(Self.libraryConcurrency, todo.count) { start() }
+                while await group.next() != nil {
+                    guard !Task.isCancelled else {
+                        group.cancelAll()
+                        break
+                    }
+                    if started < todo.count { start() }
+                }
             }
         }
         // What was not asked about because the screen went away is asked about next time
@@ -94,10 +124,55 @@ final class GameMetadataModel {
 
     /// A refresh, reset or match the user asked for. The state afterwards is the store's; a thrown error is the caller's.
     func perform(_ app: HostApp, _ operation: @Sendable (MetadataStore, String) async throws -> GameMetadataState) async throws -> GameMetadataState {
-        let state = try await operation(store, app.title)
+        let state = try await withProgress(total: 1) { batch in
+            let state = try await operation(store, app.title)
+            finish(batch)
+            return state
+        }
         states[Self.key(app.title)] = state
         asked.insert(Self.key(app.title))
         return state
+    }
+
+    /// The IGDB matches for [term] (the Metadata menu's search), counted in the progress.
+    func search(_ term: String) async throws -> [MetadataCandidate] {
+        try await withProgress(total: 1) { batch in
+            let found = try await store.search(term)
+            finish(batch)
+            return found
+        }
+    }
+
+    // MARK: Progress
+
+    @MainActor private final class ProgressBatch {
+        var total: Int
+        var done = 0
+        init(total: Int) { self.total = total }
+    }
+
+    /// Runs [body] with a batch of [total] games in the progress; the batch leaves it when [body] ends, however it ends.
+    private func withProgress<T>(total: Int, _ body: (ProgressBatch) async throws -> T) async rethrows -> T {
+        let batch = ProgressBatch(total: total)
+        batches.append(batch)
+        publishProgress()
+        defer {
+            batches.removeAll { $0 === batch }
+            publishProgress()
+        }
+        return try await body(batch)
+    }
+
+    private func finish(_ batch: ProgressBatch) {
+        batch.done += 1
+        publishProgress()
+    }
+
+    /// The largest batch: a single lookup does not replace the library's.
+    private func publishProgress() {
+        let batch = batches.max { $0.total < $1.total }
+        let next = batch.flatMap { $0.total == 0 ? nil : ShellProgress(done: $0.done, total: $0.total) }
+        if next != progress { progress = next }
     }
 
     /// Fills a state directly (screenshots only).

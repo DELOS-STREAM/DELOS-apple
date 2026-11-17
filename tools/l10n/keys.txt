@@ -409,6 +409,9 @@ shell_side_all_settings
 shell_side_show_hidden
 shell_side_hidden_on
 shell_side_hidden_on_this_pc
+shell_progress_artwork
+shell_progress_metadata
+shell_progress_count
 
 # Settings: frame, Stream and Audio tabs
 settings_screen_title

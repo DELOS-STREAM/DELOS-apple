@@ -59,7 +59,7 @@ extension ShellActions {
             toasts.show(L("metadata_searching_toast", term), icon: Symbols.search)
             let found: [MetadataCandidate]
             do {
-                found = try await metadata.store.search(term)
+                found = try await metadata.search(term)
             } catch is CancellationError {
                 return
             } catch {
