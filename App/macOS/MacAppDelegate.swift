@@ -10,17 +10,22 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // The game keyboard (GameController) reads the keys itself; AppKit would beep for each one nobody handles.
-        // Keys with Command (the menu bar's shortcuts) and keys typed into a text field are left alone.
+        // Keys with Command, Control or Option (menu shortcuts, Full Keyboard Access, VoiceOver commands), keys typed
+        // into a text field and keys for a sheet or panel are left alone.
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            Self.passes(commandHeld: event.modifierFlags.contains(.command)) ? event : nil
+            Self.passes(modifiers: event.modifierFlags) ? event : nil
         }
     }
 
-    /// Whether a key goes on to AppKit: a key with Command is a shortcut of the menu bar, and a key typed into a text
-    /// field is the field's. Monitors run on the main thread.
-    private nonisolated static func passes(commandHeld: Bool) -> Bool {
-        if commandHeld { return true }
-        return MainActor.assumeIsolated { NSApp.keyWindow?.firstResponder is NSText }
+    /// Whether a key goes on to AppKit: a key with Command, Control or Option belongs to the menu bar or to the
+    /// accessibility features, a key typed into a text field is the field's, and a sheet or panel (an open or save
+    /// dialog, an alert) takes its own keys. Monitors run on the main thread.
+    private nonisolated static func passes(modifiers: NSEvent.ModifierFlags) -> Bool {
+        if !modifiers.isDisjoint(with: [.command, .control, .option]) { return true }
+        return MainActor.assumeIsolated {
+            guard let window = NSApp.keyWindow else { return false }
+            return window.firstResponder is NSText || window.isSheet || window is NSPanel
+        }
     }
 
     /// Closing the window ends the app: there is one window, and a stream cannot go on without it.
