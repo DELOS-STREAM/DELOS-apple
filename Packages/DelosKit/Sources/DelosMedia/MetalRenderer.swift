@@ -170,7 +170,10 @@ final class LayerRetagger: @unchecked Sendable {
     @MainActor
     static func configure(_ layer: CAMetalLayer, conversion: ColorConversion) {
         layer.pixelFormat = conversion.isHDR ? .rgba16Float : .bgra8Unorm
+        #if !os(tvOS)
+        // tvOS has no such switch: its output is HDR when the TV is in an HDR mode
         layer.wantsExtendedDynamicRangeContent = conversion.isHDR
+        #endif
         layer.colorspace = CGColorSpace(name: conversion.layerColorSpaceName)
     }
 }
