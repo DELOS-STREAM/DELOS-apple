@@ -873,7 +873,9 @@ score, author, date: what the reply contained). A or a tap downloads and uses th
 accent border and the "In use" badge. A kind chosen by hand is recorded in the match (`picked`) and every later refresh
 leaves it alone; matching the game by hand (`setGame`: the search menu lists at most eight games) is recorded too (`manual`),
 so the name is not searched again, and its images start over. A thumbnail is downloaded when its tile scrolls into view and
-kept in the same cache. The filter sheet (type, style, size, sort) narrows and sorts the choices; animated choices play in
+kept in the same cache; a thumbnail that is SteamGridDB's takedown placeholder (shrunk to 48 × 48, at least 90 % of it
+opaque black: `TakedownPlaceholder`, Android's `Thumbnails.looksRemoved`) takes its choice out of the grid, unless it is
+the image in use. The filter sheet (type, style, size, sort) narrows and sorts the choices; animated choices play in
 their tiles ([Animated artwork](#animated-artwork)). The first lookup and each list of choices are tried again after
 500, 1200 and 2500 ms while they fail for a passing reason (429, 5xx, a network failure: `SteamGridDBRetry`, Android's
 `SgdbRetry`); the loader stays up meanwhile, and "not reachable" shows only once the fourth attempt has failed. Not

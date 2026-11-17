@@ -59,6 +59,9 @@ public final class ArtworkStore {
     public private(set) var animationProgress: [URL: Double] = [:]
     /// The URLs whose file was found to be (true) or not to be (false) an animation that plays (`Thumbnails.animatedKnown`).
     private var animatedKnown: [URL: Bool] = [:]
+    /// The thumbnails found to be SteamGridDB's takedown placeholder (`Thumbnails.removed`): the Artwork screen leaves
+    /// those choices out, for as long as the app runs.
+    public private(set) var removedThumbnails: Set<URL> = []
 
     @ObservationIgnored private let files: ArtworkFiles
     @ObservationIgnored private let secrets: any SecretStorage
@@ -185,6 +188,11 @@ public final class ArtworkStore {
         guard let result else { return nil }
         animatedKnown[url] = result.animation != nil
         return result.animation
+    }
+
+    /// Records that the thumbnail at [url] is a takedown placeholder (the screen that decoded it looked).
+    public func markRemoved(_ url: URL) {
+        if !removedThumbnails.contains(url) { removedThumbnails.insert(url) }
     }
 
     // MARK: Downloads

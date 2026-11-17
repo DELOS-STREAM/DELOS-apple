@@ -539,7 +539,9 @@ private struct ArtworkGridView: View {
             let empty = model.empty
             let layout = ArtworkGrid(
                 width: stage.width - left - right, ratio: model.tab.ratio, columns: model.tab.columns(forStageWidth: stage.width))
-            let all: [ArtworkTile] = [.none] + images.map(ArtworkTile.image)
+            // Takedown placeholders found while the thumbnails load disappear (the chosen image always stays)
+            let shown = TakedownPlaceholder.shown(images, chosen: model.chosen, removed: actions.artwork.removedThumbnails)
+            let all: [ArtworkTile] = [.none] + shown.map(ArtworkTile.image)
             let tiles = Array(all.enumerated())
             let rows = stride(from: 0, to: tiles.count, by: layout.columns).map { tiles[$0..<min($0 + layout.columns, tiles.count)] }
             ZStack(alignment: .top) {
@@ -947,6 +949,7 @@ struct ArtworkTileView: View, Equatable {
         guard visible, picture == nil else { return }
         if let image {
             picture = await art.thumbnail(image)
+            if let picture, TakedownPlaceholder.looksRemoved(picture) { art.artwork.markRemoved(image.previewURL) }
         } else if tab != .logo {
             picture = await art.boxArt(hostID: hostID, appID: app.id, hosts: hosts)
         }
