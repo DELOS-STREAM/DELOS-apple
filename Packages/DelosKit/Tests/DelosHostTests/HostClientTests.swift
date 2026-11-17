@@ -172,14 +172,14 @@ import Testing
             address: host.httpAddress, path: "/serverinfo", query: "", tls: nil, timeout: .milliseconds(300),
             maximumBodySize: 1024)
 
-        await #expect(throws: HostError.timedOut) { try await HTTPTransport.get(request) }
+        await #expect(throws: HostError.timedOut) { try await HTTPTransport.perform(request) }
     }
 
     @Test func aRequestWithoutATimeLimitEndsWhenItsTaskIsCancelled() async throws {
         let host = try await FakeHost(identity: TestIdentities.host) { _ in .init(body: Data(), silent: true) }
         let request = HTTPRequest(
             address: host.httpAddress, path: "/launch", query: "", tls: nil, timeout: nil, maximumBodySize: 1024)
-        let task = Task { try await HTTPTransport.get(request) }
+        let task = Task { try await HTTPTransport.perform(request) }
         try await Task.sleep(for: .milliseconds(200))
 
         task.cancel()
@@ -192,7 +192,7 @@ import Testing
         let request = HTTPRequest(
             address: host.httpAddress, path: "/appasset", query: "", tls: nil, timeout: .seconds(5), maximumBodySize: 1024)
 
-        await #expect(throws: HostError.responseTooLarge) { try await HTTPTransport.get(request) }
+        await #expect(throws: HostError.responseTooLarge) { try await HTTPTransport.perform(request) }
     }
 
     @Test func quittingLaunchingAndResumingGiveUpOnAHostThatStalls() async throws {

@@ -528,8 +528,9 @@ goes from a page to the row or tile that opened it and then resumes; a tap outsi
 the menu (`StreamController.tapOutside`), never quits and never sends a click to the game; the popover has a focus of its own and the dock's tile that opened it keeps its look. The model is
 `StreamMenuModel.swift` (tiles, pages, popover geometry), the state `StreamMenuState.swift` and `StreamController`.
 
-Left out of Android's menu, because the platform has no such action: Bitrate (the core cannot change the bitrate of a
-running stream), Upscaler and Supersampling (the renderer has none), Send and Get clipboard, Zoom, Mouse mode and Local
+Bitrate, Send clipboard and Get clipboard have their actions (`StreamController.applyBitrate`, `sendClipboard`,
+`getClipboard`, below) but no tile or row yet. Left out of Android's menu, because the platform has no such action:
+Upscaler and Supersampling (the renderer has none), Zoom, Mouse mode and Local
 mouse cursor (touch is the trackpad only), On-screen controls, Open Android keyboard, Touch sensitivity, Rumble feel, Gyro
 smoothing. The captions of Overlay, Keyboard and More are empty: Android's texts describe its own statistics, keyboard and
 rows, and no Android string fits. The recorded buttons only open the menu (the input is paused while the menu is open, so
@@ -560,6 +561,28 @@ Each attempt (the first, the return from the background, Try again) has an ident
 returns afterwards (a launch that fails late, a connect that completes late, queued events) is ignored. A new attempt
 launches only once the previous one has stopped, since the core runs one connection at a time; leaving uses the steps
 of the attempt that ran.
+
+### Live bitrate and clipboard
+
+Both are Vibepollo's and Apollo's paired HTTPS commands, as DELOS for Android sends them; neither goes through the
+streaming core. `HostClient.setRuntimeBitrate` asks `/bitrate?bitrate=<kbps>` (1 to 1000 Mbps) and returns the bitrate the
+host applied, which can be lower. `StreamBitrate` (`StreamController.bitrate`) runs one change at a time while the stream
+runs and keeps what it came to: accepted, limited by the host, or failed with Android's reasons (not connected; 404:
+unsupported; 403: denied; another host error: rejected, with the host's message cut to 60 characters; anything else:
+unconfirmed) and the texts of the Bitrate page's Apply row (`statusText`, `failureText`). An answer that arrives after the
+stream ended is dropped.
+
+`HostClient.clipboard` reads `/actions/clipboard?type=text` (at most 16 MiB) and `sendClipboard` posts plain UTF-8 text to
+it; an answer with a body means the host does not support it (Sunshine). `ClipboardSync` (`StreamSteps.clipboard`, made
+once the launch knows the PC) follows `StreamClipboardSync` of DELOS for Android: with Smart Clipboard Sync this device's
+clipboard is sent once the stream runs and the PC's is fetched on Disconnect (not on Quit); Send clipboard sends also
+what DELOS already marked, Get clipboard fetches. A clip DELOS put on the clipboard or already read carries its own
+pasteboard type (`io.github.meitoncz.delos.streaming`) and is not sent again unasked; the mark is read without the
+clip's content, which on iOS asks the player before an app reads it. The PC's clip is marked concealed
+(`org.nspasteboard.ConcealedType`, the convention clipboard histories honour) while Hide clipboard content is on:
+Apple has no equivalent of Android's sensitive flag. Results are toasts over the stream when Clipboard Sync Toast is on,
+with Android's texts and its exception messages appended (the host's address instead of the full request URL, whose
+client id is no help). tvOS has no system clipboard; its closest equivalent is a clipboard in memory for the app's run.
 
 ### Input during a stream
 

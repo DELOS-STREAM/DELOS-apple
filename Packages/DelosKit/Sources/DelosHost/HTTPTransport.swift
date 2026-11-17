@@ -21,6 +21,8 @@ struct HTTPRequest: Sendable {
     /// Nil: no limit (the host waits for the user, as in the first pairing step, or for a game to start).
     var timeout: Duration?
     var maximumBodySize: Int
+    /// Nil: a GET. Otherwise a POST of this plain text (the clipboard sent to the host, NvHTTP.java:1010-1011).
+    var text: Data? = nil
 
     var target: String { query.isEmpty ? path : path + "?" + query }
 
@@ -28,8 +30,15 @@ struct HTTPRequest: Sendable {
         pairs.map { "\(escape($0.0))=\(escape($0.1))" }.joined(separator: "&")
     }
 
+    /// The request line and headers; a POST also carries its body (OkHttp's `RequestBody.create(String, text/plain)`
+    /// sends UTF-8 and says so).
     var head: Data {
-        Data("GET \(target) HTTP/1.1\r\nHost: \(address.description)\r\nUser-Agent: DELOS\r\nAccept: */*\r\nConnection: close\r\n\r\n".utf8)
+        let common = "Host: \(address.description)\r\nUser-Agent: DELOS\r\nAccept: */*\r\nConnection: close\r\n"
+        guard let text else { return Data("GET \(target) HTTP/1.1\r\n\(common)\r\n".utf8) }
+        var data = Data(
+            "POST \(target) HTTP/1.1\r\n\(common)Content-Type: text/plain; charset=utf-8\r\nContent-Length: \(text.count)\r\n\r\n".utf8)
+        data.append(text)
+        return data
     }
 
     private static let unreserved = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
@@ -41,15 +50,18 @@ struct HTTPRequest: Sendable {
 
 struct HTTPResponse: Sendable {
     let status: Int
+    /// The reason phrase of the status line ("Not Found"); empty when the host sent none.
+    var reason = ""
     let headers: [String: String]
     let body: Data
 }
 
-/// One GET request per connection over Network.framework (`Connection: close`). Network.framework instead of
-/// URLSession: the exclusive pin is a TLS verify block that replaces the system evaluation completely, the client
-/// certificate is a TLS option, and plain HTTP to a PC by address or name needs no App Transport Security exception.
+/// One request (a GET, or the POST of a clipboard text) per connection over Network.framework (`Connection: close`).
+/// Network.framework instead of URLSession: the exclusive pin is a TLS verify block that replaces the system evaluation
+/// completely, the client certificate is a TLS option, and plain HTTP to a PC by address or name needs no App Transport
+/// Security exception.
 enum HTTPTransport {
-    static func get(_ request: HTTPRequest) async throws -> HTTPResponse {
+    static func perform(_ request: HTTPRequest) async throws -> HTTPResponse {
         let outcome = Outcome()
         // Keep-alive probes end a connection to a PC that vanished while a request without a time limit waits.
         let tcp = NWProtocolTCP.Options()
@@ -194,7 +206,7 @@ final class Once<Value: Sendable>: Sendable {
 struct HTTPResponseParser {
     let maximumBodySize: Int
     private var buffer = Data()
-    private var head: (status: Int, headers: [String: String], bodyStart: Int)?
+    private var head: (status: Int, reason: String, headers: [String: String], bodyStart: Int)?
     /// Chunked bodies are decoded once, as the bytes arrive: the part decoded so far and where the next chunk's size
     /// line starts in `buffer`. Each call then costs the new bytes, not the whole body again.
     private var decoded = [UInt8]()
@@ -235,24 +247,27 @@ struct HTTPResponseParser {
         return atEnd ? try finish(head, Data(body)) : nil
     }
 
-    private func finish(_ head: (status: Int, headers: [String: String], bodyStart: Int), _ body: Data) throws -> HTTPResponse {
+    private func finish(_ head: (status: Int, reason: String, headers: [String: String], bodyStart: Int), _ body: Data) throws -> HTTPResponse {
         if body.count > maximumBodySize { throw HostError.responseTooLarge }
-        return HTTPResponse(status: head.status, headers: head.headers, body: body)
+        return HTTPResponse(status: head.status, reason: head.reason, headers: head.headers, body: body)
     }
 
-    private static func parseHead(_ bytes: Data, bodyStart: Int) throws -> (status: Int, headers: [String: String], bodyStart: Int) {
+    private static func parseHead(
+        _ bytes: Data, bodyStart: Int
+    ) throws -> (status: Int, reason: String, headers: [String: String], bodyStart: Int) {
         let lines = String(decoding: bytes, as: UTF8.self).components(separatedBy: "\r\n")
         let statusParts = lines[0].split(separator: " ", maxSplits: 2)
         guard statusParts.count >= 2, statusParts[0].hasPrefix("HTTP/1."), let status = Int(statusParts[1]) else {
             throw HostError.malformedResponse("not an HTTP response")
         }
+        let reason = statusParts.count > 2 ? String(statusParts[2]) : ""
         var headers = [String: String]()
         for line in lines.dropFirst() {
             guard let colon = line.firstIndex(of: ":") else { continue }
             let name = line[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
             headers[name] = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
         }
-        return (status, headers, bodyStart)
+        return (status, reason, headers, bodyStart)
     }
 
     /// The longest chunk size line (digits and extensions) accepted.

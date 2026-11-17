@@ -56,6 +56,8 @@ enum ToastTiming {
     static let shellMs = 4500.0
     /// A toast with an action: the profile deletion lets itself be undone for as long.
     static let actionMs = 10_000.0
+    /// A short toast over the stream (`STREAM_SHORT_MS`, ToastLogic.kt:61 of DELOS for Android).
+    static let streamShortMs = 4000.0
 
     /// Distance the card travels beyond its own width when it springs in from outside the right edge.
     static let slideExtra = 140.0
