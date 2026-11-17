@@ -106,6 +106,8 @@ public struct DelosRoot: View {
     @State private var videoCoversBackdrop = false
     /// The side menu's focus while it is open.
     @State private var sideMenu: FocusModel?
+    /// The focus of the portal while it is up: nothing under it takes the focus, and B is the only command that passes.
+    @State private var portalFocus = FocusModel(initial: "portal")
     /// The battery and the network for the status bar.
     @State private var device = DeviceStatus()
     private let appearances = AppearanceStore()
@@ -170,32 +172,43 @@ public struct DelosRoot: View {
     public var body: some View {
         StageReader(textScale: Double(appearance.uiScale) / 100) {
             ZStack {
-                // The game background shows only behind the library (`ShellBackdrop`'s heroShown)
-                if !videoCoversBackdrop { Backdrop(appearance: appearance, hero: showsLibrary ? homeArt.hero : nil) }
-                let entry = navigator.stack[navigator.stack.count - 1]
-                screen(entry)
-                    .id(ObjectIdentifier(entry.focus))
-                    .transition(ScreenMotion.transition(reduced: systemReduceMotion || appearance.reducedMotion))
-                if case .stream = navigator.current {} else {
-                    TopBar(
-                        brand: navigator.current != .start, navigation: navigation(entry),
-                        pc: navigator.current.showsNavigation ? connectedPC : nil, wifi: device.wifi, battery: device.battery,
-                        clock: appearance.clock, onBack: navigator.canGoBack ? { go { navigator.back() } } : nil)
-                        // The interface scale zooms the whole bar
-                        .modifier(ZoomedBar())
-                        // The navigation's buttons belong to the focus of the screen shown
+                ZStack {
+                    // The game background shows only behind the library (`ShellBackdrop`'s heroShown)
+                    if !videoCoversBackdrop { Backdrop(appearance: appearance, hero: showsLibrary ? homeArt.hero : nil) }
+                    let entry = navigator.stack[navigator.stack.count - 1]
+                    screen(entry)
                         .id(ObjectIdentifier(entry.focus))
+                        .transition(ScreenMotion.transition(reduced: systemReduceMotion || appearance.reducedMotion))
+                    if case .stream = navigator.current {} else {
+                        TopBar(
+                            brand: navigator.current != .start, navigation: navigation(entry),
+                            pc: navigator.current.showsNavigation ? connectedPC : nil, wifi: device.wifi, battery: device.battery,
+                            clock: appearance.clock, onBack: navigator.canGoBack ? { go { navigator.back() } } : nil)
+                            // The interface scale zooms the whole bar
+                            .modifier(ZoomedBar())
+                            // The navigation's buttons belong to the focus of the screen shown
+                            .id(ObjectIdentifier(entry.focus))
+                    }
+                    if let sideMenu {
+                        SideMenu(
+                            profile: profiles.current, pc: connectedPC, focus: sideMenu, appearance: appearance, onStep: { id, direction in _ = quickStep(id, by: direction) },
+                            onSettings: {
+                                closeSideMenu(sound: nil)
+                                go { navigator.openFromNavigation(.settings, focus: SettingsScreen.initialFocus) }
+                            },
+                            onClose: { closeSideMenu(sound: .back) })
+                    }
                 }
-                if let sideMenu {
-                    SideMenu(
-                        profile: profiles.current, pc: connectedPC, focus: sideMenu, appearance: appearance, onStep: { id, direction in _ = quickStep(id, by: direction) },
-                        onSettings: {
-                            closeSideMenu(sound: nil)
-                            go { navigator.openFromNavigation(.settings, focus: SettingsScreen.initialFocus) }
-                        },
-                        onClose: { closeSideMenu(sound: .back) })
-                }
+                .modifier(PortalBackdropBlur(active: actions.connection.portal.map { !$0.arriving } ?? false))
                 LayerHost(layers: layers, navigator: navigator)
+                ZStack {
+                    if let portal = actions.connection.portal {
+                        PortalOverlay(portal: portal, burst: actions.connection.burst, focus: portalFocus, onCancel: { actions.connection.cancel() })
+                            .transition(.asymmetric(
+                                insertion: .opacity.animation(.easeOut(duration: portal.arriving ? PortalLook.fadeInArriving : PortalLook.fadeIn)),
+                                removal: .opacity.animation(.easeOut(duration: PortalLook.fadeOut))))
+                    }
+                }
                 ToastHost(toasts: toasts)
             }
         }
@@ -206,7 +219,7 @@ public struct DelosRoot: View {
         .environment(navigator)
         .environment(layers)
         .environment(toasts)
-        .environment(\.modalFocus, sideMenu ?? (layers.isOpen ? layers.focus : nil))
+        .environment(\.modalFocus, actions.connection.isActive ? portalFocus : sideMenu ?? (layers.isOpen ? layers.focus : nil))
         #if os(tvOS)
         // The focus engine keeps its focus on an item that can no longer take it until the next press: when the focus
         // owner changes (a layer opens or closes, another screen shows), it is asked to look for the preferred item,
@@ -222,6 +235,7 @@ public struct DelosRoot: View {
         .environment(\.delosColors, colors)
         .environment(\.reducedMotion, systemReduceMotion || appearance.reducedMotion)
         .environment(\.matchGameColors, appearance.matchGameColors)
+        .onChange(of: systemReduceMotion || appearance.reducedMotion, initial: true) { _, now in actions.connection.reducedMotion = now }
         .preferredColorScheme(colors.dark ? .dark : .light)
         .onChange(of: profiles.current?.id) { _, id in
             appearance = id.map { appearances.load(profile: $0) } ?? Appearance()
@@ -247,7 +261,7 @@ public struct DelosRoot: View {
 
     /// Whether Menu is ours: a layer or the side menu is open, or there is a screen to go back to. At the first screen it
     /// is the system's (tvOS: Home).
-    private var handlesExit: Bool { sideMenu != nil || layers.isOpen || navigator.canGoBack }
+    private var handlesExit: Bool { sideMenu != nil || layers.isOpen || navigator.canGoBack || actions.connection.isActive }
 
     /// The sounds, and the controllers' and keyboards' commands (on tvOS only the ones the system has no event for).
     private func startInput() {
@@ -288,6 +302,11 @@ public struct DelosRoot: View {
     /// [fromRemote]: the Siri Remote's Menu or Play/Pause.
     private func route(_ command: MenuCommand, repeatCount: Int, fromRemote: Bool = false) {
         guard let feedback else { return }
+        // The portal into a PC holds every command; B stops waiting for a PC that wakes up
+        if actions.connection.isActive {
+            if command == .back { actions.connection.cancel() }
+            return
+        }
         navigator.commandRepeat = repeatCount
         navigator.commandFromRemote = fromRemote
         if let sideMenu {
@@ -366,7 +385,7 @@ public struct DelosRoot: View {
         case .start:
             StartScreen(
                 focus: entry.focus, profile: profiles.current, defaultPC: profiles.startup.defaultPC, actions: actions,
-                onPC: { host in go { navigator.openHome(hostID: host.id) } },
+                onPC: { host in actions.connect(host.id) },
                 onPair: { go { navigator.push(.pair, focus: PairPCScreen.firstFocus(hosts.hosts)) } }
             )
         case .profile:
@@ -386,7 +405,7 @@ public struct DelosRoot: View {
         case .pair:
             PairPCScreen(
                 focus: entry.focus,
-                onHost: { host in go { host.pin != nil ? navigator.openHome(hostID: host.id) : navigator.push(.pin(hostID: host.id), focus: "cancel") } },
+                onHost: { host in host.pin != nil ? actions.connect(host.id) : go { navigator.push(.pin(hostID: host.id), focus: "cancel") } },
                 onCode: { host in actions.pairWithCode(hostID: host.id) },
                 onAddress: { go { navigator.push(.pairAddress, focus: "field") } }
             )
@@ -410,7 +429,7 @@ public struct DelosRoot: View {
     private func pinScreen(hostID: String, code: OneTimeCode?, entry: Navigator.Entry) -> some View {
         PinScreen(
             hostID: hostID, code: code, focus: entry.focus, feedback: feedback,
-            onPaired: { go { navigator.openHome(hostID: hostID) } },
+            onPaired: { actions.connect(hostID) },
             onFailed: { message in
                 feedback?.play(.error)
                 toasts.show(message, icon: Symbols.error)
@@ -497,7 +516,7 @@ public struct DelosRoot: View {
                 let host = try await hosts.ask(address, typed: true)
                 go {
                     if host.pin != nil {
-                        navigator.openHome(hostID: host.id)
+                        actions.connect(host.id)
                     } else {
                         _ = navigator.back()
                         navigator.push(.pin(hostID: host.id), focus: "cancel")

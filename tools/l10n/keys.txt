@@ -94,6 +94,13 @@ devices_unpair_offline
 devices_unpair_not_paired
 devices_unpair_failed
 devices_starting
+devices_portal_waking_title
+devices_portal_waiting_title
+devices_portal_waking_note
+devices_portal_waiting_note
+devices_wake_timeout_toast
+devices_portal_connecting_title
+devices_portal_connecting_note
 
 # Pairing
 pairing_pc_title
@@ -372,6 +379,8 @@ conn_resume_failed
 conn_resume_foreign
 stream_exit_disconnecting
 stream_exit_quitting
+stream_exit_quitting_game
+stream_loader_codec_auto
 stream_loader_greeting
 stream_loader_lines_audio_stream_0
 stream_loader_lines_audio_stream_1

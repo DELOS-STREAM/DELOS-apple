@@ -160,6 +160,26 @@ priority to ordinary messages; animation ticks never repost it. Actual VoiceOver
 devices is not verified. The card receives a stage zoomed by the interface scale, so its geometry, text-width cap,
 glyphs, action chip and shadows all grow together while the outer screen-edge insets stay fixed.
 
+### Connecting to a PC: the portal
+
+`ShellActions.connect(_:)` (`ShellDeviceActions.connect` of Android's DeviceFlows.kt) runs `ConnectFlow`, a state machine
+(`ConnectFlow.Phase`: starting, waking, waiting, connecting, arriving) behind two protocols so the tests drive it with a
+fake clock (`ConnectClock`) and a fake network (`ConnectEnvironment`; `AppConnectEnvironment` is the one on `HostStore`):
+
+| Step | What happens |
+|---|---|
+| Press | OPEN cue; nothing if a portal is already up |
+| PC not online | `HostStore.wake` sends the packet; the portal says "Waking up <PC>" · "Wake-up signal sent · B cancels". A PC without a MAC address (or a packet that did not go) gets "Waiting for <PC>" · "Turn the PC on · B cancels" instead, and is waited for just the same |
+| Waiting | The PC is asked again at once and every 3 s (`HostStore.refresh`; discovery finds it too) for at most 120 s. B, a tap or a click cancels without a word (BACK cue). After 120 s: ERROR cue and the toast "<PC> did not wake up"; pressing the PC again is the retry |
+| Connecting | "Connecting to <PC>" · "Vibepollo · paired" (not cancellable) for at least 2.1 s (0.6 s with reduced motion) while the PC's apps load, for at most 5 s |
+| Arrival | SELECT cue, the burst (flash and the orb flying at the viewer), the library opens 380 ms later through the usual screen transition, the burst ends 500 ms after that |
+
+`PortalOverlay` is the port of Android's `PortalOverlay`: the screen behind blurs (22 stage px, `PortalBackdropBlur`), a
+radial scrim, four rings 0.35 s apart every 2.2 s (main, second, main, third color) around a 220 px orb with the state's
+icon, the PC's name in Unbounded 36 and the note in Figtree 24. The geometry and timing are `PortalLook`. While it is up
+`DelosRoot` gives it the modal focus and every command: only B passes (on tvOS the Menu button, through a focus sink).
+Android has no way to cancel without a B; here a tap or a click on a portal that can be cancelled does it too.
+
 ## Video formats
 
 `DelosMedia` turns what the host sends into what VideoToolbox decodes, without FFmpeg:
@@ -301,9 +321,37 @@ that talk to the PC and the core are behind the `StreamSteps` protocol, so the t
 |---|---|
 | Display | `VideoSurface` (a thin `UIView` host of the renderer's layer: the `AVSampleBufferDisplayLayer` or the `CAMetalLayer`, full screen, aspect fit, black) reports the screen's pixel size and highest refresh rate once it is in a window; the stream starts then. While it is shown, a display link asks for the screen's highest refresh rate (ProMotion screens otherwise slow down to 60 Hz), and the animated background is not drawn behind the video |
 | Launch | `HostStore.refresh` asks the PC again over its pinned connection: offline and "not paired" end here. The app is found in the loaded app list (else it is loaded). `StreamPlan` with the current profile's `StreamSettings` and the formats VideoToolbox decodes in hardware (`DecoderSupport`: H.264 always, HEVC and AV1 8-bit where supported; 10-bit waits for HDR), of which the chosen codec offers some. The app is resumed when the PC runs it, another running app is quit first, else it is launched (`NvConnection.startApp` of DELOS for Android) |
-| Connect | `StreamSession.start` with `VideoOutput(DisplayLayerRenderer)` and `AudioOutput`, the server information of the launch's session URL. Each `stageStarting` event tells a line of the stage (Android's `stream_loader_lines_*`) and adds 8 % to the progress, up to 92 % |
+| Connect | `StreamSession.start` with `VideoOutput(DisplayLayerRenderer)` and `AudioOutput`, the server information of the launch's session URL. Each `stageStarting` event tells a line of the stage (Android's `stream_loader_lines_*`) and adds 8 % to the progress, up to 92 % (the launch scene starts at 30 % and does the same, below) |
 | Stream | `connectionStarted`: the video shows, `GameInput` starts; rumble events go to the controllers. A termination shows the result overlay (`StreamText.termination`, Android's `describeStreamFailure`); a graceful end goes back (without Android's toast "The PC ended the stream" yet) |
-| Leave | Disconnect stops the session (the app keeps running on the PC); Quit app also asks the PC to quit it (`cancel`), and a refusal shows "The PC did not quit …". Leaving the screen any other way disconnects |
+| Leave | Disconnect stops the session (the app keeps running on the PC); Quit app also asks the PC to quit it (`cancel`), and a refusal shows "The PC did not quit …". Leaving the screen any other way disconnects. From the stream menu the exit scene plays first (below) |
+
+### The launch scene
+
+While a stream connects and opens, `LaunchLoader` lies over the screen (`LaunchOverlay` and `LoaderScene` of Android, the
+specification is docs/LAUNCH_TRANSITION.md of that repository). `LaunchTimeline` is its choreography, a value the tests step;
+`LaunchDirector` runs it on the system clock. What Android's numbers say, and what is here:
+
+| Part | Here |
+|---|---|
+| Scene | The hyperspace tunnel: `Launch.metal` is a line-by-line port of the AGSL shader (24 streaks, 24 clouds, the weights 1.5 / 1.3 / 0.5 of the three accents), drawn at 0.6 of the size and scaled up; the travel is integrated on the CPU (`LaunchTravel`, `LaunchTunnelRun`) so a stage's step of progress bends the speed instead of making the tunnel leap. Reduced motion: a still dark scene with the third accent glowing, no clock. Android's ring-and-cover scene for old Androids is not ported: every supported OS here has shaders |
+| Information | 100 px from the bottom, 1000 px wide: the game's SteamGridDB logo (440 × 124) or its title in Unbounded 58, "1920 × 1080 · Auto · 60 FPS" in Figtree 17 (the profile's choice: the codec is the setting, not the negotiated one), the connection line in Figtree 23, a 360 × 3 bar from the second to the main accent and its percentage |
+| Progress | 0 → 30 % over 0.7 s when the scene appears, then each stage adds 8 % up to 92 % over 0.6 s |
+| Lines | `LaunchStageQueue` (a port, with Android's contract tests): each line is told at least 1.2 s, in order; once the game runs the lines still queued are dropped |
+| Reveal | Once `connectionStarted` arrives the scene waits for the renderer's first presented frame (`presentationCounters`, polled every 50 ms), at most 3 s; the bar fills to 100 % in 0.25 s; then the exit: 2.2 s (0.5 s with reduced motion) in which the information fades during the first 34 %, the tunnel zooms and a soft aperture opens from 68 to 88 % over the real picture; the input is live meanwhile |
+
+The library's own part of the launch is the screen transition (Android's 0.3 s fade of the overlay over the library).
+Not ported: the arrival effect on the stream's picture (118 % zoom with blur, warp and RGB split settling to 100 %), which
+Android renders inside its video paths and which would have to live in the renderers; the negotiated codec in the
+parameters line; the game's cover or background in the scene (Android shows neither with the tunnel); the cover growing
+out of its tile (Android has no such thing).
+
+The exit scene (`StreamExit`, `StreamExitScene`, `StreamExitMotion`) plays when Disconnect or Quit app is chosen in the stream
+menu: OPEN cue, the picture blurs up to 50 px over 0.45 s and zooms to 112 % over 2.4 s while the DELOS background comes in
+over it (0.7 s), and the portal opens over it ("Disconnecting", or "Quitting <game>", the PC's name below, a home or power
+icon); from 1.15 s the scene fades into the flat background color over 0.33 s, and the library returns at 1.5 s
+(`StreamController.leavingHold`; B while connecting and a lost stream have no scene). With reduced motion: no blur and no zoom,
+the background in 0.25 s, the flat fade from 0.35 s over 0.2 s, the library at 0.7 s. Not ported: the burst that Android finishes in the
+library.
 
 The result overlay is Android's `StreamResultLayer`: a sad face, the title, one sentence, Try again (focused first) and
 Back to library, and the technical text behind Details. B is Back to library. A launch the PC refused shows Android's
@@ -754,13 +802,17 @@ Rename, Wake the PC (an offline PC that can be woken), Unpair (an online PC) and
 or Unpair is the confirmation. `HostStore.unpairOnPC` asks the PC to forget this client and keeps the pairing when it
 cannot (offline, not paired, no answer, still paired: `UnpairResult`, one toast sentence each); `HostStore.remove`
 forgets the PC and its pairing here only. A PC that is removed or unpaired leaves the list, stops being the default PC
-and its library is dropped from the stack (`Navigator.dropLibrary`). Connect does not wake and wait in a portal as
-Android does; waking has its own row.
+and its library is dropped from the stack (`Navigator.dropLibrary`). Connect, a press on a PC of the start screen, the
+pairing screen's list and the end of pairing all go through the portal (next section); the Wake row only sends the packet.
 
 Not ported yet: the default PC's Skip the start screen, the Devices screen's link test,
 the connect portal that wakes and waits, waking an asleep PC on A, the companion screen; in the library the compact layout, recording
 the streaming time (the stream screen does not add to `PlaytimeStore` yet), the game menu's Artwork, App settings and
 Hide, the metadata filters (Android's filter modal and its empty-library message), the game's colors in its menu tile, hidden games, wrap-around in the row and per-game settings.
+Not ported yet: the default PC's Skip the start screen, the Devices screen's link test, the companion screen; in the library the compact layout, recording
+the streaming time (the stream screen does not add to `PlaytimeStore` yet), game metadata (IGDB genres and themes,
+HowLongToBeat, HDR chips through the metadata Worker), the game menu's Artwork, Metadata, App settings and Hide, the
+game's colors in its menu tile, hidden games, wrap-around in the row and per-game settings.
 
 ## The library row
 

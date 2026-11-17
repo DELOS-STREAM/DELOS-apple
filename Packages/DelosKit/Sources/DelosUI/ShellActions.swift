@@ -12,6 +12,8 @@ final class ShellActions {
     let layers: Layers
     let artwork: ArtworkStore
     let metadata: GameMetadataModel
+    /// Connecting to a PC: the portal, the wake-up and the wait.
+    let connection: ConnectFlow
     private let playtimes = PlaytimeStore()
     private let played = PlayedGames()
 
@@ -24,6 +26,16 @@ final class ShellActions {
         self.layers = layers
         self.artwork = artwork
         self.metadata = metadata
+        connection = ConnectFlow(
+            environment: AppConnectEnvironment(hosts: hosts, toasts: toasts, layers: layers) { id in
+                go { navigator.openHome(hostID: id) }
+            },
+            clock: SystemConnectClock())
+    }
+
+    /// Opens a PC's library through the portal (`DeviceActions.connect`): a PC that sleeps is woken up and waited for.
+    func connect(_ hostID: String) {
+        connection.connect(hostID)
     }
 
     private var feedback: Feedback? { layers.feedback }
@@ -66,7 +78,7 @@ final class ShellActions {
             switch action {
             case .connect(let openApps):
                 MenuItem(icon: Symbols.login, label: L(openApps ? "devices_menu_open_games" : "devices_menu_connect")) { [self] in
-                    go { navigator.openHome(hostID: hostID) }
+                    connect(hostID)
                 }
             case .makeDefault: MenuItem(icon: Symbols.star, label: L("devices_menu_default_on")) { [self] in setDefault(host) }
             case .clearDefault: MenuItem(icon: Symbols.star, label: L("devices_menu_default_off")) { [self] in setDefault(nil) }

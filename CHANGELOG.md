@@ -19,6 +19,18 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   time and one pill of genres and one of themes (Steam's user tags first, IGDB otherwise, in the game's colors), the game
   menu gets Metadata (search and change the match, refresh, reset) and Settings → About lists the data providers. Without
   the address nothing changes and nothing is requested. Lookups against the real services are not verified.
+- The launch scene of Android: while a stream connects, the hyperspace tunnel (a Metal port of the AGSL shader) runs behind
+  the game's logo or title, the stream's resolution, codec and frame rate, the connection lines (each told at least
+  1.2 s) and the progress; once the first frame is presented the information fades and the tunnel opens over the picture
+  (2.2 s). Reduced motion shows a still scene and a 0.5 s fade. Leaving from the stream menu plays the exit scene: the
+  picture blurs and zooms while the portal says "Disconnecting" or "Quitting <game>", then the library returns. The
+  arrival effect on the picture itself is not ported; the look on a device and the shader's cost are not verified.
+- Connecting to a PC goes through the portal as on Android: a PC that sleeps is sent Wake-on-LAN (the portal says it is
+  waking up, or, when the PC has no known MAC address, waits for you to turn it on), is asked again every 3 s for up to
+  two minutes, and its library opens when it answers; B, a tap or a click cancels, and a PC that stays silent ends with
+  a toast. The press on a PC of the start screen, the pairing list, the Devices menu's Connect and the end of pairing
+  all use it. The flow is a state machine tested with a fake clock and network; the real Wake-on-LAN and a real sleeping
+  PC are not verified.
 - Pairing with a one-time code: the menu of a PC that is not paired yet offers "Pair with a PIN" and "Pair with a
   one-time code"; the latter asks for the PIN and passphrase made in the PC's web UI and says when the code was wrong.
 - A second video renderer next to the display layer: it decodes with VideoToolbox, keeps the pictures in a small queue

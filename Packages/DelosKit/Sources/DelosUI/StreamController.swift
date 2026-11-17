@@ -59,6 +59,17 @@ final class StreamController {
     private(set) var phase = Phase.connecting
     /// "Calling up <PC>" and the line of the current stage.
     private(set) var greeting = ""
+    /// The game's name (the launch scene's title).
+    var appName: String { steps.appName }
+    /// The leaving that runs is Quit app (the exit scene's icon and text).
+    private(set) var leavingQuit = false
+    /// The leaving that runs comes from the stream menu: the exit scene plays, and the stream ends after ``leavingHold``.
+    private(set) var leavingScene = false
+    /// The PC's name (the exit scene's second line).
+    var pcName: String { steps.pcName }
+    /// How long a leaving from the stream menu keeps the exit scene up at least (`StreamExit`: 1.5 s, 0.7 s with reduced
+    /// motion); the screen sets it. Zero: the stream ends as soon as it has stopped.
+    @ObservationIgnored var leavingHold: Duration = .zero
     private(set) var line = ""
     /// The loader's progress, 0…1: each stage adds 8 % up to 92 %, the running stream fills it (Android's
     /// `StreamLoader`).
@@ -112,6 +123,7 @@ final class StreamController {
         guard let display else { return }
         attemptID += 1
         let id = attemptID
+        leavingScene = false
         phase = .connecting
         progress = 0
         line = StageLines.line(.platform, pcName: steps.pcName)
@@ -290,7 +302,7 @@ final class StreamController {
     /// Leaves the stream: Disconnect (`quit` false) keeps the app running on the PC, Quit app ends it there too. A
     /// call while the stream is already leaving returns when that leaving is over (the app waits for it before it
     /// quits).
-    func leave(quit: Bool) async {
+    func leave(quit: Bool, scene: Bool = false) async {
         switch phase {
         case .leaving:
             await leaving?.value
@@ -307,15 +319,21 @@ final class StreamController {
         // No return from the background starts another attempt now; the one that ran is the one the PC quits
         suspended = false
         let steps = self.steps
+        leavingQuit = quit
+        leavingScene = scene
         phase = .leaving(quit ? L("stream_exit_quitting", steps.appName) : L("stream_exit_disconnecting"))
         stopInput()
         let stopped = endAttempt()
+        let hold = scene ? leavingHold : .zero
         let task = Task { @MainActor [weak self] in
+            let began = ContinuousClock.now
             await stopped.value
             if quit, await !steps.quitApp() {
                 self?.phase = .failed(StreamText.quitFailure(appName: steps.appName))
                 return
             }
+            // The exit scene plays out before the library comes back
+            try? await ContinuousClock().sleep(until: began.advanced(by: hold))
             self?.phase = .ended
         }
         leaving = task
