@@ -1,3 +1,4 @@
+import CoreGraphics
 import DelosData
 import Testing
 @testable import DelosUI
@@ -23,5 +24,30 @@ import Testing
         #expect(abs(GlideLook.pill.reach(width: 400) - 24) < 0.001)
         // Chips grow and ring less, and are 12 px apart or more
         #expect(GlideLook.chip.reach(width: 100) < GlideLook.pill.reach(width: 100))
+    }
+
+    @Test func theGlidingRingStartsWhereItWasAndEndsExactlyOnTheElement() {
+        let search = CGRect(x: 700, y: 0, width: 296, height: 46), filter = CGRect(x: 1018, y: 0, width: 142, height: 46)
+        let glide = RingGlide(from: search, to: filter, at: 100)
+        #expect(glide.rect(on: filter, at: 100) == search)
+        // A tenth of the way in (the curve has done about 37 % of the distance) it is between the two, as wide as neither
+        let early = glide.rect(on: filter, at: 100 + RingGlide.duration / 10)
+        #expect(early.minX > search.minX + 60 && early.minX < filter.minX - 60)
+        #expect(early.width < search.width - 20 && early.width > filter.width + 20)
+        let end = glide.rect(on: filter, at: 100 + RingGlide.duration)
+        #expect(abs(end.minX - filter.minX) < 0.001 && abs(end.width - filter.width) < 0.001)
+        #expect(glide.rect(on: filter, at: 200) == filter)
+    }
+
+    @Test func theGlidingRingTravelsWithAnElementThatScrollsWhileItGlides() {
+        let from = CGRect(x: 0, y: 0, width: 100, height: 60), to = CGRect(x: 300, y: 0, width: 140, height: 60)
+        let glide = RingGlide(from: from, to: to, at: 0)
+        let time = RingGlide.duration * 0.3
+        // The row scrolls the target 80 points to the left: the ring is 80 points further left, its size the same
+        let scrolled = glide.rect(on: to.offsetBy(dx: -80, dy: 0), at: time)
+        let still = glide.rect(on: to, at: time)
+        #expect(abs(scrolled.minX - (still.minX - 80)) < 0.001)
+        #expect(abs(scrolled.width - still.width) < 0.001)
+        #expect(glide.rect(on: to.offsetBy(dx: -80, dy: 0), at: RingGlide.duration) == to.offsetBy(dx: -80, dy: 0))
     }
 }
