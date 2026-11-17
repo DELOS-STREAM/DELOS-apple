@@ -366,33 +366,33 @@ actor ArtworkFiles {
     /// The file at [url] as cache entry [key] (downloaded once, [progress] hearing how far), and whether it plays.
     func animation(url: URL, key: String, client: SteamGridDB, progress: @escaping @Sendable (Double) -> Void) async -> Probe? {
         if let data = await cache.mappedData(for: key) { return Probe(animation: AnimatedImageInfo.of(data) != nil ? data : nil) }
-        let (cache, limit) = (cache, cache.maxEntryBytes)
-        guard let data = await download(key, work: { try await client.download(url, limit: limit, progress: progress) },
-                                        store: { try? await cache.store($0, for: key) }) else { return nil }
-        guard AnimatedImageInfo.of(data) != nil else { return Probe(animation: nil) }
-        // Played from the file rather than held in memory, when it was stored
-        return Probe(animation: await cache.mappedData(for: key) ?? data)
+        guard let data = await download(key, url: url, client: client, progress: progress) else { return nil }
+        return Probe(animation: AnimatedImageInfo.of(data) != nil ? data : nil)
     }
 
     func image(hostID: String, appID: Int, kind: ArtKind, client: SteamGridDB?) async -> Data? {
         let key = Self.imageKey(hostID, appID, kind)
-        if let data = await cache.data(for: key) { return data }
+        if let data = await cache.mappedData(for: key) { return data }
         // The cache dropped it: the chosen image is downloaded again
         guard let client, let url = match(hostID: hostID, appID: appID)?.chosen?[kind.rawValue]?.url else { return nil }
-        let (cache, limit) = (cache, cache.maxEntryBytes)
-        return await download(key) { try await client.download(url, limit: limit) } store: { try? await cache.store($0, for: key) }
+        return await download(key, url: url, client: client)
+    }
+
+    /// Downloads [url] to disk and moves it into the cache as [key], once per key at a time and at most
+    /// ``parallelDownloads`` at a time; every asker gets the stored entry, mapped from its file (nil when it failed).
+    private func download(_ key: String, url: URL, client: SteamGridDB, progress: (@Sendable (Double) -> Void)? = nil) async -> Data? {
+        let cache = cache
+        return await download(key) {
+            try await cache.store(fileAt: try await client.download(url, limit: cache.maxEntryBytes, progress: progress), for: key)
+            return await cache.mappedData(for: key)
+        }
     }
 
     /// Runs [work] once per [key] at a time, and at most ``parallelDownloads`` at a time; every asker gets its result.
-    private func download(_ key: String, work: @escaping @Sendable () async throws -> Data,
-                          store: @escaping @Sendable (Data) async -> Void) async -> Data? {
+    private func download(_ key: String, work: @escaping @Sendable () async throws -> Data?) async -> Data? {
         if let running = inflight[key] { return await running.value }
         let gate = gate
-        let task = Task<Data?, Never> {
-            guard let data = try? await gate.withPermit(work) else { return nil }
-            await store(data)
-            return data
-        }
+        let task = Task<Data?, Never> { try? await gate.withPermit(work) }
         inflight[key] = task
         let data = await task.value
         inflight[key] = nil
@@ -406,8 +406,9 @@ actor ArtworkFiles {
         return await download(key) {
             let data = try await fetch()
             guard Int64(data.count) <= Self.boxArtLimit else { throw SteamGridDBError.imageTooLarge }
+            try? await cache.store(data, for: key)
             return data
-        } store: { try? await cache.store($0, for: key) }
+        }
     }
 
     /// `fetchNow` of DELOS for Android. A kind picked by hand stays; a game matched by hand is not searched for again.
@@ -427,7 +428,7 @@ actor ArtworkFiles {
                 let image = try await client.images(gameID: gameID, kind: kind).first
                 let key = Self.imageKey(hostID, appID, kind)
                 if let image {
-                    try await cache.store(try await client.download(image.url, limit: cache.maxEntryBytes), for: key)
+                    try await cache.store(fileAt: try await client.download(image.url, limit: cache.maxEntryBytes), for: key)
                 } else {
                     await cache.remove(key)
                 }
@@ -465,7 +466,7 @@ actor ArtworkFiles {
     func apply(hostID: String, appID: Int, kind: ArtKind, image: SteamGridDBImage?, client: SteamGridDB) async throws {
         let key = Self.imageKey(hostID, appID, kind)
         if let image {
-            try await cache.store(try await client.download(image.url, limit: cache.maxEntryBytes), for: key)
+            try await cache.store(fileAt: try await client.download(image.url, limit: cache.maxEntryBytes), for: key)
         } else {
             await cache.remove(key)
         }
@@ -480,8 +481,7 @@ actor ArtworkFiles {
     /// A thumbnail of a choice, kept in the cache.
     func thumbnail(_ image: SteamGridDBImage, client: SteamGridDB) async -> Data? {
         let key = Self.thumbnailKey(image)
-        if let data = await cache.data(for: key) { return data }
-        let (cache, limit, url) = (cache, cache.maxEntryBytes, image.previewURL)
-        return await download(key) { try await client.download(url, limit: limit) } store: { try? await cache.store($0, for: key) }
+        if let data = await cache.mappedData(for: key) { return data }
+        return await download(key, url: image.previewURL, client: client)
     }
 }

@@ -42,13 +42,16 @@ final class ArtworkModel {
     /// The filters of the tab, without what its kind cannot filter by.
     var filters: ArtFilters { ArtFilterRules.normalized(tab.kind, filtersByTab[tab] ?? ArtFilters()) }
 
-    /// Never looked up yet: find the game first and download its best-rated images like the automatic run. A failure is
-    /// reported through [onError].
+    /// The app's artwork comes from SteamGridDB (`ArtworkStore.eligible`): DELOS's own entries have bundled artwork.
+    var eligible: Bool { BundledArtwork.kind(app) == nil }
+
+    /// Never looked up yet: find the game first and download its best-rated images like the automatic run, retrying a
+    /// passing failure (`SgdbRetry`). A failure is reported through [onError].
     func lookup(onError: (any Error) -> Void) async {
-        if artwork.enabled, await !artwork.isSearched(hostID: hostID, appID: app.id) {
+        if artwork.enabled, eligible, await !artwork.isSearched(hostID: hostID, appID: app.id) {
             looking = true
             do {
-                try await artwork.fetch(hostID: hostID, appID: app.id, name: app.title)
+                _ = try await SteamGridDBRetry.run { try await artwork.fetch(hostID: hostID, appID: app.id, name: app.title) }
             } catch is CancellationError {
             } catch {
                 onError(error)
@@ -88,7 +91,7 @@ final class ArtworkModel {
         do {
             var asked = filters
             asked.sort = .score
-            let list = try await artwork.choices(hostID: hostID, appID: app.id, kind: kind, filters: asked)
+            let list = try await SteamGridDBRetry.run { try await artwork.choices(hostID: hostID, appID: app.id, kind: kind, filters: asked) }
             lists[key] = list
             choices = ready(list)
         } catch is CancellationError {

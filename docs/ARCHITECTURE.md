@@ -854,8 +854,11 @@ name is typed into its field) and the sideways scrolling avatar rows of a stage 
 
 `ArtworkStore` (DelosData) is Android's `ArtworkStore` and `BoxArtCache`: `SteamGridDB` (API v2, still images only,
 never NSFW or humor; the name as one path segment) matches each app by name and downloads the best-rated cover, wide
-cover, hero and logo. Images live in `DiskCache` (Caches/artwork, 256 MB, at most 32 MB per file, least recently used
-dropped first; file names are SHA-256 of the key); the match and each kind's chosen image URL are small JSON files
+cover, hero and logo. Images live in `DiskCache` (Caches/artwork, 2 GB, at most 2 GB per file as Android's
+`MAX_FILE_BYTES`, least recently used dropped first; file names are SHA-256 of the key). Every SteamGridDB file goes to a
+temporary file as it arrives (`FileDownload`: the announced length, then the bytes written, are checked against the limit)
+and is moved into the cache, so a large animated background is never held in memory; stored images are mapped from their
+files. The match and each kind's chosen image URL are small JSON files
 under Application Support/artwork, so an image the cache dropped is downloaded again without a new search. The PC's
 box art is cached the same way. With the key set and Download automatically on, the library downloads the artwork of
 games never looked up when it loads; a cover waits for the lookup (up to 20 s) before falling back to the box art.
@@ -871,7 +874,10 @@ accent border and the "In use" badge. A kind chosen by hand is recorded in the m
 leaves it alone; matching the game by hand (`setGame`: the search menu lists at most eight games) is recorded too (`manual`),
 so the name is not searched again, and its images start over. A thumbnail is downloaded when its tile scrolls into view and
 kept in the same cache. The filter sheet (type, style, size, sort) narrows and sorts the choices; animated choices play in
-their tiles ([Animated artwork](#animated-artwork)). Not ported: the companion screen.
+their tiles ([Animated artwork](#animated-artwork)). The first lookup and each list of choices are tried again after
+500, 1200 and 2500 ms while they fail for a passing reason (429, 5xx, a network failure: `SteamGridDBRetry`, Android's
+`SgdbRetry`); the loader stays up meanwhile, and "not reachable" shows only once the fourth attempt has failed. Not
+ported: the companion screen.
 
 ### Animated artwork
 

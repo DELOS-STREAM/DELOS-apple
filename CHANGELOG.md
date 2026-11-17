@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- SteamGridDB calls on the Artwork screen are tried again after 500, 1200 and 2500 ms when the service is busy (429,
+  5xx) or the network drops; the loader stays up until the fourth attempt has failed.
+- Artwork files up to 2 GB can be used, so a large animated background can be applied: downloads go to disk as they
+  arrive and are never held in memory, and the artwork cache holds 2 GB.
 - Pairing waits for the trusted paired state instead of a fixed delay, and manual-address entry reports a PC
   that was not added. The start screen retargets its initial PC focus as discovery changes. On compact stages,
   the profile chip shares the status line, clears the measured status cluster and truncates long names.

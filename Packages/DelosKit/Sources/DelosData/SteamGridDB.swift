@@ -95,20 +95,31 @@ public struct SteamGridDB: Sendable {
 
     let key: String
     let transport: Transport
-    /// Fetches a file and stops reading once it is larger than the limit (the second argument), telling how far it is
-    /// (0…1, only when the reply announces its length) to the third.
-    typealias Downloader = @Sendable (URLRequest, Int64, (@Sendable (Double) -> Void)?) async throws -> (Data, HTTPURLResponse)
+    /// Fetches a file into a temporary file of its own (the caller moves or deletes it) and stops reading once it is
+    /// larger than the limit (the second argument), telling how far it is (0…1, only when the reply announces its
+    /// length) to the third. A reply that is not 2xx leaves no file.
+    typealias Downloader = @Sendable (URLRequest, Int64, (@Sendable (Double) -> Void)?) async throws -> (URL?, HTTPURLResponse)
     let downloader: Downloader
 
+    /// The largest file an image download takes (`SteamGridDbClient.MAX_FILE_BYTES` of DELOS for Android): 2 GB, so a
+    /// large animated background can be used. The file goes to disk as it arrives and is never held in memory.
+    public static let maxFileBytes: Int64 = 2048 * 1024 * 1024
+
     /// - Parameter transport: replaces the network for the API and the downloads (tests); nil uses URLSession, and
-    ///   downloads stop at their size limit while they are read.
+    ///   downloads go to disk and stop at their size limit while they are read.
     public init(key: String, transport: Transport? = nil) {
         self.key = key
         self.transport = transport ?? SteamGridDB.urlSession
         if let transport {
-            downloader = { request, _, _ in try await transport(request) }
+            downloader = { request, _, _ in
+                let (data, response) = try await transport(request)
+                guard (200..<300).contains(response.statusCode) else { return (nil, response) }
+                let file = FileManager.default.temporaryDirectory.appending(path: "sgdb-\(UUID().uuidString).part", directoryHint: .notDirectory)
+                try data.write(to: file)
+                return (file, response)
+            }
         } else {
-            downloader = SteamGridDB.boundedDownload
+            downloader = FileDownload.run
         }
     }
 
@@ -118,33 +129,6 @@ public struct SteamGridDB: Sendable {
         request.timeoutInterval = 30
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw SteamGridDBError.badReply }
-        return (data, http)
-    }
-
-    /// A download that is refused as soon as the announced length, or the bytes read so far, pass [limit]: a huge
-    /// reply is never held whole. A reply that is not 2xx is not read. [progress] hears the share read after every 64 KB.
-    static let boundedDownload: Downloader = { request, limit, progress in
-        var request = request
-        request.timeoutInterval = 30
-        let (bytes, response) = try await URLSession.shared.bytes(for: request)
-        guard let http = response as? HTTPURLResponse else { throw SteamGridDBError.badReply }
-        guard (200..<300).contains(http.statusCode) else { return (Data(), http) }
-        guard response.expectedContentLength <= limit else { throw SteamGridDBError.imageTooLarge }
-        let total = response.expectedContentLength
-        var data = Data()
-        var chunk = [UInt8]()
-        chunk.reserveCapacity(64 * 1024)
-        for try await byte in bytes {
-            chunk.append(byte)
-            if chunk.count == 64 * 1024 {
-                data.append(contentsOf: chunk)
-                chunk.removeAll(keepingCapacity: true)
-                guard Int64(data.count) <= limit else { throw SteamGridDBError.imageTooLarge }
-                if total > 0 { progress?(min(Double(data.count) / Double(total), 1)) }
-            }
-        }
-        data.append(contentsOf: chunk)
-        guard Int64(data.count) <= limit else { throw SteamGridDBError.imageTooLarge }
         return (data, http)
     }
 
@@ -210,13 +194,21 @@ public struct SteamGridDB: Sendable {
         return ArtFilterRules.sort(ArtFilterRules.merge(lists), filters.sort)
     }
 
-    /// The file at [url], at most [limit] bytes; [progress] hears how far the download is (0…1) when its length is known.
-    public func download(_ url: URL, limit: Int64, progress: (@Sendable (Double) -> Void)? = nil) async throws -> Data {
+    /// The file at [url], at most [limit] bytes, as a temporary file the caller moves into place or deletes; [progress]
+    /// hears how far the download is (0…1) when its length is known.
+    public func download(_ url: URL, limit: Int64, progress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
         guard url.scheme == "https" else { throw SteamGridDBError.insecureURL }
-        let (data, response) = try await downloader(URLRequest(url: url), limit, progress)
-        guard (200..<300).contains(response.statusCode) else { throw SteamGridDBError.downloadHTTP(response.statusCode) }
-        guard Int64(data.count) <= limit else { throw SteamGridDBError.imageTooLarge }
-        return data
+        let (file, response) = try await downloader(URLRequest(url: url), limit, progress)
+        guard (200..<300).contains(response.statusCode), let file else {
+            if let file { try? FileManager.default.removeItem(at: file) }
+            throw SteamGridDBError.downloadHTTP(response.statusCode)
+        }
+        let size = (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
+        guard size <= limit else {
+            try? FileManager.default.removeItem(at: file)
+            throw SteamGridDBError.imageTooLarge
+        }
+        return file
     }
 
     /// The reply of an API request: 401 and 403 reject the key, 404 is "nothing" (nil).
@@ -288,5 +280,137 @@ public struct SteamGridDB: Sendable {
     private static func number(_ value: Any?) -> Int? {
         guard let value = value as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID() else { return nil }
         return value.intValue
+    }
+}
+
+/// Retries for SteamGridDB calls that failed for a passing reason (`SgdbRetry` of DELOS for Android): the service busy
+/// or briefly unreachable, a dropped connection. The Artwork screen keeps its loader up while it retries and only says
+/// "not reachable" once every attempt has failed.
+public enum SteamGridDBRetry {
+    /// The waits before the 2nd, 3rd and 4th attempt: four attempts in about four seconds of waiting.
+    public static let delays: [Duration] = [.milliseconds(500), .milliseconds(1200), .milliseconds(2500)]
+
+    /// Whether trying again can help: a network failure or an overloaded or failing server (429, 5xx), never a rejected
+    /// key, an unreadable reply or a bad file.
+    public static func isTransient(_ error: any Error) -> Bool {
+        switch error {
+        case is CancellationError: return false
+        case let error as SteamGridDBError:
+            if case .apiHTTP(let code) = error { return code == 429 || (500...599).contains(code) }
+            return false
+        case let error as URLError: return error.code != .cancelled
+        default: return false
+        }
+    }
+
+    /// Runs [block], retrying after each wait in [delays] while the failure ``isTransient(_:)``; the last failure is thrown.
+    public static func run<T>(
+        delays: [Duration] = delays,
+        isolation: isolated (any Actor)? = #isolation,
+        wait: (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        _ block: () async throws -> T
+    ) async throws -> T {
+        var attempt = 0
+        while true {
+            do {
+                return try await block()
+            } catch {
+                guard isTransient(error), attempt < delays.count else { throw error }
+                try await wait(delays[attempt])
+                attempt += 1
+            }
+        }
+    }
+}
+
+/// One download through URLSession that goes to a temporary file as it arrives (`SteamGridDbClient.download` and
+/// `Thumbnails.fetch` of DELOS for Android): the announced length, then the bytes written so far, are checked against the
+/// limit, so a huge reply is refused early and never held in memory. A reply that is not 2xx is not read.
+final class FileDownload: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let limit: Int64
+    private let progress: (@Sendable (Double) -> Void)?
+    private let file = FileManager.default.temporaryDirectory.appending(path: "sgdb-\(UUID().uuidString).part", directoryHint: .notDirectory)
+    // Touched only on the session's serial delegate queue, then read once the task has completed
+    private var handle: FileHandle?
+    private var written: Int64 = 0
+    private var total: Int64 = 0
+    private var response: HTTPURLResponse?
+    private var failure: (any Error)?
+    private var continuation: CheckedContinuation<(URL?, HTTPURLResponse), any Error>?
+
+    private init(limit: Int64, progress: (@Sendable (Double) -> Void)?) {
+        self.limit = limit
+        self.progress = progress
+    }
+
+    static let run: SteamGridDB.Downloader = { request, limit, progress in
+        var request = request
+        request.timeoutInterval = 30
+        let download = FileDownload(limit: limit, progress: progress)
+        let task = URLSession.shared.dataTask(with: request)
+        task.delegate = download
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                download.continuation = continuation
+                task.resume()
+            }
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+                    completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void) {
+        guard let http = response as? HTTPURLResponse else {
+            failure = SteamGridDBError.badReply
+            return completionHandler(.cancel)
+        }
+        self.response = http
+        guard (200..<300).contains(http.statusCode) else { return completionHandler(.cancel) }
+        total = http.expectedContentLength
+        guard total <= limit else {
+            failure = SteamGridDBError.imageTooLarge
+            return completionHandler(.cancel)
+        }
+        guard FileManager.default.createFile(atPath: file.path, contents: nil), let handle = try? FileHandle(forWritingTo: file) else {
+            failure = CocoaError(.fileWriteUnknown)
+            return completionHandler(.cancel)
+        }
+        self.handle = handle
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        guard failure == nil, let handle else { return }
+        written += Int64(data.count)
+        guard written <= limit else {
+            failure = SteamGridDBError.imageTooLarge
+            return dataTask.cancel()
+        }
+        do {
+            try handle.write(contentsOf: data)
+        } catch {
+            failure = error
+            return dataTask.cancel()
+        }
+        if total > 0 { progress?(min(Double(written) / Double(total), 1)) }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
+        try? handle?.close()
+        handle = nil
+        let continuation = self.continuation
+        self.continuation = nil
+        if let response, !(200..<300).contains(response.statusCode) {
+            try? FileManager.default.removeItem(at: file)
+            continuation?.resume(returning: (nil, response))
+        } else if let error = failure ?? error {
+            try? FileManager.default.removeItem(at: file)
+            continuation?.resume(throwing: error)
+        } else if let response {
+            continuation?.resume(returning: (file, response))
+        } else {
+            continuation?.resume(throwing: SteamGridDBError.badReply)
+        }
     }
 }
