@@ -35,6 +35,63 @@ enum ArtworkTab: CaseIterable, Hashable {
         }
     }
 
+    /// "All 41 covers" (`countAll`).
+    func countAll(_ images: Int) -> String {
+        switch self {
+        case .cover: LPlural("artwork_count_all_cover", images)
+        case .wide: LPlural("artwork_count_all_wide", images)
+        case .hero: LPlural("artwork_count_all_hero", images)
+        case .logo: LPlural("artwork_count_all_logo", images)
+        }
+    }
+
+    /// "10 of 41 covers" (`countOf`): the quantity is the total.
+    func countOf(_ shown: Int, _ total: Int) -> String {
+        switch self {
+        case .cover: LPlural("artwork_count_of_cover", total, shown)
+        case .wide: LPlural("artwork_count_of_wide", total, shown)
+        case .hero: LPlural("artwork_count_of_hero", total, shown)
+        case .logo: LPlural("artwork_count_of_logo", total, shown)
+        }
+    }
+
+    /// "10 of 41 covers" when the unfiltered total differs, else "41 covers"; [all] says "All 41 covers" for an unfiltered
+    /// list (`resultLine`).
+    func resultLine(shown: Int, total: Int?, all: Bool) -> String {
+        if let total, total != shown { return countOf(shown, total) }
+        return all ? countAll(shown) : count(shown)
+    }
+
+    /// No image matches the filters.
+    var none: String {
+        switch self {
+        case .cover: L("artwork_filtered_none_cover")
+        case .wide: L("artwork_filtered_none_wide")
+        case .hero: L("artwork_filtered_none_hero")
+        case .logo: L("artwork_filtered_none_logo")
+        }
+    }
+
+    /// Why none matches when the game's total is known: "Hades has 41 covers on SteamGridDB, none of them matches ...".
+    func has(game: String, total: Int) -> String {
+        switch self {
+        case .cover: LPlural("artwork_filtered_has_cover", total, game)
+        case .wide: LPlural("artwork_filtered_has_wide", total, game)
+        case .hero: LPlural("artwork_filtered_has_hero", total, game)
+        case .logo: LPlural("artwork_filtered_has_logo", total, game)
+        }
+    }
+
+    /// Why none matches when the total is not known.
+    var unknown: String {
+        switch self {
+        case .cover: L("artwork_filtered_unknown_cover")
+        case .wide: L("artwork_filtered_unknown_wide")
+        case .hero: L("artwork_filtered_unknown_hero")
+        case .logo: L("artwork_filtered_unknown_logo")
+        }
+    }
+
     /// SteamGridDB has none for this app.
     var empty: String {
         switch self {
@@ -145,7 +202,58 @@ enum ArtworkChoices: Equatable {
     case noKey
     case noGame
     case failed(String)
-    case ready(gameID: Int, images: [SteamGridDBImage])
+    /// [total] is the unfiltered count when it is known (the unfiltered list was loaded).
+    case ready(gameID: Int, images: [SteamGridDBImage], total: Int?)
+}
+
+/// The labels of the filter sheet and the strip (`ArtType.label`, `ArtSort.label`/`chip`/`first`, `ActiveFilter.label`).
+extension ArtType {
+    var label: String {
+        switch self {
+        case .all: L("filters_art_type_all")
+        case .still: L("filters_art_type_static")
+        case .animated: L("filters_art_type_animated")
+        }
+    }
+}
+
+extension ArtSort {
+    var label: String {
+        switch self {
+        case .score: L("filters_art_sort_score")
+        case .newest: L("filters_art_sort_newest")
+        case .oldest: L("filters_art_sort_oldest")
+        }
+    }
+
+    /// The removable chip of a non-default order.
+    var chip: String {
+        switch self {
+        case .score: L("filters_art_sort_score_chip")
+        case .newest: L("filters_art_sort_newest_chip")
+        case .oldest: L("filters_art_sort_oldest_chip")
+        }
+    }
+
+    /// The note under the toolbar.
+    var first: String {
+        switch self {
+        case .score: L("filters_art_sort_score_first")
+        case .newest: L("filters_art_sort_newest_first")
+        case .oldest: L("filters_art_sort_oldest_first")
+        }
+    }
+}
+
+extension ActiveFilter {
+    var label: String {
+        switch self {
+        case .type(let type): type.label
+        case .style(let style): ArtworkFact.styleLabel(style)
+        case .dimensions(let dimensions): ArtFilterRules.dimensionsLabel(dimensions)
+        case .sort(let sort): sort.chip
+        }
+    }
 }
 
 /// A fact the info strip tells about the focused image (`ArtworkFact`): only what SteamGridDB's answer contained.

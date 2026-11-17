@@ -9,7 +9,7 @@ enum DevicesLogic {
     enum Action: Equatable {
         /// Connect (opens the PC's apps), or "Open its apps" when its library is the one open.
         case connect(openApps: Bool)
-        case makeDefault, clearDefault, wake, rename, unpair, remove
+        case wake, rename, unpair, remove
     }
 
     /// The paired PCs by name (the Devices screen lists no found-but-unpaired PC).
@@ -18,20 +18,18 @@ enum DevicesLogic {
     }
 
     /// The line under a PC: Connected (online, and its library is open), Online, Asleep (it can be woken: its MAC address is
-    /// known) or Offline; the default PC says so too. Android's Devices screen leaves the default out; the start screen
-    /// has it, and this screen's menu can set it, so the status shows it.
-    nonisolated static func status(_ host: HostRecord, active: Bool, isDefault: Bool) -> String {
+    /// known) or Offline. Like Android's Devices screen it does not mention the default PC (the start screen does).
+    nonisolated static func status(_ host: HostRecord, active: Bool) -> String {
         let online = host.reachability == .online
-        let status = online ? L(active ? "devices_status_connected" : "devices_status_online")
+        return online ? L(active ? "devices_status_connected" : "devices_status_online")
             : host.macAddress != nil ? L("devices_status_asleep") : L("devices_status_offline")
-        return isDefault ? L("devices_status_with_default", status, L("devices_status_default")) : status
     }
 
     /// The rows of a PC's menu, in Android's order: Connect, Rename, Wake (only an offline PC that can be woken), Unpair (only
-    /// an online one), Remove. The default PC toggle comes after Connect.
-    static func actions(_ host: HostRecord, active: Bool, isDefault: Bool) -> [Action] {
+    /// an online one), Remove.
+    static func actions(_ host: HostRecord, active: Bool) -> [Action] {
         let online = host.reachability == .online
-        var rows: [Action] = [.connect(openApps: active), isDefault ? .clearDefault : .makeDefault, .rename]
+        var rows: [Action] = [.connect(openApps: active), .rename]
         if !online, host.macAddress != nil { rows.append(.wake) }
         if online { rows.append(.unpair) }
         rows.append(.remove)
@@ -56,14 +54,13 @@ enum DevicesLogic {
 }
 
 /// `#scr-devices` (`DevicesScreen` in DELOS for Android): the paired PCs in circles with their status, the one whose library
-/// is open marked; A or a tap opens a PC's menu (connect, default, rename, wake, unpair, remove), and the last circle pairs
+/// is open marked; A or a tap opens a PC's menu (connect, rename, wake, unpair, remove), and the last circle pairs
 /// a new PC (the pairing screen lists the PCs found and takes an address). Showing it looks for PCs and asks the paired
 /// ones again, as the start screen does.
 struct DevicesScreen: View {
     let focus: FocusModel
     /// The PC whose library is open below this screen.
     let activeID: String?
-    let defaultPC: String?
     let actions: ShellActions
     let onPair: @MainActor () -> Void
     @Environment(HostStore.self) private var hosts
@@ -83,7 +80,7 @@ struct DevicesScreen: View {
                     ) { focused in
                         CircleItem(
                             icon: Symbols.desktopWindows, label: host.name,
-                            meta: DevicesLogic.status(host, active: active, isDefault: host.id == defaultPC),
+                            meta: DevicesLogic.status(host, active: active),
                             metaDot: host.reachability == .online ? .onlineGreen : nil,
                             selected: active, focused: focused)
                     }

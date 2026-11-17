@@ -27,7 +27,6 @@ struct GameSettingsScreen: View {
     @State private var model: GameSettingsModel
     @State private var picker: (id: String, focus: FocusModel)?
     @State private var rowFrames: [String: CGRect] = [:]
-    @State private var pace = ScrollPace()
     /// The row last focused, which Reset all gives the focus back to.
     @State private var lastRow: String?
     @Environment(\.modalFocus) private var inheritedModal
@@ -44,33 +43,60 @@ struct GameSettingsScreen: View {
         self.navigator = navigator
         self.actions = actions
         _model = State(initialValue: GameSettingsModel(hostID: hostID, app: app, profileID: profileID, device: .current))
+        // The banner blurs the app's art like the app's background
+        _heroBlur = State(initialValue: AppearanceStore().load(profile: profileID).heroBlur)
     }
 
-    private var rows: [SettingRow] { model.rows }
+    @State private var tab = GameSettingsTab.stream
+    @State private var heroBlur: Int
+    private var tabs: [GameSettingsTab] { model.tabs }
+    /// The tab shown: the chosen one, as far as it has rows.
+    private var current: GameSettingsTab { tabs.contains(tab) ? tab : .stream }
+    private var rows: [SettingRow] { model.rows(current) }
     private var focusedRow: SettingRow? { rows.first { focus.focused == AnyHashable($0.id) } }
 
     var body: some View {
         let left = 150 + stage.safe.leading, right = 150 + stage.safe.trailing
+        let bottom = SettingsLayout.bottom(scale: stage.textScale) + stage.safe.bottom
         let rows = rows
         let count = model.overrides.count
+        let streamCount = model.customCount(.stream), displayCount = model.customCount(.display)
         ZStack(alignment: .topLeading) {
+            GameBanner(hostID: hostID, app: app, blur: heroBlur)
             header(count: count)
-                .frame(height: stage.px(92))
+                .frame(height: stage.px(GameSettingsLayout.headHeight))
                 .padding(.leading, stage.px(left))
                 .padding(.trailing, stage.px(right))
-                .padding(.top, stage.px(106 + stage.safe.top))
-            HStack(alignment: .top, spacing: stage.px(56)) {
-                list(rows)
-                GameSettingsPanel(
-                    app: app.title, row: focusedRow.map { row in
-                        (row, model.isCustom(row.id), model.profileLabel(row.id), model.currentLabel(row.id))
-                    }, count: count)
-                    .frame(width: stage.px(520))
+                .padding(.top, stage.px(GameSettingsLayout.headTop + stage.safe.top))
+            // Centred on the stage, like the global settings' tabs (Display shows only where it has a row)
+            if tabs.count > 1 {
+                TabRow(
+                    tabs: tabs.map { TabSpec(id: $0, icon: $0.icon, label: $0.label, badge: model.customCount($0)) }, selected: current,
+                    focus: focus, focusID: { "game-tab-\($0)" }, collapse: stage.compact, left: SettingsLayout.titleX,
+                    right: stage.width - SettingsLayout.titleX
+                ) { next in
+                    select(next, sound: .select, keepFocus: true)
+                }
+                .frame(height: stage.targetPx(SettingsLayout.tabsHeight))
+                .frame(maxWidth: .infinity)
+                .tvFocusSection()
+                .offset(y: stage.px(SettingsLayout.tabsY + stage.safe.top))
             }
-            .padding(.leading, stage.px(left))
-            .padding(.trailing, stage.px(right))
-            .padding(.top, stage.px(296 + stage.safe.top))
-            .padding(.bottom, stage.px(96 + stage.safe.bottom))
+            // The list spans from 132 to 38 short of the panel, which starts where the global settings' panel does
+            list(rows)
+                .frame(width: stage.px(stage.width - GameSettingsLayout.listWidthLess - stage.safe.leading - stage.safe.trailing))
+                .padding(.leading, stage.px(GameSettingsLayout.listX + stage.safe.leading))
+                .padding(.top, stage.px(GameSettingsLayout.listTop + stage.safe.top))
+                .padding(.bottom, stage.px(bottom))
+            GameSettingsPanel(
+                app: app.title, row: focusedRow.map { row in
+                    (row, model.isCustom(row.id), model.profileLabel(row.id), model.currentLabel(row.id))
+                }, streamCount: streamCount, displayCount: displayCount)
+                .frame(width: stage.px(520))
+                .padding(.trailing, stage.px(right))
+                .padding(.top, stage.px(SettingsLayout.listTop + stage.safe.top))
+                .padding(.bottom, stage.px(bottom))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             if let picker, let row = rows.first(where: { $0.id == picker.id }), case let .choice(_, options, selected) = row.value {
                 ChoicePicker(
                     title: row.label, options: options, selected: selected, focus: picker.focus,
@@ -97,21 +123,20 @@ struct GameSettingsScreen: View {
         }
     }
 
+    /// Another tab: the focus goes to its first row, unless the tab was chosen on the tab itself (tvOS).
+    private func select(_ next: GameSettingsTab, sound: Cue, keepFocus: Bool = false) {
+        guard next != current else { return }
+        actions.feedback?.play(sound)
+        tab = next
+        if !keepFocus, let first = model.rows(next).first { focus.focus(AnyHashable(first.id)) }
+    }
+
     // MARK: Header
 
     private func header(count: Int) -> some View {
         HStack(spacing: stage.px(16)) {
-            VStack(alignment: .leading, spacing: stage.px(4)) {
-                Text(L("settings_game_eyebrow", hosts.host(hostID)?.name ?? "").uppercased(with: .current))
-                    .font(DelosFonts.figtree(stage.tpx(16), .bold))
-                    .tracking(stage.tpx(16) * 0.14)
-                    .foregroundStyle(colors.accent2.color)
-                    .lineLimit(1)
-                MarqueeLabel(text: app.title, active: false)
-                    .font(DelosFonts.unbounded(stage.tpx(46)))
-                    .foregroundStyle(colors.text.color)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            title
+                .frame(maxWidth: .infinity, alignment: .leading)
             CustomChip(count: count)
             if count > 0 {
                 FocusItem(id: Self.resetAllID, model: focus, action: { resetAll() }) { focused in
@@ -124,46 +149,66 @@ struct GameSettingsScreen: View {
         }
     }
 
+    /// The eyebrow ("App settings · the PC") over the app's name (`GameTitle`), with the prototype's text shadows, which keep
+    /// the text legible on a bright game background.
+    private var title: some View {
+        let shadow = colors.dark ? Color.black.opacity(0.5) : .clear
+        return VStack(alignment: .leading, spacing: stage.px(4)) {
+            Text(L("settings_game_eyebrow", hosts.host(hostID)?.name ?? "").uppercased(with: .current))
+                .font(DelosFonts.figtree(stage.tpx(16), .bold))
+                .tracking(stage.tpx(16) * 0.14)
+                .foregroundStyle(colors.accent2.color)
+                .lineLimit(1)
+                .shadow(color: shadow, radius: stage.px(12), y: stage.px(3))
+            MarqueeLabel(text: app.title, active: true)
+                .font(DelosFonts.unbounded(stage.tpx(46)))
+                .foregroundStyle(colors.text.color)
+                .shadow(color: shadow, radius: stage.px(12), y: stage.px(3))
+        }
+    }
+
     // MARK: List
 
     private func list(_ rows: [SettingRow]) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: stage.px(10)) {
-                    ForEach(rows) { row in
-                        FocusItem(
-                            id: row.id, model: focus,
-                            menu: { model.isCustom(row.id) ? resetMenu(row) : nil },
-                            action: { activate(row) }, tap: { tapped(row) }
-                        ) { focused in
-                            SettingRowView(row: row, focused: focused, hostedPlate: true, onSlide: { value in
-                                focus.focus(AnyHashable(row.id))
-                                model.slide(to: value)
-                            }, onReset: { resetRow(row.id) })
-                        }
-                        .id(row.id)
-                        .anchorPreference(key: SettingsRowAnchors.self, value: .bounds) { [row.id: $0] }
-                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { rowFrames[row.id] = $0 }
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: stage.px(10)) {
+                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                    FocusItem(
+                        id: row.id, model: focus,
+                        menu: { model.isCustom(row.id) ? resetMenu(row) : nil },
+                        action: { activate(row) }, tap: { tapped(row) }
+                    ) { focused in
+                        SettingRowView(row: row, focused: focused, hostedPlate: true, entrance: min(index, Motion.staggerCap), onSlide: { value in
+                            focus.focus(AnyHashable(row.id))
+                            model.slide(to: value)
+                        }, onReset: { resetRow(row.id) })
                     }
+                    .id(row.id)
+                    .anchorPreference(key: SettingsRowAnchors.self, value: .bounds) { [row.id: $0] }
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { rowFrames[row.id] = $0 }
+                    .reportsRowFrame(row.id)
                 }
-                .backgroundPreferenceValue(SettingsRowAnchors.self) { anchors in
-                    GeometryReader { proxy in
-                        let anchor = (focus.focused as? String).flatMap { anchors[$0] }
-                        SettingsFocusPlate(target: anchor.map { SettingsPlateGeometry.target(proxy[$0]) })
-                    }
+            }
+            .backgroundPreferenceValue(SettingsRowAnchors.self) { anchors in
+                GeometryReader { proxy in
+                    let anchor = (focus.focused as? String).flatMap { anchors[$0] }
+                    SettingsFocusPlate(target: anchor.map { SettingsPlateGeometry.target(proxy[$0]) })
+                        .id(current)
                 }
-                .padding(.horizontal, stage.px(18))
-                .padding(.top, stage.px(14))
-                .padding(.bottom, stage.px(140))
-                .focusDrivenScroll()
             }
-            .focusable(false)
-            .scrollClipDisabled()
-            .onChange(of: focus.focused) { _, now in
-                guard let id = now as? String, rows.contains(where: { $0.id == id }) else { return }
-                withAnimation(pace.animation(.easeOut(duration: 0.3))) { proxy.scrollTo(id) }
-            }
+            .padding(.horizontal, stage.px(18))
+            .padding(.top, stage.px(GameSettingsLayout.listInnerTop))
+            .padding(.bottom, stage.px(140))
+            .focusDrivenScroll()
+            .coordinateSpace(.named(SettingsListScroll.contentSpace))
+            // A tab that is switched starts a new entrance
+            .entranceScope()
+            .id(current)
         }
+        .settingsListScroll(
+            focus: focus, contains: { id in rows.contains { $0.id == id } }, resetKey: AnyHashable(current),
+            fadeTop: stage.compact ? SettingsLayout.compactFadeTop : 14, fadeBottom: stage.compact ? SettingsLayout.compactFadeBottom : 70,
+            compact: stage.compact)
         .frame(maxWidth: .infinity)
     }
 
@@ -180,6 +225,10 @@ struct GameSettingsScreen: View {
     private func capture(_ command: MenuCommand) -> Bool {
         if let picker { return capturePicker(command, picker.focus) }
         switch command {
+        case .previousTab, .nextTab:
+            guard tabs.count > 1 else { return false }
+            select(current.step(command == .nextTab ? 1 : -1, among: tabs), sound: .move)
+            return true
         case .left, .right:
             guard let row = focusedRow else { return false }
             var direction = command == .right ? 1 : -1
@@ -198,7 +247,7 @@ struct GameSettingsScreen: View {
             actions.feedback?.play(.select)
             resetRow(row.id)
             return true
-        case .previousTab, .nextTab, .down, .accept, .back, .menu, .toastAction:
+        case .down, .accept, .back, .menu, .toastAction:
             return false
         }
     }
@@ -277,19 +326,19 @@ private struct CustomChip: View {
     @Environment(\.stage) private var stage
 
     var body: some View {
-        let tint = count == 0 ? nil : colors.accent3
+        // `Chip`: an info pill in the glass style; only its icon takes the violet of a custom app
         HStack(spacing: stage.px(8)) {
-            SymbolView(symbol: count == 0 ? Symbols.checkCircle : Symbols.tune, size: 22, color: tint ?? colors.text2, filled: true)
+            SymbolView(symbol: count == 0 ? Symbols.checkCircle : Symbols.tune, size: 22, color: count == 0 ? colors.text2 : colors.accent3)
             Text(GameSettingsText.customLabel(count))
-                .font(DelosFonts.figtree(stage.tpx(19), .semibold))
-                .foregroundStyle((tint ?? colors.text2).color)
+                .font(DelosFonts.figtree(stage.tpx(19)))
+                .foregroundStyle(colors.text2.color)
                 .lineLimit(1)
         }
         .padding(.horizontal, stage.px(16))
         .padding(.vertical, stage.px(6))
         .background {
             GlassShape(Capsule(), tint: colors.surface)
-                .overlay(Capsule().strokeBorder((tint ?? colors.line).color, lineWidth: stage.px(1)))
+                .overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
         }
     }
 }
@@ -300,7 +349,9 @@ private struct CustomChip: View {
 private struct GameSettingsPanel: View {
     let app: String
     let row: (row: SettingRow, custom: Bool, profile: String, current: String)?
-    let count: Int
+    let streamCount: Int
+    let displayCount: Int
+    private var count: Int { streamCount + displayCount }
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
 
@@ -323,6 +374,8 @@ private struct GameSettingsPanel: View {
                     .foregroundStyle(colors.text2.color)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            // What the three chips of the focused row mean
+            if row?.row.impact != nil { ImpactLegend() }
             HStack(spacing: stage.px(8)) {
                 SymbolView(symbol: Symbols.checkCircle, size: 20, color: colors.text3)
                 Text(L("settings_game_saved_note"))
@@ -330,11 +383,13 @@ private struct GameSettingsPanel: View {
                     .foregroundStyle(colors.text3.color)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(.top, stage.px(10))
         }
         .padding(stage.px(44))
         .frame(maxHeight: .infinity, alignment: .top)
         .background {
-            RoundedRectangle(cornerRadius: stage.px(34)).fill(colors.surface.color)
+            // The same gentle frosted glass as the global settings' panel (`SettingsPanelFrame`)
+            GlassShape(RoundedRectangle(cornerRadius: stage.px(34)), tint: colors.surface, role: .panel)
                 .overlay(RoundedRectangle(cornerRadius: stage.px(34)).strokeBorder(colors.line.color, lineWidth: stage.px(1)))
         }
     }
@@ -361,7 +416,7 @@ private struct GameSettingsPanel: View {
             } else {
                 L("settings_game_currently", source.current)
             }
-        } ?? GameSettingsText.summary(count, app: app)
+        } ?? GameSettingsText.summary(stream: streamCount, display: displayCount)
         let shape = RoundedRectangle(cornerRadius: stage.px(20))
         return VStack(alignment: .leading, spacing: stage.px(8)) {
             HStack(spacing: stage.px(10)) {
@@ -450,5 +505,81 @@ struct RowResetButton: View {
         #else
         false
         #endif
+    }
+}
+
+/// Where the App settings screen puts its banner, title block, list and panel (`GameSettingsLayout` of DELOS for Android), stage
+/// pixels. The status bar owns y 0 to 104, so nothing starts above ``headTop``; the tabs sit where the global settings' tabs sit
+/// and the first row where its first row sits.
+enum GameSettingsLayout {
+    static let bannerHeight = 290.0, compactBannerHeight = 220.0
+    static let headTop = 106.0, headHeight = 92.0
+    /// The list's top edge (its top fade is 14 px) and the padding inside it: the first row starts at 326, like the global list's.
+    static let listTop = 296.0, listInnerTop = 30.0, listX = 132.0
+    /// The list spans from ``listX`` to the panel's left edge (38 px short of it): the stage width less this, 1080 at 1920.
+    static let listWidthLess = 840.0
+}
+
+/// The banner (`GameBanner`): the app's artwork blurred like the app's background (the hero, else the cover, else the PC's box
+/// art), the top of the hero's area; the placeholder art while there is no image. A scrim keeps the title legible on bright art,
+/// and the strip fades into the page towards its bottom.
+private struct GameBanner: View {
+    let hostID: String
+    let app: HostApp
+    let blur: Int
+    @Environment(HomeArt.self) private var art
+    @Environment(HostStore.self) private var hosts
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+    @State private var lens: CGImage?
+
+    var body: some View {
+        let placeholder = GameArt(hostID: hostID, app: app)
+        let area = HeroArea.of(stageWidth: stage.width, stageHeight: stage.height)
+        let height = stage.compact ? GameSettingsLayout.compactBannerHeight : GameSettingsLayout.bannerHeight
+        ZStack(alignment: .top) {
+            PlaceholderArt(hue: placeholder.hue, hue2: placeholder.hue2, icon: placeholder.icon, glyphSize: 420, glyphRight: 84, glyphTop: -0.14, glyphAlpha: 0.14)
+            if let lens {
+                // The stage-wide top of the hero's overscanned area (2100 x 1260 at 16:9), as the dashboard shows it
+                Image(decorative: lens, scale: 1)
+                    .resizable()
+                    .interpolation(.low)
+                    .frame(width: stage.px(area.width), height: stage.px(area.height))
+                    .offset(y: stage.px(-(area.height - stage.height) / 2))
+                    .transition(.opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000)))
+            }
+            LinearGradient(stops: [
+                .init(color: colors.bg.opacity(0.7).color, location: 0), .init(color: colors.bg.opacity(0.2).color, location: 0.5),
+                .init(color: colors.bg.opacity(0).color, location: 1),
+            ], startPoint: .leading, endPoint: .trailing)
+            LinearGradient(colors: [colors.bg.opacity(0.15).color, colors.bg.opacity(0.55).color], startPoint: .top, endPoint: .bottom)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: stage.px(height), alignment: .top)
+        .clipped()
+        // The strip fades into the page over its lower 65 %
+        .mask {
+            LinearGradient(stops: [
+                .init(color: .clear, location: 0), .init(color: .black, location: min(1 / max(stage.px(height), 1), 1)),
+                .init(color: .black, location: 0.35), .init(color: .clear, location: 1),
+            ], startPoint: .top, endPoint: .bottom)
+        }
+        .allowsHitTesting(false)
+        .task(id: "\(GameArt.key(hostID, app.id))#\(art.artwork.version)/\(blur)/\(area.width)x\(area.height)") {
+            let image = await bannerImage()
+            guard !Task.isCancelled, let image else { return }
+            let result = await art.background(GameArt(hostID: hostID, app: app, image: image), blur: blur, area: area)
+            guard !Task.isCancelled else { return }
+            withAnimation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000)) { lens = result }
+        }
+    }
+
+    /// The hero as the dashboard picks it (the SteamGridDB hero, else its cover, else the PC's artwork).
+    private func bannerImage() async -> CGImage? {
+        if art.artwork.enabled {
+            if let hero = await art.image(hostID: hostID, appID: app.id, kind: .hero) { return hero }
+            if let cover = await art.image(hostID: hostID, appID: app.id, kind: .cover) { return cover }
+        }
+        return await art.boxArt(hostID: hostID, appID: app.id, hosts: hosts)
     }
 }

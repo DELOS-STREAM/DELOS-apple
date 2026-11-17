@@ -682,8 +682,7 @@ private struct Cover: View {
             }
             .animation(Motion.fastOutSlowIn(400), value: shown.map(ObjectIdentifier.init))
             if art.artwork.isBusy(hostID: hostID, appID: app.id) {
-                ProgressView()
-                    .tint(.white)
+                RingSpinner(size: 32)
                     .frame(width: stage.px(56), height: stage.px(56))
                     .background(Circle().fill(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0.55)))
                     .padding(stage.px(16))

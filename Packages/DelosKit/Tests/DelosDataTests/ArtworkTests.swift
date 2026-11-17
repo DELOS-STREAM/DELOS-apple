@@ -305,7 +305,7 @@ private func image(_ id: Int, _ file: String) -> String { #"{"id":\#(id),"url":"
     @Test func equalScoresKeepTheOrderAndTheBestScoreComesFirst() throws {
         let url = URL(string: "https://cdn.example/a.png")!
         let images = [1, 2, 3, 4].map { SteamGridDBImage(id: $0, url: url, score: [5, 9, 5, 9][$0 - 1]) }
-        #expect(ArtworkStore.bestRatedFirst(images).map(\.id) == [2, 4, 1, 3])
+        #expect(ArtFilterRules.sort(images, .score).map(\.id) == [2, 4, 1, 3])
     }
 
     @Test func choosingAnImageStoresItAndAnAutomaticRefreshLeavesItAlone() async throws {

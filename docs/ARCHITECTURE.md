@@ -643,8 +643,21 @@ sends it off, and so does `StreamPlan`.
 tabs between their L1 and R1 badges at y 206, centred, the rows from y 312 and the 520 px description panel 56 px to
 their right. A compact stage (`SettingsLayout`) drops the title, puts the tabs at y 128 (only the selected one keeps its
 label, as on every stage under 1760 px wide), the list at y 202 with 48 px margins and the help as a dock under it
-(`HelpDockLayout`: a quarter of the stage, room for three whole rows above it). The list's edges fade while rows lie beyond
-them (`scrollEdgeFades`, 14/90 px, 24/40 px compact). Centered screens (Create, Profile) are a `CenterColumn`: on a compact
+(`HelpDockLayout`: a quarter of the stage, room for three tall rows above it, and the glass of the panel). The list's edges
+fade only while rows lie beyond them, growing with the first pixels scrolled (`SettingsListFades`, 14/90 px, 24/40 px compact),
+and the focused row is kept 72 px from the top and 110 px from the bottom, scrolling only when it leaves them on a critically
+damped spring that settles in 600 to 950 ms (`SettingsScrollMotion`, Android's `MarginBringIntoView`). The tabs
+are a `TabRow` placed by `TabRowLayout` (centred on the stage, or flush right beside the compact search circle) on a
+`SelectionPillHost`: the accent pill's two edges are two springs, the one in the direction of travel stiffer, so it stretches
+between tabs. Rows are Android's: icon, name, value, the cost chips (GPU, latency, network) of the stream rows that have them
+(`SettingImpact`, and their legend in the panel), a switch whose knob springs over 420 ms, a slider that fills in 160 ms and
+whose knob grows by 18 % inside a halo, one plate behind the focused row whose glow is clipped outside it (`PlateGlow`: blur
+50, offset 20, spread -24), and an entrance staggered per tab. Y, or the Search button (a glass circle on a compact stage),
+opens the search (`SettingsSearchView`): a letter picker and a field share one query, and every row of every tab that
+contains all its words is listed (kana, Hangul initials and pinyin initials for Japanese, Korean and Chinese). The Devices tab
+has Manage devices and Pair a new PC; Android's default PC and Skip the start screen need a start screen that connects by
+itself. About has no Version row (its text says "Delos for Android"), no update rows (the App Store updates) and no diagnostics
+(issue #71). Centered screens (Create, Profile) are a `CenterColumn`: on a compact
 stage it keeps clear of the status and hint bars, its gaps shrink with `Stage.compactScale`, and what is too tall scrolls
 with the focus kept in view and its edges fading; the avatar grid takes as many columns as fit. `StreamSettingsForm` makes the rows (`SettingRow`: Android's key, tab, section, icon, label, value, help)
 from the settings and the device (`StreamDevice`: the screen's native pixels and highest rate, `DecoderSupport`) and
@@ -911,9 +924,12 @@ value. The row shows the CUSTOM badge and "Profile: <value>"; X, the row's menu 
 Reset all resets every row, each with an Undo toast that puts back only what the reset removed. A new profile copies the
 overrides with its other settings; removing a profile or a PC forgets them. A stream takes its settings from
 `ShellActions.streamSettings(hostID:appID:)` (the profile's with the app's laid over them), the one place a start reads
-them. A cover with custom settings has a tune pill beside the hidden one. Not ported: Android's Display tab (upscaler,
-scaling, virtual display), PyroWave chroma, gyro rows and the per-codec bitrate slots, none of which exist here, and the
-banner is the library's game background instead of a banner blurred on the screen itself.
+them. A cover with custom settings has a tune pill beside the hidden one. The banner (`GameBanner`, 290 px, 220 compact) is the
+app's hero, cover or box art blurred like the app's background over the placeholder art, under a scrim and fading into the
+page; the list starts at x 132 and ends 38 px before the panel (`GameSettingsLayout`), the panel is the global settings' glass
+panel with the impact legend, and the Stream and Display tabs (`TabRow`, with the count of custom settings as a badge) show when
+Display has a row (HDR is the one display setting that exists). Not ported: Android's other Display rows (upscaler, scaling,
+virtual display), PyroWave chroma, gyro rows and the per-codec bitrate slots, none of which exist here.
 
 ## The library row
 

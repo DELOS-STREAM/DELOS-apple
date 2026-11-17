@@ -5,7 +5,7 @@ import Observation
 import SwiftUI
 
 /// What the Artwork screen knows and loads (`ArtworkScreen`'s state of DELOS for Android): the game's SteamGridDB match,
-/// the image in use per kind and the images [tab]'s kind can be chosen from.
+/// the image in use per kind, the filters of each tab and the images [tab]'s kind can be chosen from.
 @MainActor
 @Observable
 final class ArtworkModel {
@@ -13,18 +13,28 @@ final class ArtworkModel {
     let app: HostApp
     let artwork: ArtworkStore
     var tab = ArtworkTab.cover
+    /// The filters of each tab, for as long as the screen is open (`filtersByTab`).
+    var filtersByTab: [ArtworkTab: ArtFilters] = [:]
+    var sheetOpen = false
     private(set) var choices = ArtworkChoices.loading
     private(set) var match: SteamGridDBGame?
     private(set) var chosen = ArtworkChoice.unset
     /// The game is being looked up (the first visit of a game never looked up).
     private(set) var looking = false
+    /// A filter's list is being loaded while the grid keeps the images it has.
+    private(set) var refreshing = false
     @ObservationIgnored private var lists: [String: [SteamGridDBImage]] = [:]
+    /// The tab and game the grid shows images of: another one starts over with the loading message.
+    @ObservationIgnored private var shown: (tab: ArtworkTab, game: Int)?
 
     init(hostID: String, app: HostApp, artwork: ArtworkStore) {
         self.hostID = hostID
         self.app = app
         self.artwork = artwork
     }
+
+    /// The filters of the tab, without what its kind cannot filter by.
+    var filters: ArtFilters { ArtFilterRules.normalized(tab.kind, filtersByTab[tab] ?? ArtFilters()) }
 
     /// Never looked up yet: find the game first and download its best-rated images like the automatic run. A failure is
     /// reported through [onError].
@@ -53,13 +63,27 @@ final class ArtworkModel {
         guard artwork.enabled else { return choices = .noKey }
         guard !looking else { return choices = .loading }
         guard let game = match else { return choices = .noGame }
-        let key = "\(game.id)|\(tab.kind.rawValue)"
-        if let cached = lists[key] { return choices = .ready(gameID: game.id, images: cached) }
-        choices = .loading
+        let kind = tab.kind
+        let filters = self.filters
+        let tab = self.tab
+        // The sort is applied here to what was loaded, so changing it asks nothing
+        let key = "\(game.id)|\(ArtFilterRules.cacheKey(kind, filters))"
+        func total() -> Int? { lists["\(game.id)|\(ArtFilterRules.cacheKey(kind, ArtFilters()))"]?.count }
+        func ready(_ list: [SteamGridDBImage]) -> ArtworkChoices {
+            shown = (tab, game.id)
+            return .ready(gameID: game.id, images: ArtFilterRules.sort(list, filters.sort), total: total())
+        }
+        if let cached = lists[key] { return choices = ready(cached) }
+        // The grid keeps its images while a filter loads (the new list replaces them); another tab or game starts over
+        if shown?.tab != tab || shown?.game != game.id { choices = .loading }
+        refreshing = true
+        defer { refreshing = false }
         do {
-            let list = try await artwork.choices(hostID: hostID, appID: app.id, kind: tab.kind)
+            var asked = filters
+            asked.sort = .score
+            let list = try await artwork.choices(hostID: hostID, appID: app.id, kind: kind, filters: asked)
             lists[key] = list
-            choices = .ready(gameID: game.id, images: list)
+            choices = ready(list)
         } catch is CancellationError {
         } catch let error as URLError where error.code == .cancelled {
         } catch {
@@ -67,19 +91,20 @@ final class ArtworkModel {
         }
     }
 
-    /// What identifies a load: another tab, game or key starts it over.
+    /// What identifies a load: another tab, game, key or filter starts it over.
     struct LoadKey: Hashable {
         let tab: ArtworkTab
         let game: Int?
         let enabled: Bool
         let looking: Bool
+        let filters: ArtFilters
     }
 
-    var loadKey: LoadKey { LoadKey(tab: tab, game: match?.id, enabled: artwork.enabled, looking: looking) }
+    var loadKey: LoadKey { LoadKey(tab: tab, game: match?.id, enabled: artwork.enabled, looking: looking, filters: filters) }
 
     /// The tile that takes the focus when a list shows: the image in use, else the first choice.
     func initialTile() -> String {
-        if case .image(let id) = chosen, case .ready(_, let images) = choices, images.contains(where: { $0.id == id }) {
+        if case .image(let id) = chosen, case .ready(_, let images, _) = choices, images.contains(where: { $0.id == id }) {
             return ArtworkScreen.tileID(id)
         }
         return ArtworkScreen.noneID
@@ -87,18 +112,40 @@ final class ArtworkModel {
 
     /// Whether the first choice (the PC's artwork, the name) is the one in use.
     var noneInUse: Bool {
-        if case .ready(_, let images) = choices {
-            return chosen == .none || (chosen == .unset && images.isEmpty)
+        if case .ready(_, let images, _) = choices {
+            return chosen == .none || (chosen == .unset && images.isEmpty && !filters.active)
         }
         return chosen == .none
+    }
+
+    /// What identifies the list the focus starts on: another tab or game, not another filter.
+    var readyKey: String {
+        if case .ready(let game, _, _) = choices { return "ready:\(tab):\(game)" }
+        switch choices {
+        case .loading: return "loading"
+        case .noKey: return "noKey"
+        case .noGame: return "noGame"
+        case .failed: return "failed"
+        case .ready: return "ready"
+        }
+    }
+
+    /// The images of a ready list.
+    var images: [SteamGridDBImage]? {
+        if case .ready(_, let images, _) = choices { images } else { nil }
+    }
+
+    var total: Int? {
+        if case .ready(_, _, let total) = choices { total } else { nil }
     }
 }
 
 /// The artwork of one game (the game's menu → Artwork; `ArtworkScreen` of DELOS for Android): a tab per kind (cover, wide
 /// cover, background, logo, switched with L1 and R1) over a toolbar (the matched SteamGridDB game, search for another name
-/// with X), the grid of every still SteamGridDB image to choose from (the first choice being the PC's artwork, or the name
-/// instead of a logo) and a strip about the focused image. A or a tap uses the image; the image in use has the accent
-/// border. The filters and animated images of Android are not ported: the store downloads and shows still images.
+/// with X, the filter sheet with Y), the active filters as removable chips, the grid of every SteamGridDB image to choose
+/// from (the first choice being the PC's artwork, or the name instead of a logo) and a strip about the focused image. A or
+/// a tap uses the image; the image in use has the accent border. Animated images are marked; their tiles show the first
+/// frame (the animation does not play).
 struct ArtworkScreen: View {
     let hostID: String
     let app: HostApp
@@ -107,11 +154,17 @@ struct ArtworkScreen: View {
     let actions: ShellActions
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
+    @Environment(\.reducedMotion) private var reducedMotion
     @Environment(HomeArt.self) private var art
     @State private var model: ArtworkModel
+    /// The focus inside the open filter sheet; a new one each time it opens.
+    @State private var sheetFocus = FocusModel()
+    /// The item that had the focus before the sheet opened, to return to it.
+    @State private var origin: AnyHashable?
 
     static let noneID = "art-none"
     static let searchID = "art-search"
+    static let filterID = "art-filter"
     static let firstFocus = noneID
     static func tileID(_ image: Int) -> String { "art-\(image)" }
     static func tabID(_ tab: ArtworkTab) -> String { "art-tab-\(tab)" }
@@ -129,6 +182,7 @@ struct ArtworkScreen: View {
         let left = 150 + stage.safe.leading, right = 150 + stage.safe.trailing
         let top = stage.safe.top
         let infoTop = stage.height - 194
+        let filters = model.filters
         ZStack(alignment: .topLeading) {
             VStack(alignment: .leading, spacing: 0) {
                 Text(L("artwork_header"))
@@ -142,10 +196,11 @@ struct ArtworkScreen: View {
             }
             .frame(width: stage.px(560), alignment: .leading)
             .offset(x: stage.px(left), y: stage.px(104 + top))
-            ArtworkTabs(selected: model.tab, focus: focus) { select($0, sound: .select) }
+            // The tabs end exactly at the content's right edge, on every stage width
+            TabRow(
+                tabs: ArtworkTab.allCases.map { TabSpec(id: $0, icon: $0.icon, label: $0.label) }, selected: model.tab, focus: focus,
+                focusID: Self.tabID, left: left, right: stage.width - right, centred: false) { select($0, sound: .select) }
                 .frame(height: stage.px(66))
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.trailing, stage.px(right))
                 .tvFocusSection()
                 .offset(y: stage.px(124 + top))
             toolbar
@@ -153,6 +208,16 @@ struct ArtworkScreen: View {
                 .padding(.horizontal, stage.px(left))
                 .padding(.trailing, stage.px(right - left))
                 .offset(y: stage.px(206 + top))
+            if let images = model.images {
+                ArtworkFilterStrip(
+                    tab: model.tab, filters: filters, images: images.count, total: model.total, refreshing: model.refreshing,
+                    focus: focus, onClear: { chip in model.filtersByTab[model.tab] = ArtFilterRules.clear(filters, chip) },
+                    onReset: resetFilters)
+                    .frame(height: stage.px(44))
+                    .padding(.horizontal, stage.px(left))
+                    .padding(.trailing, stage.px(right - left))
+                    .offset(y: stage.px(276 + top))
+            }
             grid(left: left, right: right)
                 .frame(height: stage.px(infoTop - 10 - (324 + top)))
                 .offset(y: stage.px(324 + top))
@@ -161,34 +226,87 @@ struct ArtworkScreen: View {
                 .padding(.horizontal, stage.px(left))
                 .padding(.trailing, stage.px(right - left))
                 .offset(y: stage.px(infoTop))
+            sheet(left: left, right: right, top: 280 + top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .environment(\.modalFocus, model.sheetOpen ? sheetFocus : nil)
         .task { await model.lookup { error in report(error) } }
         .task(id: model.loadKey) { await model.load() }
         .task(id: actions.artwork.version) { await model.refresh() }
-        .onChange(of: model.choices) { _, now in
-            if case .ready = now { focus.focus(model.initialTile()) }
+        .onChange(of: model.readyKey) { _, now in
+            if now.hasPrefix("ready") { focus.focus(model.initialTile()) }
+        }
+        .onChange(of: filters.active) { was, now in
+            // Reset disables itself once nothing is filtered; if it had the focus, the focus goes back to the first option
+            if was, !now, model.sheetOpen, sheetFocus.focused == AnyHashable(ArtworkFilterSheet.resetID) {
+                sheetFocus.focus(ArtworkFilterSheet.startID(kind: model.tab.kind, filters: filters))
+            }
         }
         .onAppear {
             navigator.commandCapture = { command in capture(command) }
         }
-        .onDisappear { navigator.commandCapture = nil }
+        .onDisappear {
+            navigator.commandCapture = nil
+            navigator.screenHints = ScreenHints()
+        }
     }
 
     // MARK: Parts
 
     private var toolbar: some View {
-        HStack(spacing: stage.px(34)) {
+        HStack(spacing: stage.px(16)) {
             ArtworkGameChip(
                 match: model.match, looking: model.looking, appName: app.title, tab: model.tab,
-                imageCount: { if case .ready(_, let images) = model.choices { images.count } else { nil } }())
+                imageCount: model.total ?? (model.filters.active ? nil : model.images?.count))
             let enabled = actions.artwork.enabled
             FocusItem(id: Self.searchID, model: focus, clickCue: .open, action: { search() }) { focused in
-                ToolbarPill(label: L("artwork_search_other"), icon: Symbols.searchName, focused: focused)
+                ToolbarPill(label: L("artwork_search_other"), icon: Symbols.searchName, focused: focused, glyph: .west)
                     .opacity(enabled ? 1 : 0.4)
             }
             .disabled(!enabled)
+            let filterEnabled = enabled && model.match != nil
+            FocusItem(id: Self.filterID, model: focus, clickCue: nil, action: { openSheet() }) { focused in
+                ToolbarPill(
+                    label: L("artwork_filter"), icon: Symbols.filter, focused: focused, glyph: .north, badge: model.filters.activeCount)
+                    .opacity(filterEnabled ? 1 : 0.4)
+            }
+            .disabled(!filterEnabled)
         }
+    }
+
+    /// The filter sheet drops down from the toolbar over a dimmed page; the grid stays visible underneath.
+    @ViewBuilder private func sheet(left: Double, right: Double, top: Double) -> some View {
+        if model.sheetOpen {
+            Rectangle()
+                .fill(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0x73 / 255))
+                .frame(width: stage.px(stage.width), height: stage.px(stage.height))
+                .contentShape(Rectangle())
+                .onTapGesture { closeSheet() }
+                .transition(.opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.exit / 1000)))
+            ArtworkFilterSheet(
+                state: ArtworkFilterSheetState(
+                    tab: model.tab, filters: model.filters, images: model.images?.count, total: model.total, refreshing: model.refreshing),
+                focus: sheetFocus, onChange: { model.filtersByTab[model.tab] = $0 }, onReset: resetFilters, onClose: closeSheet)
+                .frame(width: stage.px(stage.width - left - right))
+                .offset(x: stage.px(left), y: stage.px(top))
+                .transition(popTransition)
+        }
+    }
+
+    /// `popEnter` / `popExit` from the sheet's top right: it fades in a little faster than it grows from 86 % on the
+    /// overshooting spring, and shrinks back in 240 ms.
+    private var popTransition: AnyTransition {
+        let origin = UnitPoint(x: 0.92, y: 0)
+        if reducedMotion {
+            return .asymmetric(
+                insertion: .opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000)),
+                removal: .opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.exit / 1000)))
+        }
+        return .asymmetric(
+            insertion: .opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.cardFadeIn / 1000))
+                .combined(with: .scale(scale: Motion.popFromScale, anchor: origin).animation(Motion.spring(Motion.popIn))),
+            removal: .opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.exit / 1000))
+                .combined(with: .scale(scale: Motion.popFromScale, anchor: origin).animation(.timingCurve(0.5, 0, 0.75, 0, duration: Motion.exit / 1000))))
     }
 
     @ViewBuilder private func grid(left: Double, right: Double) -> some View {
@@ -201,58 +319,62 @@ struct ArtworkScreen: View {
             ArtworkMessage(icon: Symbols.search, title: L("artwork_no_game_title", app.title), text: L("artwork_no_game_note"))
         case .failed(let text):
             ArtworkMessage(icon: Symbols.error, title: L("artwork_unreachable"), text: text)
-        case .ready(_, let images):
+        case .ready(_, let images, let total):
             let layout = ArtworkGrid(
                 width: stage.width - left - right, ratio: model.tab.ratio, columns: model.tab.columns(forStageWidth: stage.width))
             let tiles: [ArtworkTile] = [.none] + images.map(ArtworkTile.image)
             let rows = stride(from: 0, to: tiles.count, by: layout.columns).map { Array(tiles[$0..<min($0 + layout.columns, tiles.count)]) }
-            FocusScroll(axis: .vertical) {
-                VStack(alignment: .leading, spacing: stage.px(layout.gapY)) {
-                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                        HStack(spacing: stage.px(layout.gapX)) {
-                            ForEach(row, id: \.id) { tile in tileView(tile, layout: layout) }
+            ZStack(alignment: .top) {
+                FocusScroll(axis: .vertical) {
+                    VStack(alignment: .leading, spacing: stage.px(layout.gapY)) {
+                        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                            HStack(spacing: stage.px(layout.gapX)) {
+                                ForEach(row, id: \.id) { tile in tileView(tile, layout: layout, tiles: tiles) }
+                            }
                         }
                     }
-                    if images.isEmpty {
-                        Text(model.tab.empty)
-                            .font(DelosFonts.figtree(stage.tpx(22)))
-                            .foregroundStyle(colors.text2.color)
-                            .padding(.top, stage.px(12))
+                    .padding(.leading, stage.px(left))
+                    .padding(.trailing, stage.px(right))
+                    .padding(.top, stage.px(46))
+                    .padding(.bottom, stage.px(96))
+                }
+                .focusable(false)
+                .scrollClipDisabled()
+                .mask {
+                    VStack(spacing: 0) {
+                        LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: stage.px(30))
+                        Rectangle()
+                        LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: stage.px(70))
                     }
                 }
-                .padding(.leading, stage.px(left))
-                .padding(.trailing, stage.px(right))
-                .padding(.top, stage.px(46))
-                .padding(.bottom, stage.px(96))
-            }
-            .focusable(false)
-            .scrollClipDisabled()
-            .mask {
-                VStack(spacing: 0) {
-                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: stage.px(30))
-                    Rectangle()
-                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: stage.px(70))
+                if images.isEmpty {
+                    NoImages(
+                        tab: model.tab, filters: model.filters, total: total, gameName: model.match?.name.isEmpty == false ? model.match!.name : app.title,
+                        focus: focus, onReset: resetFilters, onChange: openSheet)
                 }
             }
         }
     }
 
-    private func tileView(_ tile: ArtworkTile, layout: ArtworkGrid) -> some View {
+    private func tileView(_ tile: ArtworkTile, layout: ArtworkGrid, tiles: [ArtworkTile]) -> some View {
         let image = tile.image
         let id = image.map { Self.tileID($0.id) } ?? Self.noneID
         let kind = model.tab.kind
         let applying = actions.artwork.applying(hostID: hostID, appID: app.id, kind: kind)
+        // The first eight tiles rise and fade in one after the other; later ones (a scroll, a filter) just appear
+        let place = tiles.firstIndex(of: tile).map { $0 < Motion.staggerCap ? $0 : -1 } ?? -1
         return FocusItem(id: id, model: focus, action: { actions.applyArtwork(hostID: hostID, app: app, tab: model.tab, image: image) }) { focused in
             ArtworkTileView(
                 tab: model.tab, width: layout.tileWidth, height: layout.tileHeight, focused: focused,
                 inUse: image.map { model.chosen == .image($0.id) } ?? model.noneInUse,
                 loading: applying == (image?.id ?? ArtworkStore.noImage), image: image, hostID: hostID, app: app)
         }
+        .staggerEntrance(index: place >= 0 ? place : nil)
     }
 
     /// What the strip describes: the focused tile.
     private var described: ArtworkDescribed {
-        if case .ready(_, let images) = model.choices,
+        if let images = model.images,
            let image = images.first(where: { AnyHashable(Self.tileID($0.id)) == focus.focused }) {
             return .image(image)
         }
@@ -264,6 +386,7 @@ struct ArtworkScreen: View {
     private func select(_ next: ArtworkTab, sound: Cue) {
         guard next != model.tab else { return }
         actions.layers.feedback?.play(sound)
+        if model.sheetOpen { model.sheetOpen = false; navigator.screenHints = ScreenHints() }
         model.tab = next
     }
 
@@ -276,8 +399,39 @@ struct ArtworkScreen: View {
         actions.toasts.show(ShellActions.artworkErrorText(error, fallback: "artwork_unreachable"), icon: Symbols.error)
     }
 
-    /// L1 and R1 switch the tab; X searches for another name.
+    private func openSheet() {
+        guard model.match != nil, actions.artwork.enabled, !model.sheetOpen else { return }
+        actions.layers.feedback?.play(.open)
+        origin = focus.focused
+        sheetFocus = FocusModel(initial: ArtworkFilterSheet.startID(kind: model.tab.kind, filters: model.filters))
+        navigator.armInputGate()
+        withAnimation { model.sheetOpen = true }
+        navigator.screenHints = ScreenHints(sheetOpen: true)
+    }
+
+    private func closeSheet() {
+        guard model.sheetOpen else { return }
+        actions.layers.feedback?.play(.back)
+        withAnimation { model.sheetOpen = false }
+        navigator.screenHints = ScreenHints()
+        // The focus goes back to where it was; a tile the filters removed leaves it on the first choice
+        let gone = (origin as? String).flatMap { id in id.hasPrefix("art-") ? Int(id.dropFirst(4)) : nil }.map { number in
+            !(model.images?.contains { $0.id == number } ?? false)
+        } ?? false
+        focus.focus(gone ? AnyHashable(Self.noneID) : origin ?? AnyHashable(Self.noneID))
+    }
+
+    private func resetFilters() {
+        guard model.filters.active else { return }
+        actions.layers.feedback?.play(.select)
+        model.filtersByTab[model.tab] = ArtFilters()
+        actions.toasts.show(L("filters_art_reset_toast"), icon: Symbols.reset)
+    }
+
+    /// L1 and R1 switch the tab; X searches for another name, Y opens the filter sheet. With the sheet open it has every
+    /// command: X resets, Y and B close it.
     private func capture(_ command: MenuCommand) -> Bool {
+        if model.sheetOpen { return captureSheet(command) }
         switch command {
         case .previousTab, .nextTab:
             select(model.tab.step(command == .nextTab ? 1 : -1), sound: .move)
@@ -285,9 +439,32 @@ struct ArtworkScreen: View {
         case .options:
             search()
             return true
-        case .up, .down, .left, .right, .accept, .back, .menu, .toastAction:
+        case .toastAction:
+            // A toast that has its own action keeps Y
+            guard actions.toasts.current?.action == nil else { return false }
+            openSheet()
+            return true
+        case .up, .down, .left, .right, .accept, .back, .menu:
             return false
         }
+    }
+
+    private func captureSheet(_ command: MenuCommand) -> Bool {
+        let feedback = actions.layers.feedback
+        switch command {
+        case .back, .toastAction:
+            closeSheet()
+        case .options:
+            resetFilters()
+        case .accept:
+            guard !navigator.swallowsAccept() else { break }
+            if let feedback { feedback.activate(sheetFocus.acceptCue) { sheetFocus.handle(.accept) } } else { sheetFocus.handle(.accept) }
+        case .up, .down, .left, .right:
+            if sheetFocus.handle(command) { feedback?.play(.move) }
+        case .previousTab, .nextTab, .menu:
+            break
+        }
+        return true
     }
 }
 
@@ -316,83 +493,16 @@ enum ArtworkDescribed: Equatable {
     }
 }
 
-// MARK: Tabs
-
-/// The tabs between the L1 and R1 badges; on tvOS each is also an item of the focus, since the remote has no shoulders.
-private struct ArtworkTabs: View {
-    let selected: ArtworkTab
-    let focus: FocusModel
-    let onSelect: (ArtworkTab) -> Void
-    @Environment(\.delosColors) private var colors
-    @Environment(\.stage) private var stage
-    @Environment(\.reducedMotion) private var reduceMotion
-    @Namespace private var pill
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ShoulderBadge(role: .leftShoulder)
-            ForEach(ArtworkTab.allCases, id: \.self) { tab in tabView(tab) }
-            ShoulderBadge(role: .rightShoulder)
-        }
-        .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.8), value: selected)
-    }
-
-    @ViewBuilder private func tabView(_ tab: ArtworkTab) -> some View {
-        #if os(tvOS)
-        FocusItem(id: ArtworkScreen.tabID(tab), model: focus, action: { onSelect(tab) }) { focused in
-            pillView(tab).focusLook(focused, scale: 1.06, ring: 3, glowBlur: 0, glowY: 0)
-        }
-        .padding(.horizontal, stage.px(4))
-        #else
-        pillView(tab)
-            .contentShape(Capsule())
-            .onTapGesture { onSelect(tab) }
-            .padding(.horizontal, stage.px(4))
-        #endif
-    }
-
-    private func pillView(_ tab: ArtworkTab) -> some View {
-        let on = tab == selected
-        return HStack(spacing: stage.px(12)) {
-            SymbolView(symbol: tab.icon, size: 30, color: on ? colors.onAccent : colors.text2, filled: on)
-            Text(tab.label)
-                .font(DelosFonts.figtree(stage.tpx(22), .semibold))
-                .foregroundStyle((on ? colors.onAccent : colors.text2).color)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, stage.px(22))
-        .frame(height: stage.px(66))
-        .background {
-            if on { Capsule().fill(colors.accent.color).matchedGeometryEffect(id: "pill", in: pill) }
-        }
-        .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
-    }
-}
-
-/// The previous / next tab hint beside the tabs (L1 / R1 on a PlayStation or generic pad, LB / RB, L / R): the connected controller's.
-private struct ShoulderBadge: View {
-    let role: GlyphRole
-    @Environment(\.delosColors) private var colors
-    @Environment(\.stage) private var stage
-
-    var body: some View {
-        Text(ControllerGlyphs.shared.mark(role).text ?? "")
-            .font(DelosFonts.figtree(stage.tpx(18), .bold))
-            .foregroundStyle(colors.text3.color)
-            .padding(.horizontal, stage.px(12))
-            .padding(.vertical, stage.px(6))
-            .overlay(RoundedRectangle(cornerRadius: stage.px(10)).strokeBorder(colors.line.color, lineWidth: stage.px(1)))
-            .padding(.horizontal, stage.px(10))
-    }
-}
-
 // MARK: Toolbar
 
-/// A toolbar pill (`PillButton` with `compact = true`): 64 px high.
+/// A toolbar pill (`PillButton` with `compact = true`): 64 px high, 28 px of padding on each side, the 30 px icon and the label
+/// 12 px apart, then the accent [badge] (the count of active filters) and the [glyph] of the button that does the same.
 struct ToolbarPill: View {
     let label: String
     let icon: String
     let focused: Bool
+    var glyph: GlyphRole?
+    var badge = 0
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
 
@@ -403,6 +513,8 @@ struct ToolbarPill: View {
                 .font(DelosFonts.figtree(stage.tpx(24), .semibold))
                 .foregroundStyle(colors.text.color)
                 .lineLimit(1)
+            if badge > 0 { ArtCountBadge(count: badge) }
+            if let glyph { GlyphButton(glyph, size: 32) }
         }
         .padding(.horizontal, stage.px(28))
         .frame(height: stage.px(64))
@@ -463,6 +575,54 @@ private struct ArtworkGameChip: View {
 }
 
 // MARK: Grid
+
+/// No image in the grid: what the filters left, or that SteamGridDB has none; the first choice stays (`NoImages`).
+private struct NoImages: View {
+    let tab: ArtworkTab
+    let filters: ArtFilters
+    let total: Int?
+    let gameName: String
+    let focus: FocusModel
+    let onReset: () -> Void
+    let onChange: () -> Void
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+
+    var body: some View {
+        VStack(spacing: stage.px(18)) {
+            if filters.active {
+                SymbolView(symbol: Symbols.search, size: 90, color: colors.accent, filled: true)
+                Text(tab.none)
+                    .font(DelosFonts.unbounded(stage.tpx(34)))
+                    .foregroundStyle(colors.text.color)
+                Text(total.map { tab.has(game: gameName, total: $0) } ?? tab.unknown)
+                    .font(DelosFonts.figtree(stage.tpx(22)))
+                    .foregroundStyle(colors.text2.color)
+                    .frame(maxWidth: stage.px(min(820, stage.width - 160)))
+                Text(L("artwork_filtered_active", ArtFilterRules.chips(filters).map(\.label).joined(separator: " · ")))
+                    .font(DelosFonts.figtree(stage.tpx(20), .semibold))
+                    .foregroundStyle(colors.text3.color)
+                    .frame(maxWidth: stage.px(min(820, stage.width - 160)))
+                HStack(spacing: stage.px(16)) {
+                    FocusItem(id: "art-none-reset", model: focus, clickCue: nil, action: onReset) { focused in
+                        ToolbarPill(label: L("filters_art_reset"), icon: Symbols.reset, focused: focused, glyph: .west)
+                    }
+                    FocusItem(id: "art-none-change", model: focus, clickCue: nil, action: onChange) { focused in
+                        ToolbarPill(label: L("filters_art_change"), icon: Symbols.filter, focused: focused, glyph: .north)
+                    }
+                }
+            } else {
+                Text(tab.empty)
+                    .font(DelosFonts.figtree(stage.tpx(22)))
+                    .foregroundStyle(colors.text3.color)
+            }
+        }
+        .multilineTextAlignment(.center)
+        .padding(.top, stage.px(40))
+        .padding(.leading, stage.px(300))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
 
 /// Why there is no grid (`GridMessage`).
 private struct ArtworkMessage: View {
@@ -526,10 +686,27 @@ private struct ArtworkTileView: View {
                     .frame(maxHeight: .infinity, alignment: .bottom)
             }
             if loading {
-                ProgressView()
-                    .tint(.white)
+                RingSpinner(size: 48)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0.6))
+            }
+            if image?.animated == true {
+                // The icon alone on the covers, where "In use" takes the room (`Tile`)
+                HStack(spacing: stage.px(6)) {
+                    SymbolView(symbol: Symbols.animated, size: 20, color: colors.accent2, filled: true)
+                    if tab != .cover {
+                        Text(L("artwork_animated"))
+                            .font(DelosFonts.figtree(stage.tpx(16), .bold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                    }
+                }
+                .fixedSize()
+                .padding(.horizontal, stage.px(tab == .cover ? 6 : 12))
+                .padding(.vertical, stage.px(4))
+                .background(Capsule().fill(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0xB3 / 255)))
+                .padding(stage.px(12))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
             if inUse {
                 HStack(spacing: stage.px(6)) {
@@ -571,7 +748,7 @@ private struct ArtworkTileView: View {
                     .clipped()
             }
         } else if image != nil {
-            ProgressView().tint(colors.text3.color).frame(maxWidth: .infinity, maxHeight: .infinity)
+            RingSpinner(size: 36, color: colors.text3).frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if tab == .logo {
             Text(app.title)
                 .font(DelosFonts.unbounded(stage.tpx(26), .bold))
@@ -627,7 +804,9 @@ private struct ArtworkInfoStrip: View {
                     .foregroundStyle(colors.text.color)
                     .lineLimit(1)
                 HStack(spacing: stage.px(8)) {
-                    if case .image = described { badge(L("artwork_static"), icon: nil, accent: false) }
+                    if case .image(let image) = described {
+                        badge(L(image.animated ? "artwork_animated" : "artwork_static"), icon: image.animated ? Symbols.animated : nil, accent: false)
+                    }
                     if inUse { badge(L("artwork_in_use"), icon: Symbols.check, accent: true) }
                 }
             }

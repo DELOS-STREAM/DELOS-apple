@@ -24,9 +24,9 @@ import Testing
     @Test func unsupportedSystemSettingsNeverOfferAnInertLanguageAction() {
         #expect(AppLanguageSetting.rows(.about, supported: false).isEmpty)
         #if os(iOS)
-        #expect(SettingsTab.availableCases == [.stream, .audio, .controls, .appearance, .covers, .about])
+        #expect(SettingsTab.availableCases == [.stream, .audio, .controls, .appearance, .covers, .devices, .about])
         #else
-        #expect(SettingsTab.availableCases == [.stream, .audio, .controls, .appearance, .covers])
+        #expect(SettingsTab.availableCases == [.stream, .audio, .controls, .appearance, .covers, .devices])
         #expect(AppLanguageSetting.rows(.about).isEmpty)
         #endif
     }

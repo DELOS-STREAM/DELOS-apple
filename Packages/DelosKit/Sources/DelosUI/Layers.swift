@@ -55,6 +55,8 @@ struct DialogField {
     var maxLength = 24
     /// A secret (Android's `password`): the value is hidden.
     var secret = false
+    /// An address (Android's `KeyboardType.Uri`): no capitals, the URL keyboard.
+    var address = false
 }
 
 /// A small dialog (`DialogSpec`): title, note, fields and a confirm button. [onConfirm] gets the values and returns

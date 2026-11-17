@@ -204,7 +204,7 @@ struct AvatarArt: View {
         .task(id: avatar.asset) {
             guard image == nil, let loaded = await AvatarImages.load(avatar.asset) else { return }
             image = loaded
-            withAnimation(.linear(duration: 0.18)) { shown = true }
+            withAnimation(.timingCurve(0.4, 0, 0.2, 1, duration: 0.18)) { shown = true }
         }
     }
 }

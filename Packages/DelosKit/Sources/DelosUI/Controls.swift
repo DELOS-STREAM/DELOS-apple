@@ -286,3 +286,28 @@ private struct ScaleState: Equatable {
     let focused: Bool
     let pressed: Bool
 }
+
+/// A small spinning ring (`Spinner(size, color)` of DELOS for Android): something is being downloaded or prepared. A
+/// track of the color at 25 %, a round-capped arc of 100° on it, a turn every 0.9 s; the stroke is 12 % of [size]
+/// (stage pixels). ``Spinner`` is the other one, the pairing screens' `.spinner`.
+struct RingSpinner: View {
+    let size: Double
+    var color: RGBA?
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+
+    var body: some View {
+        let ink = (color ?? colors.accent).color
+        let stroke = stage.px(size * 0.12)
+        TimelineView(.animation) { context in
+            let turn = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 0.9) / 0.9 * 360
+            ZStack {
+                Circle().inset(by: stroke / 2).stroke(ink.opacity(0.25), lineWidth: stroke)
+                Circle().inset(by: stroke / 2).trim(from: 0, to: 100.0 / 360)
+                    .stroke(ink, style: StrokeStyle(lineWidth: stroke, lineCap: .round))
+                    .rotationEffect(.degrees(turn))
+            }
+        }
+        .frame(width: stage.px(size), height: stage.px(size))
+    }
+}

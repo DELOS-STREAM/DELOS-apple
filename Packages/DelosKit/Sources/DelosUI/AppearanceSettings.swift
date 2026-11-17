@@ -39,7 +39,7 @@ struct AppearanceForm: Equatable {
     /// The rows of [tab] in Android's order.
     func rows(_ tab: SettingsTab) -> [SettingRow] {
         switch tab {
-        case .stream, .covers, .about: []
+        case .stream, .covers, .devices, .about: []
         case .audio: [soundsRow]
         case .controls: [hapticsRow]
         case .appearance:

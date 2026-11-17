@@ -70,20 +70,17 @@ final class ShellActions {
     /// The Devices screen's first focus (`DevicesLogic.firstFocus`).
     func devicesFocus() -> String { DevicesLogic.firstFocus(DevicesLogic.paired(hosts.hosts)) }
 
-    /// The menu of a PC on the Devices screen (`deviceMenu`): connect or open its apps, make it the default or not, rename
-    /// it, wake it (offline), unpair it (online), remove it from DELOS. Android's menu has no default row; the start
-    /// screen's has, and the task of this screen includes it.
+    /// The menu of a PC on the Devices screen (`deviceMenu`): connect or open its apps, rename
+    /// it, wake it (offline), unpair it (online), remove it from DELOS.
     func devicesMenu(_ hostID: String) -> ContextMenu? {
         guard let host = hosts.host(hostID) else { return nil }
         let active = hostID == libraryHostID
-        let items = DevicesLogic.actions(host, active: active, isDefault: profiles.startup.defaultPC == hostID).map { action in
+        let items = DevicesLogic.actions(host, active: active).map { action in
             switch action {
             case .connect(let openApps):
                 MenuItem(icon: Symbols.login, label: L(openApps ? "devices_menu_open_games" : "devices_menu_connect")) { [self] in
                     connect(hostID)
                 }
-            case .makeDefault: MenuItem(icon: Symbols.star, label: L("devices_menu_default_on")) { [self] in setDefault(host) }
-            case .clearDefault: MenuItem(icon: Symbols.star, label: L("devices_menu_default_off")) { [self] in setDefault(nil) }
             case .rename: MenuItem(icon: Symbols.edit, label: L("devices_menu_rename")) { [self] in rename(hostID) }
             case .wake: MenuItem(icon: Symbols.wake, label: L("devices_menu_wake")) { [self] in wake(hostID) }
             case .unpair: MenuItem(icon: Symbols.linkOff, label: L("devices_menu_unpair")) { [self] in unpair(hostID) }

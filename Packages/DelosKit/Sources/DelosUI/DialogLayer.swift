@@ -18,8 +18,11 @@ struct DialogLayer: View {
     @State private var cardSize = CGSize.zero
     @State private var layerFrame = CGRect.zero
     @State private var keyboardTop: CGFloat?
+    /// The card has settled in (it enters from a slight scale and a little lower: `dialogEnter`).
+    @State private var entered = false
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
+    @Environment(\.reducedMotion) private var reduced
 
     init(layers: Layers, spec: DialogSpec, navigator: Navigator) {
         self.layers = layers
@@ -47,7 +50,8 @@ struct DialogLayer: View {
                 .staggerEntrance(index: 0, base: Motion.menuDelay)
             Text(spec.note)
                 .font(DelosFonts.figtree(stage.tpx(24)))
-                .lineSpacing(stage.px(24 * 0.4))
+                // Line height 1.4 em; Figtree's own is 1.2 em
+                .lineSpacing(stage.tpx(24 * (1.4 - 1.2)))
                 .foregroundStyle(colors.text2.color)
                 .fixedSize(horizontal: false, vertical: true)
                 .staggerEntrance(index: 1, base: Motion.menuDelay)
@@ -84,6 +88,13 @@ struct DialogLayer: View {
                 .onTapGesture {}
         }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
+        // `dialogEnter`: fade (280 ms, ease), scale from .96 and slide up by a 25th of the card (560 ms, ease-out)
+        .opacity(entered ? 1 : 0)
+        .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: entered)
+        .scaleEffect(entered || reduced ? 1 : Motion.dialogFromScale)
+        .offset(y: entered || reduced ? 0 : cardSize.height / 25)
+        .animation(.timingCurve(0.16, 1, 0.3, 1, duration: Motion.popIn / 1000), value: entered)
+        .onAppear { entered = true }
         .offset(y: lift)
         .animation(.easeOut(duration: 0.25), value: keyboardTop)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -136,7 +147,7 @@ private struct DialogFieldView: View {
         // would take the select instead
         TextPill(
             label: nil, icon: field.icon, placeholder: field.placeholder, text: $value, editing: $editing, focused: false,
-            secret: field.secret, width: width, onSubmit: onSubmit
+            address: field.address, secret: field.secret, width: width, onSubmit: onSubmit
         )
         .multilineTextAlignment(.leading)
         .onChange(of: editing) { _, now in if now { focus.focus(DialogLayer.fieldID(index)) } }
@@ -153,7 +164,7 @@ private struct DialogFieldView: View {
         FocusItem(id: DialogLayer.fieldID(index), model: focus, action: { typing = index }) { focused in
             TextPill(
                 label: nil, icon: field.icon, placeholder: field.placeholder, text: $value, editing: $editing, focused: focused,
-                secret: field.secret, width: width, onSubmit: onSubmit
+                address: field.address, secret: field.secret, width: width, onSubmit: onSubmit
             )
             // The note above is centered; the value reads from the start of the field
             .multilineTextAlignment(.leading)

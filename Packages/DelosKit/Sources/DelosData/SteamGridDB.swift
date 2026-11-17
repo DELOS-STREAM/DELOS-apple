@@ -33,10 +33,12 @@ public struct SteamGridDBImage: Equatable, Hashable, Sendable {
     public let author: String?
     public let date: Int?
     public let mime: String?
+    /// Found by the request for animated images (SteamGridDB's answers do not say it themselves).
+    public let animated: Bool
 
     public init(
         id: Int, url: URL, width: Int = 0, height: Int = 0, thumb: URL? = nil, style: String? = nil, score: Int = 0,
-        author: String? = nil, date: Int? = nil, mime: String? = nil
+        author: String? = nil, date: Int? = nil, mime: String? = nil, animated: Bool = false
     ) {
         self.id = id
         self.url = url
@@ -48,6 +50,7 @@ public struct SteamGridDBImage: Equatable, Hashable, Sendable {
         self.author = author
         self.date = date
         self.mime = mime
+        self.animated = animated
     }
 
     /// What a tile shows first: the thumbnail, except that SteamGridDB gives some images a WebM thumbnail the app cannot
@@ -79,8 +82,8 @@ public enum SteamGridDBError: Error, Equatable, Sendable {
     case insecureURL
 }
 
-/// The SteamGridDB API (v2) with the user's own key (`SteamGridDbClient` of DELOS for Android). Only still images are
-/// asked for (the dashboard does not play animated ones yet), never NSFW or humor images. [transport] performs one
+/// The SteamGridDB API (v2) with the user's own key (`SteamGridDbClient` of DELOS for Android). Never NSFW or humor
+/// images are asked for; the automatic downloads take still images. [transport] performs one
 /// request; the tests give it fixtures.
 public struct SteamGridDB: Sendable {
     public typealias Transport = @Sendable (URLRequest) async throws -> (Data, HTTPURLResponse)
@@ -154,30 +157,16 @@ public struct SteamGridDB: Sendable {
         return request(path: "search/autocomplete/" + segment, query: [])
     }
 
-    /// The still images of [kind] for the game [gameID], best rated first.
-    public func imagesRequest(gameID: Int, kind: ArtKind) -> URLRequest {
+    /// The request of [query] for the images of [kind] for the game [gameID]. The automatic downloads ask for the still
+    /// images (`ArtFilters(type = STATIC)` of DELOS for Android).
+    public func imagesRequest(gameID: Int, kind: ArtKind, query: ArtQuery? = nil) -> URLRequest {
         let path = switch kind {
         case .cover, .wide: "grids/game/\(gameID)"
         case .hero: "heroes/game/\(gameID)"
         case .logo: "logos/game/\(gameID)"
         }
-        return request(path: path, query: Self.query(kind))
-    }
-
-    /// The query of an automatic still-image request (`ArtFilterRules.queries` with the type "static").
-    static func query(_ kind: ArtKind) -> [URLQueryItem] {
-        var items = [
-            URLQueryItem(name: "types", value: "static"),
-            URLQueryItem(name: "nsfw", value: "false"),
-            URLQueryItem(name: "humor", value: "false"),
-            URLQueryItem(name: "mimes", value: kind == .logo ? "image/png,image/webp" : "image/png,image/jpeg,image/webp"),
-        ]
-        switch kind {
-        case .cover: items.append(URLQueryItem(name: "dimensions", value: coverDimensions.joined(separator: ",")))
-        case .wide: items.append(URLQueryItem(name: "dimensions", value: wideDimensions.joined(separator: ",")))
-        case .hero, .logo: break
-        }
-        return items
+        let query = query ?? ArtFilterRules.queries(kind, ArtFilters(type: .still))[0]
+        return request(path: path, query: query.params)
     }
 
     /// RFC 3986 unreserved characters and the sub-delimiters a path segment may carry; "/" , "?" and "#" are encoded.
@@ -200,8 +189,22 @@ public struct SteamGridDB: Sendable {
         return try Self.parseGames(try await call(request))
     }
 
-    public func images(gameID: Int, kind: ArtKind) async throws -> [SteamGridDBImage] {
-        try Self.parseImages(try await call(imagesRequest(gameID: gameID, kind: kind)))
+    /// The images of [kind] for [gameID] that match [filters], in the order of its sort (`SteamGridDb.images`). Both
+    /// types are two requests; the still images are still worth showing when the animated request fails.
+    public func images(gameID: Int, kind: ArtKind, filters: ArtFilters = ArtFilters(type: .still)) async throws -> [SteamGridDBImage] {
+        let queries = ArtFilterRules.queries(kind, filters)
+        var lists: [[SteamGridDBImage]] = []
+        for query in queries {
+            do {
+                lists.append(try Self.parseImages(try await call(imagesRequest(gameID: gameID, kind: kind, query: query)), animated: query.animated))
+            } catch {
+                let cancelled = error is CancellationError || (error as? URLError)?.code == .cancelled
+                let rejected = (error as? SteamGridDBError) == .keyRejected
+                guard queries.count > 1, query.animated, !cancelled, !rejected else { throw error }
+                lists.append([])
+            }
+        }
+        return ArtFilterRules.sort(ArtFilterRules.merge(lists), filters.sort)
     }
 
     /// The file at [url], at most [limit] bytes.
@@ -250,7 +253,7 @@ public struct SteamGridDB: Sendable {
     /// The images of a list reply in its order; an entry without a usable URL, or a WebM (which the app cannot show), is
     /// left out. What the API tells about an image (thumbnail, style, score, author, date, file type) is kept for the
     /// Artwork screen's choices.
-    static func parseImages(_ reply: Data?) throws -> [SteamGridDBImage] {
+    static func parseImages(_ reply: Data?, animated: Bool = false) throws -> [SteamGridDBImage] {
         try dataList(reply)?.compactMap { entry in
             guard let id = number(entry["id"]), let text = entry["url"] as? String, let url = URL(string: text),
                   url.scheme == "https" else { return nil }
@@ -263,7 +266,7 @@ public struct SteamGridDB: Sendable {
                 id: id, url: url, width: number(entry["width"]) ?? 0, height: number(entry["height"]) ?? 0,
                 thumb: thumb ?? url, style: style, score: number(entry["score"]) ?? 0,
                 author: ((entry["author"] as? [String: Any])?["name"] as? String).flatMap { $0.isEmpty ? nil : $0 },
-                date: epochSeconds(entry["date"] ?? entry["created_at"]), mime: mime)
+                date: epochSeconds(entry["date"] ?? entry["created_at"]), mime: mime, animated: animated)
         } ?? []
     }
 

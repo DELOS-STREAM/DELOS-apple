@@ -59,16 +59,17 @@ private let iPhone = StreamDevice(pixelWidth: 1290, pixelHeight: 2796, maxFrames
         #expect(form.rows(.audio).map(\.id) == ["checkbox_host_audio"])
         #expect(Set(form.rows(.stream).map(\.section)) == ["Video Settings"])
         #expect(form.rows(.audio)[0].section == "Host Settings")
-        #expect(SettingsTab.allCases == [.stream, .audio, .controls, .appearance, .covers, .about])
+        #expect(SettingsTab.allCases == [.stream, .audio, .controls, .appearance, .covers, .devices, .about])
         #expect(SettingsTab.stream.step(1) == .audio)
         #expect(SettingsTab.appearance.step(1) == .covers)
+        #expect(SettingsTab.covers.step(1) == .devices)
         #if os(iOS)
         #expect(SettingsTab.stream.step(-1) == .about)
-        #expect(SettingsTab.covers.step(1) == .about)
+        #expect(SettingsTab.devices.step(1) == .about)
         #expect(SettingsTab.about.step(1) == .stream)
         #else
-        #expect(SettingsTab.stream.step(-1) == .covers)
-        #expect(SettingsTab.covers.step(1) == .stream)
+        #expect(SettingsTab.stream.step(-1) == .devices)
+        #expect(SettingsTab.devices.step(1) == .stream)
         #endif
     }
 

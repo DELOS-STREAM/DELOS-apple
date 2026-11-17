@@ -28,7 +28,14 @@ import Testing
         var context = ShellHints.Context(screen: .settings)
         #expect(!buttons(context).contains(.adjust))
         context.screenHints.adjustable = true
-        #expect(buttons(context) == [.adjust, .pad(.leftShoulder), .pad(.rightShoulder), .pad(.south), .pad(.east)])
+        #expect(buttons(context) == [.adjust, .pad(.leftShoulder), .pad(.rightShoulder), .pad(.north), .pad(.south), .pad(.east)])
+    }
+
+    @Test func theArtworkSheetHasItsOwnButtons() {
+        var context = ShellHints.Context(screen: .artwork(hostID: "h", appID: 1))
+        #expect(buttons(context).contains(.pad(.north)) && buttons(context).contains(.pad(.leftShoulder)))
+        context.screenHints.sheetOpen = true
+        #expect(buttons(context) == [.pad(.south), .pad(.west), .pad(.north), .pad(.east)])
     }
 
     @Test func aStreamHasNoHints() {

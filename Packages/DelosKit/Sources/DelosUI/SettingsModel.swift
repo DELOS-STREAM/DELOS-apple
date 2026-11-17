@@ -5,10 +5,10 @@ import Foundation
 
 /// A tab of Settings (`SettingsTab` of DELOS for Android), as far as its rows are ported, in Android's order: Stream
 /// (resolution, frame rate, bitrate, codec), Audio (playing audio on the PC, interface sounds), Controls (interface
-/// haptics), Appearance (``AppearanceForm``), Covers (``CoversForm``: SteamGridDB) and About (the system app-language
-/// action on iPhone/iPad).
+/// haptics), Appearance (``AppearanceForm``), Covers (``CoversForm``: SteamGridDB), Devices (``DevicesSetting``: the
+/// paired PCs and pairing a new one) and About (the system app-language action on iPhone/iPad).
 enum SettingsTab: CaseIterable, Hashable, Sendable {
-    case stream, audio, controls, appearance, covers, about
+    case stream, audio, controls, appearance, covers, devices, about
 
     /// About has the app-language action (iPhone and iPad) and the game data providers (with a metadata service); do not
     /// expose an empty tab where it has neither.
@@ -22,6 +22,7 @@ enum SettingsTab: CaseIterable, Hashable, Sendable {
         case .controls: L("settings_tab_controls")
         case .appearance: L("settings_tab_appearance")
         case .covers: L("settings_tab_covers")
+        case .devices: L("settings_tab_devices")
         case .about: L("settings_tab_about")
         }
     }
@@ -33,6 +34,7 @@ enum SettingsTab: CaseIterable, Hashable, Sendable {
         case .controls: Symbols.sportsEsports
         case .appearance: Symbols.appearance
         case .covers: Symbols.photoLibrary
+        case .devices: Symbols.desktopWindows
         case .about: Symbols.info
         }
     }
@@ -45,6 +47,7 @@ enum SettingsTab: CaseIterable, Hashable, Sendable {
         case .controls: L("settings_tab_controls_description")
         case .appearance: L("settings_tab_appearance_description")
         case .covers: L("settings_tab_covers_description")
+        case .devices: L("settings_tab_devices_description")
         case .about: L("settings_tab_about_description")
         }
     }
@@ -92,6 +95,9 @@ struct SettingRow: Identifiable, Equatable {
     /// What the profile has ("Profile: 225 Mbps") on a row that the app overrides (`RowOverride.profileLine` of DELOS
     /// for Android): the row then carries the CUSTOM badge and this line instead of its note.
     var customLine: String? = nil
+    /// What the current value costs (GPU, latency, network): three chips on their own line above the label, which the row
+    /// reserves room for (`SettingsItem.impact`).
+    var impact: SettingImpact? = nil
 }
 
 /// What this device offers Settings → Stream (`SettingsCapabilities` of DELOS for Android).
@@ -141,9 +147,15 @@ struct StreamSettingsForm: Equatable {
 
     func rows(_ tab: SettingsTab) -> [SettingRow] {
         switch tab {
-        case .stream: [resolutionRow, frameRateRow, bitrateRow, codecRow, framePacingRow] + (showsHDRRow ? [hdrRow] : [])
+        case .stream:
+            // The cost chips of the rows that have them (`impact` of DELOS for Android)
+            ([resolutionRow, frameRateRow, bitrateRow, codecRow, framePacingRow] + (showsHDRRow ? [hdrRow] : [])).map { row in
+                var row = row
+                row.impact = settingImpact(id: row.id, context: impactContext)
+                return row
+            }
         case .audio: [hostAudioRow]
-        case .controls, .appearance, .covers, .about: []
+        case .controls, .appearance, .covers, .devices, .about: []
         }
     }
 
@@ -378,6 +390,27 @@ struct StreamSettingsForm: Equatable {
         default: 50
         }
         return min(wanted, max(1, steps / 40))
+    }
+}
+
+/// Android's Devices tab rows that have a counterpart here (`devices_manage`, `devices_pair`): the Devices screen and pairing a
+/// new PC. The default PC and "skip the start screen" belong to a start screen that connects by itself, which this one does not.
+enum DevicesSetting {
+    static let manageID = "devices_manage"
+    static let pairID = "devices_pair"
+    static var firstID: String { manageID }
+
+    static func rows(_ tab: SettingsTab) -> [SettingRow] {
+        guard tab == .devices else { return [] }
+        let section = L("settings_native_section_paired_pcs")
+        return [
+            SettingRow(
+                id: manageID, tab: .devices, section: section, icon: Symbols.devices, label: L("settings_native_manage_devices_title"),
+                value: .action(label: nil), help: L("settings_native_manage_devices_description")),
+            SettingRow(
+                id: pairID, tab: .devices, section: section, icon: Symbols.addLink, label: L("settings_native_pair_title"),
+                value: .action(label: nil), help: L("settings_native_pair_description")),
+        ]
     }
 }
 

@@ -98,7 +98,7 @@ import Testing
         #expect(GameSettingsText.customLabel(0) == "Follows your profile")
         #expect(GameSettingsText.customLabel(1) == "1 custom setting")
         #expect(GameSettingsText.customLabel(3) == "3 custom settings")
-        #expect(GameSettingsText.summary(0, app: "Hades") == "Change a row and it becomes custom for this app.")
-        #expect(GameSettingsText.summary(2, app: "Hades") == "Only Hades uses these changes. Everything else follows your profile.")
+        #expect(GameSettingsText.summary(stream: 0, display: 0) == "Change a row and it becomes custom for this app.")
+        #expect(GameSettingsText.summary(stream: 2, display: 1) == "2 on Stream · 1 on Display")
     }
 }

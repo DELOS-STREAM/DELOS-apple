@@ -17,3 +17,10 @@ func L(_ name: String, _ arguments: any CVarArg...) -> String {
 func LPlural(_ name: String, _ count: Int) -> String {
     String.localizedStringWithFormat(Bundle.module.localizedString(forKey: name, value: nil, table: nil), count)
 }
+
+/// A catalog plural that shows its number beside other arguments: the plural's quantity comes first, then the
+/// [arguments] (tools/l10n/import_android.py swaps the placeholders of Android's plurals whose quantity is the second
+/// argument, so `LPlural("artwork_count_of_cover", total, shown)` reads "10 of 41 covers").
+func LPlural(_ name: String, _ count: Int, _ arguments: any CVarArg...) -> String {
+    String(format: Bundle.module.localizedString(forKey: name, value: nil, table: nil), locale: .current, arguments: [count] + arguments)
+}

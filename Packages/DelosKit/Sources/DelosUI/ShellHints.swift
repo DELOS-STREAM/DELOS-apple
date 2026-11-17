@@ -8,6 +8,8 @@ struct ScreenHints: Equatable, Sendable {
     var adjustable = false
     /// X resets the focused row to the profile's value (an app setting that is custom).
     var resetsRow = false
+    /// The artwork filter sheet is open (its own buttons: reset filters, done).
+    var sheetOpen = false
 }
 
 /// The button hints of the shell (`hints` in DELOS for Android's `Shell.kt`, the prototype's `updateHints`): by screen and
@@ -52,17 +54,23 @@ enum ShellHints {
         let optionsHint = c.hasContextMenu ? [options] : []
         switch c.screen {
         case .home: return [hint(.south, L("shell_hint_start")), menu] + optionsHint
-        case .settings: return adjustHint + tabs + [hint(.south, L("shell_hint_change")), back]
+        case .settings: return adjustHint + tabs + [hint(.north, L("shell_hint_search")), hint(.south, L("shell_hint_change")), back]
         case .start: return [hint(.south, L("shell_hint_connect")), menu] + optionsHint
         case .boot: return [select] + (c.canGoBack ? [back] : [])
         case .createProfile: return [select, back]
-        case .pair, .pairAddress: return [select, back] + optionsHint
+        case .pair: return [select, back] + optionsHint
         case .pin, .pairCode: return [hint(.east, L("shell_hint_cancel"))]
         case .stream: return []
         case .artwork:
+            if c.screenHints.sheetOpen {
+                return [
+                    hint(.south, L("shell_hint_choose")), hint(.west, L("shell_hint_reset_filters"), short: L("shell_hint_reset")),
+                    hint(.north, L("shell_hint_done")), hint(.east, L("shell_hint_close")),
+                ]
+            }
             return tabs + [
                 hint(.south, L("shell_hint_use_image"), short: L("shell_hint_choose")),
-                hint(.west, L("shell_hint_search_name"), short: L("shell_hint_search")), back,
+                hint(.west, L("shell_hint_search_name"), short: L("shell_hint_search")), hint(.north, L("shell_hint_filter")), back,
             ]
         case .appSettings:
             return adjustHint + [hint(.south, L("shell_hint_change"))]

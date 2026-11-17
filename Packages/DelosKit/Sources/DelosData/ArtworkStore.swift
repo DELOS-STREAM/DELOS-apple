@@ -222,17 +222,12 @@ public final class ArtworkStore {
         return try await client.search(term)
     }
 
-    /// The still images [kind] can be chosen from for the app's matched game, best rated first (`choices`). Empty for an
-    /// app that was not matched.
-    public func choices(hostID: String, appID: Int, kind: ArtKind) async throws -> [SteamGridDBImage] {
+    /// The images [kind] can be chosen from for the app's matched game that match [filters], in the order of their sort
+    /// (`choices`). Empty for an app that was not matched.
+    public func choices(hostID: String, appID: Int, kind: ArtKind, filters: ArtFilters = ArtFilters()) async throws -> [SteamGridDBImage] {
         guard enabled else { throw SteamGridDBError.noKey }
         guard let id = await files.matchedGame(hostID: hostID, appID: appID)?.id else { return [] }
-        return Self.bestRatedFirst(try await client.images(gameID: id, kind: kind))
-    }
-
-    /// [images] by score, best first; equal scores keep the order they came in.
-    public static func bestRatedFirst(_ images: [SteamGridDBImage]) -> [SteamGridDBImage] {
-        images.enumerated().sorted { ($0.element.score, $1.offset) > ($1.element.score, $0.offset) }.map(\.element)
+        return try await client.images(gameID: id, kind: kind, filters: filters)
     }
 
     /// A choice's thumbnail.

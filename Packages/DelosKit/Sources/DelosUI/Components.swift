@@ -89,6 +89,8 @@ struct CircleItem: View {
     var big = true
     var avatar: Avatar?
     var selected = false
+    /// The online pulse ring (`.online-ring`): a PC that is ready to be paired.
+    var pulse = false
     var diameter: Double?
     var width: Double?
     /// The gap between the circle and its label, stage pixels (a compact stage's: the focused ring's reach and more).
@@ -127,6 +129,7 @@ struct CircleItem: View {
                     .opacity(focused ? 1 : 0)
                 }
             }
+            .background { if pulse { PulseRing(side: side) } }
             // The glow of a round element, `FocusGlow(26, 70, -16)`: centered on the circle, not moved down
             .background {
                 GlowDisc(radius: stage.px(side / 2), spread: -stage.px(16), blur: stage.px(70), color: colors.glow)
@@ -174,6 +177,26 @@ struct CircleItem: View {
         .frame(width: stage.px(badge), height: stage.px(badge))
         .offset(x: stage.px(side - edge - badge / 2), y: stage.px(edge - badge / 2))
         .transition(reduceMotion ? .opacity : .scale(scale: Motion.popFromPill).combined(with: .opacity))
+    }
+}
+
+/// `.online-ring` (`pulse` of Android's `CircleItem`): a 2 px ring in the secondary color, 16 px outside the circle, that grows
+/// from .92 to 1.25 of its size while it fades out, every 2.4 s (ease-out).
+private struct PulseRing: View {
+    let side: Double
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2.4) / 2.4
+            let wave = Motion.easeOut(t)
+            let diameter = (side + 32) * (0.92 + 0.33 * wave)
+            Circle()
+                .strokeBorder(colors.accent2.color.opacity(0.7 * (1 - wave)), lineWidth: stage.px(2))
+                .frame(width: stage.px(diameter), height: stage.px(diameter))
+        }
+        .allowsHitTesting(false)
     }
 }
 

@@ -40,6 +40,10 @@ class PluralTest(unittest.TestCase):
         entry = import_android.plural({"one": "%d day ago", "other": "%d days ago"})
         self.assertEqual(entry["variations"]["plural"]["other"]["stringUnit"]["value"], "%d days ago")
 
+    def test_a_plural_whose_quantity_is_the_second_argument_swaps_its_placeholders(self):
+        self.assertEqual(import_android.swap_quantity({"other": "%1$d of %2$d covers"}), {"other": "%2$d of %1$d covers"})
+        self.assertEqual(import_android.swap_quantity({"one": "%1$@ has %2$d cover"}), {"one": "%2$@ has %1$d cover"})
+
     def test_a_plural_without_its_number_picks_its_form_by_a_substitution(self):
         entry = import_android.plural({"one": "hour", "other": "hours"})
         self.assertEqual(entry["stringUnit"]["value"], "%#@count@")

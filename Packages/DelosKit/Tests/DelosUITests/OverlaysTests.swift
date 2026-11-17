@@ -190,6 +190,13 @@ import Testing
         #expect(low > 0.99)
     }
 
+    @Test func theHaloFallsOffSmoothlyFromItsPeakToNothing() {
+        #expect(ToastTiming.haloFalloff(0) == 1)
+        #expect(ToastTiming.haloFalloff(1) == 0)
+        #expect(ToastTiming.haloFalloff(0.5) == 0.5)
+        #expect(ToastTiming.haloFalloff(-1) == 1 && ToastTiming.haloFalloff(2) == 0)
+    }
+
     @Test func aToastLeavesAtItsHoldTimeAndIsGoneAfterTheExit() {
         let logic = ToastStageLogic<String>()
         let slot = logic.show("A", holdMs: 2000, now: 1000)
