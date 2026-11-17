@@ -13,6 +13,13 @@ struct VideoSurface {
     /// Whether the stream wants the system pointer locked to it (the Mac): hidden and detached from the mouse, whose
     /// motion the PC gets as relative movement.
     var capturesPointer = false
+    /// Whether the on-screen keyboard is up (iPhone and iPad): what is typed goes to the PC as text, Return, Tab and Backspace
+    /// as keys.
+    var keyboard = false
+    var onText: @MainActor (String) -> Void = { _ in }
+    var onBackspace: @MainActor () -> Void = {}
+    /// The system took the keyboard away (its own hide button).
+    var onKeyboardHidden: @MainActor () -> Void = {}
 }
 
 #if canImport(UIKit)
@@ -33,6 +40,10 @@ extension VideoSurface: UIViewRepresentable {
         view.onDisplay = onDisplay
         view.onTouch = onTouch
         view.ignoresPointer = ignoresPointer
+        view.onText = onText
+        view.onBackspace = onBackspace
+        view.onKeyboardHidden = onKeyboardHidden
+        view.setKeyboard(keyboard)
     }
 }
 
@@ -42,6 +53,11 @@ final class VideoHostView: UIView {
     var onDisplay: @MainActor (DisplayInfo) -> Void = { _ in }
     var onTouch: @MainActor (Int, StreamController.TouchPhase, CGPoint, CGFloat, TimeInterval) -> Void = { _, _, _, _, _ in }
     var ignoresPointer: @MainActor () -> Bool = { false }
+    var onText: @MainActor (String) -> Void = { _ in }
+    var onBackspace: @MainActor () -> Void = {}
+    var onKeyboardHidden: @MainActor () -> Void = {}
+    /// The keyboard was asked for (not taken away by the system).
+    private var keyboardWanted = false
 
     init(renderer: any VideoRenderer) {
         self.renderer = renderer
@@ -55,6 +71,38 @@ final class VideoHostView: UIView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    /// Raises or lowers the on-screen keyboard: this view is the first responder while it is up.
+    func setKeyboard(_ shown: Bool) {
+        #if os(iOS)
+        guard shown != keyboardWanted else { return }
+        keyboardWanted = shown
+        if shown { _ = becomeFirstResponder() } else { _ = resignFirstResponder() }
+        #endif
+    }
+
+    #if os(iOS)
+    override var canBecomeFirstResponder: Bool { true }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        // The system's own hide button: the menu's Keyboard tile turns off
+        if resigned, keyboardWanted {
+            keyboardWanted = false
+            Task { @MainActor [onKeyboardHidden] in onKeyboardHidden() }
+        }
+        return resigned
+    }
+
+    // The keyboard types plain text: no corrections, capitals or smart punctuation for the PC
+    var autocorrectionType: UITextAutocorrectionType = .no
+    var autocapitalizationType: UITextAutocapitalizationType = .none
+    var spellCheckingType: UITextSpellCheckingType = .no
+    var smartQuotesType: UITextSmartQuotesType = .no
+    var smartDashesType: UITextSmartDashesType = .no
+    var smartInsertDeleteType: UITextSmartInsertDeleteType = .no
+    var keyboardType: UIKeyboardType = .default
+    #endif
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -108,6 +156,21 @@ final class VideoHostView: UIView {
         }
     }
 }
+
+#if os(iOS)
+/// What the on-screen keyboard types goes to the PC (``StreamController/typed(_:)``).
+extension VideoHostView: UIKeyInput, UITextInputTraits {
+    var hasText: Bool { true }
+
+    func insertText(_ text: String) {
+        onText(text)
+    }
+
+    func deleteBackward() {
+        onBackspace()
+    }
+}
+#endif
 #elseif canImport(AppKit)
 import AppKit
 import DelosInput

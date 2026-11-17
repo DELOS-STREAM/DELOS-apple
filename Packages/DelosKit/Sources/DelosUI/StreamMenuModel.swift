@@ -27,6 +27,15 @@ enum BarItem: Int, CaseIterable, Sendable {
         guard let id = id?.base as? String, let item = Self.allCases.first(where: { $0.id == id }) else { return nil }
         self = item
     }
+
+    /// The page this tile opens in the popover; nil: the tile acts at once.
+    var page: MenuPage? {
+        switch self {
+        case .brightness: .brightness
+        case .more: .more
+        default: nil
+        }
+    }
 }
 
 /// What this device can do for the menu's tiles and pages.
