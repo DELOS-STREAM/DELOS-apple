@@ -61,6 +61,10 @@ public final class Navigator {
     }
 
     public private(set) var stack: [Entry]
+    /// The focus of a sheet or a list of values the screen shown has open (the library filter, the Artwork filter, Settings'
+    /// search and pickers): while it is set the focus engine of tvOS keeps every other item, the top navigation's too, from
+    /// taking the system focus (``ShellRouter/modalFocus``). Cleared when the screen changes.
+    var screenModal: FocusModel?
     /// True while a text field is being typed in: the controller and the keyboard's arrows, Return and Escape belong to
     /// the field, not to the focus.
     public var isEditingText = false {
@@ -142,6 +146,7 @@ public final class Navigator {
         push(.home(hostID: hostID), focus: HomeScreen.initialFocus)
     }
 
+        screenModal = nil
     /// Opens a screen of the top navigation ([Screen.showsNavigation]). Settings, Profile and Devices take each other's
     /// place, so B returns to the screen below them (Android: their `back` is the library); the current one stays.
     public func openFromNavigation(_ screen: Screen, focus: AnyHashable? = nil) {
@@ -150,6 +155,7 @@ public final class Navigator {
         push(screen, focus: focus)
     }
 
+        screenModal = nil
     /// Drops the libraries of the PC [hostID] from the stack (the PC was removed or unpaired): what is below the screen
     /// shown must not lead back into a PC that is gone. The screen shown stays.
     public func dropLibrary(of hostID: String) {
@@ -157,6 +163,7 @@ public final class Navigator {
         var index = 0
         stack.removeAll { entry in
             defer { index += 1 }
+        screenModal = nil
             if index == top { return false }
             if case .home(let id) = entry.screen { return id == hostID }
             return false

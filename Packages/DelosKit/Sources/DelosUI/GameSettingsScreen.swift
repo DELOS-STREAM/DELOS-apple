@@ -29,7 +29,6 @@ struct GameSettingsScreen: View {
     @State private var rowFrames: [String: CGRect] = [:]
     /// The row last focused, which Reset all gives the focus back to.
     @State private var lastRow: String?
-    @Environment(\.modalFocus) private var inheritedModal
 
     static let resetAllID = "game-reset-all"
     static let space = "game-settings"
@@ -104,7 +103,7 @@ struct GameSettingsScreen: View {
             }
         }
         .coordinateSpace(.named(Self.space))
-        .environment(\.modalFocus, popup?.focus ?? inheritedModal)
+        .screenModal(popup?.focus)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
             navigator.commandCapture = { command in capture(command) }

@@ -142,7 +142,7 @@ struct HomeScreen: View {
             sheet(filters: filters, listed: listed)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .environment(\.modalFocus, sheetOpen ? sheetFocus : nil)
+        .screenModal(sheetOpen ? sheetFocus : nil)
         .task(id: hostID) {
             art.hero = nil
             await hosts.refresh(hostID)
