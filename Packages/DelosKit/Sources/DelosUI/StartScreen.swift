@@ -196,6 +196,7 @@ public struct DelosRoot: View {
                                 closeSideMenu(sound: nil)
                                 go { navigator.openFromNavigation(.settings, focus: SettingsScreen.initialFocus) }
                             },
+                            hidden: actions.hiddenRow(pcName: connectedPC?.name),
                             onClose: { closeSideMenu(sound: .back) })
                     }
                 }
@@ -417,8 +418,17 @@ public struct DelosRoot: View {
             pinScreen(hostID: hostID, code: code, entry: entry)
         case .home(let hostID):
             HomeScreen(hostID: hostID, focus: entry.focus, actions: actions)
+        case .artwork(let hostID, let appID):
+            if let app = hosts.apps[hostID]?.first(where: { $0.id == appID }) {
+                ArtworkScreen(hostID: hostID, app: app, focus: entry.focus, navigator: navigator, actions: actions)
+            }
+        case .appSettings(let hostID, let appID):
+            if let app = hosts.apps[hostID]?.first(where: { $0.id == appID }) {
+                GameSettingsScreen(
+                    hostID: hostID, app: app, focus: entry.focus, navigator: navigator, actions: actions, profileID: profiles.current?.id ?? "")
+            }
         case .stream(let hostID, let appID):
-            StreamScreen(hostID: hostID, appID: appID, settings: streamSettings.load(profile: profiles.current?.id ?? ""))
+            StreamScreen(hostID: hostID, appID: appID, settings: actions.streamSettings(hostID: hostID, appID: appID))
         case .settings:
             SettingsScreen(
                 profileID: profiles.current?.id ?? "", appearance: $appearance, focus: entry.focus, navigator: navigator,
@@ -442,8 +452,12 @@ public struct DelosRoot: View {
             )
     }
 
+    /// The library's game background shows behind the library and behind the settings of one of its apps.
     private var showsLibrary: Bool {
-        if case .home = navigator.current { true } else { false }
+        switch navigator.current {
+        case .home, .appSettings: true
+        default: false
+        }
     }
 
     /// The top navigation of the screen [entry] shows, if it has one.
@@ -481,6 +495,10 @@ public struct DelosRoot: View {
     /// A quick setting of the side menu stepped (the side menu's rows): applied at once and kept with the current
     /// profile's appearance. False when nothing changed.
     private func quickStep(_ id: String, by direction: Int) -> Bool {
+        if id == SideMenu.hiddenID {
+            actions.hiding.showHidden.toggle()
+            return true
+        }
         guard let profile = profiles.current?.id, let next = QuickSettings.step(id, by: direction, from: appearance) else { return false }
         appearance = next
         appearances.save(next, profile: profile)

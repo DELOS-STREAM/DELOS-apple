@@ -16,6 +16,8 @@ final class ShellActions {
     let connection: ConnectFlow
     private let playtimes = PlaytimeStore()
     private let played = PlayedGames()
+    let streams = StreamSettingsStore()
+    let gameSettings = GameSettingsStore()
 
     init(navigator: Navigator, hosts: HostStore, profiles: ProfileStore, toasts: Toasts, layers: Layers, artwork: ArtworkStore,
          metadata: GameMetadataModel) {
@@ -38,7 +40,7 @@ final class ShellActions {
         connection.connect(hostID)
     }
 
-    private var feedback: Feedback? { layers.feedback }
+    var feedback: Feedback? { layers.feedback }
 
     /// The start screen's first focus: the default PC, else the first paired PC that is online, else the first one,
     /// else "Pair a new PC".
@@ -97,6 +99,7 @@ final class ShellActions {
         Task {
             let result = await hosts.unpairOnPC(hostID)
             if result == .unpaired {
+                gameSettings.remove(hostID: hostID)
                 if profiles.startup.defaultPC == hostID { profiles.setDefaultPC(nil) }
                 navigator.dropLibrary(of: hostID)
             } else {
@@ -112,6 +115,7 @@ final class ShellActions {
     private func remove(_ hostID: String) {
         guard let name = hosts.host(hostID)?.name else { return }
         hosts.remove(hostID)
+        gameSettings.remove(hostID: hostID)
         if profiles.startup.defaultPC == hostID { profiles.setDefaultPC(nil) }
         navigator.dropLibrary(of: hostID)
         toasts.show(L("devices_removed_toast", name), icon: Symbols.delete)
@@ -177,7 +181,7 @@ final class ShellActions {
 
     /// A game's menu in the library (`gameMenu`), depending on what runs on the PC: this game (resume, quit), another
     /// game (quit that one and start this one, or go back to it) or nothing (start). Choosing Quit is the confirmation.
-    /// Android's Artwork, App settings and Hide wait for their features; Metadata shows when a metadata service is configured.
+    /// Metadata shows when a metadata service is configured.
     func gameMenu(hostID: String, app: HostApp) -> ContextMenu? {
         guard let host = hosts.host(hostID) else { return nil }
         let running = host.runningAppID == 0 ? nil : hosts.apps[hostID]?.first { $0.id == host.runningAppID }
@@ -197,13 +201,51 @@ final class ShellActions {
         } else {
             items = [MenuItem(icon: Symbols.playArrow, label: L("home_menu_start")) { start(app) }]
         }
+        let hidden = isHidden(hostID: hostID, appID: app.id)
+        let custom = !gameOverrides(hostID: hostID, appID: app.id).isEmpty
         let other = running.flatMap { $0.id == app.id ? nil : L("home_header_other_running", $0.title) }
         let header = MenuHeader(
-            status: running?.id == app.id ? L("home_header_running") : L("home_header_game"), running: running?.id == app.id, meta: other)
+            status: running?.id == app.id ? L("home_header_running") : L("home_header_game"), running: running?.id == app.id,
+            meta: [other, custom ? L("home_header_custom") : nil, hidden ? L("home_header_hidden") : nil].compactMap { $0 }.reduce(nil) { facts, next in
+                facts.map { L("home_meta_join", $0, next) } ?? next
+            })
+        items.append(MenuItem(icon: Symbols.photoLibrary, label: L("home_menu_artwork")) { [self] in openArtwork(hostID: hostID, app: app) })
         if metadata.offers(app) {
             items.append(MenuItem(icon: Symbols.metadata, label: L("home_menu_metadata")) { [self] in openMetadataMenu(hostID: hostID, app: app) })
         }
+        items.append(MenuItem(icon: Symbols.settings, label: L("home_menu_settings")) { [self] in openAppSettings(hostID: hostID, app: app) })
+        items.append(
+            hidden
+                ? MenuItem(icon: Symbols.visibility, label: L("home_menu_show")) { [self] in setHidden(false, hostID: hostID, app: app) }
+                : MenuItem(icon: Symbols.visibilityOff, label: L("home_menu_hide")) { [self] in setHidden(true, hostID: hostID, app: app) })
         return ContextMenu(title: app.title, items: items, header: header)
+    }
+
+    // MARK: Hiding games
+
+    /// Hidden games of the current profile and the side menu's switch that shows them.
+    let hiding = HiddenLibrary()
+
+    func isHidden(hostID: String, appID: Int) -> Bool {
+        hiding.ids(profile: profiles.current?.id, hostID: hostID).contains(appID)
+    }
+
+    /// The pills on [appID]'s cover.
+    func marks(hostID: String, appID: Int) -> [CoverMark] {
+        (isHidden(hostID: hostID, appID: appID) ? [.hidden] : []) + (gameOverrides(hostID: hostID, appID: appID).isEmpty ? [] : [.custom])
+    }
+
+    /// Hides or shows [app] (`onHide` of `HomeScreen.kt`); hiding says where the game can be found again.
+    private func setHidden(_ hidden: Bool, hostID: String, app: HostApp) {
+        hiding.set(hidden, appID: app.id, profile: profiles.current?.id, hostID: hostID)
+        if hidden { toasts.show(L("home_hidden_toast", app.title), icon: Symbols.visibilityOff) }
+    }
+
+    /// The side menu's "Show hidden apps" row for the open library, nil when it has none.
+    func hiddenRow(pcName: String?) -> SideMenu.HiddenRow? {
+        let apps = libraryHostID.flatMap { hosts.apps[$0] } ?? []
+        let hidden = libraryHostID.map { hiding.ids(profile: profiles.current?.id, hostID: $0) } ?? []
+        return LibraryHiding.sideRow(count: LibraryHiding.count(apps, hidden: hidden), showing: hiding.showHidden, pcName: pcName)
     }
 
     private func quit(hostID: String, app: HostApp) {
@@ -252,9 +294,10 @@ final class ShellActions {
 
     func rememberHomeGame(hostID: String, appID: Int) { homeGames[hostID] = appID }
 
-    /// [apps] in the library's order (`PcRepository.order`): the running game, the played ones from the most recent,
-    /// then the others in the PC's order.
-    func libraryOrder(hostID: String, apps: [HostApp]) -> [HostApp] {
+    /// [apps] without the hidden ones (unless the side menu shows them), in the library's order (`PcRepository.order`):
+    /// the running game, the played ones from the most recent, then the others in the PC's order.
+    func libraryOrder(hostID: String, apps all: [HostApp]) -> [HostApp] {
+        let apps = LibraryHiding.visible(all, hidden: hiding.ids(profile: profiles.current?.id, hostID: hostID), showHidden: hiding.showHidden)
         let running = hosts.host(hostID).flatMap { $0.runningAppID == 0 ? nil : $0.runningAppID }
         let times = profiles.current.map { played.times(profile: $0.id, hostID: hostID) } ?? [:]
         let byID = Dictionary(apps.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })

@@ -85,6 +85,11 @@ struct SettingRow: Identifiable, Equatable {
     var swatch: RGBA? = nil
     /// False: the row is dimmed, its value cannot change and the panel says it is unavailable (`SettingsItem.enabled`).
     var enabled = true
+    /// A line under the label (`SettingRow`'s `description`: the side menu's hidden-games count).
+    var note: String? = nil
+    /// What the profile has ("Profile: 225 Mbps") on a row that the app overrides (`RowOverride.profileLine` of DELOS
+    /// for Android): the row then carries the CUSTOM badge and this line instead of its note.
+    var customLine: String? = nil
 }
 
 /// What this device offers Settings → Stream (`SettingsCapabilities` of DELOS for Android).

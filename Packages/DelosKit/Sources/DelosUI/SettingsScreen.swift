@@ -427,6 +427,8 @@ struct SettingRowView: View {
     var hostedPlate = false
     /// A value set on the slider's track by touch (on release).
     var onSlide: (Int) -> Void = { _ in }
+    /// Resets the row to the profile's value (a row that is custom only).
+    var onReset: (() -> Void)? = nil
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
@@ -435,10 +437,29 @@ struct SettingRowView: View {
         HStack(spacing: stage.px(22)) {
             SymbolView(symbol: row.icon, size: 34, color: focused ? colors.accent2 : colors.accent2.opacity(0.62), filled: focused)
                 .frame(width: stage.px(compact ? 44 : 52), alignment: .leading)
-            MarqueeLabel(text: row.label, active: focused)
-                .font(DelosFonts.figtree(stage.tpx(26), .semibold))
-                .foregroundStyle(colors.text.color)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: stage.px(4)) {
+                MarqueeLabel(text: row.label, active: focused)
+                    .font(DelosFonts.figtree(stage.tpx(26), .semibold))
+                    .foregroundStyle(colors.text.color)
+                if let line = row.customLine {
+                    HStack(spacing: stage.px(10)) {
+                        CustomBadge()
+                        Text(line)
+                            .font(DelosFonts.figtree(stage.tpx(19)))
+                            .foregroundStyle(colors.text3.color)
+                            .lineLimit(1)
+                    }
+                } else if let note = row.note {
+                    Text(note)
+                        .font(DelosFonts.figtree(stage.tpx(19)))
+                        .foregroundStyle(colors.text3.color)
+                        .lineLimit(2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if row.customLine != nil, let onReset {
+                RowResetButton(focused: focused && row.enabled, onReset: onReset)
+            }
             value
         }
         // An unavailable row is dimmed (Android's 45 %); the focus plate keeps its look
@@ -663,7 +684,7 @@ private struct DescriptionPanel: View {
 /// The values of a choice row to pick from (touch; Android issue #92): a card that opens at the row's value with the
 /// current value (checked and focused) over the row, kept under the status bar and above the bottom edge; a long list
 /// scrolls. A tap picks a value, a tap beside the card closes it. With a controller: up and down, A picks, B closes.
-private struct ChoicePicker: View {
+struct ChoicePicker: View {
     let title: String
     let options: [String]
     let selected: Int?

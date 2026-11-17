@@ -98,11 +98,20 @@ struct SideMenu: View {
     /// A quick setting [id] was stepped by a direction (1 or -1).
     let onStep: @MainActor (_ id: String, _ direction: Int) -> Void
     let onSettings: @MainActor () -> Void
+    /// The "Show hidden apps" row, while a game of the open library is hidden or it is on (nil: no row).
+    var hidden: HiddenRow? = nil
     let onClose: @MainActor () -> Void
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
 
     static let settingsID = "side-settings"
+    static let hiddenID = "side-hidden"
+
+    /// What the "Show hidden apps" row shows: its switch and the count of hidden games under its label.
+    struct HiddenRow: Equatable {
+        let showing: Bool
+        let note: String
+    }
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -123,6 +132,15 @@ struct SideMenu: View {
                             id: Self.settingsID, tab: .stream, section: "", icon: Symbols.settings, label: L("shell_side_all_settings"),
                             value: .action(label: nil), help: ""),
                         focused: focused, compact: true)
+                }
+                if let hidden {
+                    FocusItem(id: Self.hiddenID, model: focus, action: { onStep(Self.hiddenID, 1) }) { focused in
+                        SettingRowView(
+                            row: SettingRow(
+                                id: Self.hiddenID, tab: .stream, section: "", icon: Symbols.visibility, label: L("shell_side_show_hidden"),
+                                value: .toggle(hidden.showing), help: "", note: hidden.note),
+                            focused: focused, compact: true)
+                    }
                 }
                 Spacer()
             }

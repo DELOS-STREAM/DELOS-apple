@@ -28,6 +28,10 @@ public enum Screen: Hashable, Sendable {
     case settings
     /// The paired PCs and what can be done with each (Android's `Screen.Devices`).
     case devices
+    /// Choosing the cover, wide cover, background and logo of the app [appID] of the PC [hostID] (`Screen.Artwork`).
+    case artwork(hostID: String, appID: Int)
+    /// The stream settings the app [appID] of the PC [hostID] overrides (`Screen.GameSettings`).
+    case appSettings(hostID: String, appID: Int)
 
     /// The screens of the top navigation (Android's `Screen.main`): the library, Settings, Profile and Devices. They show
     /// the navigation in the status bar.

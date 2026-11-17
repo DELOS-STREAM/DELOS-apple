@@ -9,6 +9,13 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Hiding games: the game menu has Hide app and Show app, the side menu has "Show hidden apps" with the count, and a shown
+  hidden game carries an eye-slash pill. Hidden games are kept per profile and per PC.
+- The Artwork screen of the game menu: choose the cover, wide cover, background and logo among the still SteamGridDB images
+  (best rated first) or leave it to the PC's artwork or the name, search for another name and match the game by hand. The
+  choices are kept by automatic refreshes. The filters and animated images of Android are not ported.
+- App settings in the game menu: resolution, frame rate, bitrate, codec, frame pacing and host audio can be set for one
+  app, stored per profile and app, with the CUSTOM marks, Reset all and Undo of Android. A stream of the app uses them.
 - Video frame pacing adds Android's Balanced with FPS limit, Warp Drive and Warp 2: real host FPS cap/2x/4x
   requests with the closest display-layer presentation behavior, not generated frames. Native Nano Pacer and
   internal decoder tuning are not falsely advertised; platform differences are documented.

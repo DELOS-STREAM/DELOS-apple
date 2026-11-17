@@ -15,6 +15,20 @@ struct ArtworkMatch: Codable, Equatable, Sendable {
     var name: String?
     var year: Int?
     var chosen: [String: Chosen]?
+    /// The game was chosen by hand: a refresh does not search for another one.
+    var manual: Bool?
+    /// The kinds chosen by hand: a refresh leaves them alone.
+    var picked: [String]?
+}
+
+/// The image used for a kind of a game's artwork (`ArtworkStore.chosen` of DELOS for Android).
+public enum ArtworkChoice: Equatable, Sendable {
+    /// Never set.
+    case unset
+    /// Left empty on purpose: the PC's artwork, or the game's name instead of a logo.
+    case none
+    /// The SteamGridDB image with this id.
+    case image(Int)
 }
 
 /// The library's artwork (`ArtworkStore` and `BoxArtCache` of DELOS for Android): the SteamGridDB images of the PCs'
@@ -38,6 +52,8 @@ public final class ArtworkStore {
     public private(set) var busy: Set<String> = []
     /// Downloading the artwork of many games: how far it is, nil when nothing runs.
     public private(set) var progress: (done: Int, total: Int)?
+    /// The image being downloaded for a kind of a game ("host/app/kind" → the image's id, ``noImage`` for none).
+    private(set) var applyingImages: [String: Int] = [:]
 
     @ObservationIgnored private let files: ArtworkFiles
     @ObservationIgnored private let secrets: any SecretStorage
@@ -175,6 +191,78 @@ public final class ArtworkStore {
         return found
     }
 
+    // MARK: Choosing artwork (the Artwork screen)
+
+    /// The id `applying` reports for an image being left empty.
+    public static let noImage = -1
+
+    /// Whether the app has been looked up on SteamGridDB (found or not).
+    public func isSearched(hostID: String, appID: Int) async -> Bool {
+        await files.match(hostID: hostID, appID: appID) != nil
+    }
+
+    /// The SteamGridDB game the app is matched with.
+    public func matchedGame(hostID: String, appID: Int) async -> SteamGridDBGame? {
+        await files.matchedGame(hostID: hostID, appID: appID)
+    }
+
+    /// The image in use for [kind].
+    public func choice(hostID: String, appID: Int, kind: ArtKind) async -> ArtworkChoice {
+        await files.choice(hostID: hostID, appID: appID, kind: kind)
+    }
+
+    /// The id of the image being downloaded for [kind] (``noImage`` for none), nil when nothing is.
+    public func applying(hostID: String, appID: Int, kind: ArtKind) -> Int? {
+        applyingImages[Self.game(hostID, appID) + "/" + kind.rawValue]
+    }
+
+    /// The games SteamGridDB knows under [term] (`search`).
+    public func search(_ term: String) async throws -> [SteamGridDBGame] {
+        guard enabled else { throw SteamGridDBError.noKey }
+        return try await client.search(term)
+    }
+
+    /// The still images [kind] can be chosen from for the app's matched game, best rated first (`choices`). Empty for an
+    /// app that was not matched.
+    public func choices(hostID: String, appID: Int, kind: ArtKind) async throws -> [SteamGridDBImage] {
+        guard enabled else { throw SteamGridDBError.noKey }
+        guard let id = await files.matchedGame(hostID: hostID, appID: appID)?.id else { return [] }
+        return Self.bestRatedFirst(try await client.images(gameID: id, kind: kind))
+    }
+
+    /// [images] by score, best first; equal scores keep the order they came in.
+    public static func bestRatedFirst(_ images: [SteamGridDBImage]) -> [SteamGridDBImage] {
+        images.enumerated().sorted { ($0.element.score, $1.offset) > ($1.element.score, $0.offset) }.map(\.element)
+    }
+
+    /// A choice's thumbnail.
+    public func thumbnail(_ image: SteamGridDBImage) async -> Data? {
+        await files.thumbnail(image, client: client)
+    }
+
+    /// Uses [image] for [kind] (nil: none, so the PC's artwork or the game's name), picked by hand (`apply`).
+    public func apply(hostID: String, appID: Int, kind: ArtKind, image: SteamGridDBImage?) async throws {
+        guard enabled else { throw SteamGridDBError.noKey }
+        let game = Self.game(hostID, appID)
+        let key = game + "/" + kind.rawValue
+        applyingImages[key] = image?.id ?? Self.noImage
+        busy.insert(game)
+        defer {
+            applyingImages[key] = nil
+            busy.remove(game)
+            version += 1
+        }
+        try await files.apply(hostID: hostID, appID: appID, kind: kind, image: image, client: client)
+    }
+
+    /// Matches the app with [game] by hand and downloads its best-rated images, the ones chosen before starting over
+    /// (`setGame`).
+    public func setGame(hostID: String, appID: Int, game: SteamGridDBGame) async throws {
+        guard enabled else { throw SteamGridDBError.noKey }
+        await files.setGame(hostID: hostID, appID: appID, game: game)
+        try await fetch(hostID: hostID, appID: appID, name: game.name, refresh: true)
+    }
+
     private var client: SteamGridDB { SteamGridDB(key: apiKey, transport: transport) }
 
     private static func game(_ hostID: String, _ appID: Int) -> String { "\(hostID)/\(appID)" }
@@ -230,10 +318,10 @@ actor ArtworkFiles {
         return data
     }
 
-    /// `fetchNow` of DELOS for Android.
+    /// `fetchNow` of DELOS for Android. A kind picked by hand stays; a game matched by hand is not searched for again.
     func fetch(hostID: String, appID: Int, name: String, refresh: Bool, client: SteamGridDB) async throws -> Bool {
         var match = match(hostID: hostID, appID: appID)
-        if match == nil || refresh {
+        if match == nil || (refresh && match?.manual != true) {
             let found = try await client.search(name).first
             match = match != nil && found?.id == match?.id ? match : ArtworkMatch(id: found?.id, name: found?.name, year: found?.year)
         }
@@ -241,7 +329,8 @@ actor ArtworkFiles {
         write(match, hostID: hostID, appID: appID)
         guard let gameID = match.id else { return false }
         var chosen = match.chosen ?? [:]
-        for kind in ArtKind.allCases where refresh || chosen[kind.rawValue] == nil {
+        let picked = Set(match.picked ?? [])
+        for kind in ArtKind.allCases where !picked.contains(kind.rawValue) && (refresh || chosen[kind.rawValue] == nil) {
             do {
                 let image = try await client.images(gameID: gameID, kind: kind).first
                 let key = Self.imageKey(hostID, appID, kind)
@@ -260,5 +349,48 @@ actor ArtworkFiles {
         match.chosen = chosen
         write(match, hostID: hostID, appID: appID)
         return true
+    }
+
+    /// What the app is matched with, or nil when it was never looked up.
+    func matchedGame(hostID: String, appID: Int) -> SteamGridDBGame? {
+        guard let match = match(hostID: hostID, appID: appID), let id = match.id else { return nil }
+        return SteamGridDBGame(id: id, name: match.name ?? "", year: match.year)
+    }
+
+    /// The image of [kind] in use (`chosen` of the Android store).
+    func choice(hostID: String, appID: Int, kind: ArtKind) -> ArtworkChoice {
+        guard let chosen = match(hostID: hostID, appID: appID)?.chosen?[kind.rawValue] else { return .unset }
+        return chosen.id.map(ArtworkChoice.image) ?? .none
+    }
+
+    /// Matches the app with [game] by hand (`setGame`): the images chosen before are forgotten and downloaded again.
+    func setGame(hostID: String, appID: Int, game: SteamGridDBGame) {
+        write(ArtworkMatch(id: game.id, name: game.name, year: game.year, manual: true), hostID: hostID, appID: appID)
+    }
+
+    /// Uses [image] for [kind] (nil: none, so the PC's artwork or the game's name), picked by hand and kept by every
+    /// later refresh (`applyNow`).
+    func apply(hostID: String, appID: Int, kind: ArtKind, image: SteamGridDBImage?, client: SteamGridDB) async throws {
+        let key = Self.imageKey(hostID, appID, kind)
+        if let image {
+            try await cache.store(try await client.download(image.url, limit: cache.maxEntryBytes), for: key)
+        } else {
+            await cache.remove(key)
+        }
+        var match = match(hostID: hostID, appID: appID) ?? ArtworkMatch()
+        var chosen = match.chosen ?? [:]
+        chosen[kind.rawValue] = ArtworkMatch.Chosen(id: image?.id, url: image?.url)
+        match.chosen = chosen
+        match.picked = Array(Set(match.picked ?? []).union([kind.rawValue])).sorted()
+        write(match, hostID: hostID, appID: appID)
+    }
+
+    /// A thumbnail of a choice, kept in the cache.
+    func thumbnail(_ image: SteamGridDBImage, client: SteamGridDB) async -> Data? {
+        let key = "thumb/\(image.id)"
+        if let data = await cache.data(for: key) { return data }
+        guard let data = try? await client.download(image.previewURL, limit: cache.maxEntryBytes) else { return nil }
+        try? await cache.store(data, for: key)
+        return data
     }
 }

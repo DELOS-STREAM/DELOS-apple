@@ -94,6 +94,17 @@ final class HomeArt {
         return image
     }
 
+    /// A choice's thumbnail on the Artwork screen, decoded no larger than a tile needs.
+    func thumbnail(_ image: SteamGridDBImage) async -> CGImage? {
+        let key = "thumb/\(image.id)"
+        if let cached = images[key] { return cached }
+        guard let data = await artwork.thumbnail(image), let decoded = await Self.decode(data, maxPixels: 700) else { return nil }
+        images[key] = decoded
+        return decoded
+    }
+
+    func cachedThumbnail(_ image: SteamGridDBImage) -> CGImage? { images["thumb/\(image.id)"] }
+
     func cachedImage(hostID: String, appID: Int, kind: ArtKind) -> CGImage? {
         images["sgdb/\(hostID)/\(appID)/\(kind.rawValue)#\(artwork.version)"]
     }

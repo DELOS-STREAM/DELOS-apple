@@ -693,6 +693,26 @@ under Application Support/artwork, so an image the cache dropped is downloaded a
 box art is cached the same way. With the key set and Download automatically on, the library downloads the artwork of
 games never looked up when it loads; a cover waits for the lookup (up to 20 s) before falling back to the box art.
 
+### Choosing artwork by hand
+
+The game menu's Artwork opens `ArtworkScreen` (Android's `ArtworkScreen.kt`): a tab per kind (cover, wide cover,
+background, logo; L1 and R1) over a toolbar with the matched SteamGridDB game and "Search for another name" (X), the grid
+of every still image SteamGridDB has for the matched game, best rated first (`ArtworkStore.choices`), behind the first
+choice (the PC's box art, or the game's name for a logo), and a strip about the focused image (style, size, file type,
+score, author, date: what the reply contained). A or a tap downloads and uses the image (`apply`); the image in use has the
+accent border and the "In use" badge. A kind chosen by hand is recorded in the match (`picked`) and every later refresh
+leaves it alone; matching the game by hand (`setGame`: the search menu lists at most eight games) is recorded too (`manual`),
+so the name is not searched again, and its images start over. A thumbnail is downloaded when its tile scrolls into view and
+kept in the same cache. Not ported: the filter sheet (type, style, size, sort) and animated images (the store asks
+for still images only, and nothing here plays an animation), and the companion screen.
+
+### Hiding games
+
+Hide app / Show app in the game menu keep the app ids per profile and per PC (`HiddenGames`, UserDefaults,
+Android's `ui_hidden_<pc>`); a hidden app leaves the library. The side menu has "Show hidden apps" with the count while an
+app of the open library is hidden or the switch is on; the switch is not kept. A shown hidden app has an eye-slash pill in
+the cover's corner and "Hidden" in its menu header. A library whose games are all hidden shows the empty message.
+
 ## Game metadata
 
 `MetadataStore` is an actor in DelosData; `GameMetadataModel` (DelosUI) is the library's view of it (below). `lookup(title:force:builtIn:)`
@@ -820,6 +840,20 @@ Not ported yet: the default PC's Skip the start screen, the Devices screen's lin
 the streaming time (the stream screen does not add to `PlaytimeStore` yet), game metadata (IGDB genres and themes,
 HowLongToBeat, HDR chips through the metadata Worker), the game menu's Artwork, Metadata, App settings and Hide, the
 game's colors in its menu tile, hidden games, wrap-around in the row and per-game settings.
+
+## App settings
+
+The game menu's App settings opens `GameSettingsScreen` (Android's `GameSettingsScreen.kt`, docs/PER_APP_SETTINGS.md): the
+stream settings that exist here (resolution, frame rate, bitrate, codec, frame pacing, host audio) for one app, stored per
+profile, PC and app (`GameSettingsStore`, UserDefaults, only what the app overrides). A setting the app does not override
+follows the profile, also when the profile changes later; one it overrides stays custom even when it equals the profile's
+value. The row shows the CUSTOM badge and "Profile: <value>"; X, the row's menu or the round button on touch resets it,
+Reset all resets every row, each with an Undo toast that puts back only what the reset removed. A new profile copies the
+overrides with its other settings; removing a profile or a PC forgets them. A stream takes its settings from
+`ShellActions.streamSettings(hostID:appID:)` (the profile's with the app's laid over them), the one place a start reads
+them. A cover with custom settings has a tune pill beside the hidden one. Not ported: Android's Display tab (HDR, upscaler,
+scaling, virtual display), PyroWave chroma, gyro rows and the per-codec bitrate slots, none of which exist here, and the
+banner is the library's game background instead of a banner blurred on the screen itself.
 
 ## The library row
 
@@ -1027,6 +1061,9 @@ has no such setting; both are in `Config/Info.plist`, which Xcode merges with th
 
 ### Not verified
 
+- Hiding games, the Artwork screen and App settings on a controller, the Siri Remote and a real PC (the simulator
+  screens were looked at with a debug-only fake); SteamGridDB's real answers (style, score, author and date fields), choosing
+  an image against the live service, and a stream that takes the app's overrides.
 - Moving the focus with a real game controller on iPhone and iPad (the simulator has no controller); the logic is
   covered by the unit tests only.
 - The Metal renderer on a real display (`-DelosRenderer metal`): `CAMetalDisplayLink` callbacks, the GPU end times against

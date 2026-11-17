@@ -91,7 +91,14 @@ struct HomeScreen: View {
             case .loading: HomeMessage(icon: Symbols.loading, title: L("home_loading"), text: nil)
             case .offline: HomeMessage(icon: Symbols.wifiOff, title: L("home_offline_title", name), text: nil)
             case .empty: HomeMessage(icon: Symbols.sportsEsports, title: L("home_empty_title", name), text: L("home_empty_note"))
-            case .apps(let apps): GameLibrary(hostID: hostID, apps: actions.libraryOrder(hostID: hostID, apps: apps), focus: focus, actions: actions)
+            case .apps(let apps):
+                let shown = actions.libraryOrder(hostID: hostID, apps: apps)
+                // Every game hidden: the library has nothing to show until the side menu's switch is on
+                if shown.isEmpty {
+                    HomeMessage(icon: Symbols.sportsEsports, title: L("home_empty_title", name), text: L("home_empty_note"))
+                } else {
+                    GameLibrary(hostID: hostID, apps: shown, focus: focus, actions: actions)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -328,7 +335,8 @@ struct GameLibrary: View {
                             clickCue: offersChoices(app) ? nil : .select,
                             action: { actions.activate(hostID: hostID, app: app, focus: focus) }
                         ) { isFocused in
-                            Cover(hostID: hostID, app: app, wide: index == 0, focused: isFocused, menuOpen: menuOpen, badge: badge)
+                            Cover(hostID: hostID, app: app, wide: index == 0, focused: isFocused, menuOpen: menuOpen, badge: badge,
+                                  marks: actions.marks(hostID: hostID, appID: app.id))
                         }
                         .staggerEntrance()
                     }
@@ -624,6 +632,8 @@ private struct Cover: View {
     /// A context menu is open: the covers beside the focused one dim.
     let menuOpen: Bool
     let badge: CoverBadge?
+    /// The icon-only pills of the top-right corner (hidden, custom settings).
+    var marks: [CoverMark] = []
     @Environment(HostStore.self) private var hosts
     @Environment(HomeArt.self) private var art
     @Environment(\.delosColors) private var colors
@@ -664,6 +674,19 @@ private struct Cover: View {
                     .background(Circle().fill(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0.55)))
                     .padding(stage.px(16))
                     .frame(maxWidth: .infinity, alignment: .trailing)
+            } else if !marks.isEmpty {
+                // Android's CornerPill: an icon-only dark glass pill; the busy spinner takes this corner while it shows
+                HStack(spacing: stage.px(8)) {
+                    ForEach(marks, id: \.self) { mark in
+                        SymbolView(symbol: mark.icon, size: 22, color: RGBA(red: 1, green: 1, blue: 1, alpha: mark.opacity), filled: true)
+                            .padding(.horizontal, stage.px(14))
+                            .padding(.vertical, stage.px(6))
+                            .background(Capsule().fill(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0.55)))
+                            .accessibilityLabel(mark.label)
+                    }
+                }
+                .padding(stage.px(18))
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
             if let badge {
                 HStack(spacing: stage.px(8)) {
