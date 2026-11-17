@@ -94,7 +94,9 @@ enum ShellHints {
         switch c.screen {
         case .home:
             if c.screenHints.sheetOpen {
-                return [select, hint(.west, L("shell_hint_reset")), hint(.north, L("shell_hint_close")), hint(.east, L("shell_hint_close"))]
+                // The same as the Artwork screen's sheet (Android's sheet hints): Y is Done, not a second Close
+                return [hint(.south, L("shell_hint_choose")), hint(.west, L("shell_hint_reset_filters"), short: L("shell_hint_reset")),
+                        hint(.north, L("shell_hint_done")), hint(.east, L("shell_hint_close"))]
             }
             let filter = c.screenHints.filterLabel.map { [Hint(button: .pad(.north), label: $0, tappable: true)] } ?? []
             return [hint(.south, L("shell_hint_start"))] + filter + [menu] + optionsHint
