@@ -100,6 +100,7 @@ struct CircleItem: View {
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
     @Environment(\.pressed) private var pressed
+    @Environment(\.glideRingHost) private var glideHost
 
     var body: some View {
         let side = diameter ?? (big ? 220.0 : 176.0)
@@ -117,11 +118,16 @@ struct CircleItem: View {
             }
             .frame(width: stage.px(side), height: stage.px(side))
             .background {
-                // Ring: 5 px wide, 5 px outside the circle
-                Circle()
-                    .strokeBorder(colors.accent.color, lineWidth: stage.px(5))
-                    .padding(-stage.px(10))
-                    .opacity(focused ? 1 : 0)
+                if glideHost {
+                    // The row's one ring glides to the focused circle (`glideTarget`): it reads the circle's layout bounds
+                    Color.clear.anchorPreference(key: GlideRingKey.self, value: .bounds) { focused ? $0 : nil }
+                } else {
+                    // Ring: 5 px wide, 5 px outside the circle
+                    Circle()
+                        .strokeBorder(colors.accent.color, lineWidth: stage.px(5))
+                        .padding(-stage.px(10))
+                        .opacity(focused ? 1 : 0)
+                }
             }
             .background { if pulse { PulseRing(side: side) } }
             .shadow(color: focused ? colors.glow.color : .clear, radius: stage.px(35), y: stage.px(26))
@@ -165,6 +171,74 @@ struct CircleItem: View {
         .frame(width: stage.px(badge), height: stage.px(badge))
         .offset(x: stage.px(side - edge - badge / 2), y: stage.px(edge - badge / 2))
         .transition(reduceMotion ? .opacity : .scale(scale: Motion.popFromPill).combined(with: .opacity))
+    }
+}
+
+/// The bounds of the focused element of a ``glideRingHost``.
+struct GlideRingKey: PreferenceKey {
+    static let defaultValue: Anchor<CGRect>? = nil
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) { value = value ?? nextValue() }
+}
+
+extension EnvironmentValues {
+    /// The circles below draw no ring of their own: the host's one ring glides to the focused one.
+    @Entry var glideRingHost = false
+}
+
+extension View {
+    /// One focus ring for a group of circles that glides to whichever has the focus (`GlideRingHost` of DELOS for
+    /// Android): 560 ms with the slight overshoot of the glide curve, 5 px wide and 5 px outside the focused circle's
+    /// grown bounds; it fades in 120 ms, and out 280 ms after a 70 ms grace (focus passes through "nothing" between two
+    /// circles). It jumps with reduced motion. Drawn behind the circles, so a check badge stays above it.
+    func glideRingHost(grow: Double = 1.16) -> some View {
+        environment(\.glideRingHost, true)
+            .backgroundPreferenceValue(GlideRingKey.self) { anchor in
+                GeometryReader { proxy in GlideRing(rect: anchor.map { proxy[$0] }, grow: grow) }
+            }
+    }
+}
+
+private struct GlideRing: View {
+    let rect: CGRect?
+    let grow: Double
+    @State private var last: CGRect?
+    @State private var shown = false
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+    @Environment(\.reducedMotion) private var reduced
+
+    var body: some View {
+        let r = rect ?? last
+        ZStack {
+            if let r {
+                let width = r.width * grow + stage.px(20), height = r.height * grow + stage.px(20)
+                Circle()
+                    .strokeBorder(colors.accent.color, lineWidth: stage.px(5))
+                    .frame(width: width, height: height)
+                    .position(x: r.midX, y: r.midY)
+                    .opacity(shown ? 1 : 0)
+                    .animation(reduced ? nil : .timingCurve(0.3, 1.22, 0.42, 1, duration: 0.56), value: r)
+            }
+        }
+        .allowsHitTesting(false)
+        .onChange(of: rect) { _, now in
+            if let now {
+                if !shown {
+                    // Appears where the circle is, it does not travel from where the last one was
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) { last = now }
+                }
+                last = now
+                withAnimation(.timingCurve(0.25, 0.1, 0.25, 1, duration: 0.12)) { shown = true }
+            } else {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(70))
+                    guard rect == nil else { return }
+                    withAnimation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000)) { shown = false }
+                }
+            }
+        }
     }
 }
 

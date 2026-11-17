@@ -137,7 +137,7 @@ struct CircleRow<Content: View>: View {
     @Environment(\.stage) private var stage
 
     var body: some View {
-        let row = HStack(alignment: .top, spacing: stage.px(56)) { content() }.padding(stage.px(40))
+        let row = HStack(alignment: .top, spacing: stage.px(56)) { content() }.padding(stage.px(40)).glideRingHost()
         ViewThatFits(in: .horizontal) {
             row
             FocusScroll(axis: .horizontal) { row }.scrollClipDisabled().focusable(false)
