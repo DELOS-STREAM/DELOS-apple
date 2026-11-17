@@ -73,7 +73,7 @@ struct LibraryFilterSheet: View {
                 .onGeometryChange(for: Double.self) { Double($0.size.height) } action: { headerHeight = $0 }
             ScrollViewReader { proxy in
                 ScrollView(.vertical, showsIndicators: false) {
-                    LibraryChipGlideHost {
+                    ChipGlideHost {
                         VStack(alignment: .leading, spacing: stage.px(34 * k)) {
                             section(0, Symbols.genreUnknown, L("filters_section_genre")) {
                                 chip(L("filters_all"), selected: filters.genreID == nil, id: LibraryFilterIDs.genre(nil), count: games.count) {
@@ -274,76 +274,6 @@ struct LibraryFilterChip: View {
                 GlassShape(Capsule(), tint: colors.surface).overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
             }
         }
-        .modifier(LibraryChipFocus(focused: focused))
-    }
-}
-
-// MARK: Gliding focus ring
-
-/// The frame (in ``LibraryChipGlideHost``'s space) of the chip that has the focus.
-private struct LibraryChipGlideKey: PreferenceKey {
-    static var defaultValue: CGRect? { nil }
-    static func reduce(value: inout CGRect?, nextValue: () -> CGRect?) { value = nextValue() ?? value }
-}
-
-private struct LibraryChipFocus: ViewModifier {
-    let focused: Bool
-    @Environment(\.reducedMotion) private var reduced
-    @Environment(\.pressed) private var pressed
-
-    func body(content: Content) -> some View {
-        content
-            .background {
-                GeometryReader { proxy in
-                    Color.clear.preference(key: LibraryChipGlideKey.self, value: focused ? proxy.frame(in: .named("libraryChipGlide")) : nil)
-                }
-            }
-            .scaleEffect(focusScale(focused: focused, pressed: pressed, focus: GlideLook.chip.scale))
-            .animation(.focusScale(pressed: pressed, reduced: reduced), value: [focused, pressed])
-            .zIndex(focused ? 1 : 0)
-    }
-}
-
-/// The one focus ring of the sheet's rows of chips (`RowGlideHost(ring = FocusRing(3f, 3f), corner = 999f, focusScale = 1.05f)`):
-/// it glides from chip to chip, also from one row to the next, instead of each chip fading its own. The first focus and
-/// reduced motion do not glide, and when the focus leaves the chips it waits 70 ms for the next one, then fades.
-struct LibraryChipGlideHost<Content: View>: View {
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        content()
-            .coordinateSpace(name: "libraryChipGlide")
-            .backgroundPreferenceValue(LibraryChipGlideKey.self) { frame in LibraryChipGlideRing(target: frame) }
-    }
-}
-
-private struct LibraryChipGlideRing: View {
-    let target: CGRect?
-    @State private var previous: CGRect?
-    @Environment(\.delosColors) private var colors
-    @Environment(\.stage) private var stage
-    @Environment(\.reducedMotion) private var reduced
-
-    var body: some View {
-        Group {
-            if let frame = target ?? previous {
-                let grown = CGSize(width: frame.width * GlideLook.chip.scale, height: frame.height * GlideLook.chip.scale)
-                let outside = stage.px(2 * GlideLook.chip.ring)
-                Capsule()
-                    .strokeBorder(colors.accent.color, lineWidth: stage.px(GlideLook.chip.ring))
-                    .frame(width: grown.width + 2 * outside, height: grown.height + 2 * outside)
-                    .position(x: frame.midX, y: frame.midY)
-                    .animation(reduced ? nil : .timingCurve(0.3, 1.22, 0.42, 1, duration: SettingsPlateGeometry.duration), value: target)
-                    .opacity(target == nil ? 0 : 1)
-                    .animation(
-                        target == nil
-                            ? .timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000).delay(0.07)
-                            : .timingCurve(0.25, 0.1, 0.25, 1, duration: 0.12),
-                        value: target != nil)
-            }
-        }
-        .onChange(of: target, initial: true) { _, frame in if let frame { previous = frame } }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        .modifier(ChipFocus(focused: focused))
     }
 }
