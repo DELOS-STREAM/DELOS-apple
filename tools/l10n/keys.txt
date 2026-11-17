@@ -557,8 +557,27 @@ stream_result_try_again
 stream_result_unpaired
 stream_result_unpaired_details
 
-# Navigation (touch)
+# Hint bar (button hints, shown with the connected controller's glyphs) and the library note
+shell_hint_select
 shell_hint_back
+shell_hint_close
+shell_hint_cancel
+shell_hint_change
+shell_hint_reset
+shell_hint_start
+shell_hint_menu
+shell_hint_options
+shell_hint_adjust
+shell_hint_previous_tab
+shell_hint_next_tab
+shell_hint_connect
+shell_hint_choose
+shell_hint_use_image
+shell_hint_search_name
+shell_hint_search
+shell_hint_reset_to_profile
+shell_hint_library_label
+shell_home_apps_on_pc
 
 # Settings: frame pacing
 title_frame_pacing
