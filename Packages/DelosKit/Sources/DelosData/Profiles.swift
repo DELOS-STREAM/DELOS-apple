@@ -94,6 +94,8 @@ public final class ProfileStore {
     @ObservationIgnored private let deleteGrace: Duration
     /// The profiles deleted less than ``deleteGrace`` ago, which Undo can bring back.
     @ObservationIgnored private var deleted: [String: Deleted] = [:]
+    /// The pending purge of each deleted profile, cancelled by Undo or by a newer delete of the same id.
+    @ObservationIgnored private var purgeTasks: [String: Task<Void, Never>] = [:]
     private static let key = "profiles"
     /// The ids of deleted profiles whose settings are still kept: when DELOS ends before the grace is over, the next
     /// start removes them.
@@ -106,6 +108,7 @@ public final class ProfileStore {
         let index: Int
         let wasCurrent: Bool
         let successor: String?
+        let token: UUID
     }
 
     /// - Parameters:
@@ -201,13 +204,16 @@ public final class ProfileStore {
         let wasCurrent = profiles.current?.id == id
         var rest = profiles.all
         let profile = rest.remove(at: index)
-        deleted[id] = Deleted(profile: profile, index: index, wasCurrent: wasCurrent, successor: rest.first?.id)
+        let token = UUID()
+        deleted[id] = Deleted(profile: profile, index: index, wasCurrent: wasCurrent, successor: rest.first?.id, token: token)
         defaults.set(Array(deleted.keys), forKey: Self.deletedKey)
         save(Profiles(all: rest, currentID: wasCurrent ? rest.first?.id : profiles.currentID))
         let grace = deleteGrace
-        Task { [weak self] in
+        purgeTasks[id]?.cancel()
+        purgeTasks[id] = Task { [weak self] in
             try? await Task.sleep(for: grace)
-            self?.purge(id)
+            guard !Task.isCancelled else { return }
+            self?.purge(id, token: token)
         }
         return !rest.isEmpty
     }
@@ -217,6 +223,7 @@ public final class ProfileStore {
     @discardableResult
     public func undoDelete(_ id: String) -> Bool {
         guard let gone = deleted.removeValue(forKey: id) else { return false }
+        purgeTasks.removeValue(forKey: id)?.cancel()
         defaults.set(Array(deleted.keys), forKey: Self.deletedKey)
         let takesOver = gone.wasCurrent && profiles.current?.id == gone.successor
         var all = profiles.all
@@ -226,8 +233,11 @@ public final class ProfileStore {
     }
 
     /// The grace of a deleted profile is over: its settings are removed for good.
-    func purge(_ id: String) {
-        guard deleted.removeValue(forKey: id) != nil else { return }
+    /// A timer of an earlier delete of the same id (deleted, undone, deleted again) finds another [token] and does nothing.
+    func purge(_ id: String, token: UUID) {
+        guard deleted[id]?.token == token else { return }
+        deleted.removeValue(forKey: id)
+        purgeTasks.removeValue(forKey: id)
         defaults.set(Array(deleted.keys), forKey: Self.deletedKey)
         removeSettings(id)
     }

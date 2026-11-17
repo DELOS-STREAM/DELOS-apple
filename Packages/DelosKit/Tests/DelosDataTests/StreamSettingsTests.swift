@@ -47,10 +47,10 @@ import Testing
     }
 
     @MainActor
-    @Test func aNewProfileCopiesTheCurrentOnesStreamSettingsAndDeletingForgetsThem() throws {
+    @Test func aNewProfileCopiesTheCurrentOnesStreamSettingsAndDeletingForgetsThem() async throws {
         let suite = "delos.tests.\(UUID().uuidString)"
         defer { UserDefaults().removePersistentDomain(forName: suite) }
-        let profiles = ProfileStore(suiteName: suite)
+        let profiles = ProfileStore(suiteName: suite, deleteGrace: .milliseconds(20))
         let stream = StreamSettingsStore(suiteName: suite)
         let ann = try #require(profiles.create(name: "Ann", avatar: 0))
         stream.save(StreamSettings(fps: 120), profile: ann.id)
@@ -60,7 +60,7 @@ import Testing
         stream.save(StreamSettings(fps: 30), profile: bob.id)
         #expect(stream.load(profile: ann.id).fps == 120)
         profiles.delete(bob.id)
-        profiles.purge(bob.id)
+        for _ in 0..<500 where stream.load(profile: bob.id) != StreamSettings() { try await Task.sleep(for: .milliseconds(10)) }
         #expect(stream.load(profile: bob.id) == StreamSettings())
     }
 
