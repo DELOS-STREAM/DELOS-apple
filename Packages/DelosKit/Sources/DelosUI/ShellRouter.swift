@@ -28,6 +28,16 @@ final class ShellRouter {
     @ObservationIgnored var transition: (() -> Void) -> Void = { go($0) }
     /// Opens and closes the side menu inside an animation (the root's); tests run it at once.
     @ObservationIgnored var animate: (Double, () -> Void) -> Void = { duration, change in withAnimation(.easeOut(duration: duration), change) }
+    /// The side menu while a touch drag owns it (``SideMenuSwipe``).
+    let sideDrag = SideMenuDrag()
+    /// The panel's width in points, what a drag's travel is measured against; the root keeps it to the stage's.
+    @ObservationIgnored var sideWidth = SideMenuStyle.width
+    /// Reduced motion (the system's or the profile's): a drag only toggles the menu; the root keeps it.
+    @ObservationIgnored var reducedMotion = false
+    /// Runs a drag's release [change] inside [animation], then [done] once the animation has ended; tests run both at once.
+    @ObservationIgnored var settle: (_ animation: Animation, _ change: () -> Void, _ done: @escaping @MainActor () -> Void) -> Void = { animation, change, done in
+        withAnimation(animation, completionCriteria: .removed, change) { MainActor.assumeIsolated { done() } }
+    }
 
     init(navigator: Navigator, layers: Layers, toasts: Toasts, actions: ShellActions) {
         self.navigator = navigator
@@ -56,13 +66,76 @@ final class ShellRouter {
     // MARK: Side menu
 
     func openSideMenu() {
+        // A touch drag owns the menu until it has settled
+        guard !sideDrag.engaged else { return }
         feedback?.play(.open)
         animate(0.56) { sideMenu = FocusModel(initial: QuickSettings.ids[0]) }
     }
 
     func closeSideMenu(sound: Cue?) {
+        guard !sideDrag.engaged else { return }
         if let sound { feedback?.play(sound) }
         animate(0.24) { sideMenu = nil }
+    }
+
+    /// Whether a drag in from the left edge can open the side menu now: the screen has one and nothing else is open (or a
+    /// drag already owns the menu).
+    var sideSwipeOpens: Bool {
+        sideDrag.engaged || (sideMenu == nil && !layers.isOpen && navigator.screenModal == nil && navigator.current.hasSideMenu
+            && !actions.connection.isActive)
+    }
+
+    /// A touch drag took the side menu: from closed when [opening], else from open (or from where a settling panel is).
+    func beginSideDrag(opening: Bool) {
+        if reducedMotion { return }
+        let drag = sideDrag
+        let start = opening ? 0 : drag.engaged ? min(drag.settlingProgress(at: .now), 1) : 1
+        drag.settles += 1
+        drag.start = start
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) {
+            drag.progress = start
+            drag.engaged = true
+            if opening, sideMenu == nil { sideMenu = FocusModel(initial: QuickSettings.ids[0]) }
+        }
+    }
+
+    /// The drag moved [travel] points to the right since it began: the panel follows.
+    func moveSideDrag(travel: Double) {
+        guard !reducedMotion, sideDrag.engaged else { return }
+        sideDrag.progress = SideMenuSwipe.progress(start: sideDrag.start, travel: travel, width: sideWidth)
+    }
+
+    /// The drag ended [travel] points to the right of its start at [velocity] points per second: the menu springs open or
+    /// closed (``SideMenuSwipe/settlesOpen(opening:progress:velocity:fling:)``), from the speed of the finger.
+    func endSideDrag(opening: Bool, travel: Double, velocity: Double) {
+        if reducedMotion {
+            guard SideMenuSwipe.reducedToggles(opening: opening, travel: travel, width: sideWidth) else { return }
+            if opening { openSideMenu() } else { closeSideMenu(sound: .back) }
+            return
+        }
+        let drag = sideDrag
+        guard drag.engaged else { return }
+        let open = SideMenuSwipe.settlesOpen(opening: opening, progress: drag.progress, velocity: velocity)
+        if open && opening { feedback?.play(.open) }
+        if !open && !opening { feedback?.play(.back) }
+        drag.settles += 1
+        let settle = drag.settles
+        let target = open ? 1.0 : 0.0
+        let spring = SettleSpring(from: drag.progress, to: target, velocity: velocity / max(sideWidth, 1), began: .now)
+        drag.spring = spring
+        self.settle(spring.animation, { drag.progress = target }) { [weak self] in
+            guard let self, drag.settles == settle else { return }
+            drag.spring = nil
+            var instant = Transaction()
+            instant.disablesAnimations = true
+            // The panel and the scrim left from where the drag left them: no exit transition
+            withTransaction(instant) {
+                if !open { self.sideMenu = nil }
+                drag.engaged = false
+            }
+        }
     }
 
     /// Left or right on the side menu's focused row: a quick setting takes the next or the previous value.

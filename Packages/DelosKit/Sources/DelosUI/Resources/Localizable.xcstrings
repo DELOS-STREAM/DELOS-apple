@@ -10235,6 +10235,71 @@
         }
       }
     },
+    "devices_address_not_added": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ odpovědělo, ale nepodařilo se ho přidat"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ hat geantwortet, konnte aber nicht hinzugefügt werden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ answered, but could not be added"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ ha respondido, pero no se pudo añadir"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ a répondu, mais n’a pas pu être ajouté"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@から応答がありましたが、追加できませんでした"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@이(가) 응답했지만 추가하지 못했어요"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ respondeu, mas não pôde ser adicionado"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ відповів, але його не вдалося додати"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 已响应，但无法添加"
+          }
+        }
+      }
+    },
     "devices_address_note": {
       "extractionState": "manual",
       "localizations": {
@@ -21262,6 +21327,71 @@
         }
       }
     },
+    "help_checkbox_enable_device_rumble": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Použije vibrační motor handheldu, i když gamepad vibrace podporuje. Ne pro vestavěný USB ovladač."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nutzt den Vibrationsmotor des Handhelds auch dann, wenn ein Controller Rumble unterstützt. Nicht für den eingebauten USB-Treiber."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uses the handheld's vibration motor even when a controller supports rumble. Not for the built-in USB driver."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa el motor de vibración de la consola portátil aunque un mando admita vibración. No sirve con el controlador USB integrado."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilise le moteur de vibration de la console portable même quand une manette gère la vibration. Pas pour le pilote USB intégré."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コントローラーが振動に対応していても、携帯機の振動モーターを使います。内蔵USBドライバーでは使えません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "컨트롤러가 럼블을 지원해도 휴대용 기기의 진동 모터를 사용해요. 내장 USB 드라이버에는 적용되지 않아요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa o motor de vibração do portátil mesmo quando o controle suporta vibração. Não vale para o driver USB integrado."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Використовує вібромотор портативного пристрою, навіть якщо контролер підтримує вібрацію. Не для вбудованого USB-драйвера."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "即使手柄支持震动，也使用掌机的震动马达。不适用于内置 USB 驱动。"
+          }
+        }
+      }
+    },
     "help_checkbox_enable_fullexdisplay": {
       "extractionState": "manual",
       "localizations": {
@@ -21778,6 +21908,71 @@
           "stringUnit": {
             "state": "translated",
             "value": "多任务时让串流保持在画中画中。仅可观看：小窗口中无法操作应用。"
+          }
+        }
+      }
+    },
+    "help_checkbox_enable_rumble": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Posílá vibrace z PC na podporované gamepady. Které efekty fungují, určuje gamepad, připojení a ovladač."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sendet Host-Rumble an unterstützte Gamepads. Controller, Verbindung und Treiber bestimmen, welche Effekte funktionieren."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sends host rumble to supported gamepads. Controller, connection and driver decide which effects work."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envía la vibración del host a los mandos compatibles. El mando, la conexión y el controlador deciden qué efectos funcionan."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoie les vibrations du PC aux manettes compatibles. La manette, la connexion et le pilote déterminent quels effets fonctionnent."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ホストの振動を、対応するコントローラーに送ります。どの効果が使えるかは、コントローラー、接続、ドライバーによって決まります。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "호스트 럼블을 지원되는 게임패드로 보내요. 어떤 효과가 작동하는지는 컨트롤러, 연결, 드라이버에 따라 달라요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envia a vibração do PC para controles compatíveis. Controle, conexão e driver definem quais efeitos funcionam."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Надсилає вібрацію від хоста на контролери з підтримкою. Які ефекти працюють, залежить від контролера, з’єднання й драйвера."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将电脑端的震动发送给支持的手柄。具体哪些效果可用，取决于手柄、连接方式和驱动。"
           }
         }
       }
@@ -23728,6 +23923,71 @@
           "stringUnit": {
             "state": "translated",
             "value": "向 Vibepollo 或 Apollo 请求一个符合所需分辨率和 FPS 的 PC 虚拟显示器。需要电脑端支持。"
+          }
+        }
+      }
+    },
+    "help_checkbox_vibrate_fallback": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Použije vibrační motor handheldu pro vibrace ze hry, když to gamepad neumí. Vyžaduje vibrační motor."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nutzt den Vibrationsmotor des Handhelds für Spiel-Rumble, wenn das Gamepad es nicht kann. Erfordert einen Vibrationsmotor."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uses the handheld's vibration motor for game rumble when the gamepad cannot. Needs a vibration motor."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa el motor de vibración de la consola portátil para la vibración del juego cuando el mando no puede. Requiere un motor de vibración."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilise le moteur de vibration de la console portable pour les vibrations du jeu quand la manette ne peut pas. Nécessite un moteur de vibration."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コントローラーが振動できない場合に、携帯機の振動モーターをゲームの振動に使います。振動モーターが必要です。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "게임패드가 지원하지 못할 때 휴대용 기기의 진동 모터로 게임 럼블을 대신해요. 진동 모터가 필요해요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa o motor de vibração do portátil para a vibração do jogo quando o controle não consegue. Requer motor de vibração."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Використовує вібромотор портативного пристрою для ігрової вібрації, коли контролер не може. Потрібен вібромотор."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "手柄无法震动时，使用掌机的震动马达模拟游戏震动。需要设备带有震动马达。"
           }
         }
       }
@@ -25873,6 +26133,71 @@
           "stringUnit": {
             "state": "translated",
             "value": "PC 发送的分辨率。像素越多，画面越细腻，负载也越高。"
+          }
+        }
+      }
+    },
+    "help_list_rumble_feel": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jak se vibrace ze hry cítí. Od příštího streamu."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wie sich Spiel-Rumble anfühlt. Ab dem nächsten Stream."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How game rumble feels. Next stream."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cómo se siente la vibración del juego. Próximo stream."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le ressenti des vibrations du jeu. Au prochain stream."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ゲームの振動の感触です。次回のストリームから適用されます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "게임 럼블의 느낌이에요. 다음 스트림부터 적용돼요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Como a vibração do jogo é sentida. Vale no próximo stream."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Яка вібрація відчувається в грі. З наступного стріму."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "游戏震动的手感。下次串流生效。"
           }
         }
       }
@@ -29448,6 +29773,71 @@
           "stringUnit": {
             "state": "translated",
             "value": "实体触控板的垂直灵敏度。值越大移动越远；负值会反向。"
+          }
+        }
+      }
+    },
+    "help_seekbar_vibrate_fallback_strength": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Síla vibrací tohoto zařízení pro vibrace ze hry. Vyžaduje řízení amplitudy. Netýká se haptiky rozhraní."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stärke der Vibration dieses Geräts für Spiel-Rumble. Erfordert Amplitudensteuerung. Nicht die Haptik der Oberfläche."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Strength of this device's vibration for game rumble. Needs amplitude control. Not interface haptics."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intensidad de la vibración de este dispositivo para la vibración del juego. Requiere control de amplitud. No afecta a la vibración háptica de la interfaz."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intensité de la vibration de cet appareil pour les vibrations du jeu. Nécessite le contrôle d’amplitude. Pas le retour haptique de l’interface."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ゲームの振動に使う、この端末の振動の強さです。振幅の制御が必要です。インターフェースのハプティクスには影響しません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "게임 럼블에 쓰는 이 기기 진동의 세기예요. 진폭 제어가 필요해요. 인터페이스 햅틱과는 별개예요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intensidade da vibração deste dispositivo para a vibração do jogo. Requer controle de amplitude. Não afeta o feedback tátil da interface."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сила вібрації цього пристрою для ігрової вібрації. Потрібне керування амплітудою. Не стосується тактильного відгуку інтерфейсу."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本设备模拟游戏震动的强度。需要支持振幅控制。不影响界面触感反馈。"
           }
         }
       }
@@ -41759,6 +42149,71 @@
         }
       }
     },
+    "row_not_set": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenastaveno"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht gesetzt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not set"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sin definir"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non défini"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未設定"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 안 됨"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não definido"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не задано"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未设置"
+          }
+        }
+      }
+    },
     "row_reset": {
       "extractionState": "manual",
       "localizations": {
@@ -42080,6 +42535,526 @@
           "stringUnit": {
             "state": "translated",
             "value": "增加"
+          }
+        }
+      }
+    },
+    "rumble_preset_kick_start": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silný start"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kickstart"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kick-start"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impulso inicial"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Coup de départ"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キックスタート"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "킥 스타트"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impulso inicial"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Різкий старт"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启动冲击"
+          }
+        }
+      }
+    },
+    "rumble_preset_original": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Původní"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オリジナル"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "원본"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оригінал"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "原始"
+          }
+        }
+      }
+    },
+    "rumble_preset_pulsing": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pulzující"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pulsierend"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pulsing"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pulsante"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pulsé"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "パルス"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "펄스"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pulsante"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пульсація"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "脉冲"
+          }
+        }
+      }
+    },
+    "rumble_preset_soft": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jemné"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sanft"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Soft"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suave"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Doux"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ソフト"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "부드러움"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suave"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "М’яка"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "柔和"
+          }
+        }
+      }
+    },
+    "rumble_problem_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ selhalo: %2$@; použije se prostá amplituda"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ ist fehlgeschlagen: %2$@; es wird die einfache Amplitude verwendet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ failed: %2$@; plain amplitude is used"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ falló: %2$@; se usa amplitud simple"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ a échoué : %2$@ ; l’amplitude simple est utilisée"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@が失敗しました：%2$@。通常の振幅を使います"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 실패: %2$@. 일반 진폭을 사용해요"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ falhou: %2$@; a amplitude simples é usada"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ завершився помилкою: %2$@; використовується проста амплітуда"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 失败：%2$@；改用普通振幅"
+          }
+        }
+      }
+    },
+    "rumble_problem_no_amplitude": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tento vibrační motor nemá řízení amplitudy; použije se prostá amplituda"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Vibrationsmotor hat keine Amplitudensteuerung; es wird die einfache Amplitude verwendet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vibrator has no amplitude control; plain amplitude is used"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este motor de vibración no tiene control de amplitud; se usa amplitud simple"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce moteur de vibration n’a pas de contrôle d’amplitude ; l’amplitude simple est utilisée"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この振動モーターは振幅を制御できません。通常の振幅を使います"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 진동 모터는 진폭을 제어할 수 없어요. 일반 진폭을 사용해요"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este motor de vibração não tem controle de amplitude; a amplitude simples é usada"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цей вібромотор не має керування амплітудою; використовується проста амплітуда"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此振动马达不支持振幅控制；改用普通振幅"
+          }
+        }
+      }
+    },
+    "rumble_problem_single_vibrator": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ běží jen na jediném vibračním motoru; použije se prostá amplituda"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ läuft nur auf einem einzelnen Vibrationsmotor; es wird die einfache Amplitude verwendet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ runs on a single vibrator only; plain amplitude is used"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ solo funciona con un único motor de vibración; se usa amplitud simple"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ ne fonctionne qu’avec un seul moteur de vibration ; l’amplitude simple est utilisée"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@は単一の振動モーターでのみ動作します。通常の振幅を使います"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 방식은 진동 모터가 하나일 때만 동작해요. 일반 진폭을 사용해요"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ só funciona com um único motor de vibração; a amplitude simples é usada"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ працює лише з одним вібромотором; використовується проста амплітуда"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 仅支持单个振动马达；改用普通振幅"
+          }
+        }
+      }
+    },
+    "rumble_unavailable_no_amplitude": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tento vibrační motor nemá řízení amplitudy"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Vibrationsmotor hat keine Amplitudensteuerung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vibrator has no amplitude control"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este motor de vibración no tiene control de amplitud"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce moteur de vibration n’a pas de contrôle d’amplitude"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この振動モーターは振幅を制御できません"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 진동 모터는 진폭을 제어할 수 없어요"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este motor de vibração não tem controle de amplitude"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цей вібромотор не має керування амплітудою"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此振动马达不支持振幅控制"
           }
         }
       }
@@ -48933,6 +49908,201 @@
           "stringUnit": {
             "state": "translated",
             "value": "Material You 配色"
+          }
+        }
+      }
+    },
+    "settings_native_menu_buttons_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klepnutí na Guide nebo Zpět otevře menu streamu; podržení pošle do PC Guide. Tady můžeš přidat vlastní tlačítka stisknutá společně, třeba zadní tlačítko. Výchozí je žádná."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kurz Guide oder Zurück drücken öffnet das Stream-Menü; halten sendet Guide an den PC. Hier kannst du eigene, gemeinsam gedrückte Tasten hinzufügen, z. B. eine Rückseitentaste. Standardmäßig keine."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A tap of Guide or Back opens the stream menu; holding it sends Guide to the PC. Here you can add your own buttons pressed together, e.g. a rear button. None by default."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una pulsación de Guide o Atrás abre el menú del stream; mantenerlo envía Guide al PC. Aquí puedes añadir tus propios botones pulsados a la vez, p. ej. un botón trasero. Ninguno por defecto."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un appui sur Guide ou Retour ouvre le menu du stream ; un appui long envoie Guide au PC. Ici, tu peux ajouter tes propres boutons pressés ensemble, par ex. une palette arrière. Aucun par défaut."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guideまたは戻るを短く押すとストリームメニューが開き、長押しするとPCにGuideを送ります。ここでは、背面ボタンなど同時に押す独自のボタンを追加できます。初期設定ではなしです。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guide나 뒤로를 짧게 누르면 스트림 메뉴가 열리고, 길게 누르면 PC에 Guide를 보내요. 여기서 뒷면 버튼 등 함께 누를 버튼을 직접 추가할 수 있어요. 기본값은 없음이에요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um toque em Guide ou Voltar abre o menu do stream; segurar envia Guide ao PC. Aqui você pode adicionar seus próprios botões pressionados juntos, por exemplo um botão traseiro. Nenhum por padrão."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Коротке натискання Guide або Назад відкриває меню стріму; утримання надсилає на ПК Guide. Тут можна додати власні кнопки, натиснуті разом, наприклад задню кнопку. Типово немає."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "短按 Guide 或返回键打开串流菜单；长按则向电脑发送 Guide。可在此添加自定义的同时按下的按键，例如背键。默认无。"
+          }
+        }
+      }
+    },
+    "settings_native_menu_buttons_record": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nahrát tlačítka"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasten aufzeichnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record buttons"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grabar botones"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer des boutons"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ボタンを記録"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "버튼 기록"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gravar botões"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Записати кнопки"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "录制按键"
+          }
+        }
+      }
+    },
+    "settings_native_menu_buttons_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tlačítka menu streamu"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasten fürs Stream-Menü"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stream menu buttons"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Botones del menú del stream"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boutons du menu du stream"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ストリームメニューのボタン"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스트림 메뉴 버튼"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Botões do menu do stream"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Кнопки меню стріму"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "串流菜单按键"
           }
         }
       }
@@ -57466,6 +58636,136 @@
         }
       }
     },
+    "shell_button_capture_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Podrž je společně a pak pusť. Funguje i jedno tlačítko, třeba zadní. Počkáním nebo klepnutím zrušíš."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halte sie gleichzeitig gedrückt und lass dann los. Eine einzelne Taste geht auch, z. B. eine Rückseitentaste. Warte oder tippe zum Abbrechen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold them together, then let go. One button works too, e.g. a rear button. Wait or tap to cancel."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mantenlos pulsados a la vez y suéltalos. También vale un solo botón, p. ej. uno trasero. Espera o toca para cancelar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maintiens-les ensemble, puis relâche. Un seul bouton marche aussi, par ex. une palette arrière. Attends ou touche l’écran pour annuler."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同時に押し、そのまま離してください。背面ボタンなど、1つのボタンでも設定できます。キャンセルするには、待つかタップしてください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "버튼을 함께 누르고 있다가 놓으세요. 뒷면 버튼처럼 버튼 하나만 써도 돼요. 취소하려면 기다리거나 탭하세요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Segure-os juntos e solte. Um único botão também funciona, por exemplo um botão traseiro. Aguarde ou toque para cancelar."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Утримуй їх разом, потім відпусти. Підійде й одна кнопка, наприклад задня. Зачекай або торкнись, щоб скасувати."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同时按住它们，然后松开。也可以只用一个按键，例如背键。等待或点按即可取消。"
+          }
+        }
+      }
+    },
+    "shell_button_capture_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stiskni tlačítka menu streamu"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drücke die Tasten für das Stream-Menü"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Press the stream menu buttons"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pulsa los botones del menú del stream"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appuie sur les boutons du menu du stream"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ストリームメニューのボタンを押してください"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스트림 메뉴 버튼을 누르세요"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pressione os botões do menu do stream"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Натисни кнопки меню стріму"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请按下串流菜单按键"
+          }
+        }
+      }
+    },
     "shell_default_profile_name": {
       "extractionState": "manual",
       "localizations": {
@@ -63019,6 +64319,201 @@
         }
       }
     },
+    "stream_menu_button_home": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Domů"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Home"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Home"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inicio"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accueil"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ホーム"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "홈"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Início"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Головна"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主页"
+          }
+        }
+      }
+    },
+    "stream_menu_button_select": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "セレクト"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "셀렉트"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择"
+          }
+        }
+      }
+    },
+    "stream_menu_button_start": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "スタート"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시작"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Старт"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开始"
+          }
+        }
+      }
+    },
     "stream_menu_hint_back": {
       "extractionState": "manual",
       "localizations": {
@@ -63340,6 +64835,71 @@
           "stringUnit": {
             "state": "translated",
             "value": "命令"
+          }
+        }
+      }
+    },
+    "stream_menu_row_rumble_feel": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Charakter vibrací"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vibrationsprofil"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rumble feel"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sensación de vibración"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ressenti des vibrations"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "振動の感触"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "럼블 느낌"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sensação da vibração"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Відчуття вібрації"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "震动手感"
           }
         }
       }
@@ -72639,6 +74199,71 @@
         }
       }
     },
+    "title_checkbox_vibrate_fallback": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nahradit vibrace gamepadu vibrací zařízení"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rumble per Gerätevibration nachbilden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emulate rumble support with vibration"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emular la vibración con el dispositivo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Simuler la vibration avec l’appareil"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端末の振動で振動機能をエミュレート"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "진동으로 럼블 에뮬레이션"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emular vibração do controle com a vibração do dispositivo"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Емуляція вібрації контролера вібромотором"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用设备震动模拟手柄震动"
+          }
+        }
+      }
+    },
     "title_checkbox_vibrate_osc": {
       "extractionState": "manual",
       "localizations": {
@@ -72964,6 +74589,71 @@
         }
       }
     },
+    "title_device_rumble": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vynutit vibrace zařízení"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vibration am Gerät erzwingen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Force vibration on device"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forzar vibración en el dispositivo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forcer la vibration de l’appareil"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端末の振動を強制"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "기기 진동 강제"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forçar vibração no dispositivo"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Примусова вібрація пристрою"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "强制设备震动"
+          }
+        }
+      }
+    },
     "title_enable_commit_text": {
       "extractionState": "manual",
       "localizations": {
@@ -73155,6 +74845,71 @@
           "stringUnit": {
             "state": "translated",
             "value": "串流时显示性能统计"
+          }
+        }
+      }
+    },
+    "title_enable_rumble": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zapnout vibrace"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rumble aktivieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable Rumble"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activar vibración"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activer la vibration"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "振動を有効にする"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "럼블 사용"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ativar vibração"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Увімкнути вібрацію"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启用震动"
           }
         }
       }
@@ -75170,6 +76925,71 @@
           "stringUnit": {
             "state": "translated",
             "value": "计费网络下的视频码率"
+          }
+        }
+      }
+    },
+    "title_seekbar_vibrate_fallback_strength": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Síla náhradních vibrací"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stärke des nachgebildeten Rumbles"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adjust emulated rumble intensity"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajustar la intensidad de la vibración emulada"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intensité de la vibration simulée"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "エミュレート振動の強さを調整"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "에뮬레이션 럼블 강도 조절"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajustar intensidade da vibração emulada"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сила емульованої вібрації"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "调整模拟震动强度"
           }
         }
       }

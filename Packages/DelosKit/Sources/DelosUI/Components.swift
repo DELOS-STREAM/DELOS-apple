@@ -1,4 +1,15 @@
 import SwiftUI
+import Observation
+
+@MainActor @Observable
+final class StatusBarEdges {
+    /// Points within the stage, before the right status cluster; nil until its first measurement.
+    var rightStart: Double?
+}
+
+extension EnvironmentValues {
+    @Entry var statusBarEdges: StatusBarEdges?
+}
 
 /// The DELOS mark: a ring in the main color with a small moon in the secondary color at its top right
 /// (`LogoMark` in DELOS for Android). [size] in stage pixels.

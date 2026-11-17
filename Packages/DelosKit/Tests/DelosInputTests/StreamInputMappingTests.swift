@@ -1,5 +1,6 @@
 import CoreGraphics
 import DelosCore
+import Foundation
 import Testing
 @testable import DelosInput
 
@@ -64,31 +65,253 @@ import Testing
     }
 }
 
+/// The stream menu's own buttons (`ButtonShortcutTest` of DELOS for Android), fed the buttons held at each moment.
 @Suite struct MenuShortcutTests {
-    /// The buttons forwarded and whether the menu opened, for each controller state in turn.
-    private func run(_ states: [ControllerButtons]) -> (forward: [ControllerButtons], open: [Bool]) {
-        var shortcut = MenuShortcut()
+    /// The buttons kept from the host and whether the menu opened, for each moment in turn.
+    private func run(_ buttons: Set<ShortcutButton>, _ states: [Set<ShortcutButton>]) -> (kept: [Set<ShortcutButton>], open: Int) {
+        var shortcut = MenuShortcut(buttons: buttons)
         let results = states.map { shortcut.update($0) }
-        return (results.map(\.forward), results.map(\.open))
+        return (results.map(\.swallowed), results.filter(\.open).count)
     }
 
-    @Test func l3AndR3OpenTheMenuWhenBothAreLetGo() {
-        let result = run([[.leftStick], [.leftStick, .rightStick], [.rightStick], [], []])
-        // The button that completes the shortcut is kept from the host; the menu opens once, when both are let go
-        #expect(result.forward == [[.leftStick], [.leftStick], [], [], []])
-        #expect(result.open == [false, false, false, true, false])
+    @Test func l3AndR3OpenTheMenuWhenReleasedInEitherOrder() {
+        #expect(run([.l3, .r3], [[.l3], [.l3, .r3], [.r3], []]).open == 1)
+        #expect(run([.l3, .r3], [[.r3], [.l3, .r3], [.r3], []]).open == 1)
+        #expect(run([.l3, .r3], [[.l3], [.l3, .r3], [.l3], []]).open == 1)
     }
 
-    @Test func otherButtonsPassAndOneButtonAloneDoesNotOpen() {
-        let result = run([[.a, .rightStick], [.a], []])
-        #expect(result.forward == [[.a, .rightStick], [.a], []])
-        #expect(result.open == [false, false, false])
+    @Test func opensOnTheLastReleaseNotBefore() {
+        var shortcut = MenuShortcut(buttons: [.l3, .r3])
+        let opened = [[.l3], [.l3, .r3], [.l3], []].map { shortcut.update($0).open }
+        #expect(opened == [false, false, false, true])
     }
 
-    @Test func bothAtOnceAreBothKeptFromTheHost() {
-        let result = run([[.leftStick, .rightStick, .x], []])
-        #expect(result.forward == [[.x], []])
-        #expect(result.open == [false, true])
+    @Test func oneButtonAloneNeverOpensAndAlwaysReachesTheGame() {
+        let result = run([.l3, .r3], [[.l3], [], [.r3], [], [.l3], [], [.r3], []])
+        #expect(result.open == 0)
+        #expect(result.kept.allSatisfy { $0.isEmpty })
+    }
+
+    @Test func aButtonHeldAndReportedAgainDoesNotCountTwice() {
+        #expect(run([.l3, .r3], [[.l3], [.l3], [.l3], []]).open == 0)
+    }
+
+    @Test func otherButtonsPressedAlongDoNotOpenOrDisturbIt() {
+        let result = run([.l3, .r3], [[.a], [.a, .l3], [.a, .l3, .x], [.l3, .x], [.l3, .r3, .x], [.l3, .x], [.x], []])
+        #expect(result.open == 1)
+        #expect(result.kept.allSatisfy { !$0.contains(.a) && !$0.contains(.x) })
+    }
+
+    @Test func onlyTheCompletingButtonIsKeptFromTheGameSoEveryPressedButtonGetsItsRelease() {
+        // The game saw L3 go down, so it must see it go up; R3 (and its release) never reaches it
+        #expect(run([.l3, .r3], [[.l3], [.l3, .r3], [.l3], []]).kept == [[], [.r3], [], []])
+        // The other release order: L3's release completes it and still reaches the game
+        #expect(run([.l3, .r3], [[.l3], [.l3, .r3], [.r3], []]).kept == [[], [.r3], [.r3], []])
+        // Both at once: both are kept
+        #expect(run([.l3, .r3], [[.l3, .r3, .x], []]).kept == [[.l3, .r3], []])
+    }
+
+    @Test func theSameStateSeenTwiceChangesNothing() {
+        #expect(run([.l3, .r3], [[.l3], [.l3], [.l3, .r3], [.l3, .r3], [.r3], [.r3], [], []]).open == 1)
+    }
+
+    @Test func otherCombinationsWork() {
+        let combos: [Set<ShortcutButton>] = [[.start, .select], [.l1, .r1], [.home], [.l1, .r1, .start], [.l2, .paddle1]]
+        for combo in combos {
+            #expect(run(combo, [combo, []]).open == 1, "\(combo)")
+        }
+    }
+
+    /// A tap of Home opens the menu, so no buttons are set by default (L3 + R3 was the default before).
+    @Test func noButtonsAreSetByDefault() {
+        var shortcut = MenuShortcut()
+        #expect(shortcut.buttons.isEmpty)
+        let results = [[.l3], [.l3, .r3], [.r3], []].map { shortcut.update($0) }
+        #expect(results.allSatisfy { $0.swallowed.isEmpty && !$0.open })
+    }
+
+    @Test func theButtonsAreReadFromTheControllerAndTakenOutOfTheStateThePCGets() {
+        var pad = GamepadSnapshot()
+        pad.leftStickButton = true
+        pad.rightTriggerPressed = true
+        pad.rightTrigger = 0.9
+        pad.home = true
+        pad.share = true
+        pad.up = true
+        // The D-pad is never part of a shortcut
+        #expect(ShortcutButton.pressed(pad) == [.l3, .r2, .home, .share])
+        var state = GamepadMapping.state(pad)
+        ShortcutButton.remove([.l3, .r2, .share], from: &state)
+        #expect(state.buttons == [.special, .up])
+        #expect(state.rightTrigger == 0)
+    }
+
+    @Test func storedNamesRoundTripInLabelOrderAndUnknownNamesAreDropped() {
+        #expect(ShortcutButton.stored([.r3, .l3, .start]) == ["l3", "r3", "start"])
+        #expect(ShortcutButton.parse(["r3", "l3", "touchpad", "dpadUp"]) == [.l3, .r3])
+    }
+}
+
+/// Recording the stream menu's buttons (`ButtonCaptureLayer` of DELOS for Android).
+@Suite struct MenuButtonRecorderTests {
+    /// What the recorder returns for each moment in turn.
+    private func record(_ states: [Set<ShortcutButton>]) -> (results: [Set<ShortcutButton>?], combination: [ShortcutButton]) {
+        var recorder = MenuButtonRecorder()
+        let results = states.map { recorder.update($0) }
+        return (results, recorder.combination)
+    }
+
+    @Test func theButtonsHeldTogetherAreSavedOnceAllAreLetGo() {
+        let run = record([[.l1], [.l1, .r1], [.r1], [], [.a], []])
+        // Saved when the last is let go; once saved, nothing more
+        #expect(run.results == [nil, nil, nil, [.l1, .r1], nil, nil])
+        #expect(run.combination == [.l1, .r1])
+    }
+
+    @Test func oneButtonWorksAndNothingIsSavedBeforeAPress() {
+        #expect(record([[], [.paddle1], []]).results == [nil, nil, [.paddle1]])
+    }
+
+    @Test func aButtonLetGoAndPressedAgainWhileAnotherIsHeldCountsOnce() {
+        let run = record([[.start], [.start, .select], [.select], [.start, .select], []])
+        #expect(run.combination == [.start, .select])
+        #expect(run.results.last == [.start, .select])
+    }
+
+    @Test func itGivesUpAfterTenSeconds() {
+        #expect(MenuButtonRecorder.idle == .seconds(10))
+    }
+}
+
+/// The capture of every controller's buttons: a combination from two controllers, an idle timeout and a cancel.
+@MainActor
+@Suite struct MenuButtonCaptureTests {
+    @Test func buttonsOfTwoControllersFormOneCombination() {
+        var saved: Set<ShortcutButton>??
+        let capture = MenuButtonCapture { saved = .some($0) }
+        let pads = (NSObject(), NSObject())
+        let one = ObjectIdentifier(pads.0), two = ObjectIdentifier(pads.1)
+        capture.update([.l3], from: one)
+        capture.update([.r3], from: two)
+        #expect(capture.combination == [.l3, .r3])
+        capture.update([], from: one)
+        #expect(saved == nil)
+        capture.update([], from: two)
+        #expect(saved == .some([.l3, .r3]))
+    }
+
+    @Test func withoutAPressItEndsUnchanged() async throws {
+        var saved: Set<ShortcutButton>?? = nil
+        let capture = MenuButtonCapture(idle: .milliseconds(30)) { saved = .some($0) }
+        capture.start()
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(saved == .some(nil))
+    }
+
+    @Test func aCancelEndsItUnchangedOnce() {
+        var calls = 0
+        let capture = MenuButtonCapture { result in
+            calls += 1
+            #expect(result == nil)
+        }
+        capture.cancel()
+        capture.cancel()
+        capture.update([.a], from: ObjectIdentifier(NSObject()))
+        capture.update([], from: ObjectIdentifier(NSObject()))
+        #expect(calls == 1)
+    }
+}
+
+/// A tap of Home opens the stream menu, a hold of half a second is Guide (`GuideTapHoldTest` of DELOS for Android), driven
+/// by a fake clock.
+@Suite struct GuideTapHoldTests {
+    /// The gesture with a fake clock: milliseconds since the test started.
+    private final class Clock {
+        var now: Int64 = 1_000
+        var g = GuideTapHold()
+        func advance(_ ms: Int64) { now += ms }
+        func down() -> Bool { g.onDown(now) }
+        func timeout() -> GuideTapHold.Action { g.onHoldTimeout(now) }
+        func up() -> GuideTapHold.Action { g.onUp() }
+        func reset() -> Bool { g.reset() }
+    }
+
+    private let c = Clock()
+    private let hold = GuideTapHold.holdMilliseconds
+
+    @Test func aTapOpensTheMenuOnReleaseAndSendsNoGuide() {
+        #expect(c.down(), "the first down starts the hold timer")
+        c.advance(120)
+        #expect(c.up() == .tapMenu)
+        #expect(!c.g.isGuideDown)
+    }
+
+    @Test func aHoldPressesGuideWhileHeldAndReleasesItOnUp() {
+        _ = c.down()
+        c.advance(hold)
+        #expect(c.timeout() == .guideDown, "decided while held, not on release")
+        #expect(c.g.isGuideDown)
+        c.advance(2_000)
+        #expect(c.up() == .guideUp, "no menu follows a hold")
+        #expect(!c.g.isGuideDown)
+    }
+
+    @Test func aReleaseJustBeforeTheHoldTimeIsATap() {
+        _ = c.down()
+        c.advance(hold - 1)
+        #expect(c.timeout() == GuideTapHold.Action.none)
+        #expect(c.up() == .tapMenu)
+    }
+
+    @Test func repeatsOfAHeldButtonDoNotRestartTheHold() {
+        #expect(c.down())
+        c.advance(300)
+        #expect(!c.down())
+        c.advance(200)
+        #expect(!c.down())
+        #expect(c.timeout() == .guideDown)
+        #expect(c.up() == .guideUp)
+    }
+
+    @Test func aLateTimerAfterReleaseAndAStrayUpDoNothing() {
+        _ = c.down()
+        _ = c.up()
+        c.advance(hold)
+        #expect(c.timeout() == GuideTapHold.Action.none)
+        #expect(c.up() == GuideTapHold.Action.none)
+    }
+
+    @Test func aStaleTimerOfAnEarlierPressDoesNotCutTheNextPressShort() {
+        _ = c.down()
+        c.advance(100)
+        _ = c.up()
+        c.advance(100)
+        _ = c.down()
+        c.advance(hold - 200)
+        #expect(c.timeout() == GuideTapHold.Action.none, "the first press's timer fires 300 ms into the second")
+        c.advance(200)
+        #expect(c.timeout() == .guideDown)
+    }
+
+    @Test func theTimerFiresOncePerPress() {
+        _ = c.down()
+        c.advance(hold)
+        #expect(c.timeout() == .guideDown)
+        #expect(c.timeout() == GuideTapHold.Action.none)
+    }
+
+    @Test func resetForgetsAPressAndSaysWhetherGuideWasDown() {
+        _ = c.down()
+        c.advance(hold)
+        _ = c.timeout()
+        #expect(c.reset())
+        #expect(c.up() == GuideTapHold.Action.none)
+        #expect(c.down(), "a new press works after a reset")
+        #expect(!c.reset())
+    }
+
+    @Test func theHoldTimeIsHalfASecond() {
+        #expect(GuideTapHold.holdMilliseconds == 500)
     }
 }
 
@@ -175,15 +398,72 @@ import Testing
         #expect(ends == [])
     }
 
-    @Test func theLeftEdgeSwipeOwnsItsTouchAndOpensOnce() {
+    // `StreamMenuSwipeTest` of DELOS for Android
+
+    @Test func zoneBoundsFor1080() {
+        expectZone(StreamMenuSwipe.zone(height: 1080, gestureInset: 0, minDeadEdge: 24), top: 885.6, bottom: 1056)
+        expectZone(StreamMenuSwipe.zone(height: 1080, gestureInset: 48, minDeadEdge: 24), top: 885.6, bottom: 1032)
+        expectZone(StreamMenuSwipe.zone(height: 1080, gestureInset: 150, minDeadEdge: 24), top: 885.6, bottom: 930)
+    }
+
+    private func expectZone(_ zone: SwipeZone, top: CGFloat, bottom: CGFloat) {
+        #expect(abs(zone.top - top) < 1e-6 && zone.bottom == bottom, "\(zone)")
+    }
+
+    @Test func minimumWinsOverSmallInset() {
+        #expect(StreamMenuSwipe.zone(height: 1080, gestureInset: 10, minDeadEdge: 24).bottom == 1056)
+    }
+
+    @Test func tinyHeightsStayValid() {
+        let z = StreamMenuSwipe.zone(height: 20, gestureInset: 0, minDeadEdge: 24)
+        #expect(z.bottom == 0)
+        #expect(z.top <= z.bottom)
+        #expect(!StreamMenuSwipe.starts(z, y: 5))
+        #expect(!StreamMenuSwipe.starts(StreamMenuSwipe.zone(height: 0, gestureInset: 0, minDeadEdge: 24), y: 0))
+    }
+
+    @Test func startIsInclusiveAtTopExclusiveAtBottom() {
+        let z = StreamMenuSwipe.zone(height: 1080, gestureInset: 0, minDeadEdge: 24)
+        #expect(StreamMenuSwipe.starts(z, y: z.top))
+        #expect(!StreamMenuSwipe.starts(z, y: z.top - 1))
+        #expect(StreamMenuSwipe.starts(z, y: z.bottom - 1))
+        #expect(!StreamMenuSwipe.starts(z, y: z.bottom))
+    }
+
+    @Test func theEdgeStripDoesNotStartAndTheBandAboveItDoes() {
+        let z = StreamMenuSwipe.zone(height: 1080, gestureInset: 0, minDeadEdge: 24)
+        #expect(StreamMenuSwipe.starts(z, y: 1080 * 0.94))
+        #expect(!StreamMenuSwipe.starts(z, y: 1056))
+        #expect(!StreamMenuSwipe.starts(z, y: 1079))
+    }
+
+    @Test func opensAtDistanceThreshold() {
+        let start = CGPoint(x: 500, y: 1000)
+        #expect(StreamMenuSwipe.opens(start: start, now: CGPoint(x: 500, y: 1000 - 130), height: 1080))
+        #expect(!StreamMenuSwipe.opens(start: start, now: CGPoint(x: 500, y: 1000 - 129), height: 1080))
+        #expect(!StreamMenuSwipe.opens(start: start, now: CGPoint(x: 500, y: 1010), height: 1080))
+    }
+
+    @Test func mostlyHorizontalDragIsRejected() {
+        #expect(!StreamMenuSwipe.opens(start: CGPoint(x: 100, y: 1000), now: CGPoint(x: 400, y: 800), height: 1080))
+        #expect(!StreamMenuSwipe.opens(start: CGPoint(x: 400, y: 1000), now: CGPoint(x: 100, y: 800), height: 1080))
+        #expect(!StreamMenuSwipe.opens(start: CGPoint(x: 100, y: 1000), now: CGPoint(x: 300, y: 800), height: 1080))
+        #expect(StreamMenuSwipe.opens(start: CGPoint(x: 100, y: 1000), now: CGPoint(x: 150, y: 800), height: 1080))
+    }
+
+    @Test func aTouchInTheBandIsTheSwipesForItsWholeLifeAndOpensOnce() {
         var swipe = MenuSwipe()
-        // Outside the left 4 %: not the swipe's
-        let outside = swipe.began(1, x: 100, width: 2000)
-        let inside = swipe.began(2, x: 30, width: 2000)
-        #expect(!outside && inside)
-        let moves = [100.0, 280, 400].map { swipe.moved(2, x: $0, width: 2000) }
+        let zone = StreamMenuSwipe.zone(height: 1080, gestureInset: 0, minDeadEdge: 24)
+        // Above the band, and in the system's strip: not the swipe's
+        let above = swipe.began(1, at: CGPoint(x: 500, y: 500), zone: zone)
+        let strip = swipe.began(3, at: CGPoint(x: 500, y: 1070), zone: zone)
+        let band = swipe.began(2, at: CGPoint(x: 500, y: 1000), zone: zone)
+        #expect(!above && !strip && band)
+        let moves = [950.0, 870, 700].map { swipe.moved(2, to: CGPoint(x: 500, y: $0), height: 1080) }
         #expect(moves.map(\.owned) == [true, true, true])
         #expect(moves.map(\.open) == [false, true, false])
+        let stray = swipe.moved(1, to: CGPoint(x: 500, y: 100), height: 1080)
+        #expect(!stray.owned && !stray.open)
         let ended = (swipe.ended(2), swipe.ended(1))
         #expect(ended == (true, false))
     }

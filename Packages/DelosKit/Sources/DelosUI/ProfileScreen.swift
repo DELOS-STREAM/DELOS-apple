@@ -78,8 +78,9 @@ struct ProfileChip: View {
             Text(profile.name)
                 .font(DelosFonts.figtree(stage.tpx(24), .semibold))
                 .foregroundStyle(colors.text.color)
-                .lineLimit(1)
+                .lineLimit(stage.compact ? 1 : nil)
             SymbolView(symbol: Symbols.expandMore, size: 28, color: focused ? colors.accent : colors.text3)
+                .fixedSize()
         }
         .padding(.leading, stage.px(6))
         .padding(.trailing, stage.px(26))

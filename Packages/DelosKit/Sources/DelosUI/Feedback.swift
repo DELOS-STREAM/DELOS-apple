@@ -1,5 +1,6 @@
-import AudioToolbox
+import AVFoundation
 import Foundation
+import OSLog
 #if os(iOS)
 import UIKit
 #endif
@@ -9,15 +10,14 @@ public enum Cue: String, CaseIterable, Sendable {
     case move, select, back, open, error
 }
 
-/// UI sounds (the five blips of DELOS for Android, made by its tools/sounds/make_ui_sounds.py) and haptics on iPhone
-/// and iPad. The sounds are system sounds: they mix with other audio, follow the silent switch and never block the main
-/// thread (an `AVAudioPlayer` created at launch waited for the audio server and froze the first frame).
+/// Interface cues use media-volume playback. Audio-server work and WAV preparation stay off the main actor.
+/// The stream owns its audio-session mode; UI cues never deactivate it or replace an existing playback category.
 @MainActor
 public final class Feedback {
     public var soundsEnabled = true
     public var hapticsEnabled = true
 
-    private var sounds: [Cue: SystemSoundID] = [:]
+    private let sounds: any CueSoundPlaying
     private var focusSilenced = true
     #if os(iOS)
     private let selection = UISelectionFeedbackGenerator()
@@ -26,12 +26,10 @@ public final class Feedback {
     #endif
 
     public init() {
-        for cue in Cue.allCases {
-            guard let url = Bundle.module.url(forResource: "ui_\(cue.rawValue)", withExtension: "wav") else { continue }
-            var id: SystemSoundID = 0
-            if AudioServicesCreateSystemSoundID(url as CFURL, &id) == kAudioServicesNoError { sounds[cue] = id }
-        }
+        sounds = MediaCueSounds()
     }
+
+    init(sounds: any CueSoundPlaying) { self.sounds = sounds }
 
     /// The next focus change is not announced: the first focus of a screen is silent, like in the prototype.
     public func silenceNextFocus() {
@@ -59,7 +57,7 @@ public final class Feedback {
 
     public func play(_ cue: Cue) {
         playedCount += 1
-        if soundsEnabled, let id = sounds[cue] { AudioServicesPlaySystemSound(id) }
+        if soundsEnabled { sounds.play(cue) }
         #if os(iOS)
         guard hapticsEnabled else { return }
         switch cue {
@@ -70,6 +68,60 @@ public final class Feedback {
         #endif
     }
 
-    /// Whether every cue's sound was loaded (false when a file is missing from the bundle).
-    var allSoundsLoaded: Bool { sounds.count == Cue.allCases.count }
+}
+
+protocol CueSoundPlaying: Sendable {
+    func play(_ cue: Cue)
+}
+
+/// All mutable AVAudioPlayer state belongs to this serial queue, not to the caller's actor.
+private final class MediaCueSounds: CueSoundPlaying, @unchecked Sendable {
+    private static let logger = Logger(subsystem: "io.github.meitoncz.delos", category: "InterfaceAudio")
+    private let queue = DispatchQueue(label: "io.github.meitoncz.delos.interface-audio", qos: .userInitiated)
+    private var players: [Cue: AVAudioPlayer] = [:]
+
+    init() {
+        queue.async { [self] in
+            do { try configureSession(activate: false) }
+            catch { Self.logger.error("Interface audio preparation session failed: \(error.localizedDescription, privacy: .public)") }
+            for cue in Cue.allCases {
+                guard let url = Bundle.module.url(forResource: "ui_\(cue.rawValue)", withExtension: "wav") else {
+                    Self.logger.error("Missing interface cue: \(cue.rawValue, privacy: .public)")
+                    continue
+                }
+                do {
+                    let player = try AVAudioPlayer(contentsOf: url)
+                    player.prepareToPlay()
+                    players[cue] = player
+                } catch {
+                    Self.logger.error("Interface cue preparation failed: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+        }
+    }
+
+    func play(_ cue: Cue) {
+        queue.async { [self] in
+            do {
+                try configureSession(activate: true)
+                guard let player = players[cue] else { return }
+                player.currentTime = 0
+                if !player.play() { Self.logger.error("Interface cue playback did not start: \(cue.rawValue, privacy: .public)") }
+            } catch {
+                Self.logger.error("Interface audio session failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    private func configureSession(activate: Bool) throws {
+        #if os(iOS) || os(tvOS)
+        let session = AVAudioSession.sharedInstance()
+        // Preparation can activate the session too. Never prepare under the default solo-ambient category.
+        // AudioOutput owns moviePlayback during a stream, so an existing playback session is left unchanged.
+        if session.category != .playback {
+            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+        }
+        if activate { try session.setActive(true) }
+        #endif
+    }
 }

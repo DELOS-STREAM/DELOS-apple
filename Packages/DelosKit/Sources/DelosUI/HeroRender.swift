@@ -27,6 +27,30 @@ enum HeroRender {
 
     /// Renders [source] with a blur of [blur] stage pixels (CSS blur(σ)) for [area]. Call off the main thread.
     static func render(_ source: CGImage, blur: Int, area: HeroArea) -> Result? {
+        let extended = HeroGeometry.layout(area, width: source.width, height: source.height).extended
+        let underlay = extended ? extensionImage(source, area: area) : nil
+        if extended, underlay == nil { return nil }
+        guard let composed = compose(source, blur: blur, area: area, extension: underlay, colors: true),
+              let image = composed.bitmap.image() else { return nil }
+        return Result(image: image, colors: composed.colors)
+    }
+
+    /// A frame of an animated game background: [source] (the frame, decoded as small as it is drawn) rendered like
+    /// ``render(_:blur:area:)``, over [extension] (``extensionImage(_:area:)`` of the still first frame) for a wide hero,
+    /// without working out the colors. Call off the main thread.
+    static func frame(_ source: CGImage, blur: Int, area: HeroArea, extension: CGImage?) -> CGImage? {
+        compose(source, blur: blur, area: area, extension: `extension`, colors: false)?.bitmap.image()
+    }
+
+    /// The blurred, darkened extension under a wide hero (`HeroBitmaps.extension`), nil when [source] has none to make.
+    static func extensionImage(_ source: CGImage, area: HeroArea) -> CGImage? {
+        extensionBitmap(source, area: area)?.image()
+    }
+
+    /// The composition, saturated, blurred and faded; with [colors], the main colors too (the plain crop's for a wide hero,
+    /// whose extension's tint would mute them).
+    private static func compose(_ source: CGImage, blur: Int, area: HeroArea, extension extensionImage: CGImage?,
+                                colors: Bool) -> (bitmap: Bitmap, colors: GameColors?)? {
         let w = blur > 0 ? width : sharpWidth
         let h = height(area, width: w)
         let scale = Double(w) / area.width
@@ -34,9 +58,7 @@ enum HeroRender {
         var out: Bitmap
         let hues: GameColors?
         if layout.extended {
-            guard let extensionImage = extensionBitmap(source, area: area)?.image(),
-                  var composed = Bitmap(width: w, height: h),
-                  var band = Bitmap(width: w, height: h) else { return nil }
+            guard let extensionImage, var composed = Bitmap(width: w, height: h), var band = Bitmap(width: w, height: h) else { return nil }
             composed.draw(extensionImage, in: CGRect(x: 0, y: 0, width: w, height: h))
             let top = layout.top * scale, bottom = layout.bottom * scale, fade = layout.fade * scale
             band.draw(source, in: CGRect(x: layout.left * scale, y: top, width: layout.width * scale, height: layout.height * scale))
@@ -44,18 +66,17 @@ enum HeroRender {
             composed.composite(band)
             composed.saturate(saturation)
             out = composed
-            hues = coverCrop(source, width: w, height: h).map { GameColors.dominant($0.argb()) } ?? nil
+            hues = colors ? coverCrop(source, width: w, height: h).flatMap { GameColors.dominant($0.argb()) } : nil
         } else {
             guard let crop = coverCrop(source, width: w, height: h) else { return nil }
             out = crop
-            hues = GameColors.dominant(crop.argb())
+            hues = colors ? GameColors.dominant(crop.argb()) : nil
         }
         // CSS blur(σ) in stage pixels at this scale; three box blurs approximate a Gaussian
         let radius = Int((Double(blur) * scale).rounded())
         if radius > 0 { out.boxBlur(radius: radius, passes: 3) }
         out.fadeDiagonally()
-        guard let image = out.image() else { return nil }
-        return Result(image: image, colors: hues)
+        return (out, hues)
     }
 
     /// The image cropped to fill [width] × [height], saturated.

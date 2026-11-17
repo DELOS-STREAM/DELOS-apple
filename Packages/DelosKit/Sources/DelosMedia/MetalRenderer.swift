@@ -12,8 +12,8 @@ import Synchronization
 /// `AVSampleBufferDisplayLayer`'s internals.
 ///
 /// The second path of decision L4. It is not the default: ``RendererChoice`` picks it for the debug switch until a stream
-/// on the iPad shows it is steadier (issue #9, #12). It also is where upscalers (SGSR, MetalFX), HDR tone mapping
-/// (issue #11) and PyroWave (issue #13) draw.
+/// on the iPad shows it is steadier (issue #9, #12). It also is where the launch scene's arrival (``LaunchArrival``),
+/// upscalers (SGSR, MetalFX), HDR tone mapping (issue #11) and PyroWave (issue #13) draw.
 ///
 /// `CAMetalDisplayLink` exists on iOS and tvOS 17, and on macOS 14 (the app's minimum is 15), so the Mac needs no second
 /// display-link kind.
@@ -59,6 +59,14 @@ public final class MetalRenderer: VideoRenderer {
 
     public func flush() {
         pipeline.flush()
+    }
+
+    public func startArrival(duration: Double) {
+        pipeline.startArrival(duration: duration)
+    }
+
+    public func cancelArrival() {
+        pipeline.cancelArrival()
     }
 
     public func presentationCounters() async -> VideoPresentationCounters? {

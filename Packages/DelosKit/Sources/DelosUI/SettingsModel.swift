@@ -1,6 +1,8 @@
 import DelosCore
 import DelosData
+import DelosInput
 import enum DelosMedia.FramePacing
+import enum DelosInput.ShortcutButton
 import Foundation
 
 /// A tab of Settings (`SettingsTab` of DELOS for Android), in Android's order: Stream, Display, Audio, Controls,
@@ -214,10 +216,19 @@ struct StreamSettingsForm: Equatable {
     static let hostAudio = "checkbox_host_audio"
     static let perfOverlay = "checkbox_enable_perf_overlay"
     static let perfOverlayLite = "checkbox_enable_perf_overlay_lite"
-    /// The profile's shell rows (`nativeSettings`): stream menu swipe, on-screen controls opacity, statistics position.
-    static let menuSwipe = SettingKey.streamMenuSwipe.rawValue
     static let oscOpacity = "seekbar_osc_opacity"
     static let statsPosition = SettingKey.statsPosition.rawValue
+    /// The profile's shell rows (`nativeSettings`): stream menu buttons and swipe, on-screen controls opacity,
+    /// statistics position.
+    static let menuButtons = "ui_stream_menu_buttons"
+    static let menuSwipe = "ui_stream_menu_swipe"
+    /// The buttons that open the stream menu, none by default.
+    var menuButtonsChosen: Set<ShortcutButton> { ShortcutButton.parse(settings.streamMenuButtons) }
+
+    /// The buttons the recording returned.
+    mutating func setMenuButtons(_ buttons: Set<ShortcutButton>) {
+        settings.streamMenuButtons = ShortcutButton.stored(buttons)
+    }
 
     /// The HDR row shows where HDR can work, and also while `hdr` is stored as on where it cannot (a profile from
     /// another device, another monitor): the row is then the way to switch it off.
@@ -250,21 +261,19 @@ struct StreamSettingsForm: Equatable {
 
     // MARK: The shell's own rows of the profile
 
+    /// The stream menu's rows of Settings → Controls (`ui_stream_menu_buttons`, `ui_stream_menu_swipe`).
+    func streamMenuRows(_ tab: SettingsTab) -> [SettingRow] {
+        tab == .controls ? [menuButtonsRow, menuSwipeRow] : []
+    }
+
     func nativeRows(_ tab: SettingsTab) -> [SettingRow] {
         switch tab {
         case .controls:
             // The other on-screen controls settings are phone-only; the opacity shows wherever there is a touchscreen
-            [menuSwipeRow] + (device.touchscreen ? [oscOpacityRow] : [])
+            streamMenuRows(tab) + (device.touchscreen ? [oscOpacityRow] : [])
         case .display: [statsPositionRow]
         default: []
         }
-    }
-
-    private var menuSwipeRow: SettingRow {
-        SettingRow(
-            id: Self.menuSwipe, tab: .controls, section: L("settings_native_section_stream_menu"), icon: Symbols.swipeUp,
-            label: L("settings_native_menu_swipe_title"), value: .toggle(settings.bool(.streamMenuSwipe)),
-            help: L("settings_native_menu_swipe_description"))
     }
 
     /// The on-screen controls' opacity (`OscOpacity`): 0 to 100 % in steps of 5, the stream menu's More slider too.
@@ -492,6 +501,8 @@ struct StreamSettingsForm: Equatable {
         case Self.hostAudio: toggleRow(spec, settings.playAudioOnHost)
         case Self.perfOverlay: toggleRow(spec, settings.statisticsOverlay.isShown)
         case Self.perfOverlayLite: toggleRow(spec, settings.statisticsOverlay == .compact)
+        case Self.rumbleEnabled, Self.rumbleFeel, Self.rumbleFallback, Self.rumbleDevice, Self.rumbleStrength:
+            rumbleRows.first { $0.id == spec.id }
         default: nil
         }
     }
@@ -540,6 +551,25 @@ struct StreamSettingsForm: Equatable {
             id: spec.id, tab: spec.tab, section: spec.section, icon: spec.icon, label: spec.label,
             value: .choice(label: label, options: options.map(\.label), selected: selected),
             help: details(spec, value: label, explanation: Self.codecHelp(settings.codec), unavailable: selected == nil))
+    }
+
+    /// "Not set" or the recorded buttons; the list clears them or records new ones, and a step records (the row's own
+    /// value is never a choice of its list once buttons are set).
+    private var menuButtonsRow: SettingRow {
+        let buttons = menuButtonsChosen
+        let label = buttons.isEmpty ? L("row_not_set") : StreamMenuButtonsText.label(buttons)
+        return SettingRow(
+            id: Self.menuButtons, tab: .controls, section: L("settings_native_section_stream_menu"), icon: Symbols.streamMenuButtons,
+            label: L("settings_native_menu_buttons_title"),
+            value: .choice(label: label, options: [L("row_not_set"), L("settings_native_menu_buttons_record")], selected: buttons.isEmpty ? 0 : nil),
+            help: AppearanceForm.details(value: label, explanation: nil, about: L("settings_native_menu_buttons_description")))
+    }
+
+    private var menuSwipeRow: SettingRow {
+        SettingRow(
+            id: Self.menuSwipe, tab: .controls, section: L("settings_native_section_stream_menu"), icon: Symbols.swipeUp,
+            label: L("settings_native_menu_swipe_title"), value: .toggle(settings.streamMenuSwipe),
+            help: L("settings_native_menu_swipe_description"))
     }
 
     private func framePacingRow(_ spec: CatalogSpec) -> SettingRow {
@@ -664,12 +694,12 @@ struct StreamSettingsForm: Equatable {
         case Self.perfOverlay: settings.statisticsOverlay = settings.statisticsOverlay.isShown ? .off : .full
         case Self.perfOverlayLite where settings.statisticsOverlay.isShown:
             settings.statisticsOverlay = settings.statisticsOverlay == .compact ? .full : .compact
-        case Self.menuSwipe: settings.set(.streamMenuSwipe, .bool(!settings.bool(.streamMenuSwipe)))
+        case Self.menuSwipe: settings.streamMenuSwipe.toggle()
         case Self.oscOpacity: setSlider(.oscOpacity, settings.int(.oscOpacity) + direction * Self.oscOpacityStep, step: Self.oscOpacityStep)
         case Self.statsPosition:
             settings.set(.statsPosition, .text(Self.next(settings.statsPosition, in: StatsPosition.allCases, direction).rawValue))
         default:
-            guard let spec = SettingsCatalog.spec(id), let key = spec.key else { break }
+            guard let spec = SettingsCatalog.spec(id), let key = spec.key else { stepRumble(id, by: direction); break }
             switch spec.kind {
             case .toggle: settings.set(key, .bool(!settings.bool(key)))
             case .choice:
@@ -692,6 +722,10 @@ struct StreamSettingsForm: Equatable {
         case Self.codec: if codecOptions.indices.contains(index) { setCodec(codecOptions[index].value) }
         case Self.framePacing: if framePacingOptions.indices.contains(index) { settings.framePacing = framePacingOptions[index].value }
         case Self.statsPosition: if StatsPosition.allCases.indices.contains(index) { settings.set(.statsPosition, .text(StatsPosition.allCases[index].rawValue)) }
+        case Self.rumbleFeel where settings.rumble.enabled:
+            if RumblePreset.allCases.indices.contains(index) { settings.rumble.profile = RumblePreset.allCases[index] }
+        // "Not set"; "Record buttons" is the screen's (it opens the recording)
+        case Self.menuButtons: if index == 0 { settings.streamMenuButtons = [] }
         default:
             guard let spec = SettingsCatalog.spec(id), let key = spec.key else { break }
             let options = choices(spec)
@@ -705,6 +739,7 @@ struct StreamSettingsForm: Equatable {
         switch id {
         case Self.bitrate: setBitrate(value)
         case Self.oscOpacity: setSlider(.oscOpacity, value, step: Self.oscOpacityStep)
+        case Self.rumbleStrength: settings.rumble.deviceStrength = value
         default:
             guard let spec = SettingsCatalog.spec(id), let key = spec.key,
                   case let .slider(_, step, _, _) = spec.kind else { return }

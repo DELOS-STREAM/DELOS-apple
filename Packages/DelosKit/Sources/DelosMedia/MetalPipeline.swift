@@ -45,6 +45,22 @@ final class MetalPipeline: @unchecked Sendable {
         var lastHDRInfo: HDRPictureInfo?
         var awaitingKeyFrame = true
         var lateRefreshes = 0
+        /// The launch scene's arrival while it runs.
+        var arrival: ArrivalRun?
+        /// The picture on screen was drawn with an arrival pose (so it must be drawn again once the arrival ends).
+        var posedOnScreen = false
+
+        /// The arrival's pose for a refresh at `time`, nil when the picture is drawn plainly; an arrival that is complete
+        /// at `time` ends here.
+        mutating func arrivalPose(at time: Double) -> ArrivalPose? {
+            guard let run = arrival else { return nil }
+            let opening = run.opening(at: time)
+            if opening >= 1 {
+                arrival = nil
+                return nil
+            }
+            return LaunchArrival.shouldActivate(opening) ? LaunchArrival.pose(opening: opening) : nil
+        }
     }
 
     private struct NumberedFrame {
@@ -131,27 +147,43 @@ final class MetalPipeline: @unchecked Sendable {
 
     // MARK: Refreshes
 
-    /// Shows the frame due at this refresh, if there is one.
+    /// Shows the frame due at this refresh, if there is one. While the arrival runs the last frame is drawn again at
+    /// every refresh with the pose of that refresh's time, and once it ends the last frame is drawn plainly once more,
+    /// so a still picture settles too and the stream goes on exactly as without it.
     func tick(_ tick: RefreshTick) {
         let size = tick.drawable.map { (width: $0.texture.width, height: $0.texture.height) }
-        let work = state.withLock { s -> (frame: NumberedFrame, due: Double?)? in
+        let work = state.withLock { s -> (frame: NumberedFrame, due: Double?, pose: ArrivalPose?)? in
+            let pose = s.arrivalPose(at: tick.presentation)
             if let taken = s.queue.take(at: tick.presentation, refresh: tick.refresh) {
                 s.lastFrame = taken.frame
                 s.lastDrawnSize = size ?? (0, 0)
-                return (taken.frame, taken.due)
+                s.posedOnScreen = pose != nil
+                return (taken.frame, taken.due, pose)
             }
-            // No new picture: the layer keeps the last one, unless the layer's size changed and it must be drawn again
-            if let last = s.lastFrame, let size, size != s.lastDrawnSize {
-                s.lastDrawnSize = size
-                return (last, nil)
-            }
-            return nil
+            // No new picture: the layer keeps the last one, unless the layer's size changed or the arrival moves it
+            guard let last = s.lastFrame else { return nil }
+            let resized = size.map { $0 != s.lastDrawnSize } ?? false
+            guard resized || pose != nil || s.posedOnScreen else { return nil }
+            if let size { s.lastDrawnSize = size }
+            s.posedOnScreen = pose != nil
+            return (last, nil, pose)
         }
         guard let work else { return }
-        draw(work.frame, tick: tick, presented: work.due != nil, due: work.due ?? tick.presentation)
+        draw(work.frame, tick: tick, presented: work.due != nil, due: work.due ?? tick.presentation, arrival: work.pose)
     }
 
-    private func draw(_ numbered: NumberedFrame, tick: RefreshTick, presented: Bool, due: Double) {
+    /// Starts the launch scene's arrival now on the renderer's clock; it lasts `duration` seconds (the exit's).
+    func startArrival(duration: Double) {
+        let now = clock()
+        state.withLock { $0.arrival = ArrivalRun(start: now, duration: duration) }
+    }
+
+    /// Ends the arrival at once: the next refresh draws the picture plainly.
+    func cancelArrival() {
+        state.withLock { $0.arrival = nil }
+    }
+
+    private func draw(_ numbered: NumberedFrame, tick: RefreshTick, presented: Bool, due: Double, arrival: ArrivalPose?) {
         let pixelBuffer = numbered.frame.pixelBuffer
         guard let conversion = ColorConversion(pixelBuffer: pixelBuffer),
               let commandBuffer = drawer.queue.makeCommandBuffer() else { return }
@@ -169,7 +201,7 @@ final class MetalPipeline: @unchecked Sendable {
         } else {
             return
         }
-        guard drawer.draw(pixelBuffer, conversion: conversion, into: target, commandBuffer: commandBuffer) else { return }
+        guard drawer.draw(pixelBuffer, conversion: conversion, into: target, commandBuffer: commandBuffer, arrival: arrival) else { return }
         if let drawable = tick.drawable {
             commandBuffer.present(drawable)
             // The drawing must be done by the time of the refresh it is for; the system's own presented time is not in

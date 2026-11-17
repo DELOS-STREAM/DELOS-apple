@@ -95,7 +95,10 @@ Android (after 500 ms, every 50 ms); the handler gets the number of the repeat (
 settings use to speed up a slider and to stop a held Up at the first row.
 `FocusItem` wraps a view for both engines.
 A `FocusItem` can name where a direction leads instead of the nearest item (`moves`): the avatar grid continues a
-row's end in the next row. Its `tap` is what a touch does when it is not what A does; it gets whether the item had the focus
+row's end in the next row. Items can form a restoring group (`FocusModel.restoreFocus(in:items:)`): a move that enters the
+group from outside lands on the group's item that had the focus last instead of the nearest one, so Down from the top
+navigation returns to the cover the focus went up from (on tvOS the system's move into the group is redirected the same way).
+Its `tap` is what a touch does when it is not what A does; it gets whether the item had the focus
 before the tap (a settings row's first tap only focuses it, the second changes it, `RowTouch`); a tap always focuses the item
 first.
 
@@ -136,14 +139,28 @@ capsule; Settings, Profile and Devices take each other's place on the stack; the
 row reaches them. On those screens and on the start screen (`hasSideMenu`), the left menu button opens the side menu
 (`SideMenu`, Android's `SideMenuLayer`): the profile and the connected PC at the top and All settings; it takes every
 command while it is open, and B, the menu button or a tap beside it closes it. The quick settings (theme, background, sounds, haptics) are in it; the rows scroll
-(`FocusScroll` with edge fades) where the stage is too short, the panel is 680 px wide (glass, `panel` role), docked to the left edge at full height (`SideMenuStyle`: on iPad and Apple TV it is a floating box instead, with continuous 40 px corners and a 32 px gap to the left, top and bottom edges and the safe area; an Apple-only presentation decision, Android keeps its edge panel; iPhone, a narrow iPad window and Mac keep the edge panel) and arrives from
-a tenth of its width to its left (`sideEnter`: 560 ms ease-out with a 280 ms fade; it leaves over 240 ms ease-in; only
-fading with reduced motion) under the root's scrim (`LayerScrim`: the scrim token, fading in over 420 ms, out over 240 ms),
+(`FocusScroll` with edge fades) where the stage is too short, the panel is 680 px wide (glass, `panel` role), docked to the left edge at full height (`SideMenuStyle`: on iPad and Apple TV it is a floating box instead, with continuous 40 px corners and the same gap to the left, top and bottom edges of the screen, `SideMenuStyle.gap`: 48 px beyond the deepest of the three safe areas, so a status bar or the home indicator does not make one gap larger; iPhone, a narrow iPad window and Mac keep the edge panel). The edge panel arrives from
+a tenth of its width to its left (`sideEnter`: 560 ms ease-out with a 280 ms fade; it leaves over 240 ms ease-in); the
+floating glass box materialises from the left edge instead (`SideBoxMaterialize`: from 90 % scale anchored at the left edge,
+a tenth of the width to the left and blurred by 24 px, on the geometry spring of damping ratio 0.8 and stiffness 190, with
+the 280 ms fade; it goes back the same way over 240 ms ease-in); both only fade with reduced motion. It lies over the root's
+scrim (`LayerScrim`: the scrim token, fading in over 420 ms, out over 240 ms),
 while the screen behind it blurs by 6 stage pixels (`LayerBackdropBlur`, also behind dialogs; the context menu's scrim only
 dims). One plate glides between its rows, as in Settings. The top navigation wraps from the last button to the first; while
 the focus moves between two buttons an accent pill glides behind them (`NavPill`: both edges springs, the one in the
-direction of travel stiffer) and the focused button's own fill fades in over it. Android has no touch way to the side menu; on the start
-screen the profile chip opens the profiles menu (as on Android), so touch reaches Profile and Settings through a PC's
+direction of travel stiffer) and the focused button's own fill fades in over it.
+
+Touch opens the side menu with a drag in from the left edge, and the panel follows the finger (`SideMenuSwipe`,
+`SideMenuDrag`, `ShellRouter.beginSideDrag` / `moveSideDrag` / `endSideDrag`): a drag that starts within 40 pt of the left
+edge (`SideMenuEdgeStrip`, only that strip takes the touch) and goes more sideways than up or down past a 10 pt slop takes
+the menu; the panel's offset, the scrim's opacity and the screen's blur then show the drag's progress (0 closed, 1 open,
+the travel measured against the panel's width) instead of their transitions, damped past fully open to at most 6 % of the
+width (the edge panel's glass reaches that far past the left edge, so no gap shows). On release, 600 pt/s or faster goes
+the way the finger moves; otherwise the menu opens past 40 % of the width and springs back below it, on the geometry spring
+from the finger's speed; a drag to the left on the open menu (the scrim or the panel) closes it by the same rules, and a
+new drag catches a settling panel where it is. While a drag owns the menu, the menu button and B wait for it to settle.
+With reduced motion the panel does not follow: the drag only toggles the menu once it has covered 40 % of the width. On
+the start screen the profile chip opens the profiles menu, so touch also reaches Profile and Settings through a PC's
 library and its top navigation.
 
 ### Who captures the commands
@@ -258,8 +275,9 @@ so `VideoOutput` and `VideoSamples` are unchanged:
 |---|---|
 | `VideoDecoder` | A `VTDecompressionSession`: hardware decoding where the device has it (not required, so the simulator falls back to software), `RealTime`, asynchronous, one frame at a time in arrival order (no B-frames). It outputs Metal-compatible, IOSurface-backed two-plane 4:2:0 buffers, 8 or 10 bits, video or full range, and measures the time from submit to output. A new format description (new parameter sets, another resolution) builds a new session; an error or an invalidated session (the app was in the background) makes the renderer refuse non-key frames until the next key frame, which `VideoOutput` turns into an IDR request |
 | `FrameQueue` | The decoded pictures wait here (at most four; a newer one pushes the oldest out). Each gets the time `FramePacer` gives it, the same three modes as the display layer. At each refresh the queue hands out the oldest frame that is due (a frame is due within half a refresh before its time, so it is shown at the refresh nearest to it); when more than one frame would stay due behind it, it skips ahead and the skipped frames count as dropped. In Lowest latency no frame may stay behind, so the newest due frame wins. A struct that takes times as arguments: a fake clock tests it |
-| `CAMetalDisplayLink` | Calls back once per refresh with the drawable and the time its picture appears (`targetPresentationTimestamp`), from a thread of its own (the main thread is busy with the interface), at the screen's highest refresh rate. It exists on iOS and tvOS 17 and on macOS 14, so the Mac needs no `CADisplayLink` variant. A refresh without a frame draws nothing and the layer keeps the last picture; the last picture is drawn again when the layer's size changed |
+| `CAMetalDisplayLink` | Calls back once per refresh with the drawable and the time its picture appears (`targetPresentationTimestamp`), from a thread of its own (the main thread is busy with the interface), at the screen's highest refresh rate. It exists on iOS and tvOS 17 and on macOS 14, so the Mac needs no `CADisplayLink` variant. A refresh without a frame draws nothing and the layer keeps the last picture; the last picture is drawn again when the layer's size changed, at every refresh while the launch arrival moves it, and once more when the arrival ends |
 | `MetalFrameDrawer` | The pixel buffer's planes become textures through a `CVMetalTextureCache` (no copy), `VideoShaders.metal` converts Y'CbCr to RGB and the picture is fitted into the drawable on black. `ColorConversion` reads range and bit depth from the pixel format and the matrix and transfer function from the buffer's attachments; BT.601, BT.709 and BT.2020 matrices, limited and full range, 8 and 10 bits. The transfer function stays as encoded and the layer is tagged with the matching colour space (BT.709, BT.2020, PQ, HLG): tone mapping and linearising for HDR start in the shader, where `VideoUniforms.transfer` is already passed |
+| Arrival | The launch scene's arrival on the live picture (`LaunchArrival`, `arrivalFragment` in `VideoShaders.metal`). `startArrival(duration:)` starts it on the renderer's own clock; at each refresh the pose is computed for that refresh's presentation time from the exit's opening (0…1 over 2.2 s). From 55 % of the opening until its end the picture is converted into an RGB texture of its own size (8-bit, or half floats for 10-bit pictures, so HDR's encoded values pass unchanged), its mip levels are generated, and the pass draws it into the fitted rectangle: zoom (118 % with a blur of 20 source pixels, read from the mip levels, until 68 %), then a spring that settles to 100 % with a squash, a skew of at most 0.55°, a wave and an RGB split of up to 9 source pixels. At the end, or at `cancelArrival()` when the scene goes away early, the picture is drawn through the plain path again, byte for byte the picture without the arrival. `ArrivalRenderingTests` compares the pass with a CPU reference of the shader (0.012 per channel) and checks the blur, the identity and a 10-bit PQ picture in a half-float target; `ArrivalPipelineTests` drives it with a virtual clock |
 | `MetalPipeline` | The three of them without the layer and the display link: the core's thread enqueues, VideoToolbox's delivers pictures, the display link's thread draws, behind one short lock. The replay tests drive it with a virtual clock and virtual refreshes |
 
 For an observed PQ or HLG picture, `LayerRetagger` uses an `rgba16Float` drawable and enables the Metal layer's
@@ -406,12 +424,11 @@ specification is docs/LAUNCH_TRANSITION.md of that repository). `LaunchTimeline`
 | Progress | 0 → 30 % over 0.7 s when the scene appears, then each stage adds 8 % up to 92 % over 0.6 s |
 | Lines | `LaunchStageQueue` (a port, with Android's contract tests): each line is told at least 1.2 s, in order; once the game runs the lines still queued are dropped |
 | Reveal | Once `connectionStarted` arrives the scene waits for the renderer's first presented frame (`presentationCounters`, polled every 50 ms), at most 3 s; the bar fills to 100 % in 0.25 s; then the exit: 2.2 s (0.5 s with reduced motion) in which the information fades during the first 34 %, the tunnel zooms and a soft aperture opens from 68 to 88 % over the real picture; the input is live meanwhile |
+| Arrival | When the exit begins, `LaunchDirector` calls the renderer's `startArrival(duration:)` with the exit's 2.2 s (`LaunchTimeline.arrivalSeconds(since:)`), and the Metal renderer draws the live picture through the arrival pass on its own clock ([The Metal renderer](#the-metal-renderer)): from 55 % of the exit, under the still opaque tunnel, the picture waits at 118 % and blurred, and from 68 %, as the aperture opens, it springs in to 100 %. The pass needs no preparation, so the exit has no readiness wait at 60 %. A scene that goes away early (`stop()`) cancels it. Reduced motion has no arrival: the picture is shown as it is under the plain fades. The display layer, the fallback where Metal cannot start, draws no effects and shows the picture as it is too, the behaviour for a GPU pass that is unavailable |
 
 The library's own part of the launch is the screen transition (Android's 0.3 s fade of the overlay over the library).
-Not ported: the arrival effect on the stream's picture (118 % zoom with blur, warp and RGB split settling to 100 %), which
-Android renders inside its video paths and which would have to live in the renderers; the negotiated codec in the
-parameters line; the game's cover or background in the scene (Android shows neither with the tunnel); the cover growing
-out of its tile (Android has no such thing).
+Not ported: the negotiated codec in the parameters line; the game's cover or background in the scene (Android shows
+neither with the tunnel); the cover growing out of its tile (Android has no such thing).
 
 The exit scene (`StreamExit`, `StreamExitScene`, `StreamExitMotion`) plays when Disconnect or Quit app is chosen in the stream
 menu: OPEN cue, the picture blurs up to 50 px over 0.45 s and zooms to 112 % over 2.4 s while the DELOS background comes in
@@ -485,7 +502,10 @@ repeat). A row that does not fit a narrow stage keeps the tile size and scrolls 
 The tiles are Resume, Keyboard (iPhone and iPad: the system keyboard over the stream, what is typed goes to the PC as text,
 Return, Tab and Backspace as keys; `VideoHostView` is its first responder, it comes up once the menu has closed and goes down
 when the menu opens again or the stream stops running; the keys of an iPad's hardware keyboard go to the PC through
-GameController alone, so the keyboard does not type them a second time), Overlay (statistics), Brightness (iPhone and iPad: the screen's brightness for the
+GameController alone, so the keyboard does not type them a second time; debug builds log the tile press, the first
+responder's changes with the frames that caused a resign, the system keyboard's notifications, the hardware keyboard's
+connections and `MenuKeyOwnerView`'s claims as `KeyboardTileLog`, subsystem `io.github.meitoncz.delos`, category
+`KeyboardTile`), Overlay (statistics), Brightness (iPhone and iPad: the screen's brightness for the
 length of the stream, given back when it ends or the app leaves the screen), More, Disconnect and Quit app. Brightness and
 More open a popover (`StreamPopover.swift`): a frosted card above the tile that opened it with the shared caret (`CardCaret`, 60 x 24) in one
 outline, a header with a back circle and the title, 72 px rows on one gliding plate (a slider takes left and right, a held
@@ -501,16 +521,25 @@ Left out of Android's menu, because the platform has no such action: Bitrate (th
 running stream), Upscaler and Supersampling (the renderer has none), Send and Get clipboard, Zoom, Mouse mode and Local
 mouse cursor (touch is the trackpad only), On-screen controls, Open Android keyboard, Touch sensitivity, Rumble feel, Gyro
 smoothing. The captions of Overlay, Keyboard and More are empty: Android's texts describe its own statistics, keyboard and
-rows, and no Android string fits. The L3 + R3 shortcut only opens the menu (Android also
-closes it with it: the input is paused while the menu is open).
+rows, and no Android string fits. The recorded buttons only open the menu (the input is paused while the menu is open, so
+they cannot close it).
 
-It opens as in DELOS for Android by default: L3 + R3 held together (`MenuShortcut`, Android's `ButtonShortcut`: the
-button that completes the shortcut is kept from the PC, the menu opens when both are let go), or a swipe from the
-left edge of the touch screen (`MenuSwipe`: a touch starting in the left 4 % belongs to the swipe and does not reach
-the PC; 12 % of the width to the right opens the menu). Android swipes up from the bottom edge, but on iPhone and iPad
-that edge belongs to the system's home gesture (Android's swipe up had to start above the system's gesture strip at the edge;
-here the swipe is on the left edge, which has no system gesture in a full-screen app, and `defersSystemGestures` keeps the
-home indicator's swipe from firing on the first touch, so there is no edge conflict to move away from). A hardware keyboard opens it with Control + Option + Shift + M or by
+It opens with a tap of a controller's Home button: `GuideTapHold` decides each press, a release within 500 ms opens the
+menu and sends nothing to the PC, a press held for 500 ms becomes Guide on the PC at that moment, while the button is
+still down, and is released with it (`GameInput` runs the hold timer per controller; a press while the menu or the
+loader has the input belongs to no tap or hold). The Home button's system gestures (the games overlay) are off while the
+stream runs, so the press reaches the app. The Siri Remote's Back button opens the menu when no game controller is
+connected; SwiftUI reports it only as the exit command, without its duration, so its hold cannot be Guide.
+Besides Home, the buttons the profile recorded in Settings → Controls → Stream menu open it (`MenuShortcut`: held together
+in any order, the menu opens when the last is let go; only the button that completes the combination is kept from the PC,
+so every button the game saw go down also goes up; none by default). "Record buttons" opens a layer
+(`ButtonCaptureLayer`, `MenuButtonCapture`) that takes every controller button until the buttons held together are let go;
+ten seconds without a press, or a tap anywhere, end it unchanged. The D-pad and a touchpad's click cannot be recorded.
+A swipe up opens it on the touch screen (`StreamMenuSwipe`, unless the profile turned it off): it starts in the band
+between 82 % of the window's height and the strip the system keeps at the bottom edge (the home indicator's safe area,
+at least 24 points), and the menu opens once it has gone up 12 % of the height and more up than sideways. A touch that
+starts in the band belongs to the swipe for its whole life and never reaches the PC; `defersSystemGestures` keeps the
+home indicator's own swipe from firing on the first touch. A hardware keyboard opens it with Control + Option + Shift + M or by
 holding Escape for a second (`MenuKeyShortcut`, [the Mac app](#the-mac-app)).
 While it is open, `GameInput` sends nothing and releases every held button, key and mouse button at the PC.
 When the app goes to the background during a stream, iOS suspends it and the connection would break; the stream is
@@ -527,7 +556,7 @@ of the attempt that ran.
 
 | Device | Mapping |
 |---|---|
-| Game controller (`GCExtendedGamepad`) | Lowest free controller number (`ControllerSlots`, up to 16, the active mask); an arrival event with the type (Xbox, PlayStation, Switch by product category), the buttons it has and its capabilities (analog triggers, rumble and trigger rumble from the haptic localities, LED, battery, motion). The gamepad's profile-level change handler sends the full state: `GamepadMapping` (Menu = Start, Options = Back, Home = Guide, paddles, touchpad button, Share; sticks −1…1 → ±32767, y up; triggers 0…1 → 0…255). The buttons' system gestures are off while the stream runs |
+| Game controller (`GCExtendedGamepad`) | Lowest free controller number (`ControllerSlots`, up to 16, the active mask); an arrival event with the type (Xbox, PlayStation, Switch by product category), the buttons it has and its capabilities (analog triggers, rumble and trigger rumble from the haptic localities, LED, battery, motion). The gamepad's profile-level change handler sends the full state: `GamepadMapping` (Menu = Start, Options = Back, Home = Guide once held for 500 ms (a tap opens the stream menu), paddles, touchpad button, Share; sticks −1…1 → ±32767, y up; triggers 0…1 → 0…255). The buttons' system gestures are off while the stream runs |
 | Rumble | `ControllerHaptics`: a CoreHaptics engine of the controller per motor (low frequency → left handle, high → right handle, trigger motors → triggers) playing an endless continuous event whose intensity follows the PC's amplitude, as Moonlight for iOS does |
 | Hardware keyboard (`GCKeyboard`) | Per-key handlers; HID usage → Windows virtual-key code (`KeyboardMapping`, Moonlight's table) with the `0x8000` prefix; the modifiers from the held Shift, Control, Alt (Option) and Command keys |
 | Mouse (`GCMouse`) | Relative motion (divided by 1.25, as Moonlight), left, right, middle and two side buttons, scroll in 1/120 notches (20 per unit) |
@@ -558,7 +587,7 @@ Mac parts are behind `#if os(macOS)` in `App/` and in the package.
 | Display and Settings | `StreamDevice.current` reads `NSScreen.main` the same way. The audio session code is iOS-only (`AVAudioSession` does not exist on the Mac) |
 | Keyboard and mouse | `GameInput` (`GCKeyboard`, `GCMouse`) as on iPad; `GCMouse` gives relative motion without the system pointer. The Mac has no touch input |
 | Pointer lock | While the stream runs and neither its menu, the loader nor the result overlay is shown, `PointerLock` (DelosInput) asks the AppKit backend to warp the pointer to the middle of the video, detach it from the mouse (`CGAssociateMouseAndMouseCursorPosition`) and hide it. It lets go when the menu, the loader or the result overlay shows, the stream ends, the app is no longer the active app, the window is no longer key, or the window closes |
-| Stream menu | L3 + R3 as everywhere; with a keyboard Control + Option + Shift + M (the M is kept from the PC and the pause lets go of the modifiers) or Escape held for one second (a quick Escape goes to the PC; the pause lets go of the held one). Both free the pointer by opening the menu |
+| Stream menu | A tap of a controller's Home or the recorded buttons as everywhere; with a keyboard Control + Option + Shift + M (the M is kept from the PC and the pause lets go of the modifiers) or Escape held for one second (a quick Escape goes to the PC; the pause lets go of the held one). Both free the pointer by opening the menu |
 | Key sound | A local `NSEvent` monitor drops key-down events that the interface does not use, so AppKit does not beep for each key the game keyboard reads; Command shortcuts and keys typed into a text field pass |
 | Activity | During a stream a process activity keeps the display awake and App Nap off (the Mac's `isIdleTimerDisabled`); a Mac does not suspend a window that other windows cover, so the iOS rule to close the stream in the background is off |
 | Status bar | The battery from IOKit power sources once a minute (`BatteryStatus(powerSource:)`; none on a Mac without one); the back button and the profile and settings entries of the profile menu are shown for the mouse |
@@ -596,9 +625,19 @@ Not verified: a real Apple TV (focus, the Siri Remote's touch surface and long p
 
 ## Sounds and haptics
 
-`Feedback` plays the five interface sounds of DELOS for Android (move, select, back, open, error) as system sounds, so
-they mix with other audio and follow the silent switch, and on iPhone and iPad a matching system haptic.
-Moving the focus plays move, activating an item plays select.
+`Feedback` plays move, select, back, open and error as preloaded media cues through `AVAudioPlayer`.
+Preparation and audio-session calls run on a dedicated serial queue, never on the main actor. iOS and tvOS use
+the playback category with mixing outside a stream; an existing playback category and the stream's
+moviePlayback mode are preserved. UI cues never deactivate the shared session.
+The media volume controls sound; the ring/silent switch does not select the playback policy.
+iPhone and iPad also use matching system haptics. Interface sounds and haptics have independent toggles.
+
+Moving focus plays move except after an explicit focus-silence request. Activations use their item's cue, and
+an explicit action cue replaces that default instead of playing twice. Artwork filters already route chip
+activation through this path; reset is select, opening is open, and closing is back. The connect flow uses open,
+error on wake timeout, select on arrival and back on cancellation.
+`FeedbackTests`, `PolishFeedbackTests` and `ConnectFlowTests` cover suppression, de-duplication and flow cues.
+Physical-device media volume, silent-switch behavior, first-cue latency and mixing with a real stream are not verified.
 
 ## Glass
 
@@ -664,7 +703,8 @@ and tilts on Android's 25 s orbit (`HeroMotion`, 15°, overscan 1.02; still with
 background's base gradient fades to 12 % and repaints at 30 Hz. With Match the app's colors the animated background
 takes the game's three colors (`GameColors.dominant`, Android's `dominantHues` with a port of material-color-utilities'
 CAM16/HCT; from the cover, the game background's while the cover's are unknown), smoothed per frame
-(`BackdropTints`). Not ported: animated (WebP) heroes, the vignette, and Android's Material You path.
+(`BackdropTints`). An animated hero plays over its still render (`HeroLive`, see [Animated artwork](#animated-artwork)).
+Not ported: the vignette, and Android's Material You path.
 
 ## Settings
 
@@ -728,7 +768,10 @@ menu's bitrate), the summary of the catalog or no value line is used instead.
 Light), Color palette (all eight; the value shows a dot of the palette's main hue, `hsl(accent, 90, 60)`, and the panel
 the main, secondary and accent colors as 120 × 72 swatches), Clock (System, 12-hour, 24-hour), Animated background (all
 eleven), Interface scale (a slider, 100 to 130 % in steps of 5) and Animations (Full, Reduced); Interface sounds sits in
-the Audio tab and Interface haptics in the Controls tab, all under the Interface section, as on Android. A change goes
+the Audio tab and Interface haptics in the Controls tab, all under the Interface section. Under it, the Controls tab's
+Stream menu section (`StreamSettingsForm.streamMenuRows`, kept in the profile's `StreamSettings`) has Stream menu buttons
+("Not set" or the recorded buttons such as "L3 + R3"; its list clears them or records new ones, and a step records) and
+Swipe up to open the menu (on by default). An appearance change goes
 into `DelosRoot`'s appearance through a binding, so the colors, the backdrop behind Settings, the clock, the interface
 scale, the sounds and the haptics change at once, and `SettingsScreen` stores it for the profile. The help is
 `NativeSettingsHelp.details` (the value with its line, then the row's description); the background row shows only the
@@ -827,8 +870,34 @@ score, author, date: what the reply contained). A or a tap downloads and uses th
 accent border and the "In use" badge. A kind chosen by hand is recorded in the match (`picked`) and every later refresh
 leaves it alone; matching the game by hand (`setGame`: the search menu lists at most eight games) is recorded too (`manual`),
 so the name is not searched again, and its images start over. A thumbnail is downloaded when its tile scrolls into view and
-kept in the same cache. Not ported: the filter sheet (type, style, size, sort) and animated images (the store asks
-for still images only, and nothing here plays an animation), and the companion screen.
+kept in the same cache. The filter sheet (type, style, size, sort) narrows and sorts the choices; animated choices play in
+their tiles ([Animated artwork](#animated-artwork)). Not ported: the companion screen.
+
+### Animated artwork
+
+An image ImageIO reads as more than one frame (animated WebP, GIF, APNG) on a canvas of at most 100 million pixels plays
+(`AnimatedImageInfo`, DelosData); the stored file is the downloaded one, so the still readers decode its first frame and
+`ArtworkStore.animation(hostID:appID:kind:)` maps the same file for playing. `AnimatedArtLayer` (DelosUI) draws the
+animation over the still view, cropped or fitted the same way and fading in once its first frame is decoded; the still is
+hidden once it has faded in (a transparent animation never shows the first frame through it) and back as soon as it stops.
+`AnimatedFrameDecoder` decodes one frame at a time off the main actor, no larger than `AnimatedPlayback.decodeSize` gives
+for the view's pixels (an Artwork tile at most 520 px across, a game background frame at most 1050), and holds the shown
+frame and the next one. `FrameClock` times the frames: each lasts the delay its file gives (ImageIO's unclamped delay; a
+GIF delay of 10 ms or less is 100 ms, any other is kept, 0 included), measured from when it was due, at most one frame
+changes per display frame (`TimelineView(.animation)`), and a frame that came late keeps its whole time. A layer exists
+only while it plays, so a paused one costs no memory and starts from its first frame again; it restarts too when the app
+comes back to the foreground.
+
+What plays (`AnimatedPlayback.shouldPlay`): in the library, the covers on screen (`onScrollVisibilityChange`) and the
+focused game's logo, while no dialog, filter sheet, side menu or portal covers the screen (a context menu does not:
+the covers beside it keep playing) and motion is not reduced (the profile's Animations or the system's Reduce Motion); on
+the Artwork screen, the animated choices on screen while no sheet or layer is open, each fetching its thumbnail, else the
+full file of a WebP, PNG or GIF, once (`ArtworkStore.animation(of:)`, the download's progress in
+`animationProgress`). The game background (`HeroArt`) starts after the game has stayed focused for 500 ms, renders every
+frame like the still one (`HeroRender.frame`, over the still first frame's extension), and loops through
+`LoopedAnimation`: a pass of 1.5 s or more plays once and the next pass, decoded 500 ms before, fades in over its last
+700 ms (a third of the loop at most, `HeroLoopTimeline`); a shorter one repeats by itself. When it stops while the game
+background stays (a portal opens, motion is reduced) it holds its frame for 1 s before the still returns.
 
 ### Bundled artwork
 
@@ -1045,8 +1114,8 @@ DELOS's own entries pass only while nothing is filtered. The home screen (`HomeS
 for the whole library when it opens (the cached records first, then the due ones three at a time) so the chips are
 complete, shows the library through the filter and, while the service is configured and the library has games, offers the
 filter: Y (`MenuCommand.toastAction`, which a toast with its own action keeps) or, without a controller, a tap on the hint bar's Filter, which
-is a glyphless pill (`Hint.tappable`, `HintBar.onTap`, faded in and out by the input kind) and presses the screen's Y. Android has
-no touch way to the filter at all. or a tap. `LibraryFilterSheet` is Android's `FilterModal`: a glass panel (1240 stage
+is a 52 px glass pill with the filter symbol before its label, so it reads as a button (`Hint.tappable`, `Hint.icon`,
+`HintBar.onTap`, faded in and out by the input kind), and presses the screen's Y. `LibraryFilterSheet` is Android's `FilterModal`: a glass panel (1240 stage
 pixels, the compact stage's margin of 48) with a title and the live count, a section per criterion with one row of chips
 that scrolls sideways (the genre and theme chips with their icon and the number of games), and Reset (X) and Done (Y, B)
 under them; the sections scroll when they do not fit and the focused one is brought into view. The choices apply at
@@ -1280,7 +1349,8 @@ has no such setting; both are in `Config/Info.plist`, which Xcode merges with th
   the running stream, a launch failure, a failed stage, Try again, a lost connection and a graceful end, Disconnect,
   Quit app and a refused quit, leaving while connecting, who gets the controller commands), the failure texts against
   Android's rules, the PC's launch answers (470, 525, 599), the controller button flags, stick and trigger scaling,
-  controller numbers, the menu shortcut, the keyboard table, the trackpad and the left-edge swipe, the decoder formats.
+  controller numbers, Home's tap and hold, the recorded buttons and their recording, the keyboard table, the trackpad and
+  the swipe up, the decoder formats.
 - Settings without a screen (`swift test`): `StreamSettings` read leniently and clamped, stored per profile, copied to
   a new profile and removed with it; the bitrate default following the resolution and frame rate; the resolution, frame
   rate and codec lists for several displays and decoders, the formats each codec offers, the replacement of values a
@@ -1327,7 +1397,7 @@ has no such setting; both are in `Config/Info.plist`, which Xcode merges with th
 - A real stream: launch, resume and quit against a PC, start, video and audio with real data, input, rumble on a
   controller, the 120 Hz display path, latency and termination. The owner runs streams. Also untried: a mouse or trackpad
   on an iPad (the pointer lock, its refusal in Slide Over and Stage Manager, and `GCMouse`'s motion while locked), the
-  keyboard, the edge swipe and the L3 + R3 shortcut on a device, and the Details of the result overlay opened.
+  keyboard, the swipe up, Home's tap and hold and the recorded buttons on a device, and the Details of the result overlay opened.
 - libopus on x86_64 (Intel Macs and simulators) was only compiled; the tests ran on arm64, where the NEON paths are
   used.
 - Pairing, the app list, box art, launch and quit against a real Sunshine, Apollo or Vibepollo host: the protocol is
@@ -1359,3 +1429,46 @@ scrolls); the slider card 1040 x 300 with 96 px ◀ ▶ buttons (a hold repeats 
 separator, Mbit/s for the bitrate, rounded to the grid and clamped; text that is no number is dropped with the error cue). The
 controller keeps its behavior: left and right step the row; in the open popover up, down and A work the options, left and right the
 slider, B closes it. Not verified on a device: the look, the keyboard lifting the card, a hold on the buttons.
+
+## Game rumble
+
+`StreamSettings.rumble` stores `RumbleConfiguration` per profile. `StreamSettingsStore.didSave` notifies the active
+stream; `StreamController.rumbleConfiguration` updates `GameInput` and its physical outputs immediately.
+The Controls rows offer Original, Soft, Kick-start and Pulsing, rumble on/off, device fallback, forced device
+vibration and 1–200% device strength. Interface haptics are independent.
+
+`RumbleChannel` preserves eight-bit motor truncation, weighted single-motor mixing, immediate zero cancellation,
+100 ms kick settling and fractional smoothing. `ControllerHaptics` uses CoreHaptics looping patterns for continuous
+output and 20 ms on / 20 ms off pulses. Steady output and silence require no polling task; only kick/smoothing
+transitions schedule a settling task. Pause, disconnect and stream stop release motors and adaptive triggers.
+Only player zero may use device vibration. Device fallback does not duplicate a supported controller's rumble
+unless forced device vibration is enabled.
+
+`AdaptiveTriggerEffect` decodes positional feedback (0x21), weapon (0x25), positional vibration (0x26), legacy
+feedback/weapon (0x01/0x02), and off (0x00/0x05). The packet field reference is
+[dualsensectl](https://github.com/nowrep/dualsensectl/blob/main/main.c).
+GameController does not expose raw HID effects for bow, galloping or machine modes. Those requests stop the
+affected trigger, set `adaptiveTriggerUnsupported`, and emit a diagnostic. CoreHaptics failures expose
+`RumbleProblem.failed`; a failed pulse pattern retries plain amplitude.
+
+Verification: `RumbleProfilesTests` covers shaping, mixing, timed settling, cancellation, device routing and packet
+validation. `RumbleSettingsTests` covers persisted settings, legacy decoding and disabled dependencies.
+Real controller motors, Taptic playback, adaptive-trigger feel and effects on media playback are not verified.
+
+## Pairing and compact profile placement
+
+`PairStateWait` bounds publication waits with a monotonic clock and cancellation: 5 seconds for an added host,
+8 seconds for the trusted paired state. A state that is already published returns immediately. Missing manual
+address insertion uses `devices_address_not_added`. The start screen reselects default, online, first paired PC,
+or Pair when discovery changes that initial candidate.
+
+`StatusBarEdges` publishes the compact right status-cluster boundary in stage-local points, including interface
+zoom. `ProfileChipPosition` keeps a 24-stage-pixel gap, centers the chip when it fits and otherwise centers it in
+the available space. Long names truncate; the avatar and chevron retain their sizes. Before measurement, the
+fallback reserves 360 stage pixels for status. Standard layouts retain the top-center chip.
+Avatar grid fallbacks pass `big: false` for the 76-stage-pixel glyph; artwork and circle dimensions are unchanged.
+
+The profile cue sites already use the shared layer OPEN cue for menus and name dialogs, ERROR for a rejected
+blank name, and Feedback activation de-duplication. No second cue is added at those sites.
+`SmallParityTests` covers immediate/delayed/absent/cancelled state waits and compact placement bounds.
+Pairing against a physical host and controller focus on physical devices are not verified.

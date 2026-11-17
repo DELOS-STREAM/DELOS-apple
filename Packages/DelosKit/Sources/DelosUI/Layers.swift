@@ -69,10 +69,10 @@ struct DialogSpec {
     let onConfirm: @MainActor ([String]) -> Bool
 }
 
-/// The layers above the current screen (`Layer` and the layer half of `ShellState` in DELOS for Android): a context menu
-/// or a dialog, one at a time. An open layer has its own focus and takes every controller and keyboard command; the
-/// screen's focus stays where it was, so the element a menu belongs to keeps its focus look and has the focus again when
-/// the layer closes.
+/// The layers above the current screen (`Layer` and the layer half of `ShellState` in DELOS for Android): a context menu,
+/// a dialog or the recording of the stream menu's buttons, one at a time. An open layer has its own focus and takes every
+/// controller and keyboard command; the screen's focus stays where it was, so the element a menu belongs to keeps its focus
+/// look and has the focus again when the layer closes.
 @MainActor
 @Observable
 final class Layers {
@@ -80,6 +80,8 @@ final class Layers {
         /// [anchor]: the frame of the element the menu belongs to, in global points (nil: no element).
         case context(ContextMenu, anchor: CGRect?)
         case dialog(DialogSpec)
+        /// Records the stream menu's buttons (`ButtonCaptureLayer`): every controller button is the capture's.
+        case buttonCapture(MenuButtonCapture)
     }
 
     private(set) var layer: Layer?
@@ -109,6 +111,17 @@ final class Layers {
         open(.dialog(spec), focus: DialogLayer.firstFocus(spec))
     }
 
+    /// Records the stream menu's buttons; [onRecorded] gets the combination once all of its buttons are let go. Without a
+    /// press for ten seconds, or after a tap anywhere, the layer closes unchanged.
+    func openButtonCapture(onRecorded: @escaping @MainActor (Set<ShortcutButton>) -> Void) {
+        let capture = MenuButtonCapture { [weak self] buttons in
+            self?.close()
+            if let buttons { onRecorded(buttons) }
+        }
+        open(.buttonCapture(capture), focus: AnyHashable("button-capture"))
+        capture.start()
+    }
+
     /// Opens a menu a chosen menu item leads to (a list of matches after "Search"), at the frame the last menu had.
     func openContextMenu(_ menu: ContextMenu, anchor: CGRect?) {
         open(.context(menu, anchor: anchor), focus: Self.rowID(menu.initialRow))
@@ -134,10 +147,12 @@ final class Layers {
     }
 
     func close() {
-        guard layer != nil else { return }
+        guard let closing = layer else { return }
         layer = nil
         menuPath = []
         generation += 1
+        // A recording that closes any other way ends unchanged and gives the controllers back
+        if case .buttonCapture(let capture) = closing { capture.cancel() }
     }
 
     /// B: a submenu goes back to its parent, with the focus on the row that opened it; otherwise the layer closes.
@@ -168,6 +183,8 @@ final class Layers {
     /// A controller or keyboard command while a layer is open: it never reaches the screen behind it.
     func handle(_ command: MenuCommand, at now: Date = .now) {
         guard let layer else { return }
+        // Every button may be wanted for the stream menu's combination: the recording has them all
+        if case .buttonCapture = layer { return }
         switch command {
         case .back:
             back()
@@ -186,8 +203,13 @@ final class Layers {
         }
     }
 
-    /// A tap beside the layer or the button that opened a menu: the layer closes, submenus and all.
+    /// A tap beside the layer or the button that opened a menu: the layer closes, submenus and all. A tap during the
+    /// recording of the stream menu's buttons ends it unchanged, without a sound (`ButtonCaptureLayer`).
     func dismiss() {
+        if case .buttonCapture = layer {
+            close()
+            return
+        }
         feedback?.play(.back)
         close()
     }
@@ -199,43 +221,50 @@ final class Layers {
 /// The scrim under a layer (`Scrim` of DELOS for Android): it fades in over ``Motion/scrim`` ms and out over
 /// ``Motion/exit`` ms with CSS `ease`; a tap on it closes the layer. The context menu's is the [light] one that only dims
 /// (4, 8, 16 at 26 %); every other layer's is the theme's scrim token, and the screen beneath it blurs
-/// (``LayerBackdropBlur``).
+/// (``LayerBackdropBlur``). While a touch drag moves the side menu, [progress] is its opening progress: the scrim follows
+/// it instead of fading in and out.
 struct LayerScrim: View {
     var light = false
+    var progress: Double? = nil
     let onTap: @MainActor () -> Void
     @Environment(\.delosColors) private var colors
 
     var body: some View {
         Rectangle()
             .fill(light ? RGBA(red: 4 / 255, green: 8 / 255, blue: 16 / 255, alpha: 0.26).color : colors.scrim.color)
+            .opacity(progress.map { min(max($0, 0), 1) } ?? 1)
             .ignoresSafeArea()
             .contentShape(Rectangle())
             .onTapGesture(perform: onTap)
-            .transition(.asymmetric(
+            .transition(progress != nil ? .identity : .asymmetric(
                 insertion: .opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.scrim / 1000)),
                 removal: .opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.exit / 1000))))
     }
 }
 
 /// The screen under a layer's scrim blurs by 6 stage pixels (`Modifier.backdropBlur(haze, 6f, scrim)` of `Scrim`), with the
-/// scrim's fades.
+/// scrim's fades; while a touch drag moves the side menu, by its opening [progress] of that.
 struct LayerBackdropBlur: ViewModifier {
     let active: Bool
+    var progress: Double? = nil
     @Environment(\.stage) private var stage
 
     func body(content: Content) -> some View {
         content
-            .blur(radius: active ? stage.px(6) : 0)
+            .blur(radius: active ? stage.px(6) * CGFloat(progress.map { min(max($0, 0), 1) } ?? 1) : 0)
             .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: (active ? Motion.scrim : Motion.exit) / 1000), value: active)
     }
 }
 
 extension Layers {
-    /// Whether the layer blurs the screen under its scrim: every layer but the context menu's light one.
+    /// Whether the layer blurs the screen under its scrim: every layer but the context menu's light one and the button
+    /// recording's plain scrim.
     var blursScreen: Bool {
         guard let layer else { return false }
-        if case .context = layer { return false }
-        return true
+        switch layer {
+        case .context, .buttonCapture: return false
+        case .dialog: return true
+        }
     }
 }
 
@@ -251,8 +280,13 @@ struct LayerHost: View {
         ZStack {
             if let layer = layers.layer {
                 let isMenu = if case .context = layer { true } else { false }
-                LayerScrim(light: isMenu, onTap: layers.dismiss)
+                // The recording draws its own scrim, with its own fades
+                if case .buttonCapture = layer {} else { LayerScrim(light: isMenu, onTap: layers.dismiss) }
                 switch layer {
+                case let .buttonCapture(capture):
+                    ButtonCaptureLayer(capture: capture, onTap: layers.dismiss)
+                        .id(layers.generation)
+                        .transition(.opacity.animation(ButtonCaptureLayer.fade))
                 case let .context(menu, anchor):
                     let tip = UnitPoint(x: layers.menuTip.x, y: layers.menuTip.y)
                     ContextMenuLayer(layers: layers, menu: menu, anchor: anchor)

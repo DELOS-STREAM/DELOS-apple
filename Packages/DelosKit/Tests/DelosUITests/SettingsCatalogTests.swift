@@ -58,7 +58,7 @@ import Testing
             .smartClipboardSyncToast: .bool(true), .hideClipboardContent: .bool(true), .keyboardOpacity: .int(90),
             .onscreenKeyboardHeight: .int(200), .onscreenKeyboardWidth: .int(1000), .onscreenKeyboardAlignMode: .text("center"),
             .enableStickyModifierKeyVirtualKeyboard: .bool(true), .oscOpacity: .int(90), .keyLayout: .text("OSC_Keyboard"),
-            .pyrowaveChroma: .text("420"), .streamMenuSwipe: .bool(true), .statsPosition: .text("TOP_LEFT"),
+            .pyrowaveChroma: .text("420"), .statsPosition: .text("TOP_LEFT"),
             .trackpadDragDropThreshold: .int(250), .freeAnalogStickOpacity: .int(20),
         ]
         for (key, value) in defaults { #expect(key.defaultValue == value, "\(key.rawValue)") }

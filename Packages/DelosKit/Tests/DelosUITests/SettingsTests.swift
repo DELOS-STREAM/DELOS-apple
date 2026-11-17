@@ -181,6 +181,33 @@ private let iPhone = StreamDevice(pixelWidth: 1290, pixelHeight: 2796, maxFrames
             == "The saved choice is unavailable\n\nAbout.")
         #expect(StreamSettingsForm.details(value: "x", explanation: nil, unavailable: false, about: "About.") == "About.")
     }
+
+    /// Settings → Controls → Stream menu (`nativeSettings` of DELOS for Android): the buttons ("Not set" by default, the list
+    /// clears them or records) and the swipe toggle, after the interface rows.
+    @Test func theStreamMenuRowsSayNotSetByDefaultAndShowTheRecordedButtons() throws {
+        var form = StreamSettingsForm(settings: StreamSettings(), device: iPhone)
+        let rows = form.streamMenuRows(.controls)
+        #expect(rows.map(\.id) == ["ui_stream_menu_buttons", "ui_stream_menu_swipe"])
+        #expect(Set(rows.map(\.section)) == ["Stream menu"])
+        #expect(form.streamMenuRows(.stream).isEmpty)
+        let buttons = try #require(rows.first)
+        #expect(buttons.label == "Stream menu buttons")
+        #expect(buttons.value == .choice(label: "Not set", options: ["Not set", "Record buttons"], selected: 0))
+        #expect(buttons.help.hasPrefix("Not set\n\nA tap of Guide or Back opens the stream menu"))
+        form.setMenuButtons([.r3, .l3])
+        #expect(form.settings.streamMenuButtons == ["l3", "r3"])
+        #expect(form.streamMenuRows(.controls)[0].value == .choice(label: "L3 + R3", options: ["Not set", "Record buttons"], selected: nil))
+        form.setMenuButtons([.select, .start, .home])
+        #expect(StreamMenuButtonsText.label(form.menuButtonsChosen) == "Start + Select + Home")
+        // "Not set" clears them
+        form.pick(StreamSettingsForm.menuButtons, option: 0)
+        #expect(form.settings.streamMenuButtons.isEmpty)
+        // The swipe is on by default and toggles
+        #expect(form.streamMenuRows(.controls)[1].value == .toggle(true))
+        let toggled = form.step(StreamSettingsForm.menuSwipe, by: 1)
+        #expect(toggled)
+        #expect(!form.settings.streamMenuSwipe)
+    }
 }
 
 @MainActor

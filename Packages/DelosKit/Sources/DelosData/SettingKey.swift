@@ -100,8 +100,6 @@ public enum SettingKey: String, CaseIterable, Codable, Sendable {
     case reduceRefreshRate = "checkbox_reduce_refresh_rate"
     case fullRange = "checkbox_full_range"
     case preventPacketLoss = "checkbox_prevent_packet_loss"
-    /// Settings → Controls → Stream menu: a swipe up from the bottom edge opens the stream menu (`ui_stream_menu_swipe`).
-    case streamMenuSwipe = "ui_stream_menu_swipe"
     /// Settings → Display → Statistics: the corner of the full statistics panel (`ui_stats_position`).
     case statsPosition = "ui_stats_position"
 
@@ -191,7 +189,6 @@ public enum SettingKey: String, CaseIterable, Codable, Sendable {
         case .reduceRefreshRate: .bool(false)
         case .fullRange: .bool(false)
         case .preventPacketLoss: .bool(false)
-        case .streamMenuSwipe: .bool(true)
         case .statsPosition: .text("TOP_LEFT")
         }
     }

@@ -1,4 +1,5 @@
 import DelosCore
+import DelosInput
 import DelosMedia
 import Foundation
 
@@ -131,6 +132,12 @@ public struct StreamSettings: Codable, Equatable, Sendable {
     /// The bitrate each codec last had (`ui_codec_bitrate_<codec>` of DELOS for Android): kept when the codec changes
     /// away and restored when it comes back. Never part of what a stream reads.
     public var codecBitrates: [String: Int] = [:]
+    public var rumble = RumbleConfiguration()
+    /// The controller buttons that open the stream menu when held together (`ui_stream_menu_buttons`), by name; none by
+    /// default, since a tap of Home opens it. The names are DelosInput's `ShortcutButton` values.
+    public var streamMenuButtons: [String] = []
+    /// The swipe up from the band above the bottom edge opens the stream menu (`ui_stream_menu_swipe`).
+    public var streamMenuSwipe = true
 
     /// The bitrate slider of Android (`seekbar_bitrate_kbps`): 1 to 1000 Mbps in steps of 1 Mbps.
     public static let bitrateRange = 1000...1_000_000
@@ -252,6 +259,9 @@ public struct StreamSettings: Codable, Equatable, Sendable {
         values = stored.values
         codecBitrates = value(.codecBitrates, [String: Int]()).filter { VideoCodec(rawValue: $0.key) != nil }
             .mapValues(Self.clampBitrate)
+        rumble = value(.rumble, d.rumble)
+        streamMenuButtons = value(.streamMenuButtons, d.streamMenuButtons)
+        streamMenuSwipe = value(.streamMenuSwipe, d.streamMenuSwipe)
     }
 }
 
@@ -370,6 +380,7 @@ public enum StreamChoices {
 
 /// Stores the ``StreamSettings`` of each profile in `UserDefaults`, next to its ``Appearance``.
 public struct StreamSettingsStore: Sendable {
+    public static let didSave = Notification.Name("DelosStreamSettingsDidSave")
     private let suiteName: String?
 
     /// - Parameter suiteName: a `UserDefaults` suite; nil is the app's standard defaults.
@@ -391,6 +402,7 @@ public struct StreamSettingsStore: Sendable {
     public func save(_ settings: StreamSettings, profile: String) {
         guard let data = try? JSONEncoder().encode(settings) else { return }
         defaults.set(data, forKey: key(profile))
+        NotificationCenter.default.post(name: Self.didSave, object: profile)
     }
 
     /// Forgets a removed profile's settings.

@@ -9,12 +9,34 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Pairing waits for the trusted paired state instead of a fixed delay, and manual-address entry reports a PC
+  that was not added. The start screen retargets its initial PC focus as discovery changes. On compact stages,
+  the profile chip shares the status line, clears the measured status cluster and truncates long names.
+  Avatar fallback glyphs use the smaller grid size.
+
+- Game rumble has Original, Soft, Kick-start and Pulsing feels, live profile updates, an optional device
+  vibration fallback and a strength control. DualSense feedback, weapon and positional vibration trigger effects
+  use GameController; unsupported effects release the trigger rather than leaving resistance stuck.
+  Physical-controller and Taptic playback are not verified.
+- Interface cues use media-volume playback instead of system-alert sounds. Audio preparation runs off the main
+  thread and preserves an active stream's audio-session mode. Device volume, silent-switch behavior and
+  real-stream mixing are not verified on hardware.
+
 - Controller hints use the approved complete Xbox, DualSense, DualShock 4 and Joy-Con font glyphs,
   with physical button positions preserved and no extra disc or connected-pad SF Symbols override. The shared
   library also includes Mac keyboard, mouse and trackpad symbols.
+- The stream arrives at the end of the launch scene: while the tunnel opens, the live picture waits zoomed to 118 %
+  and blurred, then springs in to 100 % with a short squash, wave and RGB split, and ends exactly on the plain picture.
+  It is drawn by the Metal renderer on the live frames; with reduced motion, and with the display layer where Metal
+  is unavailable, the picture is shown as it is. Not verified on a device.
+- Controller hints use the same approved complete Xbox, DualSense, DualShock 4 and Joy-Con font glyphs as Android,
+  with physical button positions preserved and no extra disc or connected-pad SF Symbols override. Both font files
+  are byte-identical to Android; the shared library also includes Mac keyboard, mouse and trackpad symbols.
   Physical-device rendering is not verified.
 - The library filter on the home screen (when `DelosMetadataURL` is configured): Y, or a tap on the hint bar's Filter
   (a glyphless pill while no controller is the input), opens a glass sheet with chips for genre and theme (with the number of games each holds), HDR support and
+- The library filter of Android on the home screen (when `DelosMetadataURL` is configured): Y, or a tap on the hint bar's Filter
+  (a 52 px glass pill with the filter symbol before its label while no controller is the input), opens a glass sheet with chips for genre and theme (with the number of games each holds), HDR support and
 - A demo harness for debug builds (`-DelosDemo YES`, docs/BUILDING.md): a fake PC with games, generated artwork, fake metadata and a
   command script, none of it touching the network, the client identity or the app's data, and `tools/sim-walkthrough.sh` to
   screenshot any screen in a fresh simulator.
@@ -50,9 +72,15 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   dynamic range. The look on iPad and iPhone HDR displays is not verified.
 - Hiding games: the game menu has Hide app and Show app, the side menu has "Show hidden apps" with the count, and a shown
   hidden game carries an eye-slash pill. Hidden games are kept per profile and per PC.
-- The Artwork screen of the game menu: choose the cover, wide cover, background and logo among the still SteamGridDB images
-  (best rated first) or leave it to the PC's artwork or the name, search for another name and match the game by hand. The
-  choices are kept by automatic refreshes. The filters and animated images are not ported.
+- The Artwork screen of the game menu: choose the cover, wide cover, background and logo among the still and animated
+  SteamGridDB images, narrowed and sorted by the filter sheet, or leave it to the PC's artwork or the name, search for
+  another name and match the game by hand. The choices are kept by automatic refreshes.
+- Animated artwork plays: an animated WebP, GIF or APNG cover, wide cover, logo or game background plays over its first
+  frame in the library, and the animated choices play in their Artwork screen tiles (a bar shows the download of the
+  animation). Each frame keeps the time its file gives it, frames are decoded one at a time at the size they are shown,
+  and nothing plays while it is off screen or covered, while the app is in the background, or with reduced motion; the
+  game background starts after the game has stayed focused for half a second and loops with a cross-fade. Playback on
+  devices and its cost there are not verified.
 - App settings in the game menu: resolution, frame rate, bitrate, codec, frame pacing and host audio can be set for one
   app, stored per profile and app, with the CUSTOM marks, Reset all and Undo. A stream of the app uses them.
 - Video frame pacing adds Balanced with FPS limit, Warp Drive and Warp 2: real host FPS cap/2x/4x
@@ -158,6 +186,12 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 ### Changed
 
 - Feedback and motion: a tap or a click plays the same cue and squeezes the element (.97) as A
+- The stream menu opens with a tap of a controller's Home button, and holding Home for half a second sends Guide to the
+  PC while it is held; the Home button's system overlay stays off during a stream. L3 + R3 no longer open the menu by
+  default: Settings → Controls → Stream menu buttons records your own combination ("Not set" by default). On the touch
+  screen the menu opens with a swipe up from a band above the bottom edge (Swipe up to open the menu, on by default)
+  instead of the swipe from the left edge; touches starting in that band do not reach the PC. Not yet tried on a device.
+- Feedback and motion as in DELOS for Android: a tap or a click plays the same cue and squeezes the element (.97) as A
   does, without a second sound (Cancel and Back to library are BACK only; the stream menu opens with OPEN and closes with
   BACK; the PC ending the stream shows a toast), Apple TV plays MOVE and SELECT through the focus engine, circle rows and
   tall menus scroll to the focused item, icons cross-fade between Regular and Fill, the focus curves are 420 ms and jump
@@ -168,6 +202,13 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - Streams no longer ask GeForce Experience to optimize the game's settings.
 - The profile chip on the start screen opens the profiles menu instead of the profile screen; a PC that
   sleeps and can be woken says so.
+- The side menu follows the finger: a drag in from the left edge pulls the panel, the scrim and the blur with it (a
+  little past fully open with a rubber band), and on release it opens past 40 % of its width or with a quick flick and
+  springs back otherwise; a drag to the left on the open menu closes it the same way. With reduced motion the drag only
+  toggles the menu once it is long enough. On iPad and Apple TV the floating glass box has the same, larger gap to the
+  left, top and bottom edges of the screen (the status bar and the home indicator no longer widen one of them) and
+  materialises from the left edge (growing, sharpening from a blur, on a spring) and goes back into it; with reduced
+  motion it fades. Not verified on a device yet.
 
 ### Removed
 
@@ -177,6 +218,7 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- Down from the top navigation returns to the cover the focus went up from, not to the cover under the button.
 - The library's row of covers, the filter sheet's chip rows and every other row and list that follows the focus glide
   smoothly: one spring that every step retargets and that keeps its speed, driven at up to 120 frames a second, instead of
   SwiftUI's animated scroll, which restarted from rest after a still frame at every step (a held arrow or quick presses hopped
