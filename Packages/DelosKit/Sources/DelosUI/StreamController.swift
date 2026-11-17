@@ -59,7 +59,10 @@ final class StreamController {
         case ended
     }
 
-    private(set) var phase = Phase.connecting
+    private(set) var phase = Phase.connecting {
+        // The keyboard belongs to the running stream: not over the loader, the exit or the result overlay
+        didSet { if phase != .streaming { keyboardShown = false } }
+    }
     /// "Calling up <PC>" and the line of the current stage.
     private(set) var greeting = ""
     /// The game's name (the launch scene's title).

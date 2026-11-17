@@ -143,6 +143,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- The Keyboard tile of the stream menu raises the system keyboard on the iPhone and the iPad again and keeps it up: the key
+  window's return to the app no longer takes the keyboard's first responder back for the interface's arrow keys, which are
+  given back when the keyboard goes down, a raise the system refuses is tried again and shown honestly on the tile, the
+  keyboard goes away with the running stream, and the keys of a hardware keyboard are no longer typed twice into the PC
+  while it is up. Not yet verified on the iPad.
 - A hardware keyboard on the iPad (Magic Keyboard) no longer scrolls the library, Settings and the other lists on top of
   the focus: the arrow, Space, Page, Home and End keys are taken from UIKit's own keyboard scrolling and focus movement
   (priority key commands, `allowsKeyboardScrolling` off), a key the keyboard repeats by itself is not another press, and

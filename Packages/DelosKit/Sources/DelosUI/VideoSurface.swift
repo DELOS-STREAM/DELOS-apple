@@ -1,3 +1,4 @@
+import DelosInput
 import DelosMedia
 import SwiftUI
 
@@ -77,21 +78,61 @@ final class VideoHostView: UIView {
         #if os(iOS)
         guard shown != keyboardWanted else { return }
         keyboardWanted = shown
-        if shown { _ = becomeFirstResponder() } else { _ = resignFirstResponder() }
+        if shown {
+            raiseKeyboard(retries: Self.raiseRetries)
+        } else {
+            _ = resignFirstResponder()
+        }
         #endif
     }
 
     #if os(iOS)
+    /// How often a refused first responder is tried again, and how long after.
+    private static let raiseRetries = 5
+    private static let raiseRetryDelay = Duration.milliseconds(100)
+
+    /// Takes the first responder, which brings the keyboard up. Refused (the view is not in a window yet, the app is not
+    /// active yet): tried again a moment later, and when it never works the Keyboard tile is told, so it does not stay lit
+    /// over a keyboard that is not there.
+    private func raiseKeyboard(retries: Int) {
+        guard keyboardWanted, !isFirstResponder else { return }
+        if window != nil, becomeFirstResponder() { return }
+        guard retries > 0 else {
+            keyboardWanted = false
+            Task { @MainActor [onKeyboardHidden] in onKeyboardHidden() }
+            return
+        }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.raiseRetryDelay)
+            self?.raiseKeyboard(retries: retries - 1)
+        }
+    }
+
     override var canBecomeFirstResponder: Bool { true }
 
     override func resignFirstResponder() -> Bool {
         let resigned = super.resignFirstResponder()
+        guard resigned else { return resigned }
         // The system's own hide button: the menu's Keyboard tile turns off
-        if resigned, keyboardWanted {
+        if keyboardWanted {
             keyboardWanted = false
             Task { @MainActor [onKeyboardHidden] in onKeyboardHidden() }
         }
+        // The keys of the interface belong to the interface again (the menu's arrows must not reach the system)
+        Task { @MainActor in NotificationCenter.default.post(name: MenuKeyOwnerView.reclaim, object: nil) }
         return resigned
+    }
+
+    // A hardware keyboard types into the first responder as well as through GameController, which already sends its keys to the
+    // PC: the system's own delivery of the same key to the keyboard (as text) would type it twice. These keys end here.
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) { swallowKeys(presses) { super.pressesBegan($0, with: event) } }
+    override func pressesChanged(_ presses: Set<UIPress>, with event: UIPressesEvent?) { swallowKeys(presses) { super.pressesChanged($0, with: event) } }
+    override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) { swallowKeys(presses) { super.pressesEnded($0, with: event) } }
+    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) { swallowKeys(presses) { super.pressesCancelled($0, with: event) } }
+
+    private func swallowKeys(_ presses: Set<UIPress>, rest: (Set<UIPress>) -> Void) {
+        let others = presses.filter { $0.key == nil }
+        if !others.isEmpty { rest(others) }
     }
 
     // The keyboard types plain text: no corrections, capitals or smart punctuation for the PC
@@ -118,6 +159,10 @@ final class VideoHostView: UIView {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
+        #if os(iOS)
+        // The keyboard was asked for before the view had a window
+        if window != nil { raiseKeyboard(retries: Self.raiseRetries) }
+        #endif
         refreshLink?.invalidate()
         refreshLink = nil
         guard let screen = window?.windowScene?.screen else {
@@ -173,7 +218,6 @@ extension VideoHostView: UIKeyInput, UITextInputTraits {
 #endif
 #elseif canImport(AppKit)
 import AppKit
-import DelosInput
 
 extension VideoSurface: NSViewRepresentable {
     func makeNSView(context: Context) -> VideoHostView {

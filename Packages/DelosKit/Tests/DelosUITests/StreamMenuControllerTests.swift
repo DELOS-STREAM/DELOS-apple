@@ -254,6 +254,14 @@ private func streaming(
         #expect(steps.sink.keys.count == 4)
     }
 
+    @Test func theKeyboardGoesAwayWhenTheStreamStopsRunning() async {
+        let (controller, _) = await streaming()
+        controller.toggleKeyboard()
+        #expect(controller.keyboardShown)
+        await controller.leave(quit: false)
+        #expect(!controller.keyboardShown, "not over the exit scene or the result")
+    }
+
     @Test func thePagesHaveTheContentOfTheMenusRows() async {
         let long = "A very long command name that goes on and on forever"
         let (controller, _) = await streaming(brightness: FakeBrightness(), commands: ["Steam", long])
