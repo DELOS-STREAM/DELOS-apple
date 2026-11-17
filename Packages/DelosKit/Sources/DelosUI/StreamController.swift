@@ -228,9 +228,23 @@ final class StreamController {
 
     // MARK: Menu
 
+    /// How long after the menu opened its focus ignores commands: what the player still holds from the game (a
+    /// direction, A, Return) is not a choice in the menu.
+    static let menuGrace: TimeInterval = 0.5
+    @ObservationIgnored private var menuOpenedAt = Date.distantPast
+    /// Called when the menu opens: the screen cancels the repeats of the direction that is held.
+    @ObservationIgnored var menuOpened: (@MainActor () -> Void)?
+
+    /// Whether the menu has been open long enough for its commands to be the player's choices.
+    func menuIsArmed(at now: Date = .now) -> Bool {
+        now.timeIntervalSince(menuOpenedAt) >= Self.menuGrace
+    }
+
     func openMenu() {
         guard phase == .streaming, !menuOpen else { return }
         menuOpen = true
+        menuOpenedAt = .now
+        menuOpened?()
         input?.paused = true
     }
 

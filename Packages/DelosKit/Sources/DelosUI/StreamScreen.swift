@@ -82,10 +82,12 @@ struct StreamScreen: View {
             LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer)
         }
         controller.leavingHold = .seconds(ExitLook.handoff(reduced: reducedMotion))
+        controller.menuOpened = { [navigator] in navigator.cancelRepeats?() }
         self.renderer = renderer
         self.controller = controller
         navigator.commandCapture = { [navigator] command in
-            Self.capture(command, controller: controller, focus: navigator.focus, fromRemote: navigator.commandFromRemote, feedback: layers?.feedback)
+            Self.capture(command, controller: controller, focus: navigator.focus, fromRemote: navigator.commandFromRemote, feedback: layers?.feedback,
+                repeatCount: navigator.commandRepeat)
         }
         IdleTimer.disabled = true
         // Quitting the app (the Mac: Command-Q, closing the window) leaves the stream first
@@ -110,7 +112,7 @@ struct StreamScreen: View {
     /// system also reports it as Menu). Either closes the open menu.
     static func capture(
         _ command: MenuCommand, controller: StreamController, focus: FocusModel, fromRemote: Bool = false,
-        feedback: Feedback? = nil,
+        feedback: Feedback? = nil, repeatCount: Int = 0, at now: Date = .now,
         hasGamepad: @autoclosure () -> Bool = ConnectedControllers.hasGamepad
     ) -> Bool {
         switch controller.phase {
@@ -125,7 +127,9 @@ struct StreamScreen: View {
                 controller.closeMenu()
                 return true
             }
-            return false
+            // A direction or A still held from the game is not a choice: nothing reaches the menu's focus until the
+            // menu has been open a moment, and a repeat of a held direction never does
+            return !controller.menuIsArmed(at: now) || repeatCount > 0
         case .failed:
             if command == .back {
                 feedback?.play(.back)

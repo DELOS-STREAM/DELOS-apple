@@ -92,6 +92,8 @@ public final class Navigator {
     /// While set, every controller and keyboard command goes here first; true: consumed (the stream screen owns the
     /// controller).
     @ObservationIgnored public var commandCapture: (@MainActor (MenuCommand) -> Bool)?
+    /// Ends the repeats of a held direction (``MenuInput/cancelRepeats()``); set by the screen that owns the input.
+    @ObservationIgnored public var cancelRepeats: (@MainActor () -> Void)?
     /// How often the command being handled has repeated while its direction is held (0: a new press).
     @ObservationIgnored public internal(set) var commandRepeat = 0
     /// Whether the command being handled is the Siri Remote's Menu or Play/Pause (tvOS): not a button of a game
@@ -108,24 +110,24 @@ public final class Navigator {
 
     /// Opens [screen] above the current one, with the focus on [focus] (nil: the first item that appears).
     public func push(_ screen: Screen, focus: AnyHashable? = nil) {
+        armInputGate()
         stack.append(Entry(screen: screen, focus: FocusModel(initial: focus)))
     }
-        armInputGate()
 
     /// Goes back one screen. False at the root.
     @discardableResult
     public func back() -> Bool {
         guard canGoBack else { return false }
+        armInputGate()
         stack.removeLast()
         return true
-        armInputGate()
     }
 
     /// Replaces the whole stack with [screen] (the first run is over, or starts again).
     public func reset(to screen: Screen, focus: AnyHashable? = nil) {
+        armInputGate()
         stack = [Entry(screen: screen, focus: FocusModel(initial: focus))]
     }
-        armInputGate()
 
     /// Opens the library of the PC [hostID] above the start screen (from the start screen, or once pairing is done:
     /// B then returns to the start screen, not to the pairing screens).

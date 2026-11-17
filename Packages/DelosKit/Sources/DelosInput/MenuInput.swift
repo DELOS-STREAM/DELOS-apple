@@ -101,6 +101,9 @@ public final class MenuInput {
         held = (source, repeating)
     }
 
+    /// Ends the repeats of a held direction: the stream menu opens while the player may still hold one.
+    public func cancelRepeats() { release(nil) }
+
     /// Ends the repeats of [source] (nil: of whoever holds a direction).
     private func release(_ source: AnyHashable?) {
         guard let held, source == nil || held.source == source else { return }

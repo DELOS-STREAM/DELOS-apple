@@ -149,14 +149,12 @@ struct StreamMenu: View {
         let width = D.rowWidth(count: count)
         let top = min(stage.height - D.topFromBottom, stage.height - stage.safe.bottom / stage.scale - D.tile - D.labelGap - 70)
         let focusedIndex = Self.ids.firstIndex { focus.focused == AnyHashable($0) }
-        let first = Self.ids.first!, last = Self.ids.last!
         return ZStack(alignment: .topLeading) {
             DockRing(index: focusedIndex ?? 0, t: t, exitT: exitT, count: count)
             ForEach(Self.ids.indices, id: \.self) { index in
                 let id = Self.ids[index]
                 FocusItem(
                     id: id, model: focus,
-                    moves: index == 0 ? [.left: AnyHashable(last)] : index == count - 1 ? [.right: AnyHashable(first)] : [:],
                     clickCue: id == Self.resumeID ? .back : .select, action: { activate(id) }
                 ) { focused in
                     DockTile(
