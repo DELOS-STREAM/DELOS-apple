@@ -26,3 +26,9 @@ typedef struct {
 
 /// LiGetHdrMetadata into the flat struct: false when the host's HDR mode is off or it sent no metadata.
 bool DelosCommonGetHdrMetadata(DelosHdrMetadata *out);
+
+/// The stream encryption the running connection negotiated (`MoonBridge.getStreamEncryption` of DELOS for Android,
+/// simplejni.c:251): video in bit 0, audio in bit 1. Read it once the connection has started.
+#define DELOS_STREAM_ENCRYPTION_VIDEO 1
+#define DELOS_STREAM_ENCRYPTION_AUDIO 2
+int DelosCommonGetStreamEncryption(void);
