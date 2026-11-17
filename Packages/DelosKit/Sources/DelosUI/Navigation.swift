@@ -69,6 +69,16 @@ public final class Navigator {
         didSet { if oldValue, !isEditingText { textEditingEnded = .now } }
     }
     @ObservationIgnored private var textEditingEnded = Date.distantPast
+    /// An A or Return that is still being pressed when a screen changes belongs to the screen that is gone: until this
+    /// time ``swallowsAccept(at:)`` is true (``armInputGate()``).
+    @ObservationIgnored private var inputGateUntil = Date.distantPast
+    /// How long after a screen change (and after a layer opens) an accept is ignored.
+    static let inputGate: TimeInterval = 0.4
+
+    /// Ignores `accept` for ``inputGate`` seconds: called after every navigation, and by whoever opens a layer.
+    public func armInputGate(at now: Date = .now) {
+        inputGateUntil = now.addingTimeInterval(Self.inputGate)
+    }
 
     /// A text field has started or stopped being typed in. On tvOS this is not told: the system keyboard is a screen of its
     /// own that takes the remote and ends itself (Menu closes it without the app hearing of it), and a focused field is
@@ -100,6 +110,7 @@ public final class Navigator {
     public func push(_ screen: Screen, focus: AnyHashable? = nil) {
         stack.append(Entry(screen: screen, focus: FocusModel(initial: focus)))
     }
+        armInputGate()
 
     /// Goes back one screen. False at the root.
     @discardableResult
@@ -107,12 +118,14 @@ public final class Navigator {
         guard canGoBack else { return false }
         stack.removeLast()
         return true
+        armInputGate()
     }
 
     /// Replaces the whole stack with [screen] (the first run is over, or starts again).
     public func reset(to screen: Screen, focus: AnyHashable? = nil) {
         stack = [Entry(screen: screen, focus: FocusModel(initial: focus))]
     }
+        armInputGate()
 
     /// Opens the library of the PC [hostID] above the start screen (from the start screen, or once pairing is done:
     /// B then returns to the start screen, not to the pairing screens).
@@ -153,8 +166,9 @@ public final class Navigator {
     }
 
     /// Return ends typing and is then delivered as a key press too: an A or Return within this time after the field
-    /// let go of the keyboard is the same press and must not activate the focused item.
+    /// let go of the keyboard is the same press and must not activate the focused item. The same holds for the time
+    /// after a screen change or a layer opening (``armInputGate(at:)``): the press that is still down is not a new one.
     func swallowsAccept(at now: Date = .now) -> Bool {
-        now.timeIntervalSince(textEditingEnded) < 0.3
+        now.timeIntervalSince(textEditingEnded) < 0.3 || now < inputGateUntil
     }
 }

@@ -80,6 +80,19 @@ import Testing
         #expect(navigator.swallowsAccept())
         #expect(!navigator.swallowsAccept(at: .now.addingTimeInterval(1)))
     }
+
+    @Test func anAcceptStillDownWhenTheScreenChangesActivatesNothingOnTheNextScreen() {
+        let navigator = Navigator(root: .start)
+        #expect(!navigator.swallowsAccept())
+        for change in [
+            { navigator.push(.settings) }, { navigator.back() }, { navigator.reset(to: .start) },
+            { navigator.openHome(hostID: "h") },
+        ] as [() -> Void] {
+            change()
+            #expect(navigator.swallowsAccept())
+            #expect(!navigator.swallowsAccept(at: .now.addingTimeInterval(1)))
+        }
+    }
 }
 
 @MainActor
