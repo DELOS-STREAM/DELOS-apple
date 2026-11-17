@@ -177,6 +177,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   and the other screens with their own commands lost L1 and R1, Y and the adjust hint after a screen change).
 - On Apple TV the top navigation and the covers cannot take the focus behind an open filter sheet, value list or search, and
   the covers cannot behind a game menu; a tap on the side menu's panel no longer closes it.
+- The filter button of the library blurs with the rest of the screen under the filter sheet; it stayed sharp beside the sheet.
+- The library's filter sheet covers the top bar with its scrim: the brand, the navigation, the back arrow and the clock were left
+  bright above the dimmed screen. The backdrop and the bar blur under it like the screen does, as on Android.
+- The hint bar is no longer blurred and dimmed under the side menu, a context menu or a dialog: as on Android it is above the
+  scrim and the layers and stays crisp.
 - The circles of the Devices, Start, Profile, Pair and Create screens match Android's: the focus ring is no longer grown twice
   (it was 40 px too wide, so the glow showed through its gap), the glow's middle stop keeps a third of its alpha instead of
   replacing it (it was twice as bright), the discs and the profile chip are Liquid Glass tinted with Android's whole fill alpha,

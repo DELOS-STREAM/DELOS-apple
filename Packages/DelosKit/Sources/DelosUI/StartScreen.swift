@@ -183,11 +183,17 @@ public struct DelosRoot: View {
             ZStack {
                 ZStack {
                     // The game background shows only behind the library (`ShellBackdrop`'s heroShown)
-                    if !videoCoversBackdrop { Backdrop(appearance: appearance, hero: showsLibrary ? homeArt.hero : nil) }
+                    // The library's filter sheet is a layer of Android's shell: its scrim covers the bar too (the screen is raised
+                    // while the sheet is open) and the backdrop and the bar blur under it like the screen does
+                    if !videoCoversBackdrop {
+                        Backdrop(appearance: appearance, hero: showsLibrary ? homeArt.hero : nil)
+                            .modifier(LayerBackdropBlur(active: librarySheetOpen))
+                    }
                     let entry = navigator.stack[navigator.stack.count - 1]
                     screen(entry)
                         .id(ObjectIdentifier(entry.focus))
                         .transition(ScreenMotion.transition(reduced: systemReduceMotion || appearance.reducedMotion))
+                        .zIndex(librarySheetOpen ? 1 : 0)
                     if case .stream = navigator.current {} else {
                         TopBar(
                             brand: navigator.current != .start, navigation: navigation(entry),
@@ -195,13 +201,9 @@ public struct DelosRoot: View {
                             clock: appearance.clock, onBack: navigator.canGoBack ? { go { navigator.back() } } : nil)
                             // The interface scale zooms the whole bar
                             .modifier(ZoomedBar())
+                            .modifier(LayerBackdropBlur(active: librarySheetOpen))
                             // The navigation's buttons belong to the focus of the screen shown
                             .id(ObjectIdentifier(entry.focus))
-                    }
-                    if case .stream = navigator.current {} else {
-                        ShellHintBar(
-                            hints: hints, note: libraryNote, noteLabel: libraryNote == nil ? nil : L("shell_hint_library_label"),
-                            libraryRow: showsLibraryRow)
                     }
                 }
                 .modifier(PortalBackdropBlur(active: actions.connection.portal.map { !$0.arriving } ?? false))
@@ -218,6 +220,12 @@ public struct DelosRoot: View {
                         hidden: actions.hiddenRow(pcName: connectedPC?.name))
                 }
                 LayerHost(layers: layers, navigator: navigator)
+                // The hint bar is above the scrim and the layers, crisp (Android's `HintBar` follows `Scrim` in `Shell`)
+                if case .stream = navigator.current {} else {
+                    ShellHintBar(
+                        hints: hints, note: libraryNote, noteLabel: libraryNote == nil ? nil : L("shell_hint_library_label"),
+                        libraryRow: showsLibraryRow)
+                }
                 ZStack {
                     if let portal = actions.connection.portal {
                         PortalOverlay(portal: portal, burst: actions.connection.burst, focus: router.portalFocus, onCancel: { actions.connection.cancel() })
@@ -397,6 +405,9 @@ public struct DelosRoot: View {
     private var showsLibraryRow: Bool {
         if case .home = navigator.current { true } else { false }
     }
+
+    /// The library's filter sheet is open. The Artwork screen's sheet is part of that screen, under the bar, as on Android.
+    private var librarySheetOpen: Bool { showsLibraryRow && navigator.screenHints.sheetOpen }
 
     /// The button hints of the screen, layer and side menu in front (``ShellHints``).
     private var hints: [Hint] {
