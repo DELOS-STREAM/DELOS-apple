@@ -21,12 +21,13 @@ public enum RendererChoice: String, Sendable, CaseIterable {
         self = choice
     }
 
-    /// The renderer of this run: the debug switch in debug builds, else the display layer.
+    /// The renderer of this run: the debug switch in debug builds, else Metal (owner's decision, 2026-11-17: effects on the
+    /// live picture, frame pacing with the display link, the way to PyroWave); ``makeRenderer`` falls back to the display layer.
     public static var current: RendererChoice {
         #if DEBUG
-        RendererChoice(switchValue: UserDefaults.standard.string(forKey: defaultsKey)) ?? .layer
+        RendererChoice(switchValue: UserDefaults.standard.string(forKey: defaultsKey)) ?? .metal
         #else
-        .layer
+        .metal
         #endif
     }
 

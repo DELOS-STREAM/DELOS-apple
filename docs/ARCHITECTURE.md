@@ -288,11 +288,12 @@ output for 10-bit streams and for 8-bit output otherwise, and makes a new sessio
 Verified by tests only: the pieces with fakes and CPU references; not verified: the look of HDR on an iPad or iPhone
 display, the host's real metadata, a real HDR stream.
 
-`RendererChoice` picks the renderer. The display layer stays the default. The debug switch `-DelosRenderer metal` (a
-launch argument or a `defaults` value; `layer` names the default; release builds ignore it) selects the Metal renderer,
-with the profile's frame pacing mode and frame rate:
+`RendererChoice` picks the renderer. Metal is the default (owner's decision, 2026-11-17: effects on the live picture such
+as the arrival, frame pacing with the display link, the way to PyroWave); where Metal cannot start, the display layer
+takes over. The debug switch `-DelosRenderer layer` (a launch argument or a `defaults` value; `metal` names the default;
+release builds ignore it) selects the display layer, for comparisons:
 
-    xcrun devicectl device process launch --device <id> --console io.github.meitoncz.delos.debug -DelosRenderer metal
+    xcrun devicectl device process launch --device <id> --console io.github.meitoncz.delos.debug -DelosRenderer layer
 
 There is no Settings row. Android's row for the same idea, Fast V-Sync (Nano Pacer), says in its help line "MediaCodec
 only", which is not true here, and the Android help text cannot be changed on this side. The row follows when the owner
