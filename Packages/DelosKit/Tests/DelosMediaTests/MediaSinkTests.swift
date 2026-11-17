@@ -126,4 +126,74 @@ import Testing
         #expect(left == [1, 2, 3, 0])
         #expect(right == [-1, -2, -3, 0])
     }
+
+    /// The host's 5.1 order (front left, front right, center, LFE, back left, back right) with a different constant on
+    /// each channel, through the stream's format into an engine that renders offline into [output].
+    private func renderSurround(into output: AVAudioFormat, speakers: [AudioChannelLabel] = []) throws -> [[Float]] {
+        let values: [Float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+        let ring = AudioRing(channels: 6, capacityFrames: 4096, maxFrames: 4096)
+        let frames = 512
+        let interleaved = (0..<frames).flatMap { _ in values }
+        interleaved.withUnsafeBufferPointer { ring.write($0) }
+        let format = try #require(AudioOutput.format(sampleRate: 48000, channels: 6))
+        let engine = AVAudioEngine()
+        try engine.enableManualRenderingMode(.offline, format: output, maximumFrameCount: AVAudioFrameCount(frames))
+        let source = AVAudioSourceNode(format: format, renderBlock: AudioOutput.renderBlock(ring: ring))
+        engine.attach(source)
+        engine.connect(source, to: engine.mainMixerNode, format: format)
+        if let named = AudioOutput.outputFormat(hardware: engine.outputNode.outputFormat(forBus: 0), speakers: speakers) {
+            engine.connect(engine.mainMixerNode, to: engine.outputNode, format: named)
+        }
+        try engine.start()
+        defer { engine.stop() }
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: engine.manualRenderingFormat, frameCapacity: AVAudioFrameCount(frames)))
+        #expect(try engine.renderOffline(AVAudioFrameCount(frames), to: buffer) == .success)
+        // The last sample of each channel: the mixer's ramps are over by then
+        return (0..<Int(buffer.format.channelCount)).map { channel in
+            Array(UnsafeBufferPointer(start: buffer.floatChannelData![channel], count: Int(buffer.frameLength)))
+        }
+    }
+
+    /// A device with two speakers plays a surround stream mixed down (Android's audio framework does the same with a
+    /// 5.1 track): the center reaches both sides, each side keeps its own front channel.
+    @Test func surroundIsMixedDownOnStereo() throws {
+        let stereo = try #require(AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2))
+        let channels = try renderSurround(into: stereo)
+        let left = try #require(channels[0].last), right = try #require(channels[1].last)
+        #expect(left > 0.1 && right > 0.2)
+        #expect(right - left > 0.05)
+    }
+
+    /// Six channels in a discrete layout: an output that does not name its speakers (AVAudioFormat needs a layout above
+    /// two channels; an output without names has a discrete one).
+    private func unnamedSixChannels() throws -> AVAudioFormat {
+        let layout = try #require(AVAudioChannelLayout(layoutTag: kAudioChannelLayoutTag_DiscreteInOrder | 6))
+        let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channelLayout: layout)
+        #expect(!AudioOutput.namesSpeakers(format.channelLayout))
+        #expect(AudioOutput.namesSpeakers(AudioOutput.format(sampleRate: 48000, channels: 6)?.channelLayout))
+        return format
+    }
+
+    /// An output of six channels in another order (HDMI's: left, right, LFE, center, surrounds) gets every channel of
+    /// the stream on the speaker of the same name.
+    @Test func surroundKeepsItsChannelsOnASurroundRoute() throws {
+        let hdmi = try unnamedSixChannels()
+        let speakers = [
+            kAudioChannelLabel_Left, kAudioChannelLabel_Right, kAudioChannelLabel_LFEScreen, kAudioChannelLabel_Center,
+            kAudioChannelLabel_LeftSurround, kAudioChannelLabel_RightSurround,
+        ]
+        let channels = try renderSurround(into: hdmi, speakers: speakers)
+        let last = channels.map { $0.last ?? 0 }
+        for (got, want) in zip(last, [Float(0.1), 0.2, 0.4, 0.3, 0.5, 0.6]) { #expect(abs(got - want) < 0.001) }
+    }
+
+    @Test func anOutputThatNamesItsSpeakersOrHasTwoKeepsTheEnginesConnection() throws {
+        let stereo = try #require(AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2))
+        #expect(AudioOutput.outputFormat(hardware: stereo, speakers: [kAudioChannelLabel_Left, kAudioChannelLabel_Right]) == nil)
+        let named = try #require(AudioOutput.format(sampleRate: 48000, channels: 6))
+        #expect(AudioOutput.outputFormat(hardware: named, speakers: Array(repeating: kAudioChannelLabel_Left, count: 6)) == nil)
+        let unnamed = try unnamedSixChannels()
+        #expect(AudioOutput.outputFormat(hardware: unnamed, speakers: []) == nil)
+        #expect(AudioOutput.outputFormat(hardware: unnamed, speakers: Array(repeating: kAudioChannelLabel_Unknown, count: 6)) == nil)
+    }
 }
