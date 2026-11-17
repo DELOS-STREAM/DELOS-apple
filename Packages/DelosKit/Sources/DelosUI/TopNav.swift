@@ -258,6 +258,9 @@ struct SideMenu: View {
     let onSettings: @MainActor () -> Void
     /// The "Show hidden apps" row, while a game of the open library is hidden or it is on (nil: no row).
     var hidden: HiddenRow? = nil
+    /// While a touch drag owns the menu, its opening progress (``SideMenuDrag``): the panel follows it instead of its
+    /// transitions.
+    var progress: Double? = nil
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
@@ -335,6 +338,9 @@ struct SideMenu: View {
                 } else {
                     GlassShape(Rectangle(), tint: colors.surface3, role: .panel)
                         .overlay(alignment: .trailing) { Rectangle().fill(colors.line.color).frame(width: stage.px(1)) }
+                        // The glass reaches this far past the left edge, so a panel pulled beyond fully open shows more of
+                        // itself, never a gap
+                        .padding(.leading, -Self.overhang(frame, stage))
                         .contentShape(Rectangle())
                         .onTapGesture {}
                         .ignoresSafeArea()
@@ -342,22 +348,52 @@ struct SideMenu: View {
             }
             .padding(.leading, stage.px(frame.minX))
             .padding(.top, stage.px(frame.minY))
+            .offset(x: Self.dragOffset(progress, frame: frame, stage: stage))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        // `sideEnter` / `sideExit` (``transition(reducedMotion:stage:)``) on the whole layer, which is what the root inserts
-        .transition(Self.transition(reducedMotion: reduceMotion, stage: stage))
+        // `sideEnter` / `sideExit` (``transition(kind:reducedMotion:stage:)``) on the whole layer, which is what the root
+        // inserts; none while a drag moves the panel
+        .transition(progress != nil ? .identity : Self.transition(kind: style.kind, reducedMotion: reduceMotion, stage: stage))
     }
+
+    /// How far a drag at [progress] moves the panel from its place: fully off the left edge at 0, a damped pull of at most
+    /// ``SideMenuSwipe/rubber`` of the travel past fully open.
+    static func dragOffset(_ progress: Double?, frame: CGRect, stage: Stage) -> CGFloat {
+        guard let progress else { return 0 }
+        return CGFloat(min(progress - 1, SideMenuSwipe.rubber)) * stage.px(frame.maxX)
+    }
+
+    /// How far the edge panel's glass reaches past the left edge: as far as the rubber band pulls it.
+    static func overhang(_ frame: CGRect, _ stage: Stage) -> CGFloat { stage.px(frame.maxX * SideMenuSwipe.rubber) }
 
     /// How far left of its place the panel starts and ends: a tenth of its width.
     static func slideShift(_ stage: Stage) -> CGFloat { -stage.px(width) / 10 }
 
-    /// `sideEnter` / `sideExit` as a transition: in from a tenth of the width to the left over 560 ms (ease-out) with a
-    /// 280 ms fade, out over 240 ms (ease-in); with reduced motion only the fades.
-    static func transition(reducedMotion: Bool, stage: Stage) -> AnyTransition {
+    /// How blurred the floating box is when it begins to materialise and when it has dissolved, in stage pixels.
+    static let materialBlur = 24.0
+    /// The floating box's scale when it begins to materialise from the left edge and when it has gone back into it.
+    static let materialScale = 0.9
+
+    /// `sideEnter` / `sideExit` as a transition. The edge panel slides in from a tenth of the width to the left over 560 ms
+    /// (ease-out) with a 280 ms fade, and out over 240 ms (ease-in). The floating glass box materialises from the left
+    /// edge instead: it grows from ``materialScale`` towards the edge, sharpens from ``materialBlur`` and comes the same
+    /// tenth of the width, on the geometry spring, with the fade; it leaves the same way back over 240 ms (ease-in). With
+    /// reduced motion both only fade.
+    static func transition(kind: SideMenuStyle.Kind, reducedMotion: Bool, stage: Stage) -> AnyTransition {
+        if reducedMotion { return .asymmetric(insertion: fade(Motion.fade), removal: fade(Motion.exit)) }
         let shift = slideShift(stage)
-        return .asymmetric(
-            insertion: reducedMotion ? fade(Motion.fade) : fade(Motion.fade).combined(with: .offset(x: shift).animation(Motion.out(Motion.popIn))),
-            removal: reducedMotion ? fade(Motion.exit) : fade(Motion.exit).combined(with: .offset(x: shift).animation(LayerHost.easeIn(Motion.exit))))
+        switch kind {
+        case .edge:
+            return .asymmetric(
+                insertion: fade(Motion.fade).combined(with: .offset(x: shift).animation(Motion.out(Motion.popIn))),
+                removal: fade(Motion.exit).combined(with: .offset(x: shift).animation(LayerHost.easeIn(Motion.exit))))
+        case .box:
+            let material = AnyTransition(SideBoxMaterialize(shift: shift, blur: stage.px(materialBlur), scale: materialScale))
+            let spring = SettleSpring(from: 0, to: 1, velocity: 0, began: .now).animation
+            return .asymmetric(
+                insertion: fade(Motion.fade).combined(with: material.animation(spring)),
+                removal: fade(Motion.exit).combined(with: material.animation(LayerHost.easeIn(Motion.exit))))
+        }
     }
 
     /// A quick-setting row: focusable, on the shared plate, rising in with the others.
@@ -397,5 +433,20 @@ struct SideMenu: View {
     private var status: String {
         guard let pc else { return L("shell_side_not_connected") }
         return pc.online ? L("shell_side_connected", pc.name) : L("shell_side_offline", pc.name)
+    }
+}
+
+/// The floating side menu box materialising from the left edge: scaled down towards the edge, shifted towards it and
+/// blurred until it is there.
+struct SideBoxMaterialize: Transition {
+    let shift: CGFloat
+    let blur: CGFloat
+    let scale: Double
+
+    func body(content: Content, phase: TransitionPhase) -> some View {
+        content
+            .scaleEffect(phase.isIdentity ? 1 : scale, anchor: .leading)
+            .offset(x: phase.isIdentity ? 0 : shift)
+            .blur(radius: phase.isIdentity ? 0 : blur)
     }
 }

@@ -95,7 +95,10 @@ Android (after 500 ms, every 50 ms); the handler gets the number of the repeat (
 settings use to speed up a slider and to stop a held Up at the first row.
 `FocusItem` wraps a view for both engines.
 A `FocusItem` can name where a direction leads instead of the nearest item (`moves`): the avatar grid continues a
-row's end in the next row. Its `tap` is what a touch does when it is not what A does; it gets whether the item had the focus
+row's end in the next row. Items can form a restoring group (`FocusModel.restoreFocus(in:items:)`): a move that enters the
+group from outside lands on the group's item that had the focus last instead of the nearest one, so Down from the top
+navigation returns to the cover the focus went up from (on tvOS the system's move into the group is redirected the same way).
+Its `tap` is what a touch does when it is not what A does; it gets whether the item had the focus
 before the tap (a settings row's first tap only focuses it, the second changes it, `RowTouch`); a tap always focuses the item
 first.
 
@@ -136,14 +139,28 @@ capsule; Settings, Profile and Devices take each other's place on the stack; the
 row reaches them. On those screens and on the start screen (`hasSideMenu`), the left menu button opens the side menu
 (`SideMenu`, Android's `SideMenuLayer`): the profile and the connected PC at the top and All settings; it takes every
 command while it is open, and B, the menu button or a tap beside it closes it. The quick settings (theme, background, sounds, haptics) are in it; the rows scroll
-(`FocusScroll` with edge fades) where the stage is too short, the panel is 680 px wide (glass, `panel` role), docked to the left edge at full height (`SideMenuStyle`: on iPad and Apple TV it is a floating box instead, with continuous 40 px corners and a 32 px gap to the left, top and bottom edges and the safe area; an Apple-only presentation decision, Android keeps its edge panel; iPhone, a narrow iPad window and Mac keep the edge panel) and arrives from
-a tenth of its width to its left (`sideEnter`: 560 ms ease-out with a 280 ms fade; it leaves over 240 ms ease-in; only
-fading with reduced motion) under the root's scrim (`LayerScrim`: the scrim token, fading in over 420 ms, out over 240 ms),
+(`FocusScroll` with edge fades) where the stage is too short, the panel is 680 px wide (glass, `panel` role), docked to the left edge at full height (`SideMenuStyle`: on iPad and Apple TV it is a floating box instead, with continuous 40 px corners and the same gap to the left, top and bottom edges of the screen, `SideMenuStyle.gap`: 48 px beyond the deepest of the three safe areas, so a status bar or the home indicator does not make one gap larger; iPhone, a narrow iPad window and Mac keep the edge panel). The edge panel arrives from
+a tenth of its width to its left (`sideEnter`: 560 ms ease-out with a 280 ms fade; it leaves over 240 ms ease-in); the
+floating glass box materialises from the left edge instead (`SideBoxMaterialize`: from 90 % scale anchored at the left edge,
+a tenth of the width to the left and blurred by 24 px, on the geometry spring of damping ratio 0.8 and stiffness 190, with
+the 280 ms fade; it goes back the same way over 240 ms ease-in); both only fade with reduced motion. It lies over the root's
+scrim (`LayerScrim`: the scrim token, fading in over 420 ms, out over 240 ms),
 while the screen behind it blurs by 6 stage pixels (`LayerBackdropBlur`, also behind dialogs; the context menu's scrim only
 dims). One plate glides between its rows, as in Settings. The top navigation wraps from the last button to the first; while
 the focus moves between two buttons an accent pill glides behind them (`NavPill`: both edges springs, the one in the
-direction of travel stiffer) and the focused button's own fill fades in over it. Android has no touch way to the side menu; on the start
-screen the profile chip opens the profiles menu (as on Android), so touch reaches Profile and Settings through a PC's
+direction of travel stiffer) and the focused button's own fill fades in over it.
+
+Touch opens the side menu with a drag in from the left edge, and the panel follows the finger (`SideMenuSwipe`,
+`SideMenuDrag`, `ShellRouter.beginSideDrag` / `moveSideDrag` / `endSideDrag`): a drag that starts within 40 pt of the left
+edge (`SideMenuEdgeStrip`, only that strip takes the touch) and goes more sideways than up or down past a 10 pt slop takes
+the menu; the panel's offset, the scrim's opacity and the screen's blur then show the drag's progress (0 closed, 1 open,
+the travel measured against the panel's width) instead of their transitions, damped past fully open to at most 6 % of the
+width (the edge panel's glass reaches that far past the left edge, so no gap shows). On release, 600 pt/s or faster goes
+the way the finger moves; otherwise the menu opens past 40 % of the width and springs back below it, on the geometry spring
+from the finger's speed; a drag to the left on the open menu (the scrim or the panel) closes it by the same rules, and a
+new drag catches a settling panel where it is. While a drag owns the menu, the menu button and B wait for it to settle.
+With reduced motion the panel does not follow: the drag only toggles the menu once it has covered 40 % of the width. On
+the start screen the profile chip opens the profiles menu, so touch also reaches Profile and Settings through a PC's
 library and its top navigation.
 
 ### Who captures the commands
@@ -1097,8 +1114,8 @@ DELOS's own entries pass only while nothing is filtered. The home screen (`HomeS
 for the whole library when it opens (the cached records first, then the due ones three at a time) so the chips are
 complete, shows the library through the filter and, while the service is configured and the library has games, offers the
 filter: Y (`MenuCommand.toastAction`, which a toast with its own action keeps) or, without a controller, a tap on the hint bar's Filter, which
-is a glyphless pill (`Hint.tappable`, `HintBar.onTap`, faded in and out by the input kind) and presses the screen's Y. Android has
-no touch way to the filter at all. or a tap. `LibraryFilterSheet` is Android's `FilterModal`: a glass panel (1240 stage
+is a 52 px glass pill with the filter symbol before its label, so it reads as a button (`Hint.tappable`, `Hint.icon`,
+`HintBar.onTap`, faded in and out by the input kind), and presses the screen's Y. `LibraryFilterSheet` is Android's `FilterModal`: a glass panel (1240 stage
 pixels, the compact stage's margin of 48) with a title and the live count, a section per criterion with one row of chips
 that scrolls sideways (the genre and theme chips with their icon and the number of games), and Reset (X) and Done (Y, B)
 under them; the sections scroll when they do not fit and the focused one is brought into view. The choices apply at

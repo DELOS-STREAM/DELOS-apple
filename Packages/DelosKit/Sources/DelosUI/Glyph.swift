@@ -31,9 +31,11 @@ struct Hint: Hashable, Sendable {
     var button: HintButton
     var label: String
     var shortLabel: String?
-    /// A touch, a pointer or a keyboard can press it in the bar (Filter): it is then a glyphless pill; a controller has the
-    /// button itself, and the hint stays a hint.
+    /// A touch, a pointer or a keyboard can press it in the bar (Filter): it is then a glass pill with [icon] before its label;
+    /// a controller has the button itself, and the hint stays a hint.
     var tappable = false
+    /// The symbol of the pill a tappable hint becomes (the filter's funnel), so it reads as a button.
+    var icon: String? = nil
 }
 
 /// Sizes for complete controller caps and the unchanged non-controller hints.

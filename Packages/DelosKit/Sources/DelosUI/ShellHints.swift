@@ -45,7 +45,7 @@ enum ShellHints {
     /// The hints written for a controller, turned into the ones of [kind]. The rules (docs/ARCHITECTURE.md, "Input kind"):
     /// - controller: unchanged;
     /// - touch: only the primary action stays, with the tap symbol (every other action has a control on the screen), and a
-///   tappable hint (the library's Filter), which the bar draws as a glyphless pill;
+    ///   tappable hint (the library's Filter), which the bar draws as a glass pill with its symbol;
     /// - pointer (mouse, trackpad): the same, with the pointer symbol;
     /// - keyboard: Return for the primary action, Esc for back, the arrows for the adjust cue; the buttons with no key
     ///   (tabs, menu buttons, X, Y) are dropped.
@@ -57,7 +57,7 @@ enum ShellHints {
         case .controller: return hints
         case .touch, .pointer:
             let primary: HintButton = kind == .touch ? .tap : .click
-            // A tappable hint (Filter) stays: it is the control on the screen, as a glyphless pill
+            // A tappable hint (Filter) stays: it is the control on the screen, as a glass pill with its symbol
             return hints.compactMap { $0.tappable ? $0 : map($0, $0.button == .pad(.south) ? primary : nil) }
         case .keyboard:
             return hints.compactMap { hint -> Hint? in
@@ -98,7 +98,7 @@ enum ShellHints {
                 return [hint(.south, L("shell_hint_choose")), hint(.west, L("shell_hint_reset_filters"), short: L("shell_hint_reset")),
                         hint(.north, L("shell_hint_done")), hint(.east, L("shell_hint_close"))]
             }
-            let filter = c.screenHints.filterLabel.map { [Hint(button: .pad(.north), label: $0, tappable: true)] } ?? []
+            let filter = c.screenHints.filterLabel.map { [Hint(button: .pad(.north), label: $0, tappable: true, icon: Symbols.filter)] } ?? []
             return [hint(.south, L("shell_hint_start"))] + filter + [menu] + optionsHint
         case .settings: return adjustHint + tabs + [hint(.north, L("shell_hint_search")), hint(.south, L("shell_hint_change")), back]
         case .start: return [hint(.south, L("shell_hint_connect")), menu] + optionsHint

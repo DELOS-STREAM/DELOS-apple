@@ -194,6 +194,8 @@ public struct DelosRoot: View {
 
     /// The side menu's focus while it is open.
     private var sideMenu: FocusModel? { router.sideMenu }
+    /// The side menu's opening progress while a touch drag owns it (nil: the panel and the scrim run their transitions).
+    private var sideProgress: Double? { router.sideDrag.engaged ? router.sideDrag.progress : nil }
 
     private var colors: DelosColors {
         DelosColors(palette: Palette(rawValue: appearance.palette.rawValue) ?? .delos, dark: appearance.dark)
@@ -229,23 +231,32 @@ public struct DelosRoot: View {
                     }
                 }
                 .modifier(PortalBackdropBlur(active: actions.connection.portal.map { !$0.arriving } ?? false))
-                // The scrim of the side menu or a dialog blurs the screen under it
-                .modifier(LayerBackdropBlur(active: sideMenu != nil || layers.blursScreen))
+                // The scrim of the side menu or a dialog blurs the screen under it; while a touch drag moves the side menu, by
+                // its progress
+                .modifier(LayerBackdropBlur(active: sideMenu != nil || layers.blursScreen, progress: sideProgress))
                 #if os(iOS)
-                // Touch: a swipe in from the left edge opens the side menu (the controller's left menu button)
-                if sideMenu == nil, !layers.isOpen, navigator.current.hasSideMenu, !actions.connection.isActive {
-                    SideMenuEdgeSwipe { router.openSideMenu() }
+                // Touch: a drag in from the left edge opens the side menu (the controller's left menu button) and the panel
+                // follows the finger
+                if router.sideSwipeOpens {
+                    SideMenuEdgeStrip(router: router)
                 }
                 #endif
-                if sideMenu != nil { LayerScrim(onTap: { router.closeSideMenu(sound: .back) }) }
                 if let sideMenu {
-                    SideMenu(
-                        profile: profiles.current, pc: connectedPC, focus: sideMenu, appearance: appearance, onStep: { id, direction in _ = quickStep(id, by: direction) },
-                        onSettings: {
-                            router.closeSideMenu(sound: nil)
-                            go { navigator.openFromNavigation(.settings, focus: SettingsScreen.initialFocus) }
-                        },
-                        hidden: actions.hiddenRow(pcName: connectedPC?.name))
+                    // A group, not a stack: the scrim and the panel keep their own transitions
+                    Group {
+                        LayerScrim(progress: sideProgress, onTap: { router.closeSideMenu(sound: .back) })
+                        SideMenu(
+                            profile: profiles.current, pc: connectedPC, focus: sideMenu, appearance: appearance, onStep: { id, direction in _ = quickStep(id, by: direction) },
+                            onSettings: {
+                                router.closeSideMenu(sound: nil)
+                                go { navigator.openFromNavigation(.settings, focus: SettingsScreen.initialFocus) }
+                            },
+                            hidden: actions.hiddenRow(pcName: connectedPC?.name), progress: sideProgress)
+                    }
+                    #if os(iOS)
+                    // Touch: a drag to the left on the open menu closes it, the panel following the finger
+                    .modifier(SideMenuSwipeGesture(opening: false, router: router))
+                    #endif
                 }
                 LayerHost(layers: layers, navigator: navigator)
                 // The hint bar is above the scrim and the layers, crisp (Android's `HintBar` follows `Scrim` in `Shell`)
@@ -291,7 +302,10 @@ public struct DelosRoot: View {
         .environment(\.reducedMotion, systemReduceMotion || appearance.reducedMotion)
         .environment(\.shellCoversArt, sideMenu != nil || actions.connection.portal != nil)
         .environment(\.matchGameColors, appearance.matchGameColors)
-        .onChange(of: systemReduceMotion || appearance.reducedMotion, initial: true) { _, now in actions.connection.reducedMotion = now }
+        .onChange(of: systemReduceMotion || appearance.reducedMotion, initial: true) { _, now in
+            actions.connection.reducedMotion = now
+            router.reducedMotion = now
+        }
         .preferredColorScheme(colors.dark ? .dark : .light)
         .onChange(of: profiles.current?.id) { _, id in
             appearance = id.map { appearances.load(profile: $0) } ?? Appearance()
@@ -319,6 +333,7 @@ public struct DelosRoot: View {
                 try? await Task.sleep(for: .seconds(step.wait))
                 if step.command == "toast-undo" { toasts.show("Profile deleted", icon: Symbols.delete, action: ToastAction(label: "Undo") {}); continue }
                 if DemoHarness.input(step.command) { continue }
+                if await DemoHarness.sideDrag(step.command, router: router) { continue }
                 if let command = DemoHarness.command(step.command) { router.route(command, repeatCount: 0) }
             }
         }

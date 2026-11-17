@@ -30,6 +30,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   Physical-device rendering is not verified.
 - The library filter on the home screen (when `DelosMetadataURL` is configured): Y, or a tap on the hint bar's Filter
   (a glyphless pill while no controller is the input), opens a glass sheet with chips for genre and theme (with the number of games each holds), HDR support and
+- The library filter of Android on the home screen (when `DelosMetadataURL` is configured): Y, or a tap on the hint bar's Filter
+  (a 52 px glass pill with the filter symbol before its label while no controller is the input), opens a glass sheet with chips for genre and theme (with the number of games each holds), HDR support and
 - A demo harness for debug builds (`-DelosDemo YES`, docs/BUILDING.md): a fake PC with games, generated artwork, fake metadata and a
   command script, none of it touching the network, the client identity or the app's data, and `tools/sim-walkthrough.sh` to
   screenshot any screen in a fresh simulator.
@@ -195,6 +197,13 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - Streams no longer ask GeForce Experience to optimize the game's settings.
 - The profile chip on the start screen opens the profiles menu instead of the profile screen; a PC that
   sleeps and can be woken says so.
+- The side menu follows the finger: a drag in from the left edge pulls the panel, the scrim and the blur with it (a
+  little past fully open with a rubber band), and on release it opens past 40 % of its width or with a quick flick and
+  springs back otherwise; a drag to the left on the open menu closes it the same way. With reduced motion the drag only
+  toggles the menu once it is long enough. On iPad and Apple TV the floating glass box has the same, larger gap to the
+  left, top and bottom edges of the screen (the status bar and the home indicator no longer widen one of them) and
+  materialises from the left edge (growing, sharpening from a blur, on a spring) and goes back into it; with reduced
+  motion it fades. Not verified on a device yet.
 
 ### Removed
 
@@ -204,6 +213,7 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- Down from the top navigation returns to the cover the focus went up from, not to the cover under the button.
 - The library's row of covers, the filter sheet's chip rows and every other row and list that follows the focus glide
   smoothly: one spring that every step retargets and that keeps its speed, driven at up to 120 frames a second, instead of
   SwiftUI's animated scroll, which restarted from rest after a still frame at every step (a held arrow or quick presses hopped
