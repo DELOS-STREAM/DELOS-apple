@@ -197,9 +197,9 @@ public struct DelosRoot: View {
                             .id(ObjectIdentifier(entry.focus))
                     }
                     if case .stream = navigator.current {} else {
-                        HintBar(hints: hints, note: libraryNote, noteLabel: libraryNote == nil ? nil : L("shell_hint_library_label"))
-                            // The interface scale zooms the whole bar
-                            .modifier(ZoomedBar())
+                        ShellHintBar(
+                            hints: hints, note: libraryNote, noteLabel: libraryNote == nil ? nil : L("shell_hint_library_label"),
+                            libraryRow: showsLibraryRow)
                     }
                 }
                 .modifier(PortalBackdropBlur(active: actions.connection.portal.map { !$0.arriving } ?? false))
@@ -478,6 +478,11 @@ public struct DelosRoot: View {
         case .home, .appSettings: true
         default: false
         }
+    }
+
+    /// The library's row of covers is on the screen (the hint bar centres itself below it).
+    private var showsLibraryRow: Bool {
+        if case .home = navigator.current { true } else { false }
     }
 
     /// The button hints of the screen, layer and side menu in front (``ShellHints``).

@@ -8,6 +8,9 @@ struct HintBar: View {
     let hints: [Hint]
     var note: String?
     var noteLabel: String?
+    /// How far above the bottom edge of the window the bar's middle is, in points (``HintBarLayout``): nil keeps the bar
+    /// on the bottom safe edge.
+    var centerFromBottom: CGFloat?
     @State private var widths: [String: Double] = [:]
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
@@ -23,7 +26,7 @@ struct HintBar: View {
         .frame(height: stage.px(Self.height))
         .padding(.leading, stage.px(Self.inset + stage.safe.leading))
         .padding(.trailing, stage.px(Self.inset + stage.safe.trailing))
-        .padding(.bottom, stage.px(stage.safe.bottom))
+        .padding(.bottom, centerFromBottom.map { max($0 - stage.px(Self.height) / 2, 0) } ?? stage.px(stage.safe.bottom))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .allowsHitTesting(false)
     }
@@ -106,5 +109,56 @@ struct HintBar: View {
             }
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Where the hint bar sits: its middle is the midpoint between the lowest edge of the screen's content and the bottom edge
+/// of the stage, so the bar has the same air above and below it (the iPad's bar crowded the covers when it was
+/// anchored at the bottom safe edge). The lowest edge of the content is the library row's bottom, ring and glow
+/// included, on the home screen; the other screens keep their content above the same line (the home's distance from the
+/// bottom edge at the design height), so the bar sits at the same height on all of them. The glyphs never go lower than
+/// the bottom safe edge. All in stage pixels (``HintBarLayout/rowBottom(scale:safeTop:stageHeight:)`` too).
+enum HintBarLayout {
+    /// The glyph's height: it must clear the bottom safe edge.
+    static let glyph = 38.0
+
+    /// The bottom of the home's covers with their focus ring (`HomeLayout`).
+    static func rowBottom(scale: Double, safeTop: Double, stageHeight: Double) -> Double {
+        HomeLayout(scale: scale, safeTop: safeTop, stageHeight: stageHeight).coverTop + HomeLayout.coverHeight
+            + HomeLayout.ringReach(HomeLayout.coverHeight)
+    }
+
+    /// The content line of the screens without the library row: as far above the stage's bottom as the home's row is at
+    /// the design height and interface scale 1.
+    static func defaultContentBottom(stageHeight: Double) -> Double {
+        stageHeight - (HomeLayout.designHeight - rowBottom(scale: 1, safeTop: 0, stageHeight: HomeLayout.designHeight))
+    }
+
+    /// The distance of the bar's middle from the bottom of the stage. [contentBottom]: nil for the default line.
+    /// [zoom]: the interface scale that zooms the bar (its glyph grows with it).
+    static func centerFromBottom(stageHeight: Double, safeBottom: Double, contentBottom: Double?, zoom: Double = 1) -> Double {
+        let bottom = contentBottom ?? defaultContentBottom(stageHeight: stageHeight)
+        let middle = (stageHeight - bottom) / 2
+        return max(middle, safeBottom + glyph * zoom / 2)
+    }
+}
+
+/// The hint bar of the shell, placed by ``HintBarLayout`` and zoomed by the interface scale.
+struct ShellHintBar: View {
+    let hints: [Hint]
+    var note: String?
+    var noteLabel: String?
+    /// The library row is on the screen.
+    var libraryRow = false
+    @Environment(\.stage) private var stage
+
+    var body: some View {
+        let contentBottom = libraryRow
+            ? HintBarLayout.rowBottom(scale: stage.textScale, safeTop: stage.safe.top, stageHeight: stage.height) : nil
+        let center = HintBarLayout.centerFromBottom(
+            stageHeight: stage.height, safeBottom: stage.safe.bottom, contentBottom: contentBottom, zoom: stage.textScale)
+        HintBar(hints: hints, note: note, noteLabel: noteLabel, centerFromBottom: stage.px(center))
+            // The interface scale zooms the whole bar
+            .modifier(ZoomedBar())
     }
 }
