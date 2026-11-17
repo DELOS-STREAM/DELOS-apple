@@ -131,11 +131,12 @@ struct CreateProfileScreen: View {
     /// The focus id of "Change name".
     static let changeNameID = "change-name"
 
-    /// Eight columns: 144 px circles in 184 px cells, 32 px apart (1696 px); a compact stage takes four.
-    private var columns: Int { stage.compact ? 4 : 8 }
+    /// Eight columns: 144 px circles in 184 px cells, 32 px apart (1696 px); a compact stage takes four, and fewer where
+    /// the stage is narrower than that (a window or a phone in portrait).
+    private var columns: Int { AvatarGridLayout.columns(stage) }
 
     var body: some View {
-        VStack(spacing: stage.px(40)) {
+        CenterColumn(gap: 40) {
             Heading(
                 title: editing ? L("firstrun_create_edit_title") : L("firstrun_create_new_title"),
                 sub: editing ? L("firstrun_create_edit_note") : L("firstrun_create_new_note")
@@ -159,7 +160,6 @@ struct CreateProfileScreen: View {
             }
             .tvFocusSection()
         }
-        .entranceScope()
     }
 
     /// All avatars in rows. Up and down move to the same column; left at the start of a row and right at its end
@@ -167,14 +167,16 @@ struct CreateProfileScreen: View {
     private var avatarGrid: some View {
         let all = Avatar.all
         let rows = stride(from: 0, to: all.count, by: columns).map { Array(all[$0..<min($0 + columns, all.count)]) }
-        return VStack(spacing: stage.px(26)) {
+        let k = stage.compactScale
+        return VStack(spacing: stage.px(stage.compact ? AvatarGridLayout.rowGap(144 * k) : 26)) {
             ForEach(rows.indices, id: \.self) { row in
-                HStack(alignment: .top, spacing: stage.px(stage.compact ? 24 : 32)) {
+                HStack(alignment: .top, spacing: stage.px(AvatarGridLayout.columnGap(stage))) {
                     ForEach(rows[row]) { a in
                         FocusItem(id: Self.avatarID(a.index), model: focus, moves: wrap(a.index), action: { pick(a.index) }) { focused in
                             CircleItem(
                                 icon: a.icon, label: a.label, avatar: a, selected: a.index == avatar,
-                                diameter: 144, width: 184, focused: focused
+                                diameter: 144 * k, width: 184 * k, labelGap: stage.compact ? AvatarGridLayout.labelGap(144 * k) : nil,
+                                focused: focused
                             )
                         }
                         .staggerEntrance()
@@ -214,6 +216,31 @@ struct CreateProfileScreen: View {
         }
         onDone(clean, avatar)
     }
+}
+
+/// The avatar picker's grid on a stage of any width (`CircleRowFit` of DELOS for Android): as many columns as fit
+/// between the margins, eight at most (four on a compact stage), and on a compact stage the gaps that keep a focused
+/// circle's ring clear of its neighbours and of the label under it.
+enum AvatarGridLayout {
+    static let cell = 184.0, wideGap = 32.0, compactGap = 24.0
+    /// A focused circle's growth, its ring (5 px gap and 5 px of ring) and the air kept above the next row.
+    static let focusScale = 1.16, ring = 10.0, air = 12.0
+
+    static func columnGap(_ stage: Stage) -> Double { stage.compact ? compactGap : wideGap }
+
+    static func columns(_ stage: Stage) -> Int {
+        let room = stage.width - 2 * (CenterColumnLayout.margin + max(stage.safe.leading, stage.safe.trailing))
+        let gap = columnGap(stage), width = cell * stage.compactScale
+        let fit = Int(((room + gap) / (width + gap)).rounded(.down))
+        return min(stage.compact ? 4 : 8, max(fit, 2))
+    }
+
+    /// How far a focused circle [side] wide reaches beyond its box: half its growth and the ring.
+    static func focusReach(_ side: Double) -> Double { side * (focusScale - 1) / 2 + ring * focusScale }
+    /// The gap between a circle and its label on a compact stage: the reach and 8 px.
+    static func labelGap(_ side: Double) -> Double { focusReach(side) + 8 }
+    /// The gap between two rows on a compact stage: the reach and ``air``.
+    static func rowGap(_ side: Double) -> Double { focusReach(side) + air }
 }
 
 /// A labelled value that looks like a ``TextPill`` but is not an input (`ValuePill` in DELOS for Android): the text is

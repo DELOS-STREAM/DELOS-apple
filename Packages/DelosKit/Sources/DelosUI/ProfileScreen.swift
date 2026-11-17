@@ -18,10 +18,10 @@ struct ProfileScreen: View {
     @Environment(\.stage) private var stage
 
     var body: some View {
-        VStack(spacing: stage.px(54)) {
-            VStack(spacing: stage.px(18)) {
+        CenterColumn(gap: 54) {
+            VStack(spacing: stage.px(18 * stage.compactScale)) {
                 // box-shadow: 0 30px 80px -24px glow
-                AvatarBadge(avatar: .of(profile.avatar), size: 240, iconSize: 120)
+                AvatarBadge(avatar: .of(profile.avatar), size: 240 * stage.compactScale, iconSize: 120 * stage.compactScale)
                     .shadow(color: colors.glow.color, radius: stage.px(40), y: stage.px(30))
                 Text(profile.name)
                     .font(DelosFonts.unbounded(stage.tpx(stage.compact ? 48 : 64)))
@@ -32,7 +32,7 @@ struct ProfileScreen: View {
                     .font(DelosFonts.figtree(stage.tpx(26)))
                     .foregroundStyle(colors.text2.color)
             }
-            HStack(alignment: .top, spacing: stage.px(56)) {
+            CircleRow {
                 FocusItem(id: "change-avatar", model: focus, action: onChangeAvatar) { focused in
                     CircleItem(icon: Symbols.face, label: L("profile_change_avatar"), big: false, focused: focused)
                 }
@@ -57,7 +57,6 @@ struct ProfileScreen: View {
                 .staggerEntrance()
             }
         }
-        .entranceScope()
     }
 }
 

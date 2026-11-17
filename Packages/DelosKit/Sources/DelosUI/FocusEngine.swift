@@ -160,6 +160,8 @@ extension EnvironmentValues {
 /// (Android's focus margin). Not animated for reduced motion.
 struct FocusScroll<Content: View>: View {
     var axis: Axis.Set = .horizontal
+    /// The cut edges' fades in stage pixels (top, bottom) of a vertical scroll view that continues beyond them.
+    var fades: (top: Double, bottom: Double)?
     @ViewBuilder let content: () -> Content
     @State private var reveal = FocusReveal()
     @Environment(\.reducedMotion) private var reducedMotion
@@ -167,6 +169,7 @@ struct FocusScroll<Content: View>: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(axis, showsIndicators: false) { content() }
+                .modifier(OptionalFades(fades: fades))
                 .environment(\.focusReveal, reveal)
                 .onAppear {
                     reveal.attach { id, animated in
@@ -178,6 +181,14 @@ struct FocusScroll<Content: View>: View {
                     }
                 }
         }
+    }
+}
+
+private struct OptionalFades: ViewModifier {
+    let fades: (top: Double, bottom: Double)?
+
+    func body(content: Content) -> some View {
+        if let fades { content.scrollEdgeFades(top: fades.top, bottom: fades.bottom) } else { content }
     }
 }
 

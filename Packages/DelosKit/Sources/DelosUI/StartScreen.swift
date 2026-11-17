@@ -159,6 +159,12 @@ public struct DelosRoot: View {
             settingsTab = tab
             navigator.openFromNavigation(.settings, focus: defaults.string(forKey: "DelosFocus") ?? SettingsScreen.firstRow(tab))
         }
+        // -DelosScreen create | profile opens the screen of a profile (Profile needs a profile): screenshots of its layout
+        switch defaults.string(forKey: "DelosScreen") {
+        case "create": navigator.push(.createProfile(editing: false), focus: CreateProfileScreen.avatarID(0))
+        case "profile" where !profiles.isFirstRun: navigator.openFromNavigation(.profile, focus: "change-avatar")
+        default: break
+        }
         #endif
         _navigator = State(initialValue: navigator)
         _appearance = State(initialValue: appearance)
@@ -335,7 +341,7 @@ public struct DelosRoot: View {
         if let capture = navigator.commandCapture, capture(command) { return }
         if command == .menu, navigator.current.hasSideMenu {
             feedback.play(.open)
-            withAnimation(.easeOut(duration: 0.3)) { self.sideMenu = FocusModel(initial: QuickSettings.ids[0]) }
+            withAnimation(.easeOut(duration: 0.56)) { self.sideMenu = FocusModel(initial: QuickSettings.ids[0]) }
             return
         }
         // While a text field is typed in, the keys belong to it; B and Escape stop typing

@@ -61,14 +61,15 @@ struct Heading: View {
     var body: some View {
         VStack(spacing: stage.px(14)) {
             Text(title)
-                .font(DelosFonts.unbounded(stage.tpx(64)))
-                .tracking(-stage.tpx(64) * 0.01)
+                .font(DelosFonts.unbounded(stage.tpx(stage.compact ? 48 : 64)))
+                .tracking(-stage.tpx(stage.compact ? 48 : 64) * 0.01)
                 .foregroundStyle(colors.text.color)
             if let sub {
                 Text(sub)
                     .font(DelosFonts.figtree(stage.tpx(26)))
                     .foregroundStyle(colors.text2.color)
-                    .frame(maxWidth: stage.px(1000))
+                    .lineSpacing(stage.tpx(26 * 0.4))
+                    .frame(maxWidth: stage.px(stage.compact ? stage.width - 144 : 1000))
             }
         }
         .multilineTextAlignment(.center)
@@ -90,6 +91,8 @@ struct CircleItem: View {
     var selected = false
     var diameter: Double?
     var width: Double?
+    /// The gap between the circle and its label, stage pixels (a compact stage's: the focused ring's reach and more).
+    var labelGap: Double?
     let focused: Bool
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
@@ -100,7 +103,7 @@ struct CircleItem: View {
         let side = diameter ?? (big ? 220.0 : 176.0)
         let iconSize = big ? 96.0 : 76.0
         let lit = focused || selected
-        VStack(spacing: stage.px(side < 176 ? 14 : 22)) {
+        VStack(spacing: stage.px(labelGap ?? (side < 176 ? 14 : 22))) {
             ZStack {
                 if let avatar {
                     AvatarBadge(avatar: avatar, size: side, iconSize: iconSize)
