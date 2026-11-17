@@ -91,7 +91,7 @@ public final class Navigator {
         #endif
     }
 
-    /// What the screen shown says about its buttons for the hint bar (adjust, reset).
+    /// What the screen shown says about its buttons for the hint bar (adjust, reset), and who said it.
     var screenHints = ScreenHints()
     @ObservationIgnored private weak var hintsOwner: AnyObject?
 
@@ -146,6 +146,7 @@ public final class Navigator {
     /// Opens [screen] above the current one, with the focus on [focus] (nil: the first item that appears).
     public func push(_ screen: Screen, focus: AnyHashable? = nil) {
         armInputGate()
+        screenModal = nil
         stack.append(Entry(screen: screen, focus: FocusModel(initial: focus)))
     }
 
@@ -154,6 +155,7 @@ public final class Navigator {
     public func back() -> Bool {
         guard canGoBack else { return false }
         armInputGate()
+        screenModal = nil
         stack.removeLast()
         return true
     }
@@ -161,6 +163,7 @@ public final class Navigator {
     /// Replaces the whole stack with [screen] (the first run is over, or starts again).
     public func reset(to screen: Screen, focus: AnyHashable? = nil) {
         armInputGate()
+        screenModal = nil
         stack = [Entry(screen: screen, focus: FocusModel(initial: focus))]
     }
 
@@ -176,7 +179,6 @@ public final class Navigator {
         push(.home(hostID: hostID), focus: HomeScreen.initialFocus)
     }
 
-        screenModal = nil
     /// Opens a screen of the top navigation ([Screen.showsNavigation]). Settings, Profile and Devices take each other's
     /// place, so B returns to the screen below them (Android: their `back` is the library); the current one stays.
     public func openFromNavigation(_ screen: Screen, focus: AnyHashable? = nil) {
@@ -185,7 +187,6 @@ public final class Navigator {
         push(screen, focus: focus)
     }
 
-        screenModal = nil
     /// Drops the libraries of the PC [hostID] from the stack (the PC was removed or unpaired): what is below the screen
     /// shown must not lead back into a PC that is gone. The screen shown stays.
     public func dropLibrary(of hostID: String) {
@@ -193,7 +194,6 @@ public final class Navigator {
         var index = 0
         stack.removeAll { entry in
             defer { index += 1 }
-        screenModal = nil
             if index == top { return false }
             if case .home(let id) = entry.screen { return id == hostID }
             return false
