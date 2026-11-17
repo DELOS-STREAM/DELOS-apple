@@ -109,7 +109,6 @@ struct SideMenu: View {
     let onSettings: @MainActor () -> Void
     /// The "Show hidden apps" row, while a game of the open library is hidden or it is on (nil: no row).
     var hidden: HiddenRow? = nil
-    let onClose: @MainActor () -> Void
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
@@ -128,11 +127,8 @@ struct SideMenu: View {
     }
 
     var body: some View {
+        // The scrim under it is the root's (`LayerScrim`, with the blur of the screen), as Android's `Scrim` is the shell's
         ZStack(alignment: .leading) {
-            Color.black.opacity(0.35)
-                .ignoresSafeArea()
-                .contentShape(Rectangle())
-                .onTapGesture(perform: onClose)
             VStack(alignment: .leading, spacing: stage.px(10)) {
                 header
                     .staggerEntrance()
@@ -180,13 +176,23 @@ struct SideMenu: View {
             .frame(width: stage.px(Self.width + stage.safe.leading))
             .frame(maxHeight: .infinity)
             .background {
-                Rectangle().fill(colors.surface3.color)
+                // backdropBlur(haze, 28f, surface3): the panel glass
+                GlassShape(Rectangle(), tint: colors.surface3, role: .panel)
                     .overlay(alignment: .trailing) { Rectangle().fill(colors.line.color).frame(width: stage.px(1)) }
                     .ignoresSafeArea()
             }
-            // From a tenth of its width left of its place, fading in over 280 ms; with reduced motion it only fades
-            .transition(reduceMotion ? .opacity : .offset(x: -stage.px(Self.width) / 10).combined(with: .opacity.animation(.easeOut(duration: 0.28))))
+            // `sideEnter` / `sideExit`: from a tenth of its width left of its place, sliding in over 560 ms (ease-out) while
+            // fading in over 280 ms, and out over 240 ms (ease-in); with reduced motion it only fades
+            .transition(.asymmetric(
+                insertion: reduceMotion ? Self.fade(Motion.fade)
+                    : Self.fade(Motion.fade).combined(with: .offset(x: -stage.px(Self.width) / 10).animation(Motion.out(Motion.popIn))),
+                removal: reduceMotion ? Self.fade(Motion.exit)
+                    : Self.fade(Motion.exit).combined(with: .offset(x: -stage.px(Self.width) / 10).animation(LayerHost.easeIn(Motion.exit)))))
         }
+    }
+
+    private static func fade(_ ms: Double) -> AnyTransition {
+        .opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: ms / 1000))
     }
 
     private var header: some View {
