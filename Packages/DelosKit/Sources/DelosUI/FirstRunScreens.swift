@@ -176,7 +176,7 @@ struct CreateProfileScreen: View {
                     ForEach(rows[row]) { a in
                         FocusItem(id: Self.avatarID(a.index), model: focus, moves: wrap(a.index), action: { pick(a.index) }) { focused in
                             CircleItem(
-                                icon: a.icon, label: a.label, avatar: a, selected: a.index == avatar,
+                                icon: a.icon, label: a.label, big: false, avatar: a, selected: a.index == avatar,
                                 diameter: 144 * k, width: 184 * k, labelGap: stage.compact ? AvatarGridLayout.labelGap(144 * k) : nil,
                                 focused: focused
                             )

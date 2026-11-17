@@ -862,3 +862,6 @@ rumble_problem_no_amplitude
 rumble_problem_single_vibrator
 rumble_problem_failed
 rumble_unavailable_no_amplitude
+
+# Manual-address insertion failure
+devices_address_not_added

@@ -17,6 +17,13 @@ struct StartScreen: View {
     let onPair: @MainActor () -> Void
     @Environment(HostStore.self) private var hosts
     @Environment(\.stage) private var stage
+    @Environment(\.statusBarEdges) private var statusEdges
+
+    private var initialPC: String {
+        let paired = hosts.paired.sorted { $0.name.lowercased() < $1.name.lowercased() }
+        let host = paired.first { $0.id == defaultPC } ?? paired.first { $0.reachability == .online } ?? paired.first
+        return host.map { Self.pcID($0.id) } ?? "pair"
+    }
 
     /// The focus id of a PC's circle.
     static func pcID(_ hostID: String) -> String { "pc-\(hostID)" }
@@ -40,10 +47,11 @@ struct StartScreen: View {
                     ProfileChip(profile: profile, focused: focused)
                 }
                 .tvFocusSection()
-                .padding(.top, stage.px(44 + stage.safe.top))
+                .modifier(ProfileChipPosition(stage: stage, rightStart: statusEdges?.rightStart))
             }
         }
         .onAppear { hosts.startDiscovery() }
+        .onChange(of: initialPC) { _, next in focus.focus(next) }
         .task {
             let ids = hosts.paired.map(\.id)
             await withTaskGroup(of: Void.self) { group in
@@ -108,6 +116,7 @@ public struct DelosRoot: View {
     @State private var router: ShellRouter
     /// The battery and the network for the status bar.
     @State private var device = DeviceStatus()
+    @State private var statusEdges = StatusBarEdges()
     private let appearances = AppearanceStore()
     private let streamSettings = StreamSettingsStore()
     /// The tab Settings opens with (debug builds: `-DelosSettings <tab>`).
@@ -273,6 +282,7 @@ public struct DelosRoot: View {
         .environment(navigator)
         .environment(layers)
         .environment(toasts)
+        .environment(\.statusBarEdges, statusEdges)
         .environment(\.modalFocus, router.modalFocus)
         #if os(tvOS)
         // The focus engine keeps its focus on an item that can no longer take it until the next press: when the focus
@@ -540,6 +550,13 @@ public struct DelosRoot: View {
         Task {
             do {
                 let host = try await hosts.ask(address, typed: true)
+                let added = await PairStateWait.until(timeout: 5, clock: SystemConnectClock()) { hosts.host(host.id) != nil }
+                guard !Task.isCancelled else { return }
+                guard added else {
+                    feedback?.play(.error)
+                    toasts.show(L("devices_address_not_added", address.description), icon: Symbols.error)
+                    return
+                }
                 go {
                     if host.pin != nil {
                         actions.connect(host.id)

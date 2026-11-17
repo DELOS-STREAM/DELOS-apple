@@ -374,6 +374,7 @@ private struct CompactStatusBar: View {
     let bar: TopBar
     @State private var widths: [String: Double] = [:]
     @Environment(\.stage) private var stage
+    @Environment(\.statusBarEdges) private var edges
 
     private static func key(_ step: StatusBarStep) -> String { "\(step)" }
 
@@ -398,7 +399,11 @@ private struct CompactStatusBar: View {
                     .padding(.leading, stage.px(fit.navX))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            cluster(fit.step).frame(maxWidth: .infinity, alignment: .trailing).padding(.trailing, stage.px(sideRight))
+            cluster(fit.step)
+                .onGeometryChange(for: Double.self) { stage.px(stage.width - sideRight) - $0.size.width } action: {
+                    edges?.rightStart = $0
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing).padding(.trailing, stage.px(sideRight))
         }
         .background(alignment: .topLeading) {
             ZStack(alignment: .topLeading) {

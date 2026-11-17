@@ -1384,3 +1384,21 @@ affected trigger, set `adaptiveTriggerUnsupported`, and emit a diagnostic. CoreH
 Verification: `RumbleProfilesTests` covers shaping, mixing, timed settling, cancellation, device routing and packet
 validation. `RumbleSettingsTests` covers persisted settings, legacy decoding and disabled dependencies.
 Real controller motors, Taptic playback, adaptive-trigger feel and effects on media playback are not verified.
+
+## Pairing and compact profile placement
+
+`PairStateWait` bounds publication waits with a monotonic clock and cancellation: 5 seconds for an added host,
+8 seconds for the trusted paired state. A state that is already published returns immediately. Missing manual
+address insertion uses `devices_address_not_added`. The start screen reselects default, online, first paired PC,
+or Pair when discovery changes that initial candidate.
+
+`StatusBarEdges` publishes the compact right status-cluster boundary in stage-local points, including interface
+zoom. `ProfileChipPosition` keeps a 24-stage-pixel gap, centers the chip when it fits and otherwise centers it in
+the available space. Long names truncate; the avatar and chevron retain their sizes. Before measurement, the
+fallback reserves 360 stage pixels for status. Standard layouts retain the top-center chip.
+Avatar grid fallbacks pass `big: false` for the 76-stage-pixel glyph; artwork and circle dimensions are unchanged.
+
+The profile cue sites already use the shared layer OPEN cue for menus and name dialogs, ERROR for a rejected
+blank name, and Feedback activation de-duplication. No second cue is added at those sites.
+`SmallParityTests` covers immediate/delayed/absent/cancelled state waits and compact placement bounds.
+Pairing against a physical host and controller focus on physical devices are not verified.
