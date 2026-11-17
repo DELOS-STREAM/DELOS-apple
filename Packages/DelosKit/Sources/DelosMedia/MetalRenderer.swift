@@ -45,7 +45,7 @@ public final class MetalRenderer: VideoRenderer {
         layer.colorspace = CGColorSpace(name: ColorConversion().layerColorSpaceName)
         // A stream whose colours differ from the default (BT.2020, HDR) retags the layer at its first picture
         let retag = LayerRetagger(layer)
-        pipeline.observeConversion { conversion in retag.apply(conversion) }
+        pipeline.observeConversion { conversion, hdr in retag.apply(conversion, hdr: hdr) }
     }
 
     deinit {
@@ -160,20 +160,38 @@ final class LayerRetagger: @unchecked Sendable {
         self.layer = layer
     }
 
-    func apply(_ conversion: ColorConversion) {
+    func apply(_ conversion: ColorConversion, hdr: HDRPictureInfo?) {
         DispatchQueue.main.async { [self] in
-            if let layer { Self.configure(layer, conversion: conversion) }
+            if let layer { Self.configure(layer, conversion: conversion, hdr: hdr) }
         }
     }
 
     /// PQ/HLG stay encoded in the shader; Core Animation interprets the matching color-space tag exactly once.
     @MainActor
-    static func configure(_ layer: CAMetalLayer, conversion: ColorConversion) {
+    static func configure(_ layer: CAMetalLayer, conversion: ColorConversion, hdr: HDRPictureInfo? = nil) {
         layer.pixelFormat = conversion.isHDR ? .rgba16Float : .bgra8Unorm
         #if !os(tvOS)
         // tvOS has no such switch: its output is HDR when the TV is in an HDR mode
         layer.wantsExtendedDynamicRangeContent = conversion.isHDR
+        layer.edrMetadata = edrMetadata(conversion, hdr: hdr)
         #endif
         layer.colorspace = CGColorSpace(name: conversion.layerColorSpaceName)
     }
+
+    #if !os(tvOS)
+    /// What the display needs to map the pictures: the host's mastering volume and content light level for HDR10 (PQ;
+    /// PQ stays encoded in the shader, so one unit of the layer is 10,000 nits), the HLG description for HLG, nothing
+    /// for SDR or when the host sent none.
+    static func edrMetadata(_ conversion: ColorConversion, hdr: HDRPictureInfo?) -> CAEDRMetadata? {
+        switch conversion.transfer {
+        case .sdr: nil
+        case .hlg: CAEDRMetadata.hlg
+        case .pq:
+            hdr.map {
+                CAEDRMetadata.hdr10(
+                    displayInfo: $0.masteringDisplayColorVolume, contentInfo: $0.contentLightLevelInfo, opticalOutputScale: 10_000)
+            }
+        }
+    }
+    #endif
 }

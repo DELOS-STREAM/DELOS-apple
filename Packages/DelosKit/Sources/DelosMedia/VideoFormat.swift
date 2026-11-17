@@ -1,4 +1,5 @@
 import CoreMedia
+import DelosCore
 import Foundation
 
 /// The video codecs DELOS decodes.
@@ -16,7 +17,9 @@ public enum VideoFormat {
 
     /// The format description from the parameter sets of a key frame, in the order `AnnexB.parameterSets` finds them:
     /// SPS and PPS for H.264, VPS, SPS and PPS for HEVC.
-    static func description(codec: VideoCodec, parameterSets sets: [[UInt8]]) throws -> CMVideoFormatDescription {
+    static func description(
+        codec: VideoCodec, parameterSets sets: [[UInt8]], hdr: HDRMetadata? = nil
+    ) throws -> CMVideoFormatDescription {
         var format: CMVideoFormatDescription?
         let status = withParameterSets(sets) { pointers, sizes in
             switch codec {
@@ -27,7 +30,8 @@ public enum VideoFormat {
             case .hevc:
                 CMVideoFormatDescriptionCreateFromHEVCParameterSets(
                     allocator: kCFAllocatorDefault, parameterSetCount: sets.count, parameterSetPointers: pointers,
-                    parameterSetSizes: sizes, nalUnitHeaderLength: 4, extensions: nil, formatDescriptionOut: &format)
+                    parameterSetSizes: sizes, nalUnitHeaderLength: 4, extensions: hdrExtensions(hdr) as CFDictionary?,
+                    formatDescriptionOut: &format)
             case .av1:
                 kCMFormatDescriptionError_InvalidParameter
             }
@@ -54,7 +58,7 @@ public enum VideoFormat {
     }
 
     /// The format description from an AV1 temporal unit with a sequence header (or that OBU alone).
-    static func av1(_ frame: Data) throws -> CMVideoFormatDescription {
+    static func av1(_ frame: Data, hdr: HDRMetadata? = nil) throws -> CMVideoFormatDescription {
         guard let obu = try AV1.obus(frame).first(where: { $0.type == AV1.sequenceHeaderType }) else {
             throw Failure.missingParameterSets
         }
@@ -67,6 +71,7 @@ public enum VideoFormat {
             kCMFormatDescriptionExtension_Depth: header.bitDepth > 8 ? 30 : 24,
         ]
         extensions.merge(colorExtensions(header)) { _, new in new }
+        extensions.merge(hdrExtensions(hdr) ?? [:]) { _, new in new }
         var format: CMVideoFormatDescription?
         let status = CMVideoFormatDescriptionCreate(
             allocator: kCFAllocatorDefault, codecType: kCMVideoCodecType_AV1,
@@ -74,6 +79,30 @@ public enum VideoFormat {
             extensions: extensions as CFDictionary, formatDescriptionOut: &format)
         guard status == noErr, let format else { throw Failure.coreMedia(status) }
         return format
+    }
+
+    /// The mastering display colour volume (24 bytes, big-endian) and the content light level (4 bytes) the host sent, as
+    /// the extensions Apple reads from a format description; nil without metadata. The display layer takes them from
+    /// here, and VideoToolbox puts them on the pictures it decodes.
+    static func hdrExtensions(_ hdr: HDRMetadata?) -> [CFString: Any]? {
+        guard let hdr else { return nil }
+        var result: [CFString: Any] = [kCMFormatDescriptionExtension_MasteringDisplayColorVolume: hdr.masteringDisplayColorVolume as CFData]
+        if let level = hdr.contentLightLevelInfo { result[kCMFormatDescriptionExtension_ContentLightLevelInfo] = level as CFData }
+        return result
+    }
+
+    /// The bits per colour component of the stream a format description names: the AV1 depth, or the HEVC
+    /// configuration record's luma depth; 8 when it says nothing.
+    static func bitDepth(of format: CMFormatDescription) -> Int {
+        let atoms = CMFormatDescriptionGetExtension(format, extensionKey: kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms) as? [String: Any]
+        if let record = atoms?["hvcC"] as? Data, record.count > 17 {
+            // hvcC: the luma bit depth minus 8 is the low three bits of byte 17
+            return Int(record[record.startIndex + 17] & 7) + 8
+        }
+        if let record = atoms?["av1C"] as? Data, record.count > 2 {
+            return record[record.startIndex + 2] & 0x40 != 0 ? ((record[record.startIndex + 2] & 0x20 != 0) ? 12 : 10) : 8
+        }
+        return 8
     }
 
     /// The color extensions for the code points the host uses (BT.709 for SDR, BT.2020 with PQ or HLG for HDR).

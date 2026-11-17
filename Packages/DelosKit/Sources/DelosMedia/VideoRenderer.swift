@@ -11,6 +11,9 @@ public protocol VideoRenderer: Sendable {
     var name: String { get }
     /// Shows a frame; returns false when the renderer failed and needs a key frame to start over.
     func enqueue(_ sample: CMSampleBuffer) -> Bool
+    /// The stream carries (or no longer carries) 10-bit HDR video: the display layer asks for extended dynamic range.
+    /// Called from the core's video thread before the first frame.
+    func setHDR(_ active: Bool)
     /// Drops the frames waiting to be shown (before a new stream or after an error).
     func flush()
     /// The renderer's cumulative frame counters; nil when it has none yet.
@@ -27,6 +30,7 @@ public protocol VideoRenderer: Sendable {
 }
 
 extension VideoRenderer {
+    public func setHDR(_ active: Bool) {}
     @MainActor public func attached(maxFramesPerSecond: Int) {}
     @MainActor public func detached() {}
 }
@@ -89,6 +93,15 @@ public final class DisplayLayerRenderer: VideoRenderer {
             CFDictionaryRemoveValue(first, Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque())
         }
         CMSampleBufferSetOutputPresentationTimeStamp(sample, newValue: CMTime(seconds: seconds, preferredTimescale: 1_000_000_000))
+    }
+
+    /// The system shows a layer's HDR pictures above standard white only when the layer asks for extended range; the
+    /// pictures themselves carry the transfer function and the metadata (``VideoSamples``). tvOS has no such switch:
+    /// its output is HDR when the TV is in an HDR mode.
+    public func setHDR(_ active: Bool) {
+        #if !os(tvOS)
+        DispatchQueue.main.async { [self] in layer.wantsExtendedDynamicRangeContent = active }
+        #endif
     }
 
     public func flush() {

@@ -17,6 +17,7 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
         case frameRate = "list_fps"
         case bitrate = "seekbar_bitrate_kbps"
         case codec = "video_format"
+        case hdr = "checkbox_enable_hdr"
         case framePacing = "frame_pacing"
         case hostAudio = "checkbox_host_audio"
     }
@@ -25,6 +26,7 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
     public var fps: Int?
     public var bitrateKbps: Int?
     public var codec: VideoCodec?
+    public var hdr: Bool?
     public var framePacing: FramePacing?
     public var playAudioOnHost: Bool?
 
@@ -37,6 +39,7 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
         if fps != nil { keys.insert(.frameRate) }
         if bitrateKbps != nil { keys.insert(.bitrate) }
         if codec != nil { keys.insert(.codec) }
+        if hdr != nil { keys.insert(.hdr) }
         if framePacing != nil { keys.insert(.framePacing) }
         if playAudioOnHost != nil { keys.insert(.hostAudio) }
         return keys
@@ -58,6 +61,7 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
         if let fps { settings.fps = fps }
         if let bitrateKbps { settings.bitrateKbps = bitrateKbps }
         if let codec { settings.codec = codec }
+        if let hdr { settings.hdr = hdr }
         if let framePacing { settings.framePacing = framePacing }
         if let playAudioOnHost { settings.playAudioOnHost = playAudioOnHost }
         return settings
@@ -70,6 +74,7 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
         if after.fps != before.fps { fps = after.fps }
         if after.bitrateKbps != before.bitrateKbps { bitrateKbps = after.bitrateKbps }
         if after.codec != before.codec { codec = after.codec }
+        if after.hdr != before.hdr { hdr = after.hdr }
         if after.framePacing != before.framePacing { framePacing = after.framePacing }
         if after.playAudioOnHost != before.playAudioOnHost { playAudioOnHost = after.playAudioOnHost }
     }
@@ -81,6 +86,7 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
         case .frameRate: fps = nil
         case .bitrate: bitrateKbps = nil
         case .codec: codec = nil
+        case .hdr: hdr = nil
         case .framePacing: framePacing = nil
         case .hostAudio: playAudioOnHost = nil
         }
@@ -93,6 +99,7 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
         if fps == nil { fps = backup.fps }
         if bitrateKbps == nil { bitrateKbps = backup.bitrateKbps }
         if codec == nil { codec = backup.codec }
+        if hdr == nil { hdr = backup.hdr }
         if framePacing == nil { framePacing = backup.framePacing }
         if playAudioOnHost == nil { playAudioOnHost = backup.playAudioOnHost }
     }
@@ -112,6 +119,7 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
         fps = storedFPS == nil ? nil : clamped.fps
         bitrateKbps = storedBitrate == nil ? nil : clamped.bitrateKbps
         codec = value(.codec)
+        hdr = value(.hdr)
         framePacing = value(.framePacing)
         playAudioOnHost = value(.playAudioOnHost)
     }

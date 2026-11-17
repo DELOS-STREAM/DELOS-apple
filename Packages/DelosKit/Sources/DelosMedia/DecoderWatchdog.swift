@@ -72,6 +72,7 @@ public final class WatchdogVideoRenderer: VideoRenderer {
         }
         return renderer.enqueue(sample)
     }
+    public func setHDR(_ active: Bool) { renderer.setHDR(active) }
     public func flush() {
         state.withLock { $0 = State() }
         renderer.flush()

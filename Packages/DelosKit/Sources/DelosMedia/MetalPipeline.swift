@@ -42,6 +42,7 @@ final class MetalPipeline: @unchecked Sendable {
         var lastFrame: NumberedFrame?
         var lastDrawnSize = (width: 0, height: 0)
         var lastConversion: ColorConversion?
+        var lastHDRInfo: HDRPictureInfo?
         var awaitingKeyFrame = true
         var lateRefreshes = 0
     }
@@ -57,7 +58,7 @@ final class MetalPipeline: @unchecked Sendable {
     private nonisolated(unsafe) var decoder: VideoDecoder!
     private let offscreen = Mutex<(any MTLTexture)?>(nil)
     private let observer = Mutex<(@Sendable (PresentedFrame) -> Void)?>(nil)
-    private let conversionChanged = Mutex<(@Sendable (ColorConversion) -> Void)?>(nil)
+    private let conversionChanged = Mutex<(@Sendable (ColorConversion, HDRPictureInfo?) -> Void)?>(nil)
 
     init?(pacing: FramePacing, fps: Int, clock: @escaping Clock = { CACurrentMediaTime() }, device: (any MTLDevice)? = MTLCreateSystemDefaultDevice()) {
         guard let drawer = MetalFrameDrawer(device: device) else { return nil }
@@ -75,7 +76,8 @@ final class MetalPipeline: @unchecked Sendable {
     }
 
     /// Called when the pictures' colour description changes (and for the first picture), on the thread that draws.
-    func observeConversion(_ body: (@Sendable (ColorConversion) -> Void)?) {
+    /// The HDR metadata of the pictures is reported with it.
+    func observeConversion(_ body: (@Sendable (ColorConversion, HDRPictureInfo?) -> Void)?) {
         conversionChanged.withLock { $0 = body }
     }
 
@@ -153,11 +155,12 @@ final class MetalPipeline: @unchecked Sendable {
         let pixelBuffer = numbered.frame.pixelBuffer
         guard let conversion = ColorConversion(pixelBuffer: pixelBuffer),
               let commandBuffer = drawer.queue.makeCommandBuffer() else { return }
+        let hdrInfo = conversion.isHDR ? HDRPictureInfo(pixelBuffer: pixelBuffer) : nil
         let changed = state.withLock { s -> Bool in
-            defer { s.lastConversion = conversion }
-            return s.lastConversion != conversion
+            defer { s.lastConversion = conversion; s.lastHDRInfo = hdrInfo }
+            return s.lastConversion != conversion || s.lastHDRInfo != hdrInfo
         }
-        if changed, let body = conversionChanged.withLock({ $0 }) { body(conversion) }
+        if changed, let body = conversionChanged.withLock({ $0 }) { body(conversion, hdrInfo) }
         let target: any MTLTexture
         if let drawable = tick.drawable {
             target = drawable.texture

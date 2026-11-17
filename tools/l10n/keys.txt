@@ -350,6 +350,7 @@ videoformat_av1always
 videoformat_hevcalways
 videoformat_h264always
 title_checkbox_host_audio
+title_enable_hdr
 help_list_resolution
 help_list_fps
 help_video_format
@@ -358,6 +359,7 @@ help_video_format_forceav1
 help_video_format_forceh265
 help_video_format_neverh265
 help_checkbox_host_audio
+help_checkbox_enable_hdr
 help_dynamic_resolution
 help_note_unavailable
 

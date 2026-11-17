@@ -1,4 +1,5 @@
 import CoreMedia
+import DelosCore
 import Foundation
 
 /// Turns the host's frames into sample buffers for the display layer. It keeps the format description of the
@@ -21,6 +22,8 @@ public struct VideoSamples: Sendable {
     private var formatSource: [[UInt8]] = []
     /// The NAL units of the frame in progress; the array is kept so its storage serves the next frame.
     private var units: [Range<Int>] = []
+    /// What the host said about its display and content; the format description carries it.
+    private var hdr: HDRMetadata?
 
     public init(codec: VideoCodec) {
         self.codec = codec
@@ -84,6 +87,21 @@ public struct VideoSamples: Sendable {
         return sample
     }
 
+    /// The HDR metadata the next frames' format carries (nil: none). A change builds the format again from the same
+    /// parameter sets, so the renderers see the new description with the next frame.
+    public mutating func setHDRMetadata(_ metadata: HDRMetadata?) {
+        guard metadata != hdr else { return }
+        hdr = metadata
+        guard format != nil else { return }
+        if let rebuilt = build(formatSource) { format = rebuilt }
+    }
+
+    private func build(_ source: [[UInt8]]) -> CMVideoFormatDescription? {
+        codec == .av1
+            ? try? VideoFormat.av1(Data(source[0]), hdr: hdr)
+            : try? VideoFormat.description(codec: codec, parameterSets: source, hdr: hdr)
+    }
+
     /// Builds the format from parameter sets that differ from the current format's; the same ones keep it. Sets that
     /// make no format leave the current one, as before the first key frame.
     private mutating func updateFormat(_ sets: [Slice<UnsafeRawBufferPointer>]) {
@@ -92,10 +110,7 @@ public struct VideoSamples: Sendable {
             return
         }
         let source = sets.map { [UInt8]($0) }
-        let fresh = codec == .av1
-            ? try? VideoFormat.av1(Data(source[0]))
-            : try? VideoFormat.description(codec: codec, parameterSets: source)
-        guard let fresh else { return }
+        guard let fresh = build(source) else { return }
         format = fresh
         formatSource = source
     }
