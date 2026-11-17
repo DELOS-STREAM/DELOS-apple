@@ -440,6 +440,7 @@ private struct PopoverSlider: View {
         .contentShape(Rectangle())
         .animation(dragging == nil && !reducedMotion ? .timingCurve(0.16, 1, 0.3, 1, duration: 0.28) : nil, value: shown)
         .animation(reducedMotion ? nil : Motion.spring(Motion.focus), value: focused)
+        #if !os(tvOS)
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { drag in dragging = snapped(at: drag.location.x, width: width) }
@@ -447,6 +448,7 @@ private struct PopoverSlider: View {
                     onChange(snapped(at: drag.location.x, width: width))
                     dragging = nil
                 })
+        #endif
     }
 
     /// The value under the finger, on the slider's grid.
