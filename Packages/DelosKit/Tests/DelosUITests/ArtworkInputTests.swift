@@ -13,7 +13,7 @@ import Testing
         let library = FocusModel(), artwork = FocusModel()
         navigator.takeInput(library) { _ in false }
         navigator.takeInput(artwork) { _ in true }
-        navigator.screenHints = ScreenHints(sheetOpen: true)
+        navigator.setHints(ScreenHints(sheetOpen: true), from: artwork)
         navigator.releaseInput(library)
         #expect(navigator.commandCapture?(.toastAction) == true)
         #expect(navigator.screenHints.sheetOpen)
