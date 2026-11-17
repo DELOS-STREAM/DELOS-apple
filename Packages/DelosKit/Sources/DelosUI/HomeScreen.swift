@@ -349,7 +349,7 @@ struct GameLibrary: View {
             .scrollClipDisabled()
             // The row is moved by the focus alone: without this a hardware keyboard's arrow keys also scroll the
             // scroll view by themselves, on top of the focus (owner's iPad with a Magic Keyboard: a crawl, then the
-            // focus ran off the screen)
+            // focus ran off the screen); the content switches the scroll view's own keyboard scrolling off
             .focusable(false)
             .scrollPosition($position)
             .onScrollGeometryChange(for: ScrollEnds.self) { geometry in
@@ -359,6 +359,7 @@ struct GameLibrary: View {
             }
             .padding(.top, stage.px(layout.coverTop - Self.rowPad))
             .modifier(RowEdgeFade(back: ends.back ? 1 : 0, forward: ends.forward ? 1 : 0, width: stage.width, overdraw: stage.px(1000)))
+                .focusDrivenScroll()
             .animation(.easeInOut(duration: 0.3), value: ends)
             .opacity(rowAlpha)
             .offset(x: stage.px(rowBounce))

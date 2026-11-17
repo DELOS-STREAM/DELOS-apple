@@ -182,6 +182,7 @@ struct SettingsScreen: View {
                 .padding(.top, stage.px(14))
                 .padding(.bottom, stage.px(140))
             }
+                .focusDrivenScroll()
             .focusable(false)
             .scrollClipDisabled()
             .scrollEdgeFades(
@@ -872,7 +873,8 @@ struct ChoicePicker: View {
                         }
                     }
                 }
-            .focusable(false)
+                    .focusDrivenScroll()
+                .focusable(false)
                 .frame(height: listHeight)
                 .onAppear { proxy.scrollTo(Self.optionID(selected ?? 0)) }
                 .onChange(of: focus.focused) { _, now in if let now { proxy.scrollTo(now) } }

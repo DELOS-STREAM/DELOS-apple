@@ -157,7 +157,8 @@ extension EnvironmentValues {
 }
 
 /// A scroll view whose focused item stays in view: the item is centered, so the next one always peeks in at the edge
-/// (Android's focus margin). Not animated for reduced motion.
+/// (Android's focus margin). Not animated for reduced motion. The focus is the only thing that scrolls it: the content
+/// switches the keyboard scrolling of the scroll view off (``View/focusDrivenScroll()``).
 struct FocusScroll<Content: View>: View {
     var axis: Axis.Set = .horizontal
     /// The cut edges' fades in stage pixels (top, bottom) of a vertical scroll view that continues beyond them.
@@ -168,7 +169,7 @@ struct FocusScroll<Content: View>: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView(axis, showsIndicators: false) { content() }
+            ScrollView(axis, showsIndicators: false) { content().focusDrivenScroll() }
                 .modifier(OptionalFades(fades: fades))
                 .environment(\.focusReveal, reveal)
                 .onAppear {

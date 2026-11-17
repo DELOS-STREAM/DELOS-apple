@@ -264,6 +264,8 @@ public struct DelosRoot: View {
         .onMoveCommand { routeMove($0) }
         #endif
         .onAppear(perform: startInput)
+        // The keys that scroll or move the system focus (arrows, Space, Page, Home, End) are the interface's alone
+        .ownsMenuKeys(typing: navigator.isEditingText)
     }
 
     /// Whether Menu is ours: a layer or the side menu is open, or there is a screen to go back to. At the first screen it

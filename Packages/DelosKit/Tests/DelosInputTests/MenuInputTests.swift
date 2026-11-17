@@ -27,3 +27,22 @@ import Testing
         #expect(MenuInput.keyCommand(.keyA) == nil)
     }
 }
+
+@Suite struct MenuKeysTests {
+    @Test func everyKeyThatMovesOurFocusIsTakenFromTheSystem() {
+        // The keys MenuInput turns into a direction or A (and so scrolls and moves for) must not also scroll or move the
+        // system's focus: that was the double scroll of a Magic Keyboard on the iPad
+        let all: [GCKeyCode] = [.upArrow, .downArrow, .leftArrow, .rightArrow, .spacebar]
+        for code in all {
+            let command = MenuInput.keyCommand(code)
+            #expect(command != nil)
+            #expect(MenuKeys.isOwned(code), "\(code.rawValue)")
+        }
+    }
+
+    @Test func theKeysThatScrollAreOwnedAndTheOthersAreNot() {
+        for code in [GCKeyCode.pageUp, .pageDown, .home, .end] { #expect(MenuKeys.isOwned(code)) }
+        // Return and Escape do not scroll, and a letter is a letter
+        for code in [GCKeyCode.returnOrEnter, .escape, .keyA, .tab] { #expect(!MenuKeys.isOwned(code)) }
+    }
+}

@@ -142,6 +142,7 @@ struct GameSettingsScreen: View {
                 .padding(.top, stage.px(14))
                 .padding(.bottom, stage.px(140))
             }
+                .focusDrivenScroll()
             .focusable(false)
             .scrollClipDisabled()
             .onChange(of: focus.focused) { _, now in
