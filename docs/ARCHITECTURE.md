@@ -565,6 +565,9 @@ one role, so the same kind of element looks the same everywhere:
 | `panel` | Cards, panels, the context menu and the dialog, the PIN digits: what is read | Regular, tinted at 60 %, not interactive, for text contrast |
 | over the video (`glassOverMedia`) | The stream menu and anything shown over the stream | Clear (the picture shows through), tinted with the scrim token for contrast |
 
+The circles and the profile chip are `control` glass tinted with the token at its whole alpha (`GlassShape(share: 1)`), so they keep
+Android's fill color on the glass material.
+
 Not glass: primary buttons (solid main color, as on Android), focus rings, progress bars, cover art and toasts (an
 opaque navy card, as on Android, so it reads over any frame of a stream).
 
