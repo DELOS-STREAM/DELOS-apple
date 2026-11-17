@@ -219,7 +219,7 @@ public struct DelosRoot: View {
                         TopBar(
                             brand: navigator.current != .start, navigation: navigation(entry),
                             pc: navigator.current.showsNavigation ? connectedPC : nil, wifi: device.wifi, battery: device.battery,
-                            clock: appearance.clock, onBack: navigator.canGoBack ? { go { navigator.back() } } : nil)
+                            clock: appearance.clock, onBack: navigator.canGoBack ? { feedback?.play(.back); go { navigator.back() } } : nil)
                             // The interface scale zooms the whole bar
                             .modifier(ZoomedBar())
                             .modifier(LayerBackdropBlur(active: librarySheetOpen))
@@ -230,6 +230,12 @@ public struct DelosRoot: View {
                 .modifier(PortalBackdropBlur(active: actions.connection.portal.map { !$0.arriving } ?? false))
                 // The scrim of the side menu or a dialog blurs the screen under it
                 .modifier(LayerBackdropBlur(active: sideMenu != nil || layers.blursScreen))
+                #if os(iOS)
+                // Touch: a swipe in from the left edge opens the side menu (the controller's left menu button)
+                if sideMenu == nil, !layers.isOpen, navigator.current.hasSideMenu, !actions.connection.isActive {
+                    SideMenuEdgeSwipe { router.openSideMenu() }
+                }
+                #endif
                 if sideMenu != nil { LayerScrim(onTap: { router.closeSideMenu(sound: .back) }) }
                 if let sideMenu {
                     SideMenu(
@@ -245,7 +251,9 @@ public struct DelosRoot: View {
                 if case .stream = navigator.current {} else {
                     ShellHintBar(
                         hints: hints, note: libraryNote, noteLabel: libraryNote == nil ? nil : L("shell_hint_library_label"),
-                        libraryRow: showsLibraryRow)
+                        libraryRow: showsLibraryRow,
+                        // The only tappable hint is the library's Filter: the screen's own Y
+                        onTap: { _ in _ = navigator.commandCapture?(.toastAction) })
                 }
                 ZStack {
                     if let portal = actions.connection.portal {
