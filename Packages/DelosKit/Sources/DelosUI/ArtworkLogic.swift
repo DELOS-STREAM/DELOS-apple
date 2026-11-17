@@ -255,6 +255,16 @@ enum ArtworkSouth: Equatable, Sendable {
     }
 }
 
+/// The info strip under the grid (`InfoStrip`), in stage px: as high as its content needs (the text of tvOS, 24 pt at least,
+/// and of a big interface scale needs more than the design's 84), never less than that.
+enum ArtworkInfoLayout {
+    static let minHeight = 84.0
+    /// Air above and below the content.
+    static let padding = 14.0
+    /// Between the title and the facts, and between the facts.
+    static let gap = 44.0
+}
+
 /// The labels of the filter sheet and the strip (`ArtType.label`, `ArtSort.label`/`chip`/`first`, `ActiveFilter.label`).
 extension ArtType {
     var label: String {

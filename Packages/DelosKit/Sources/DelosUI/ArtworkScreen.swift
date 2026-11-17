@@ -214,7 +214,9 @@ private struct ArtworkContent: View, Equatable {
     var body: some View {
         let left = 150 + stage.safe.leading, right = 150 + stage.safe.trailing
         let top = stage.safe.top
-        let infoTop = stage.height - 194
+        // The grid and the info strip share the room from the grid's top down to 110 px above the stage's foot; the strip is as
+        // high as its content needs (at least 84 px) and the grid takes the rest
+        let lowerHeight = stage.height - 110 - (324 + top)
         let filters = model.filters
         ZStack(alignment: .topLeading) {
             VStack(alignment: .leading, spacing: 0) {
@@ -251,16 +253,17 @@ private struct ArtworkContent: View, Equatable {
                     .padding(.trailing, stage.px(right - left))
                     .offset(y: stage.px(276 + top))
             }
-            ArtworkGridView(
-                model: model, hostID: hostID, app: app, focus: focus, actions: actions, left: left, right: right,
-                onReset: resetFilters, onChange: openSheet)
-                .frame(height: stage.px(infoTop - 10 - (324 + top)))
-                .offset(y: stage.px(324 + top))
-            ArtworkInfoStrip(model: model, focus: focus)
-                .frame(height: stage.px(84))
-                .padding(.horizontal, stage.px(left))
-                .padding(.trailing, stage.px(right - left))
-                .offset(y: stage.px(infoTop))
+            VStack(spacing: stage.px(10)) {
+                ArtworkGridView(
+                    model: model, hostID: hostID, app: app, focus: focus, actions: actions, left: left, right: right,
+                    onReset: resetFilters, onChange: openSheet)
+                    .frame(maxHeight: .infinity)
+                ArtworkInfoStrip(model: model, focus: focus)
+                    .padding(.horizontal, stage.px(left))
+                    .padding(.trailing, stage.px(right - left))
+            }
+            .frame(height: stage.px(lowerHeight))
+            .offset(y: stage.px(324 + top))
             ArtworkSheetLayer(model: model, left: left, right: right, top: 280 + top, onReset: resetFilters, onClose: closeSheet)
             ArtworkHintSync(model: model, focus: focus, navigator: navigator)
         }
@@ -939,20 +942,46 @@ private struct ArtworkInfoStrip: View {
             title = ArtworkFact.title(image, fallback: tab.label)
             facts = ArtworkFact.of(image).map(\.text)
         }
-        return HStack(spacing: stage.px(44)) {
+        return HStack(spacing: stage.px(ArtworkInfoLayout.gap)) {
             VStack(alignment: .leading, spacing: stage.px(4)) {
                 Text(title)
                     .font(DelosFonts.unbounded(stage.tpx(24)))
                     .foregroundStyle(colors.text.color)
                     .lineLimit(1)
-                HStack(spacing: stage.px(8)) {
-                    if case .image(let image) = described {
-                        badge(L(image.animated ? "artwork_animated" : "artwork_static"), icon: image.animated ? Symbols.animated : nil, accent: false)
+                // The badges' row keeps its height with none shown, so the strip does not change height from one tile to the next
+                ZStack(alignment: .leading) {
+                    badge(L("artwork_in_use"), icon: Symbols.check, accent: true).hidden()
+                    HStack(spacing: stage.px(8)) {
+                        if case .image(let image) = described {
+                            badge(L(image.animated ? "artwork_animated" : "artwork_static"), icon: image.animated ? Symbols.animated : nil, accent: false)
+                        }
+                        if inUse { badge(L("artwork_in_use"), icon: Symbols.check, accent: true) }
                     }
-                    if inUse { badge(L("artwork_in_use"), icon: Symbols.check, accent: true) }
                 }
             }
-            ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
+            .layoutPriority(1)
+            // The facts that the title leaves room for; the last ones are left out rather than squeezed (compact stages, big text)
+            ViewThatFits(in: .horizontal) {
+                factRow(facts, count: 4)
+                factRow(facts, count: 3)
+                factRow(facts, count: 2)
+                factRow(facts, count: 1)
+                factRow(facts, count: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        // As high as the content needs plus air, never under the design's 84 px; the plate is the whole frame, not the content
+        .padding(.horizontal, stage.px(30))
+        .padding(.vertical, stage.px(ArtworkInfoLayout.padding))
+        .frame(maxWidth: .infinity, minHeight: stage.px(ArtworkInfoLayout.minHeight), alignment: .leading)
+        .background {
+            GlassShape(shape, tint: colors.surface).overlay(shape.strokeBorder(colors.line.color, lineWidth: stage.px(1)))
+        }
+    }
+
+    private func factRow(_ facts: [(label: String, value: String)], count: Int) -> some View {
+        HStack(spacing: stage.px(ArtworkInfoLayout.gap)) {
+            ForEach(Array(facts.prefix(count).enumerated()), id: \.offset) { _, fact in
                 VStack(alignment: .leading, spacing: 0) {
                     Text(fact.label)
                         .font(DelosFonts.figtree(stage.tpx(13), .semibold))
@@ -964,13 +993,8 @@ private struct ArtworkInfoStrip: View {
                         .lineLimit(1)
                 }
             }
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, stage.px(30))
-        .frame(maxWidth: .infinity)
-        .background {
-            GlassShape(shape, tint: colors.surface).overlay(shape.strokeBorder(colors.line.color, lineWidth: stage.px(1)))
-        }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private func badge(_ text: String, icon: String?, accent: Bool) -> some View {
