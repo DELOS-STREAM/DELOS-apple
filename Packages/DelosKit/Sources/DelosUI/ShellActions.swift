@@ -38,7 +38,7 @@ final class ShellActions {
         connection.connect(hostID)
     }
 
-    private var feedback: Feedback? { layers.feedback }
+    var feedback: Feedback? { layers.feedback }
 
     /// The start screen's first focus: the default PC, else the first paired PC that is online, else the first one,
     /// else "Pair a new PC".
@@ -177,7 +177,7 @@ final class ShellActions {
 
     /// A game's menu in the library (`gameMenu`), depending on what runs on the PC: this game (resume, quit), another
     /// game (quit that one and start this one, or go back to it) or nothing (start). Choosing Quit is the confirmation.
-    /// Android's Artwork and App settings wait for their features; Metadata shows when a metadata service is configured.
+    /// Android's App settings waits for its feature; Metadata shows when a metadata service is configured.
     func gameMenu(hostID: String, app: HostApp) -> ContextMenu? {
         guard let host = hosts.host(hostID) else { return nil }
         let running = host.runningAppID == 0 ? nil : hosts.apps[hostID]?.first { $0.id == host.runningAppID }
@@ -204,6 +204,7 @@ final class ShellActions {
             meta: [other, hidden ? L("home_header_hidden") : nil].compactMap { $0 }.reduce(nil) { facts, next in
                 facts.map { L("home_meta_join", $0, next) } ?? next
             })
+        items.append(MenuItem(icon: Symbols.photoLibrary, label: L("home_menu_artwork")) { [self] in openArtwork(hostID: hostID, app: app) })
         if metadata.offers(app) {
             items.append(MenuItem(icon: Symbols.metadata, label: L("home_menu_metadata")) { [self] in openMetadataMenu(hostID: hostID, app: app) })
         }

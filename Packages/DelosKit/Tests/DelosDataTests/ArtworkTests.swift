@@ -267,3 +267,109 @@ private func image(_ id: Int, _ file: String) -> String { #"{"id":\#(id),"url":"
         #expect(await artwork.boxArt(hostID: "PC", appID: 4) { throw URLError(.timedOut) } == nil)
     }
 }
+
+@MainActor
+@Suite struct ArtworkChoiceTests {
+    private let fake = FakeSteamGridDB([
+        "search/autocomplete/Hades": (200, list(#"{"id":7,"name":"Hades","release_date":1600000000}"#)),
+        "search/autocomplete/Hades%20II": (200, list(#"{"id":8,"name":"Hades II"}"#)),
+        "grids/game/7": (200, list(image(70, "cover.png") + "," + image(72, "other.png"))),
+        "heroes/game/7": (200, list(image(71, "hero.png"))),
+        "logos/game/7": (200, list("")),
+        "grids/game/8": (200, list(image(80, "cover2.png"))),
+        "heroes/game/8": (200, list("")),
+        "logos/game/8": (200, list("")),
+        "/cover.png": (200, "COVER"), "/other.png": (200, "OTHER"), "/hero.png": (200, "HERO"), "/cover2.png": (200, "COVER2"),
+    ])
+
+    private func store() -> ArtworkStore {
+        let secrets = ArtworkStoreTests.MemoryStorage()
+        try? secrets.write(Data("k".utf8), account: "api-key")
+        return ArtworkStore(
+            secrets: secrets, defaults: UserDefaults(suiteName: "delos.tests.\(UUID().uuidString)")!, matches: temporaryDirectory(),
+            cache: DiskCache(directory: temporaryDirectory(), budget: 1_000_000, maxEntryBytes: 1000), transport: fake.transport)
+    }
+
+    @Test func theChoicesAreTheMatchedGamesImagesBestRatedFirst() async throws {
+        let artwork = store()
+        // Not matched yet: nothing to choose from
+        #expect(try await artwork.choices(hostID: "PC", appID: 1, kind: .cover).isEmpty)
+        try await artwork.fetch(hostID: "PC", appID: 1, name: "Hades")
+        #expect(await artwork.matchedGame(hostID: "PC", appID: 1)?.id == 7)
+        #expect(try await artwork.choices(hostID: "PC", appID: 1, kind: .cover).map(\.id) == [70, 72])
+        #expect(await artwork.choice(hostID: "PC", appID: 1, kind: .cover) == .image(70))
+        #expect(await artwork.choice(hostID: "PC", appID: 1, kind: .logo) == .none)
+        #expect(await artwork.choice(hostID: "PC", appID: 2, kind: .cover) == .unset)
+    }
+
+    @Test func equalScoresKeepTheOrderAndTheBestScoreComesFirst() throws {
+        let url = URL(string: "https://cdn.example/a.png")!
+        let images = [1, 2, 3, 4].map { SteamGridDBImage(id: $0, url: url, score: [5, 9, 5, 9][$0 - 1]) }
+        #expect(ArtworkStore.bestRatedFirst(images).map(\.id) == [2, 4, 1, 3])
+    }
+
+    @Test func choosingAnImageStoresItAndAnAutomaticRefreshLeavesItAlone() async throws {
+        let artwork = store()
+        try await artwork.fetch(hostID: "PC", appID: 1, name: "Hades")
+        let other = try #require(try await artwork.choices(hostID: "PC", appID: 1, kind: .cover).last)
+        try await artwork.apply(hostID: "PC", appID: 1, kind: .cover, image: other)
+        #expect(await artwork.choice(hostID: "PC", appID: 1, kind: .cover) == .image(72))
+        #expect(await artwork.image(hostID: "PC", appID: 1, kind: .cover) == Data("OTHER".utf8))
+        #expect(artwork.applying(hostID: "PC", appID: 1, kind: .cover) == nil)
+        // Refreshing every game downloads the best-rated image of each kind again, except the one picked by hand
+        try await artwork.fetch(hostID: "PC", appID: 1, name: "Hades", refresh: true)
+        #expect(await artwork.choice(hostID: "PC", appID: 1, kind: .cover) == .image(72))
+        #expect(await artwork.image(hostID: "PC", appID: 1, kind: .cover) == Data("OTHER".utf8))
+    }
+
+    @Test func choosingNoImageRemovesTheStoredOneAndSaysSo() async throws {
+        let artwork = store()
+        try await artwork.fetch(hostID: "PC", appID: 1, name: "Hades")
+        try await artwork.apply(hostID: "PC", appID: 1, kind: .hero, image: nil)
+        #expect(await artwork.choice(hostID: "PC", appID: 1, kind: .hero) == .none)
+        #expect(await artwork.image(hostID: "PC", appID: 1, kind: .hero) == nil)
+    }
+
+    @Test func aGameMatchedByHandKeepsItsMatchAndStartsTheImagesOver() async throws {
+        let artwork = store()
+        try await artwork.fetch(hostID: "PC", appID: 1, name: "Hades")
+        let other = try #require(try await artwork.choices(hostID: "PC", appID: 1, kind: .cover).last)
+        try await artwork.apply(hostID: "PC", appID: 1, kind: .cover, image: other)
+        let games = try await artwork.search("Hades II")
+        try await artwork.setGame(hostID: "PC", appID: 1, game: try #require(games.first))
+        #expect(await artwork.matchedGame(hostID: "PC", appID: 1)?.name == "Hades II")
+        #expect(await artwork.choice(hostID: "PC", appID: 1, kind: .cover) == .image(80))
+        #expect(await artwork.image(hostID: "PC", appID: 1, kind: .cover) == Data("COVER2".utf8))
+        // A later refresh does not search for the name again: the game was chosen by hand
+        let searches = fake.count("autocomplete/Hades")
+        try await artwork.fetch(hostID: "PC", appID: 1, name: "Hades", refresh: true)
+        #expect(fake.count("autocomplete/Hades") == searches)
+        #expect(await artwork.matchedGame(hostID: "PC", appID: 1)?.name == "Hades II")
+    }
+
+    @Test func thumbnailsAreDownloadedOnceAndKept() async throws {
+        let artwork = store()
+        let image = SteamGridDBImage(id: 70, url: URL(string: "https://cdn.example/cover.png")!, thumb: URL(string: "https://cdn.example/other.png")!)
+        #expect(await artwork.thumbnail(image) == Data("OTHER".utf8))
+        #expect(await artwork.thumbnail(image) == Data("OTHER".utf8))
+        #expect(fake.count("/other.png") == 1)
+    }
+
+    @Test func theReplyKeepsWhatTheAPITellsAboutAnImage() throws {
+        let reply = Data(#"""
+        {"data":[{"id":5,"url":"https://cdn.example/a.jpg","thumb":"https://cdn.example/t.jpg","width":600,"height":900,
+        "style":["white_logo","alternate"],"score":12,"author":{"name":"Zed"},"date":1700000000000,"mime":"image/jpeg"},
+        {"id":6,"url":"https://cdn.example/b.png","date":"2025-06-23T10:00:00.000Z"},
+        {"id":7,"url":"https://cdn.example/c.webm","mime":"image/webm"}]}
+        """#.utf8)
+        let images = try SteamGridDB.parseImages(reply)
+        #expect(images.map(\.id) == [5, 6])
+        let first = try #require(images.first)
+        #expect(first.thumb.lastPathComponent == "t.jpg" && first.style == "white_logo" && first.score == 12)
+        #expect(first.author == "Zed" && first.date == 1_700_000_000 && first.format == "JPG")
+        // Without a thumbnail the full image stands in; a date can be ISO text
+        #expect(images[1].thumb == images[1].url && images[1].date == 1_750_672_800 && images[1].format == nil)
+        #expect(SteamGridDBImage(id: 1, url: URL(string: "https://cdn.example/x.png")!, thumb: URL(string: "https://cdn.example/t.webm")!)
+            .previewURL.lastPathComponent == "x.png")
+    }
+}

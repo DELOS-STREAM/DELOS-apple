@@ -12,14 +12,53 @@ public struct SteamGridDBGame: Equatable, Sendable {
     public let id: Int
     public let name: String
     public let year: Int?
+
+    public init(id: Int, name: String, year: Int? = nil) {
+        self.id = id
+        self.name = name
+        self.year = year
+    }
 }
 
-/// One image on SteamGridDB, as far as the automatic download needs it: its id, the full-size URL and its size.
-public struct SteamGridDBImage: Equatable, Sendable {
+/// One image on SteamGridDB: the full-size URL, the [thumb] the choices show and what the API tells about it (0 or nil
+/// when it does not): the [style], [score], the [author]'s name, the upload [date] (epoch seconds) and [mime].
+public struct SteamGridDBImage: Equatable, Hashable, Sendable {
     public let id: Int
     public let url: URL
     public let width: Int
     public let height: Int
+    public let thumb: URL
+    public let style: String?
+    public let score: Int
+    public let author: String?
+    public let date: Int?
+    public let mime: String?
+
+    public init(
+        id: Int, url: URL, width: Int = 0, height: Int = 0, thumb: URL? = nil, style: String? = nil, score: Int = 0,
+        author: String? = nil, date: Int? = nil, mime: String? = nil
+    ) {
+        self.id = id
+        self.url = url
+        self.width = width
+        self.height = height
+        self.thumb = thumb ?? url
+        self.style = style
+        self.score = score
+        self.author = author
+        self.date = date
+        self.mime = mime
+    }
+
+    /// What a tile shows first: the thumbnail, except that SteamGridDB gives some images a WebM thumbnail the app cannot
+    /// decode, so those use the full image.
+    public var previewURL: URL { thumb.path.lowercased().hasSuffix(".webm") ? url : thumb }
+
+    /// The file format as the info strip shows it ("WEBP", "JPG", "PNG"), nil when unknown.
+    public var format: String? {
+        guard let subtype = mime?.split(separator: "/").last.map({ $0.lowercased() }), !subtype.isEmpty else { return nil }
+        return subtype == "jpeg" ? "JPG" : subtype.uppercased()
+    }
 }
 
 /// Why a SteamGridDB call failed (`SgdbFailure` of DELOS for Android).
@@ -171,14 +210,35 @@ public struct SteamGridDB: Sendable {
     }
 
     /// The images of a list reply in its order; an entry without a usable URL, or a WebM (which the app cannot show), is
-    /// left out.
+    /// left out. What the API tells about an image (thumbnail, style, score, author, date, file type) is kept for the
+    /// Artwork screen's choices.
     static func parseImages(_ reply: Data?) throws -> [SteamGridDBImage] {
         try dataList(reply)?.compactMap { entry in
             guard let id = number(entry["id"]), let text = entry["url"] as? String, let url = URL(string: text),
                   url.scheme == "https" || url.scheme == "http" else { return nil }
-            if entry["mime"] as? String == "image/webm" || text.lowercased().hasSuffix(".webm") { return nil }
-            return SteamGridDBImage(id: id, url: url, width: number(entry["width"]) ?? 0, height: number(entry["height"]) ?? 0)
+            let mime = entry["mime"] as? String
+            if mime == "image/webm" || text.lowercased().hasSuffix(".webm") { return nil }
+            let thumb = (entry["thumb"] as? String).flatMap(URL.init(string:)).flatMap { $0.scheme == "https" || $0.scheme == "http" ? $0 : nil }
+            // Newer answers may list several styles: the first is shown
+            let style = ((entry["style"] as? [String])?.first ?? entry["style"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            return SteamGridDBImage(
+                id: id, url: url, width: number(entry["width"]) ?? 0, height: number(entry["height"]) ?? 0,
+                thumb: thumb ?? url, style: style, score: number(entry["score"]) ?? 0,
+                author: ((entry["author"] as? [String: Any])?["name"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+                date: epochSeconds(entry["date"] ?? entry["created_at"]), mime: mime)
         } ?? []
+    }
+
+    /// Epoch seconds from a number (seconds or milliseconds) or an ISO date string; nil when it is neither.
+    static func epochSeconds(_ value: Any?) -> Int? {
+        func seconds(_ n: Int) -> Int { n > 100_000_000_000 ? n / 1000 : n }
+        if let n = number(value) { return seconds(n) }
+        guard let text = value as? String else { return nil }
+        if let n = Int(text) { return seconds(n) }
+        let plain = ISO8601DateFormatter()
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return (plain.date(from: text) ?? fractional.date(from: text)).map { Int($0.timeIntervalSince1970) }
     }
 
     private static func number(_ value: Any?) -> Int? {

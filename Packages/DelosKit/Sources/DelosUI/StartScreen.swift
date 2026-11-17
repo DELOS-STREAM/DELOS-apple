@@ -418,6 +418,10 @@ public struct DelosRoot: View {
             pinScreen(hostID: hostID, code: code, entry: entry)
         case .home(let hostID):
             HomeScreen(hostID: hostID, focus: entry.focus, actions: actions)
+        case .artwork(let hostID, let appID):
+            if let app = hosts.apps[hostID]?.first(where: { $0.id == appID }) {
+                ArtworkScreen(hostID: hostID, app: app, focus: entry.focus, navigator: navigator, actions: actions)
+            }
         case .stream(let hostID, let appID):
             StreamScreen(hostID: hostID, appID: appID, settings: streamSettings.load(profile: profiles.current?.id ?? ""))
         case .settings:
