@@ -537,7 +537,9 @@ private struct ArtworkTileView: View {
                     Text(L("artwork_in_use"))
                         .font(DelosFonts.figtree(stage.tpx(16), .bold))
                         .foregroundStyle(colors.onAccent.color)
+                        .lineLimit(1)
                 }
+                .fixedSize()
                 .padding(.horizontal, stage.px(12))
                 .padding(.vertical, stage.px(4))
                 .background(Capsule().fill(colors.accent.color))

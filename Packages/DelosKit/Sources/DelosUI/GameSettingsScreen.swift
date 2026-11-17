@@ -313,6 +313,7 @@ private struct GameSettingsPanel: View {
                 Text(L("settings_game_saved_note"))
                     .font(DelosFonts.figtree(stage.tpx(17)))
                     .foregroundStyle(colors.text3.color)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(stage.px(44))
@@ -361,6 +362,7 @@ private struct GameSettingsPanel: View {
         .padding(.horizontal, stage.px(20))
         .padding(.vertical, stage.px(16))
         .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
         .background(shape.fill(custom ? tint.opacity(0.22).color : colors.text.opacity(0.06).color))
         .overlay(shape.strokeBorder(custom ? tint.opacity(0.5).color : colors.line.color, lineWidth: stage.px(1)))
     }
@@ -380,7 +382,9 @@ struct CustomBadge: View {
                 .font(DelosFonts.figtree(stage.tpx(14), .heavy))
                 .tracking(stage.tpx(14) * 0.06)
                 .foregroundStyle(colors.onAccent3.color)
+                .lineLimit(1)
         }
+        .fixedSize()
         .padding(.leading, stage.px(7))
         .padding(.trailing, stage.px(10))
         .frame(height: stage.px(26))
@@ -403,24 +407,26 @@ struct RowResetButton: View {
         #else
         let visible = focused
         #endif
-        Button(action: onReset) {
-            HStack(spacing: stage.px(10)) {
-                SymbolView(symbol: Symbols.reset, size: touch ? 28 : 24, color: tint)
-                if !touch {
-                    Text(L("row_reset"))
-                        .font(DelosFonts.figtree(stage.tpx(19), .bold))
-                        .foregroundStyle(colors.text.color)
+        if visible {
+            Button(action: onReset) {
+                HStack(spacing: stage.px(10)) {
+                    SymbolView(symbol: Symbols.reset, size: touch ? 28 : 24, color: tint)
+                    if !touch {
+                        Text(L("row_reset"))
+                            .font(DelosFonts.figtree(stage.tpx(19), .bold))
+                            .foregroundStyle(colors.text.color)
+                            .lineLimit(1)
+                    }
                 }
+                .padding(.horizontal, stage.px(touch ? 0 : 16))
+                .frame(minWidth: stage.px(touch ? 52 : 0), minHeight: stage.px(touch ? 52 : 46))
+                .background(Capsule().fill(tint.opacity(0.22).color))
+                .overlay(Capsule().strokeBorder(tint.opacity(0.5).color, lineWidth: stage.px(1)))
             }
-            .padding(.horizontal, stage.px(touch ? 0 : 16))
-            .frame(minWidth: stage.px(touch ? 52 : 0), minHeight: stage.px(touch ? 52 : 46))
-            .background(Capsule().fill(tint.opacity(0.22).color))
-            .overlay(Capsule().strokeBorder(tint.opacity(0.5).color, lineWidth: stage.px(1)))
+            .buttonStyle(.plain)
+            .fixedSize()
+            .accessibilityLabel(L("row_reset_to_profile"))
         }
-        .buttonStyle(.plain)
-        .opacity(visible ? 1 : 0)
-        .allowsHitTesting(visible)
-        .accessibilityLabel(L("row_reset_to_profile"))
     }
 
     private var touch: Bool {
