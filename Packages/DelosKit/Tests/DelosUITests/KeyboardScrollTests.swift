@@ -16,9 +16,6 @@ final class LibraryRow {
     /// What the screen does for each focus step, as `GameLibrary` does: one ``LibraryScroll/Step``.
     private(set) var targets: [LibraryScroll.Step] = []
     private(set) var focusSteps = 0
-    private var pace = ScrollPace()
-    /// The time of the command being handled (a clock the test drives).
-    var now = Date(timeIntervalSince1970: 1000)
 
     init(count: Int) {
         self.count = count
@@ -36,7 +33,7 @@ final class LibraryRow {
         guard let focused = model.focused as? String, let now = Int(focused.dropFirst()), now != before else { return }
         index = now
         focusSteps += 1
-        targets.append(LibraryScroll.step(from: before, to: now, count: count, pace: pace.move(at: self.now)))
+        targets.append(LibraryScroll.step(from: before, to: now, count: count))
     }
 }
 
@@ -48,7 +45,7 @@ final class LibraryRow {
         input.press(.right, from: "key right")
         input.lift("key right")
         #expect(row.focusSteps == 1)
-        #expect(row.targets == [.follow(to: 1, pace: .single)])
+        #expect(row.targets == [.follow(to: 1)])
     }
 
     @Test func theKeyboardsOwnRepeatIsNotAnotherPress() {
@@ -60,10 +57,9 @@ final class LibraryRow {
         #expect(row.targets.count == 1)
         input.lift("key right")
         // Up, then down again a moment later: a new press
-        row.now.addTimeInterval(1)
         input.press(.right, from: "key right")
         #expect(row.focusSteps == 2)
-        #expect(row.targets == [.follow(to: 1, pace: .single), .follow(to: 2, pace: .single)])
+        #expect(row.targets == [.follow(to: 1), .follow(to: 2)])
         input.lift("key right")
     }
 
@@ -75,8 +71,6 @@ final class LibraryRow {
         let released = Flag()
         input = MenuInput(repeatAfter: .milliseconds(30), repeatEvery: .milliseconds(10)) { command, count in
             counts.append(count)
-            // The clock of a real hold: the press, the first repeat 500 ms later, then one every 50 ms
-            row.now = Date(timeIntervalSince1970: 1000 + (count == 0 ? 0 : 0.5 + 0.05 * Double(count - 1)))
             row.handle(command)
             // The keyboard's own repeats arrive meanwhile and change nothing
             if !released.on { input?.press(.right, from: "key right") }
@@ -92,10 +86,8 @@ final class LibraryRow {
         #expect(counts == Array(0..<seen))
         #expect(row.focusSteps == seen)
         #expect(row.targets.count == seen)
-        // The press and the first repeat glide; the repeats after it are short steps
-        #expect(row.targets.first == .follow(to: 1, pace: .single))
-        #expect(row.targets[1] == .follow(to: 2, pace: .single))
-        #expect(row.targets.dropFirst(2).allSatisfy { if case .follow(_, .held) = $0 { true } else { false } })
+        // Every step, the press and each repeat, is the same retargeted glide to the next cover
+        #expect(row.targets == (1...seen).map { .follow(to: $0) })
         // Up: it stops
         // A repeat already on its way may still land; after that it stays quiet
         try await Task.sleep(for: .milliseconds(100))
@@ -152,24 +144,84 @@ final class LibraryRow {
     }
 }
 
-@Suite struct ScrollPaceTests {
-    @Test func aSinglePressGlidesAndAFastSequenceStepsShort() {
-        var pace = ScrollPace()
-        let start = Date(timeIntervalSince1970: 0)
-        #expect(pace.move(at: start) == .single)
-        // A held key: the first repeat comes 500 ms after the press, the next ones every 50 ms
-        #expect(pace.move(at: start.addingTimeInterval(0.5)) == .single)
-        #expect(pace.move(at: start.addingTimeInterval(0.55)) == .held)
-        #expect(pace.move(at: start.addingTimeInterval(0.60)) == .held)
-        // A pause: a single press again
-        #expect(pace.move(at: start.addingTimeInterval(1.5)) == .single)
+/// The glide of a focus-driven scroll (R2-15): SwiftUI's animated scroll started every new target from rest after a frame
+/// without movement, so a held arrow hopped one cover per step at 20 Hz. The glide's spring keeps its speed.
+@Suite struct GlideSpringTests {
+    /// The positions of a glide over [distance] from rest, stepped at 120 Hz for [seconds].
+    private func run(_ pace: GlideSpring.Pace, distance: Double, seconds: Double) -> [Double] {
+        var spring = GlideSpring(pace: pace)
+        spring.retarget(distance: distance)
+        var position = 0.0, positions: [Double] = []
+        for _ in 0..<Int(seconds * 120) {
+            position += spring.step(1.0 / 120)
+            positions.append(position)
+        }
+        return positions
     }
 
-    @Test func aHeldMoveIsOneShortLinearStep() {
-        var pace = ScrollPace()
-        let start = Date(timeIntervalSince1970: 0)
-        _ = pace.animation(.easeOut(duration: 0.3), at: start)
-        #expect(pace.animation(.easeOut(duration: 0.3), at: start.addingTimeInterval(0.05)) == ScrollPace.heldStep)
-        #expect(pace.animation(.easeOut(duration: 0.3), at: start.addingTimeInterval(2)) == .easeOut(duration: 0.3))
+    @Test func aStepOfTheLibraryEasesInAndLandsExactlyWithinItsSettleTime() {
+        let positions = run(LibraryScroll.pace, distance: 400, seconds: 0.5)
+        // It starts from rest: the first frame moves under 2 % of the step, and nothing ever goes back or beyond
+        #expect(positions[0] > 0 && positions[0] < 8)
+        #expect(zip(positions, positions.dropFirst()).allSatisfy { $0 <= $1 })
+        #expect(positions.allSatisfy { $0 <= 400 })
+        // About Android's 200 ms ease-out: 90 % after 167 ms, within 2 % at 250 ms, landed exactly by 400 ms
+        #expect(abs(positions[19] - 360) < 8)
+        #expect(positions[29] > 391)
+        #expect(abs(positions[47] - 400) < 1e-9)
+    }
+
+    @Test func aHeldArrowIsOneGlideWithoutAStopAtAnyStep() {
+        // The press, then a repeat every 50 ms, each one cover (400 points) further
+        let repeats = (1...10).map { (0.05 * Double($0), 400.0) }
+        var spring = GlideSpring(pace: LibraryScroll.pace)
+        spring.retarget(distance: 400)
+        var position = 0.0, target = 400.0, moves: [Double] = []
+        for frame in 0..<72 {
+            let time = Double(frame) / 120
+            if let step = repeats.first(where: { abs($0.0 - time) < 1e-9 }) {
+                target += step.1
+                spring.retarget(distance: target - position)
+            }
+            let move = spring.step(1.0 / 120)
+            position += move
+            moves.append(move)
+        }
+        // Every frame of the hold moves the row forward; past the first frames the speed stays within a narrow band
+        #expect(moves.prefix(66).allSatisfy { $0 > 0 })
+        let steady = moves[24..<60]
+        #expect(steady.max()! / steady.min()! < 1.6)
+    }
+
+    @Test func aRetargetKeepsTheSpeed() {
+        var spring = GlideSpring(pace: .list)
+        spring.retarget(distance: 300)
+        for _ in 0..<6 { _ = spring.step(1.0 / 120) }
+        let before = spring.step(1.0 / 120)
+        spring.retarget(distance: spring.remaining + 300)
+        let after = spring.step(1.0 / 120)
+        // The frame after the new target moves at least as far as the one before: no stop, no restart from rest
+        #expect(after >= before)
+    }
+
+    @Test func aFastRetargetCloseByBrakesInsteadOfOvershooting() {
+        var spring = GlideSpring(pace: .list)
+        spring.retarget(distance: 600)
+        for _ in 0..<20 { _ = spring.step(1.0 / 120) }
+        // A new target just ahead while the glide is fast
+        spring.retarget(distance: 5)
+        var travelled = 0.0
+        for _ in 0..<240 { travelled += spring.step(1.0 / 120) }
+        #expect(abs(travelled - 5) < 0.01)
+        #expect(!spring.active)
+    }
+
+    @Test func centeringKeepsTheItemInTheMiddleWithinTheContent() {
+        let geometry = GlideGeometry(offset: 100, maxOffset: 500)
+        // An item at 700…800 of a viewport spanning 0…1000: 250 further
+        #expect(geometry.centering(itemStart: 700, itemEnd: 800, viewStart: 0, viewEnd: 1000) == 350)
+        // Never before the start nor past the end
+        #expect(geometry.centering(itemStart: 0, itemEnd: 50, viewStart: 0, viewEnd: 1000) == 0)
+        #expect(geometry.centering(itemStart: 1900, itemEnd: 2000, viewStart: 0, viewEnd: 1000) == 500)
     }
 }

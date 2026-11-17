@@ -187,7 +187,10 @@ private struct ChipGlideRing: View {
                 transaction.disablesAnimations = true
                 withTransaction(transaction) { scale = 1 }
             }
-            withAnimation(.focusScale(pressed: now.scale < 1, reduced: reduced)) { scale = now.scale }
+            // The element's frame moves with every frame of a scroll of its row: only a new scale starts the spring
+            if scale != now.scale {
+                withAnimation(.focusScale(pressed: now.scale < 1, reduced: reduced)) { scale = now.scale }
+            }
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)

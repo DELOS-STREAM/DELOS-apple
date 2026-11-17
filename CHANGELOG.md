@@ -173,6 +173,14 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- The library's row of covers, the filter sheet's chip rows and every other row and list that follows the focus glide
+  smoothly: one spring that every step retargets and that keeps its speed, driven at up to 120 frames a second, instead of
+  SwiftUI's animated scroll, which restarted from rest after a still frame at every step (a held arrow or quick presses hopped
+  one cover per step). A focus step now redraws only the two items whose focus changed, not the whole row. Not verified on a
+  device yet.
+- Every scrolling row and list fades at the edges where content is cut off, as on Android: only the edge with content behind
+  it, growing with how much is hidden, without clipping a chip's text or a focused item's ring and glow (the library filter
+  sheet on an iPhone had none).
 - On iPad a game controller's input goes to DELOS alone (through GameController), never to UIKit as well: the D-pad could stop
   moving between the covers and up to the navigation, while the buttons still worked, until the side menu was opened and
   closed (owner's iPad with a DualSense). Not verified on a device yet.

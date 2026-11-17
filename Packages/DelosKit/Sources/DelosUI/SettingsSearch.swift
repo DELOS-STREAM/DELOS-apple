@@ -301,14 +301,8 @@ struct SettingsSearchView: View {
                 }
                 .focusable(false)
                 .scrollClipDisabled()
-                // The ends of the scrolling layer fade
-                .mask {
-                    HStack(spacing: 0) {
-                        LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing).frame(width: stage.px(LetterPicker.compactEdge))
-                        Color.black
-                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing).frame(width: stage.px(LetterPicker.compactEdge))
-                    }
-                }
+                // The ends of the scrolling layer fade where keys go on behind them
+                .scrollEdgeFade(.horizontal, FadeEdges(LetterPicker.compactEdge))
                 VStack(spacing: stage.px(gap)) {
                     FocusItem(id: Self.deleteID, model: focus, action: delete) { focused in
                         circle(Symbols.backspace, focused: focused, size: key)
@@ -415,10 +409,11 @@ struct SettingsSearchView: View {
             }
             .focusable(false)
             .scrollClipDisabled()
-            .scrollEdgeFades(top: stage.compact ? SettingsLayout.compactFadeTop : SettingsLayout.fadeTop, bottom: 40)
+            .scrollEdgeFade(.vertical, FadeEdges(
+                start: FadeEdge(solid: stage.compact ? SettingsLayout.compactFadeTop : SettingsLayout.fadeTop), end: FadeEdge(solid: 40)))
             .onChange(of: focus.focused) { _, now in
                 guard let id = now as? String, id.hasPrefix("search-result-") else { return }
-                withAnimation(reduceMotion ? nil : Motion.out(Motion.rowFocus)) { proxy.scrollTo(id) }
+                withAnimation(reduceMotion ? nil : SettingsScrollMotion.animation(distance: 0)) { proxy.scrollTo(id) }
             }
         }
     }

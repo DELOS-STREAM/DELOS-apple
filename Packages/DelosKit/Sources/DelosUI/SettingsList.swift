@@ -52,6 +52,7 @@ struct SettingsListScroll: ViewModifier {
     let compact: Bool
     @Binding var reveal: String?
     @State private var position = ScrollPosition(y: 0)
+    @State private var glide = ScrollGlide(pace: .list)
     @State private var metrics = SettingsScrollMetrics()
     /// Where the list is scrolling to (nil: at rest): a new focus is judged against it, not against where the spring is now.
     @State private var goal: Double?
@@ -61,7 +62,7 @@ struct SettingsListScroll: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .scrollPosition($position)
+            .scrollGlide(glide, axis: .vertical, position: $position)
             .onScrollGeometryChange(for: SettingsScrollMetrics.self) { geometry in
                 SettingsScrollMetrics(offset: geometry.contentOffset.y + geometry.contentInsets.top, viewport: geometry.containerSize.height, content: geometry.contentSize.height)
             } action: { _, now in
@@ -70,7 +71,9 @@ struct SettingsListScroll: ViewModifier {
             }
             .focusable(false)
             .scrollClipDisabled()
-            .modifier(SettingsListFades(metrics: metrics, top: fadeTop, bottom: fadeBottom))
+            // The top and bottom edges fade only while rows continue behind them, so the first and the last row's plate are
+            // never dimmed; the mask reaches to the sides for the plate's glow
+            .scrollEdgeFade(.vertical, FadeEdges(start: FadeEdge(solid: fadeTop), end: FadeEdge(solid: fadeBottom)))
             .environment(\.settingsRowFrames, frames)
             .onChange(of: focus.focused) { _, now in
                 guard let id = now as? String, contains(id) else { return }
@@ -78,9 +81,7 @@ struct SettingsListScroll: ViewModifier {
             }
             .onChange(of: resetKey) { _, _ in
                 goal = nil
-                var still = Transaction(animation: nil)
-                still.disablesAnimations = true
-                withTransaction(still) { position.scrollTo(y: 0) }
+                glide.jump(to: 0)
             }
             .task(id: reveal) {
                 guard let id = reveal else { return }
@@ -102,11 +103,10 @@ struct SettingsListScroll: ViewModifier {
         else { return }
         goal = next
         if reduced {
-            var still = Transaction(animation: nil)
-            still.disablesAnimations = true
-            withTransaction(still) { position.scrollTo(y: next) }
+            glide.jump(to: next)
         } else {
-            withAnimation(SettingsScrollMotion.animation(distance: abs(next - current) / scale)) { position.scrollTo(y: next) }
+            // One glide: a new focus while it runs retargets it and keeps its speed
+            glide.glide(to: next, unit: scale)
         }
     }
 }

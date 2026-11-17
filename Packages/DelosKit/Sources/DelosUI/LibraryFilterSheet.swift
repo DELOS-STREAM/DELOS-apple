@@ -126,11 +126,16 @@ struct LibraryFilterSheet: View {
                     }
                     .focusDrivenScroll()
                 }
-                // What does not fit is cut at the scroll area's edge (the rows keep 12 px at each side for their ring)
+                // What does not fit is cut at the scroll area's edge (the rows keep 12 px at each side for their ring) and fades
+                // where sections go on behind it (`fadeEdges(stage, chipScroll, 20f, 40f)`); only the edge with sections
+                // behind it fades, and the mask reaches far beyond the sides, so no chip, label or ring at rest is dimmed or cut
+                .scrollEdgeFade(.vertical, FadeEdges(start: FadeEdge(solid: 20), end: FadeEdge(solid: 40)))
                 .frame(height: min(contentHeight, scrollMax))
-                .onChange(of: focus.focused) { _, now in
+                // The section of the focused chip glides to the middle; read apart, so a move of the focus does not rebuild
+                // every chip of the sheet
+                .onFocusChange(focus) { now in
                     guard let section = LibraryFilterIDs.section(of: now) else { return }
-                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("filter-section-\(section)", anchor: .center) }
+                    withAnimation(SettingsScrollMotion.animation(distance: 0)) { proxy.scrollTo("filter-section-\(section)", anchor: .center) }
                 }
             }
             footer(active: filters.active)

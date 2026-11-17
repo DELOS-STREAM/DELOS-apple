@@ -234,10 +234,11 @@ struct StreamMenu: View {
         }
         .frame(width: stage.px(D.rowWidth(count: tiles.count)), height: stage.px(D.tile), alignment: .topLeading)
         if geometry.scrolls {
-            // The tiles keep their size and the row scrolls sideways under the focus; the ring, glow, pills and labels have room
+            // The tiles keep their size and the row scrolls sideways under the focus; the ring, glow, pills and labels have room,
+            // and an edge fades where tiles go on behind it
             let room = 110.0
             return AnyView(
-                FocusScroll(axis: .horizontal) {
+                FocusScroll(axis: .horizontal, fades: FadeEdges(DockGeometry.fade)) {
                     row
                         .padding(.leading, stage.px(DockGeometry.scrollSide))
                         .padding(.trailing, stage.px(DockGeometry.scrollSide))

@@ -114,31 +114,6 @@ import Testing
     }
 }
 
-@Suite struct RowFadeTests {
-    @Test func bothEdgesFadeWhereMoreCoversContinue() {
-        let stops = RowFade.stops(width: 1920, startClear: 0, startSolid: 120, endSolid: 260, endClear: 20)
-        let expected: [Double] = [0, 0, 120.0 / 1920.0, 1 - 260.0 / 1920.0, 1 - 20.0 / 1920.0, 1]
-        #expect(stops.map(\.location) == expected)
-        let opacities: [Double] = [0, 0, 1, 1, 0, 0]
-        #expect(stops.map(\.opacity) == opacities)
-    }
-
-    @Test func anEdgeWithNothingBeyondItIsNotFaded() {
-        let stops = RowFade.stops(width: 1920, startClear: 0, startSolid: 0, endSolid: 0, endClear: 0)
-        // Opaque from the left edge to the right edge
-        let locations: [Double] = [0, 0, 0, 1, 1, 1]
-        let opacities: [Double] = [0, 0, 1, 1, 0, 0]
-        #expect(stops.map(\.location) == locations)
-        #expect(stops.map(\.opacity) == opacities)
-    }
-
-    @Test func theLocationsNeverGoBackwards() {
-        let stops = RowFade.stops(width: 100, startClear: 0, startSolid: 400, endSolid: 400, endClear: 20)
-        let locations = stops.map(\.location)
-        #expect(locations.allSatisfy { (0...1).contains($0) })
-    }
-}
-
 @MainActor @Suite struct LibraryEndTests {
     @Test func theLastCoverIsAsFarFromTheRightEdgeAsTheFirstOneIsFromTheLeft() {
         // 150 - 988 × .055 + 300 × .055 / 2

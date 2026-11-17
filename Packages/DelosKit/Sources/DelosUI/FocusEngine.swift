@@ -92,12 +92,14 @@ extension FocusGeometry {
 @MainActor
 @Observable
 public final class FocusModel {
+    /// The focused item. A view that reads it is redrawn at every move of the focus; an item asks ``isFocused(_:)`` instead.
     public private(set) var focused: AnyHashable?
     @ObservationIgnored private var frames: [AnyHashable: CGRect] = [:]
     @ObservationIgnored private var actions: [AnyHashable: @MainActor () -> Void] = [:]
     @ObservationIgnored private var moves: [AnyHashable: [FocusDirection: AnyHashable]] = [:]
     @ObservationIgnored private var menus: [AnyHashable: @MainActor () -> ContextMenu?] = [:]
     @ObservationIgnored private var cues: [AnyHashable: Cue?] = [:]
+    @ObservationIgnored private var flags: [AnyHashable: FocusFlag] = [:]
 
     public init(initial: AnyHashable? = nil) {
         focused = initial
@@ -105,7 +107,26 @@ public final class FocusModel {
 
     public func focus(_ id: AnyHashable) {
         watchingForFirst = false
+        move(to: id)
+    }
+
+    /// Whether [id] has the focus. Observes only that item's own state: a move of the focus redraws the item that loses it
+    /// and the one that gains it, not every item of the screen (a row of covers re-evaluated as a whole at every step of a
+    /// held arrow costs the frames of its scroll).
+    func isFocused(_ id: AnyHashable) -> Bool {
+        if let flag = flags[id] { return flag.on }
+        // The stored value, unobserved: the asking view must not depend on every move of the focus
+        let flag = FocusFlag(on: _focused == id)
+        flags[id] = flag
+        return flag.on
+    }
+
+    /// Moves the focus to [id]; nothing changes, and nothing is redrawn, when it is there already.
+    private func move(to id: AnyHashable?) {
+        guard focused != id else { return }
+        if let old = focused { flags[old]?.on = false }
         focused = id
+        if let id { flags[id]?.on = true }
     }
 
     /// While set, the focus is on the first item in reading order of those registered so far (``focusFirstItem()``).
@@ -116,7 +137,7 @@ public final class FocusModel {
     /// the items as they register, so the answer does not depend on which one the layout reported first.
     func focusFirstItem() {
         watchingForFirst = true
-        if let first = fallback(near: nil) { focused = first }
+        if let first = fallback(near: nil) { move(to: first) }
     }
 
     /// - Parameters:
@@ -133,9 +154,9 @@ public final class FocusModel {
         self.moves[id] = moves
         menus[id] = menu
         if watchingForFirst, let first = fallback(near: nil) {
-            focused = first
+            move(to: first)
         } else if focused == nil {
-            focused = id
+            move(to: id)
         }
     }
 
@@ -151,7 +172,7 @@ public final class FocusModel {
         // the way back. So the focus moves on only if other items are still there once the layout has settled.
         Task { [weak self] in
             guard let self, focused == id, frames[id] == nil, let next = fallback(near: last) else { return }
-            focused = next
+            move(to: next)
         }
     }
 
@@ -216,18 +237,29 @@ public final class FocusModel {
         }
         watchingForFirst = false
         guard let focused, let current = frames[focused] else {
-            self.focused = fallback(near: nil)
+            move(to: fallback(near: nil))
             return self.focused != nil
         }
         if let target = moves[focused]?[direction], frames[target] != nil {
-            self.focused = target
+            move(to: target)
             return true
         }
         var others = frames
         others[focused] = nil
         guard let next = FocusGeometry.next(from: current, direction: direction, candidates: others) else { return false }
-        self.focused = next
+        move(to: next)
         return true
+    }
+}
+
+/// Whether one item has the focus (``FocusModel/isFocused(_:)``).
+@MainActor
+@Observable
+private final class FocusFlag {
+    var on: Bool
+
+    init(on: Bool) {
+        self.on = on
     }
 }
 
@@ -237,21 +269,23 @@ extension EnvironmentValues {
 }
 
 /// What a scroll view that follows the focus gives its items: ``FocusItem`` asks for itself to be brought into view when
-/// it gains the focus (a controller or the Siri Remote moves the focus; a custom focus does not scroll on its own).
+/// it gains the focus (a controller or the Siri Remote moves the focus; a custom focus does not scroll on its own), with its
+/// frame in the global space when it has been laid out.
 @MainActor
 final class FocusReveal {
-    var scrollTo: ((AnyHashable, Bool) -> Void)?
+    typealias Scroll = (_ id: AnyHashable, _ frame: CGRect?, _ animated: Bool) -> Void
+    var scrollTo: Scroll?
     private var pending: AnyHashable?
 
-    func reveal(_ id: AnyHashable, animated: Bool) {
-        if let scrollTo { scrollTo(id, animated) } else { pending = id }
+    func reveal(_ id: AnyHashable, frame: CGRect?, animated: Bool) {
+        if let scrollTo { scrollTo(id, frame, animated) } else { pending = id }
     }
 
-    func attach(_ scroll: @escaping (AnyHashable, Bool) -> Void) {
+    func attach(_ scroll: @escaping Scroll) {
         scrollTo = scroll
         guard let id = pending else { return }
         pending = nil
-        scroll(id, false)
+        scroll(id, nil, false)
     }
 }
 
@@ -260,41 +294,69 @@ extension EnvironmentValues {
 }
 
 /// A scroll view whose focused item stays in view: the item is centered, so the next one always peeks in at the edge
-/// (Android's focus margin). Not animated for reduced motion. The focus is the only thing that scrolls it: the content
-/// switches the keyboard scrolling of the scroll view off (``View/focusDrivenScroll()``).
+/// (Android's focus margin). The scroll is one continuous glide on the spring of the focus-driven lists (``ScrollGlide``,
+/// `FocusScroller` of DELOS for Android): every move of the focus retargets it and it keeps its speed, so a held arrow
+/// glides on instead of stepping. Not animated for reduced motion. The focus is the only thing that scrolls it: the
+/// content switches the keyboard scrolling of the scroll view off (``View/focusDrivenScroll()``). The edges fade where
+/// content is scrolled away behind them (``FadeEdges``, stage pixels), the mask reaching [bleed] beyond them along the
+/// axis and [outset] across it for the rings and glows of the items.
 struct FocusScroll<Content: View>: View {
-    var axis: Axis.Set = .horizontal
-    /// The cut edges' fades in stage pixels (top, bottom) of a vertical scroll view that continues beyond them.
-    var fades: (top: Double, bottom: Double)?
+    var axis: Axis = .horizontal
+    var fades = FadeEdges.row
+    var bleed = 0.0
+    var outset = 400.0
     @ViewBuilder let content: () -> Content
     @State private var reveal = FocusReveal()
+    @State private var glide = ScrollGlide(pace: .list)
+    @State private var position = ScrollPosition()
     @Environment(\.reducedMotion) private var reducedMotion
-    @State private var pace = ScrollPace()
+    @Environment(\.stage) private var stage
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView(axis, showsIndicators: false) { content().focusDrivenScroll() }
-                .modifier(OptionalFades(fades: fades))
+            ScrollView(axis == .horizontal ? .horizontal : .vertical, showsIndicators: false) { content().focusDrivenScroll() }
+                .scrollGlide(glide, axis: axis, position: $position)
+                .scrollEdgeFade(axis, fades, bleed: bleed, outset: outset)
                 .environment(\.focusReveal, reveal)
                 .onAppear {
-                    reveal.attach { id, animated in
-                        if animated && !reducedMotion {
-                            // A held arrow moves the focus every 50 ms: one short step each, not overlapping glides
-                            withAnimation(pace.animation(Motion.out(Motion.rowFocus))) { proxy.scrollTo(id, anchor: .center) }
-                        } else {
+                    let glide = glide, horizontal = axis == .horizontal, unit = stage.scale
+                    reveal.attach { id, frame, animated in
+                        guard animated, !reducedMotion, let frame else {
+                            glide.stop()
                             proxy.scrollTo(id, anchor: .center)
+                            return
                         }
+                        let view = glide.viewport
+                        glide.glide(
+                            to: horizontal
+                                ? glide.geometry.centering(itemStart: frame.minX, itemEnd: frame.maxX, viewStart: view.minX, viewEnd: view.maxX)
+                                : glide.geometry.centering(itemStart: frame.minY, itemEnd: frame.maxY, viewStart: view.minY, viewEnd: view.maxY),
+                            unit: unit)
                     }
                 }
         }
     }
 }
 
-private struct OptionalFades: ViewModifier {
-    let fades: (top: Double, bottom: Double)?
+/// Calls an action at each move of a model's focus from a view of its own (``View/onFocusChange(_:perform:)``).
+private struct FocusChangeObserver: View {
+    let model: FocusModel
+    let action: (AnyHashable?) -> Void
 
-    func body(content: Content) -> some View {
-        if let fades { content.scrollEdgeFades(top: fades.top, bottom: fades.bottom) } else { content }
+    var body: some View {
+        Color.clear
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .onChange(of: model.focused) { _, now in action(now) }
+    }
+}
+
+extension View {
+    /// Calls [perform] with the new focus at each move of [model]'s focus. The focus is read in a view of its own, so the
+    /// view this is put on does not depend on it: a screen that only scrolls along is not rebuilt, with all its items, at
+    /// every step of a held arrow.
+    func onFocusChange(_ model: FocusModel, perform: @escaping (AnyHashable?) -> Void) -> some View {
+        background(FocusChangeObserver(model: model, action: perform))
     }
 }
 
@@ -396,9 +458,10 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
         }
     }
 
-    /// The item gained the focus: its scroll view brings it into view.
+    /// The item gained the focus: its scroll view brings it into view, from where the item is laid out now.
     private func revealed(_ now: AnyHashable?, animated: Bool = true) {
-        if now == AnyHashable(id) { reveal?.reveal(AnyHashable(id), animated: animated) }
+        let key = AnyHashable(id)
+        if now == key { reveal?.reveal(key, frame: model.registeredFrames[key], animated: animated) }
     }
 
     #if os(tvOS)
@@ -467,13 +530,15 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
     }
     #else
     public var body: some View {
-        let item = content(model.focused == AnyHashable(id))
+        // Only this item's own focus: a move redraws the item that loses the focus and the one that gains it
+        let focused = model.isFocused(AnyHashable(id))
+        let item = content(focused)
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
                 model.register(AnyHashable(id), frame: frame, moves: moves, menu: menu, cue: clickCue, action: pressAction)
             }
             .onDisappear { model.unregister(AnyHashable(id)) }
             .contentShape(Rectangle())
-            .onChange(of: model.focused) { _, now in revealed(now) }
+            .onChange(of: focused) { _, now in if now { revealed(AnyHashable(id)) } }
             .onAppear { revealed(model.focused, animated: false) }
             .onTapGesture {
                 let wasFocused = model.focused == AnyHashable(id)

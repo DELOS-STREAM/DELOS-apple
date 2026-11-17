@@ -45,7 +45,10 @@ struct MarqueeLabel: View {
                         let offset = scrolling ? SettingsReadingMotion.marqueeOffset(
                             elapsed: clock.date.timeIntervalSince(started), width: naturalWidth / stage.scale) : 0
                         let lap = naturalWidth / stage.scale + SettingsReadingMotion.gap
-                        let fade = scrolling ? min(1, min(offset, lap - offset) / 28) : 0
+                        // Hidden at the left: what has scrolled away, back to nothing as the next lap's text arrives; at the
+                        // right: the rest of the text (MarqueeText's 28 and 36 px fades)
+                        let hiddenStart = scrolling ? stage.px(min(offset, lap - offset)) : 0
+                        let hiddenEnd = overflow ? (scrolling ? stage.px(lap) : naturalWidth - proxy.size.width) : 0
                         HStack(spacing: stage.px(SettingsReadingMotion.gap)) {
                             Text(text).fixedSize()
                                 .onGeometryChange(for: Double.self) { $0.size.width } action: { naturalWidth = $0 }
@@ -53,15 +56,9 @@ struct MarqueeLabel: View {
                         }
                         .offset(x: -stage.px(offset))
                         .frame(width: proxy.size.width, alignment: .leading)
-                        .mask {
-                            HStack(spacing: 0) {
-                                LinearGradient(colors: [.clear, .white], startPoint: .leading, endPoint: .trailing)
-                                    .frame(width: stage.px(28 * fade))
-                                Color.white
-                                LinearGradient(colors: [.white, .clear], startPoint: .leading, endPoint: .trailing)
-                                    .frame(width: overflow ? min(stage.px(36), proxy.size.width) : 0)
-                            }
-                        }
+                        .modifier(EdgeFadeMask(
+                            hiddenStart: hiddenStart, hiddenEnd: hiddenEnd, axis: .horizontal,
+                            start: FadeEdge(solid: stage.px(28)), end: FadeEdge(solid: min(stage.px(36), proxy.size.width))))
                         .clipped()
                     }
                     .onChange(of: active, initial: true) { _, _ in started = .now }
@@ -89,7 +86,6 @@ struct AutoScrollingHelp<Content: View>: View {
     @Environment(\.reducedMotion) private var reduced
     @State private var position = ScrollPosition(y: 0)
     @State private var extent = Extent()
-    @State private var offset = 0.0
 
     private struct Extent: Equatable, Hashable {
         var content = 0.0
@@ -114,22 +110,9 @@ struct AutoScrollingHelp<Content: View>: View {
         .onScrollGeometryChange(for: Extent.self) { geometry in
             Extent(content: geometry.contentSize.height, viewport: geometry.containerSize.height)
         } action: { _, value in extent = value }
-        .onScrollGeometryChange(for: Double.self) { geometry in
-            geometry.contentOffset.y
-        } action: { _, value in if edgeFade != nil { offset = value } }
-        .mask {
-            // The fade at each edge: the whole [inset] at both ends of a text that overflows, or, in the dock, as much as
-            // is scrolled away behind the edge
-            let top: CGFloat = edgeFade.map { min(stage.px($0), CGFloat(max(offset, 0))) } ?? (extent.overflow > 0 ? stage.px(inset) : 0)
-            let bottom: CGFloat = edgeFade.map { min(stage.px($0), CGFloat(max(extent.overflow - offset, 0))) } ?? (extent.overflow > 0 ? stage.px(inset) : 0)
-            VStack(spacing: 0) {
-                LinearGradient(colors: [.clear, .white], startPoint: .top, endPoint: .bottom)
-                    .frame(height: top)
-                Color.white
-                LinearGradient(colors: [.white, .clear], startPoint: .top, endPoint: .bottom)
-                    .frame(height: bottom)
-            }
-        }
+        // Each edge fades as far as the text continues behind it: over [inset] (which is padding at rest), or in the dock over
+        // [edgeFade]
+        .scrollEdgeFade(.vertical, FadeEdges(edgeFade ?? inset), outset: 0)
         .task(id: Run(identity: identity, extent: extent, scale: stage.scale, reduced: reduced)) {
             var reset = Transaction(animation: nil)
             reset.disablesAnimations = true

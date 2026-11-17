@@ -695,7 +695,7 @@ tabs between their L1 and R1 badges at y 206, centred, the rows from y 312 and t
 their right. A compact stage (`SettingsLayout`) drops the title, puts the tabs at y 128 (only the selected one keeps its
 label, as on every stage under 1760 px wide), the list at y 202 with 48 px margins and the help as a dock under it
 (`HelpDockLayout`: a quarter of the stage, room for three tall rows above it, and the glass of the panel). The list's edges
-fade only while rows lie beyond them, growing with the first pixels scrolled (`SettingsListFades`, 14/90 px, 24/40 px compact),
+fade only while rows lie beyond them, growing with the first pixels scrolled (`scrollEdgeFade`, 14/90 px, 24/40 px compact),
 and the focused row is kept 72 px from the top and 110 px from the bottom, scrolling only when it leaves them on a critically
 damped spring that settles in 600 to 950 ms (`SettingsScrollMotion`, Android's `MarginBringIntoView`). The tabs
 are a `TabRow` placed by `TabRowLayout` (centred on the stage, or flush right beside the compact search circle) on a
@@ -1081,6 +1081,37 @@ The game background's hero is fitted to the width at the top and fades into a bl
 16:9 that band would fill only a third of the screen, so it is scaled up to a share of the hero area that grows from half at 16:9 to two thirds at 4:3 and beyond
 (`HeroGeometry.minBandShare`; its sides cropped equally). On 16:9 a SteamGridDB hero already fills more than half, so
 nothing changes there.
+
+The row moves by one scroll target per focus step (`LibraryScroll`), glided by `ScrollGlide`: a critically damped spring
+(`GlideSpring`, Android's `ListScrollDriver`) stepped on a display link that asks for up to 120 frames a second, which sets
+the `ScrollPosition` without an animation every frame. Every step retargets it and the speed carries over: a single press
+eases in and out, a held arrow or a quick series of presses is one steady glide. SwiftUI's own animated scroll could not
+do this: each new target started from rest after a frame without movement, so a held arrow hopped one cover in 50 ms and
+stood still, and a fast tapper's presses alternated between a glide and a hop (the old `ScrollPace`). The library's spring
+settles in 250 ms (90 % after 167 ms; Android restarts a 200 ms ease-out, `FastScroll`, at every step); the rows that
+follow the focus (`FocusScroll`: chips, pills, menus, the dock, avatars, centred on the focused item) and the settings
+lists use the lists' pace (`SettingsScrollMotion`: 600 to 950 ms by distance, braking a fast retarget close by). A touch
+that drags the scroll view stops the glide; the wrap round the row and the filter sheet's sections keep their SwiftUI
+animations. A focus step redraws only the two items whose focus changed (`FocusModel.isFocused`, one observable flag per
+item; a view that reads `focused` itself is redrawn at every step), the covers are an equatable view of their own
+(`LibraryCovers`), so the library's redraws at each step do not rebuild them, and the root reads the game background in
+`ShellBackdrop`, so a new focused game's background redraws the backdrop alone.
+
+### Edge fades
+
+Every scrolling row and list fades where content is cut off, as Android's `fadeEdges(stage, scroll, …)` and `fadeMask`
+(`EdgeFade.swift`): an edge fades only while content is hidden beyond it, and the fade grows with how much is hidden
+(`EdgeFadeMath.strength`: hidden ÷ fade length, full once that much is hidden), so the first and the last item's ring and
+glow are never dimmed at rest. `FadeEdge` is one edge at full strength in stage pixels (clear up to `clear`, opaque from
+`solid`); the strength scales both. The mask reaches `bleed` beyond the edges along the axis (opaque while nothing is
+hidden there, clear at full strength: a scroll view that does not clip shows a ring or glow there at rest and cuts
+scrolled-away items) and `outset` beyond the sides across it (a chip's ring, a cover's glow), so it never clips the text
+or the ring of what is shown. `scrollEdgeFade` reads the scroll view's geometry; `EdgeFadeMask` takes the hidden amounts
+directly and animates them (the marquee, the info row's badges). The lengths are Android's: the library row 120 px at the
+left and 260 px with a 20 px clear strip at the right (72 px on a compact stage), chip and pill rows 24 px (`FadeEdges.row`),
+tab rows 40, menus 34, the filter sheet's sections 20/40, the centered column 48, the side menu 16/40 inside its 56 px
+glow room, the stream menu's rows 26/64 and its dock 80, the circle rows 40 and the avatars 52 with a 40 px bleed, the
+artwork grid 30/70, the marquee 28/36 and the badges 40. Artwork's toolbar and filter strip do not scroll and have none.
 
 ## Strings
 

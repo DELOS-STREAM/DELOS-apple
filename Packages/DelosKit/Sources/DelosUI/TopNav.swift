@@ -285,8 +285,11 @@ struct SideMenu: View {
             VStack(alignment: .leading, spacing: stage.px(10)) {
                 header
                     .staggerEntrance()
-                // What does not fit scrolls, with its edges fading: the focus brings a row into view
-                FocusScroll(axis: .vertical, fades: (Self.glowVertical + 16, Self.glowVertical + 40)) {
+                // What does not fit scrolls, with its edges fading: the focus brings a row into view. The scroll view reaches
+                // the glow's room beyond the rows, which is clear while rows continue behind that edge (`SideMenuLayer`)
+                FocusScroll(axis: .vertical, fades: FadeEdges(
+                    start: FadeEdge(solid: Self.glowVertical + 16, clear: Self.glowVertical),
+                    end: FadeEdge(solid: Self.glowVertical + 40, clear: Self.glowVertical))) {
                     VStack(alignment: .leading, spacing: stage.px(10)) {
                         ForEach(QuickSettings.rows(appearance)) { row in
                             sideRow(row) { onStep(row.id, 1) }

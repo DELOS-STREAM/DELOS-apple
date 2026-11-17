@@ -53,7 +53,9 @@ struct TabRow<ID: Hashable>: View {
             stageWidth: stage.width, rowWidth: natural / stage.scale, outset: ShoulderLabel.outset, left: left, right: right, centred: centred, spill: !stage.compact)
         ZStack(alignment: .topLeading) {
             if placement.scrolls {
+                // Fading at the edge that has more tabs behind it (`tabScroll`)
                 ScrollView(.horizontal, showsIndicators: false) { row }
+                    .scrollEdgeFade(.horizontal, .tabs)
                     .frame(width: stage.px(placement.width))
                     .offset(x: stage.px(placement.x))
             } else {

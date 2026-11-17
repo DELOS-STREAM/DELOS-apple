@@ -265,6 +265,9 @@ struct DockGeometry: Equatable, Sendable {
     let width: Double
     /// The least room kept at each side of a row that scrolls (the ring and its glow stay on the screen).
     static let scrollSide = 80.0
+    /// The fade at an edge where the row goes on, from the stage's edge (`DockGeometry.FADE`): it ends before the focused
+    /// tile's ring.
+    static let fade = 80.0
 
     var rowWidth: Double { StreamDockLayout.rowWidth(count: count) }
 

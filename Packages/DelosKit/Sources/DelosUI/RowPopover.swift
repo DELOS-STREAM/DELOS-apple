@@ -226,6 +226,8 @@ private struct OptionsList: View {
                     .focusDrivenScroll()
                 }
                 .focusable(false)
+                // A long list fades where options go on behind its edges, like a context menu's
+                .scrollEdgeFade(.vertical, .menu)
                 .frame(height: stage.px(listHeight))
                 .onAppear { proxy.scrollTo(RowPopover.optionID(selected ?? 0)) }
                 .onChange(of: focus.focused) { _, now in if let now { proxy.scrollTo(now) } }
