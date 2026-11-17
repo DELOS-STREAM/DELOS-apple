@@ -536,14 +536,18 @@ private struct GameBanner: View {
         let height = stage.compact ? GameSettingsLayout.compactBannerHeight : GameSettingsLayout.bannerHeight
         ZStack(alignment: .top) {
             PlaceholderArt(hue: placeholder.hue, hue2: placeholder.hue2, icon: placeholder.icon, glyphSize: 420, glyphRight: 84, glyphTop: -0.14, glyphAlpha: 0.14)
-            if let lens {
-                // The stage-wide top of the hero's overscanned area (2100 x 1260 at 16:9), as the dashboard shows it
-                Image(decorative: lens, scale: 1)
-                    .resizable()
-                    .interpolation(.low)
-                    .frame(width: stage.px(area.width), height: stage.px(area.height))
-                    .offset(y: stage.px(-(area.height - stage.height) / 2))
-                    .transition(.opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000)))
+            // The stage-wide top of the hero's overscanned area (2100 x 1260 at 16:9), as the dashboard shows it. An overlay, so the
+            // wider picture overflows the banner evenly on both sides (Android's `requiredSize`) instead of widening it, and the
+            // whole screen with it, the moment the art arrives
+            Color.clear.overlay(alignment: .top) {
+                if let lens {
+                    Image(decorative: lens, scale: 1)
+                        .resizable()
+                        .interpolation(.low)
+                        .frame(width: stage.px(area.width), height: stage.px(area.height))
+                        .offset(y: stage.px(-(area.height - stage.height) / 2))
+                        .transition(.opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000)))
+                }
             }
             LinearGradient(stops: [
                 .init(color: colors.bg.opacity(0.7).color, location: 0), .init(color: colors.bg.opacity(0.2).color, location: 0.5),

@@ -203,6 +203,46 @@ import Testing
         #expect(undone == 1)
         #expect(shell.navigator.screenModal == nil)
     }
+
+    @Test(arguments: [MenuCommand.back, .toastAction, .accept])
+    func closingTheFilterSheetGivesTheDPadBackToTheLibrary(_ close: MenuCommand) async {
+        let shell = await library(seeded: true)
+        shell.press(.toastAction)
+        await shell.host.until { shell.navigator.screenModal != nil }
+        let sheet = try! #require(shell.navigator.screenModal)
+        await shell.host.until { sheet.registeredFrames[LibraryFilterIDs.done] != nil }
+        // B and Y close it anywhere, A on Done
+        if close == .accept { sheet.focus(LibraryFilterIDs.done) }
+        shell.letGatesPass()
+        shell.press(close)
+        await shell.host.until { shell.navigator.screenModal == nil }
+        #expect(shell.navigator.screenModal == nil)
+        #expect(shell.focused == "app-1")
+        await shell.expectTheDPadMovesTheLibrary(from: "app-1")
+    }
+
+    // MARK: The portal
+
+    @Test func thePortalOpensTheLibraryWithTheDPadWorkingAtOnce() async {
+        let shell = ShellHarness()
+        shell.fx.actions.connection.reducedMotion = true
+        await shell.waitFor(pc)
+        #expect(shell.focused == pc)
+        shell.letGatesPass()
+        shell.press(.accept)
+        await shell.host.until { shell.fx.actions.connection.isActive }
+        #expect(shell.fx.actions.connection.isActive)
+        // The portal holds every command but B
+        shell.press(.right)
+        #expect(shell.navigator.current == .start)
+        #expect(shell.focused == pc)
+        for _ in 0..<3 where shell.navigator.current == .start { await shell.host.until { shell.navigator.current != .start } }
+        #expect(shell.navigator.stack.map(\.screen) == [.start, .home(hostID: hostID)])
+        await shell.host.until { !shell.fx.actions.connection.isActive && shell.focused == "app-1" }
+        #expect(!shell.fx.actions.connection.isActive)
+        #expect(shell.focused == "app-1")
+        await shell.expectTheDPadMovesTheLibrary(from: "app-1")
+    }
 }
 
 extension ShellHarness {
@@ -214,5 +254,16 @@ extension ShellHarness {
 
     func focusItem(_ id: String) { navigator.focus.focus(id) }
     func focusFirstCover() { navigator.focus.focus("app-1") }
+
+    /// Right moves to the next cover, Left back to [cover], Up to the top navigation: the library's D-pad works.
+    func expectTheDPadMovesTheLibrary(from cover: String) async {
+        await waitFor("app-10")
+        press(.right)
+        #expect(focused?.hasPrefix("app-") == true && focused != cover, "Right moves to the next cover")
+        press(.left)
+        #expect(focused == cover, "Left moves back")
+        press(.up)
+        #expect(focused?.hasPrefix("nav-") == true, "Up reaches the navigation")
+    }
 }
 #endif

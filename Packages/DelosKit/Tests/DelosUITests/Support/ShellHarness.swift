@@ -96,6 +96,10 @@ struct HarnessRoot: View {
                              onStep: { _, _ in }, onSettings: {}, hidden: fx.actions.hiddenRow(pcName: "Meiton-PC"))
                 }
                 LayerHost(layers: fx.layers, navigator: navigator)
+                // The portal into a PC, as the root shows it: the start screen's PC connects through it
+                if let portal = fx.actions.connection.portal {
+                    PortalOverlay(portal: portal, burst: fx.actions.connection.burst, focus: router.portalFocus, onCancel: { fx.actions.connection.cancel() })
+                }
             }
             .environment(\.modalFocus, router.modalFocus))
     }
@@ -107,7 +111,7 @@ struct HarnessRoot: View {
         case .createProfile(let editing):
             CreateProfileScreen(editing: editing, initial: editing ? fx.profiles.current : nil, focus: entry.focus, actions: fx.actions) { _, _ in }
         case .start:
-            StartScreen(focus: entry.focus, profile: fx.profiles.current, defaultPC: nil, actions: fx.actions, onPC: { _ in },
+            StartScreen(focus: entry.focus, profile: fx.profiles.current, defaultPC: nil, actions: fx.actions, onPC: { fx.actions.connect($0.id) },
                         onPair: { navigator.push(.pair, focus: PairPCScreen.firstFocus(fx.hosts.hosts)) })
         case .profile:
             ProfileScreen(profile: fx.profiles.current!, count: 1, focus: entry.focus, actions: fx.actions,

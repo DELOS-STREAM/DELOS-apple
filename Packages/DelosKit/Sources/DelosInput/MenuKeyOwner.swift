@@ -62,6 +62,12 @@ extension MenuKeys.Key {
 /// commands take priority over the system's behavior (`wantsPriorityOverSystemBehavior`: the focus system and the
 /// keyboard scrolling of scroll views) and do nothing. The keys themselves are read by ``MenuInput``.
 ///
+/// The game controllers are the interface's alone too: a `GCEventInteraction` on the window has UIKit deliver their
+/// events only through GameController, to ``MenuInput``. Without one the system may also turn a controller's input into
+/// UIKit events for whatever view holds the UIKit focus or the first responder (`GCEventViewController`: controllers
+/// "control the general UIKit user interface and for many views that is the default behavior"), and a press that UIKit
+/// takes never reaches ``MenuInput``.
+///
 /// It lets go of the first responder while a text field is typed in (``setTyping(_:)``), so the field gets its arrows
 /// back, and takes it again when the typing ends.
 @MainActor
@@ -73,6 +79,11 @@ public final class MenuKeyOwnerView: UIView {
     private var typing = false
     private var observer: NSObjectProtocol?
     private var reclaimObserver: NSObjectProtocol?
+    private let controllerEvents: GCEventInteraction = {
+        let interaction = GCEventInteraction()
+        interaction.handledEventTypes = .gamepad
+        return interaction
+    }()
     private lazy var commands: [UIKeyCommand] = MenuKeys.Key.allCases.map { key in
         let command = UIKeyCommand(input: key.input, modifierFlags: [], action: #selector(swallow))
         command.wantsPriorityOverSystemBehavior = true
@@ -108,7 +119,9 @@ public final class MenuKeyOwnerView: UIView {
         observer = nil
         reclaimObserver.map(NotificationCenter.default.removeObserver)
         reclaimObserver = nil
-        guard window != nil else { return }
+        controllerEvents.view?.removeInteraction(controllerEvents)
+        guard let window else { return }
+        window.addInteraction(controllerEvents)
         claim()
         reclaimObserver = NotificationCenter.default.addObserver(forName: Self.reclaim, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.claim() }
