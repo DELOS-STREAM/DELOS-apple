@@ -9,6 +9,7 @@ struct BootScreen: View {
     var onSkip: (@MainActor () -> Void)?
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
+    @Environment(Navigator.self) private var navigator: Navigator?
 
     var body: some View {
         VStack(spacing: stage.px(28)) {
@@ -36,6 +37,8 @@ struct BootScreen: View {
             }
             .padding(.top, stage.px(26))
         }
+        // The companion screen says what this step is; B is listed only when Boot was opened from another screen
+        .companionPage { CompanionBootPage.page(canGoBack: navigator?.canGoBack ?? false) }
     }
 }
 
@@ -162,6 +165,8 @@ struct CreateProfileScreen: View {
             }
             .tvFocusSection()
         }
+        // The draft as it is on the main display, never saved by the companion screen
+        .companionPage { CompanionCreateProfilePage.page(name: name, avatar: avatar) }
     }
 
     /// All avatars in rows. Up and down move to the same column; left at the start of a row and right at its end

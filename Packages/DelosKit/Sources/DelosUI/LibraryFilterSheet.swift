@@ -42,7 +42,7 @@ struct LibraryFilterSheet: View {
     let state: LibraryFilterState
     let focus: FocusModel
     let onChange: (MetadataFilters) -> Void
-    let onReset: () -> Void
+    let onReset: @MainActor () -> Void
     let onClose: () -> Void
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
@@ -155,6 +155,12 @@ struct LibraryFilterSheet: View {
                 // A tap on the panel stays on it; a tap beside it reaches the scrim
                 .contentShape(shape)
                 .onTapGesture {}
+        }
+        // The companion screen summarises the open sheet: the same count, the active criteria and the sheet's own reset
+        .companionPage {
+            CompanionFilterPage.page(CompanionFilter(
+                library: true, chips: CompanionFilter.libraryLabels(state.filters, genres: genres, themes: themes),
+                count: .counting(shown: state.matching, total: state.games.count, active: state.filters.active), unit: .games, onReset: onReset))
         }
     }
 

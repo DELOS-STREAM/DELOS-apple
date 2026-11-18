@@ -272,6 +272,12 @@ private struct BuiltInArtworkScreen: View {
         .background(BuiltInHintSync(focus: focus, navigator: navigator))
         .onAppear { focus.focus(Self.backID) }
         .task { picture = await art.image(hostID: hostID, app: app, kind: .wide) }
+        // The companion screen shows the built-in wide image, read-only (no Use this image)
+        .companionPage {
+            CompanionArtworkPage.page(CompanionArtwork(
+                title: app.title, image: picture, placeholderRatio: ArtworkTab.wide.ratio,
+                lines: [CompanionArtLine(L("companion_art_builtin"), tone: .muted, priority: 100)], inUse: false, onUse: nil))
+        }
     }
 }
 
@@ -365,6 +371,7 @@ private struct ArtworkContent: View, Equatable {
             .offset(y: stage.px(324 + top))
             ArtworkSheetLayer(model: model, left: left, right: right, top: 280 + top, onReset: resetFilters, onClose: closeSheet)
             ArtworkHintSync(model: model, focus: focus, navigator: navigator)
+            CompanionArtworkPublisher(model: model, focus: focus, actions: actions, onReset: resetFilters)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .modifier(SheetModalFocus(model: model))

@@ -61,6 +61,8 @@ struct ProfileScreen: View {
                 .staggerEntrance()
             }
         }
+        // The companion screen shows the profile with what it changed (read-only)
+        .companionProfile(profile, actions: actions)
     }
 }
 
