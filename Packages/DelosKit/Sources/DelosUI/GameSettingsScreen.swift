@@ -438,7 +438,7 @@ private struct GameSettingsPanel: View {
 
 // MARK: Custom marks of a row
 
-/// The CUSTOM badge of a row the app overrides (`CustomBadge`).
+/// The CUSTOM badge of a row the app overrides (`CustomBadge`), in capitals in every language.
 struct CustomBadge: View {
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
@@ -446,7 +446,7 @@ struct CustomBadge: View {
     var body: some View {
         HStack(spacing: stage.px(6)) {
             SymbolView(symbol: Symbols.tune, size: 17, color: colors.onAccent3, filled: true)
-            Text("CUSTOM") // l10n-ignore
+            Text(L("row_badge_custom").uppercased(with: .current))
                 .font(DelosFonts.figtree(stage.tpx(14), .heavy))
                 .tracking(stage.tpx(14) * 0.06)
                 .foregroundStyle(colors.onAccent3.color)

@@ -32700,6 +32700,71 @@
         }
       }
     },
+    "help_async_decode_frames": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dekodér vrací snímky asynchronně, místo aby se čekalo na každý zvlášť. Jen pro H.264, HEVC a AV1. Vypni, pokud je dekódování nestabilní."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Decoder liefert Frames asynchron, statt auf jeden einzeln zu warten. Nur H.264, HEVC und AV1. Ausschalten, wenn das Decodieren instabil ist."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The decoder returns frames asynchronously instead of waiting for each one. H.264, HEVC and AV1 only. Turn off if decoding is unstable."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El decodificador entrega los fotogramas de forma asíncrona en lugar de esperar a cada uno. Solo H.264, HEVC y AV1. Desactívalo si la decodificación es inestable."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le décodeur rend les images de façon asynchrone au lieu d’attendre chacune. H.264, HEVC et AV1 uniquement. Désactive si le décodage est instable."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フレームを1枚ずつ待たずに、デコーダーが非同期で返します。H.264、HEVC、AV1のみ。デコードが不安定な場合はオフにしてください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "프레임마다 기다리지 않고 디코더가 비동기로 프레임을 돌려줘요. H.264, HEVC, AV1에만 적용돼요. 디코딩이 불안정하면 꺼 주세요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O decodificador entrega os quadros de forma assíncrona em vez de esperar por cada um. Apenas H.264, HEVC e AV1. Desative se a decodificação ficar instável."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Декодер повертає кадри асинхронно, а не чекає на кожен окремо. Лише H.264, HEVC і AV1. Вимкни, якщо декодування нестабільне."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解码器异步返回帧，而不是逐帧等待。仅限 H.264、HEVC 和 AV1。解码不稳定时请关闭。"
+          }
+        }
+      }
+    },
     "help_checkbox_absolute_mouse_mode": {
       "extractionState": "manual",
       "localizations": {
@@ -32761,71 +32826,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "使用绝对定位，而不是游戏中的相对移动。适合远程桌面；许多游戏需要相对输入。"
-          }
-        }
-      }
-    },
-    "help_checkbox_async_decode": {
-      "extractionState": "manual",
-      "localizations": {
-        "cs": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Zpětná volání MediaCodec místo dotazování. Jen pro H.264, HEVC a AV1. Vypni, pokud je dekódování nestabilní."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "MediaCodec-Callbacks statt Polling. Nur H.264, HEVC und AV1. Ausschalten, wenn das Decodieren instabil ist."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "MediaCodec callbacks instead of polling. H.264, HEVC and AV1 only. Turn off if decoding is unstable."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Callbacks de MediaCodec en lugar de sondeo. Solo H.264, HEVC y AV1. Desactívalo si la decodificación es inestable."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rappels MediaCodec au lieu d’une interrogation permanente. H.264, HEVC et AV1 uniquement. Désactive si le décodage est instable."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ポーリングではなくMediaCodecのコールバックを使います。H.264、HEVC、AV1のみ。デコードが不安定な場合はオフにしてください。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "폴링 대신 MediaCodec 콜백을 사용해요. H.264, HEVC, AV1에만 적용돼요. 디코딩이 불안정하면 꺼 주세요."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Callbacks do MediaCodec em vez de polling. Apenas H.264, HEVC e AV1. Desative se a decodificação ficar instável."
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Зворотні виклики MediaCodec замість опитування. Лише H.264, HEVC і AV1. Вимкни, якщо декодування нестабільне."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "使用 MediaCodec 回调代替轮询。仅限 H.264、HEVC 和 AV1。解码不稳定时请关闭。"
           }
         }
       }
@@ -40955,67 +40955,67 @@
         }
       }
     },
-    "help_video_format_pyrowave": {
+    "help_video_format_pyrowave_gpu": {
       "extractionState": "manual",
       "localizations": {
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Waveletový kodek na GPU s vlastním dekodérem ve Vulkanu. Vyžaduje rychlé spojení a mnohem vyšší bitrate."
+            "value": "Waveletový kodek na GPU s vlastním dekodérem na GPU. Vyžaduje rychlé spojení a mnohem vyšší bitrate."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "GPU-Wavelet-Codec mit eigenem Vulkan-Decoder. Erfordert eine schnelle Verbindung und deutlich höhere Bitrate."
+            "value": "GPU-Wavelet-Codec mit eigenem GPU-Decoder. Erfordert eine schnelle Verbindung und deutlich höhere Bitrate."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "GPU wavelet codec with its own Vulkan decoder. Needs a fast link and far higher bitrate."
+            "value": "GPU wavelet codec with its own GPU decoder. Needs a fast link and far higher bitrate."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Códec wavelet en GPU con su propio decodificador Vulkan. Requiere un enlace rápido y un bitrate mucho más alto."
+            "value": "Códec wavelet en GPU con su propio decodificador en GPU. Requiere un enlace rápido y un bitrate mucho más alto."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codec à ondelettes sur GPU avec son propre décodeur Vulkan. Nécessite une liaison rapide et un débit bien plus élevé."
+            "value": "Codec à ondelettes sur GPU avec son propre décodeur GPU. Nécessite une liaison rapide et un débit bien plus élevé."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "独自のVulkanデコーダーを持つ、GPUウェーブレットコーデックです。高速な回線と、はるかに高いビットレートが必要です。"
+            "value": "独自のGPUデコーダーを持つ、GPUウェーブレットコーデックです。高速な回線と、はるかに高いビットレートが必要です。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "자체 Vulkan 디코더를 쓰는 GPU 웨이블릿 코덱이에요. 빠른 연결과 훨씬 높은 비트레이트가 필요해요."
+            "value": "자체 GPU 디코더를 쓰는 GPU 웨이블릿 코덱이에요. 빠른 연결과 훨씬 높은 비트레이트가 필요해요."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codec wavelet de GPU com decodificador Vulkan próprio. Requer uma conexão rápida e bitrate bem maior."
+            "value": "Codec wavelet de GPU com decodificador de GPU próprio. Requer uma conexão rápida e bitrate bem maior."
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Вейвлет-кодек на GPU з власним декодером Vulkan. Потрібне швидке з’єднання й набагато вищий бітрейт."
+            "value": "Вейвлет-кодек на GPU з власним декодером на GPU. Потрібне швидке з’єднання й набагато вищий бітрейт."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "基于 GPU 的小波编解码器，使用专用的 Vulkan 解码器。需要高速链路和高得多的码率。"
+            "value": "基于 GPU 的小波编解码器，使用专用的 GPU 解码器。需要高速链路和高得多的码率。"
           }
         }
       }
@@ -59568,6 +59568,71 @@
           "stringUnit": {
             "state": "translated",
             "value": "720p"
+          }
+        }
+      }
+    },
+    "row_badge_custom": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vlastní"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Angepasst"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personalizado"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personnalisé"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カスタム"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사용자 지정"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personalizado"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Власне"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义"
           }
         }
       }
@@ -83887,71 +83952,6 @@
         }
       }
     },
-    "stream_help_sharpness": {
-      "extractionState": "manual",
-      "localizations": {
-        "cs": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Závěrečné zostření. 0 ho vypne, ne však rekonstrukci SGSR 1. V režimu Jen zostření je to celý efekt. Platí pro tento stream."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Abschließende Schärfung. 0 deaktiviert sie, nicht die SGSR-1-Rekonstruktion. Bei „Nur schärfen“ ist sie der gesamte Effekt. Gilt für diesen Stream."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Final sharpening. 0 disables it, not SGSR 1 reconstruction. In Sharpen only it is the whole effect. Lasts for this stream."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nitidez final. 0 la desactiva, pero no la reconstrucción de SGSR 1. En Solo nitidez es todo el efecto. Dura lo que dure este stream."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Accentuation finale. 0 la désactive, pas la reconstruction SGSR 1. Avec Netteté seule, c’est tout l’effet. Dure le temps de ce stream."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最終のシャープ化です。0で無効になりますが、SGSR 1の再構築は無効になりません。「シャープのみ」では、これが効果のすべてです。このストリームの間だけ有効です。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "마지막 선명화 단계예요. 0이면 끄는 것이며 SGSR 1 복원은 끄지 않아요. 선명화만 모드에서는 이것이 효과 전부예요. 이번 스트림 동안 유지돼요."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nitidez final. 0 a desativa, mas não a reconstrução do SGSR 1. Em Só nitidez, é o efeito inteiro. Vale neste stream."
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Фінальне підвищення різкості. 0 вимикає його, а не відновлення SGSR 1. У режимі «Лише різкість» це весь ефект. Діє для цього стріму."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最终锐化。0 表示关闭锐化，但不会关闭 SGSR 1 重建。在仅锐化模式下，它就是全部效果。仅对本次串流有效。"
-          }
-        }
-      }
-    },
     "stream_help_supersampling": {
       "extractionState": "manual",
       "localizations": {
@@ -84338,6 +84338,71 @@
           "stringUnit": {
             "state": "translated",
             "value": "将低分辨率串流超分，或对原生分辨率串流进行超采样。会占用 GPU 时间；实时生效，并为此应用保留。"
+          }
+        }
+      }
+    },
+    "stream_help_upscaler_sharpness": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Závěrečné zostření. 0 ho vypne. V režimu Jen zostření je to celý efekt. Platí pro tento stream."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abschließende Schärfung. 0 deaktiviert sie. Bei „Nur schärfen“ ist sie der gesamte Effekt. Gilt für diesen Stream."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Final sharpening. 0 disables it. In Sharpen only it is the whole effect. Lasts for this stream."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nitidez final. 0 la desactiva. En Solo nitidez es todo el efecto. Dura lo que dure este stream."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accentuation finale. 0 la désactive. Avec Netteté seule, c’est tout l’effet. Dure le temps de ce stream."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最終のシャープ化です。0で無効になります。「シャープのみ」では、これが効果のすべてです。このストリームの間だけ有効です。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "마지막 선명화 단계예요. 0이면 꺼져요. 선명화만 모드에서는 이것이 효과 전부예요. 이번 스트림 동안 유지돼요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nitidez final. 0 a desativa. Em Só nitidez, é o efeito inteiro. Vale neste stream."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Фінальне підвищення різкості. 0 вимикає його. У режимі «Лише різкість» це весь ефект. Діє для цього стріму."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最终锐化。0 表示关闭锐化。在仅锐化模式下，它就是全部效果。仅对本次串流有效。"
           }
         }
       }

@@ -418,7 +418,7 @@ struct StreamSettingsForm: Equatable {
         case .av1: L("help_video_format_forceav1")
         case .hevc: L("help_video_format_forceh265")
         case .h264: L("help_video_format_neverh265")
-        case .pyroWave: L("help_video_format_pyrowave")
+        case .pyroWave: L("help_video_format_pyrowave_gpu")
         }
     }
 

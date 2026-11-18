@@ -66,6 +66,138 @@
           }
         }
       }
+    },
+    "NSHumanReadableCopyright": {
+      "comment": "The Mac's About window (Shared.xcconfig carries the English text). DELOS for Apple is the product's name.",
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELOS for Apple je svobodný software pod licencí GNU General Public License, verze 3."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELOS for Apple ist freie Software unter der GNU General Public License, Version 3."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELOS for Apple is free software under the GNU General Public License, version 3."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELOS for Apple es software libre bajo la GNU General Public License, versión 3."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELOS for Apple est un logiciel libre sous licence GNU General Public License, version 3."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELOS for Appleは、GNU General Public License バージョン3に基づくフリーソフトウェアです。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELOS for Apple은 GNU General Public License 버전 3에 따른 자유 소프트웨어예요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O DELOS for Apple é software livre sob a GNU General Public License, versão 3."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELOS for Apple — вільне програмне забезпечення за ліцензією GNU General Public License, версія 3."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELOS for Apple 是依据 GNU 通用公共许可证第 3 版发布的自由软件。"
+          }
+        }
+      }
+    },
+    "NSLocalNetworkUsageDescription": {
+      "comment": "The permission prompt for the local network (Shared.xcconfig carries the English text). DELOS is never translated or inflected.",
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aplikace DELOS používá místní síť k vyhledání herního PC a streamování z něj."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELOS nutzt das lokale Netzwerk, um deinen Gaming-PC zu finden und von ihm zu streamen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELOS uses the local network to find your gaming PC and stream from it."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELOS usa la red local para encontrar tu PC para juegos y hacer streaming desde él."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELOS utilise le réseau local pour trouver ton PC de jeu et streamer depuis celui-ci."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELOSはローカルネットワークを使って、ゲーミングPCを見つけてストリーミングします。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELOS는 로컬 네트워크로 게이밍 PC를 찾고 스트리밍해요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O DELOS usa a rede local para encontrar seu PC gamer e transmitir a partir dele."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Застосунок DELOS використовує локальну мережу, щоб знайти твій ігровий ПК і стрімити з нього."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELOS 使用本地网络查找你的游戏电脑并从中串流。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

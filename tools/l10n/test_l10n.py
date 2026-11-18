@@ -76,6 +76,28 @@ class CheckUsageTest(unittest.TestCase):
     def test_plurals_read_with_lplural_count_as_used(self):
         self.assertEqual(check_usage.USE.findall('LPlural("a", 1) + L("b") + XL("c")'), ["a", "b"])
 
+    def test_an_entry_without_every_language_is_reported_even_when_unused(self):
+        found = check_usage.incomplete(self.catalog, "x.xcstrings")
+        self.assertEqual(found, ["x.xcstrings: 'partial' has no " + ", ".join(sorted(check_usage.LANGUAGES - {"en"})) + " text"])
+
+    def test_a_text_naming_android_is_reported_in_plurals_too(self):
+        unit = lambda text: {"stringUnit": {"state": "translated", "value": text}}
+        catalog = {"strings": {
+            "neutral": {"localizations": {"en": unit("The decoder returns frames")}},
+            "codec": {"localizations": {"cs": unit("Zpětná volání MediaCodec")}},
+            "plural": {"localizations": {"en": {"variations": {"plural": {"one": unit("%d Snapdragon"), "other": unit("%d GPUs")}}}}},
+        }}
+        found = check_usage.android_only(catalog, "x.xcstrings")
+        self.assertEqual(len(found), 2)
+        self.assertIn("'codec' (cs) names MediaCodec", found[0])
+        self.assertIn("'plural' (en) names Snapdragon", found[1])
+
+    def test_the_catalogs_are_complete_and_platform_neutral(self):
+        for file in (check_usage.CATALOG, check_usage.INFO_PLIST):
+            catalog = check_usage.json.loads(file.read_text(encoding="utf-8"))
+            self.assertEqual(check_usage.incomplete(catalog, file.name), [])
+            self.assertEqual(check_usage.android_only(catalog, file.name), [])
+
 
 if __name__ == "__main__":
     unittest.main()

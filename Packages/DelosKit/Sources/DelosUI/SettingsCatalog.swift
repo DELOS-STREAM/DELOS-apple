@@ -71,7 +71,7 @@ enum SettingsCatalog {
                 label: L("title_frame_pacing"), help: L("help_frame_pacing"), kind: .typed),
             CatalogSpec(
                 id: "checkbox_async_decode", tab: .stream, category: "category_video_settings", section: L("category_video_settings"), icon: Symbols.asyncDecode,
-                label: L("title_async_decode"), help: L("help_checkbox_async_decode"), kind: .toggle),
+                label: L("title_async_decode"), help: L("help_async_decode_frames"), kind: .toggle),
             CatalogSpec(
                 id: "checkbox_sgsr", tab: .display, category: "category_video_settings", section: L("category_video_settings"), icon: Symbols.upscaler,
                 label: L("title_upscaler"), help: L("help_checkbox_sgsr"), kind: .toggle),
