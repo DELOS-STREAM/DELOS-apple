@@ -1,20 +1,29 @@
+import Foundation
+
 /// H.264 and HEVC frames as the host sends them: NAL units separated by Annex B start codes (`00 00 01` or
 /// `00 00 00 01`). The frame is read in place: the units are ranges of its bytes, and only the sample's own block gets
 /// a copy of them.
 public enum AnnexB {
     /// Calls `body` with where each NAL unit of `bytes` is, without its start code. Empty units are left out.
+    ///
+    /// The core's receive thread runs this over every frame, so the `01` bytes are found with `memchr` (vectorized) and
+    /// only they are looked at: a byte-by-byte loop cost 5 ns a byte in a debug build, 1 ms a 200 KB frame.
     public static func forEachUnit(in bytes: UnsafeRawBufferPointer, _ body: (Range<Int>) throws -> Void) rethrows {
+        guard let base = bytes.baseAddress, bytes.count >= 3 else { return }
         var unitStart: Int?
-        var i = 0
-        while i + 2 < bytes.count {
-            if bytes[i] == 0, bytes[i + 1] == 0, bytes[i + 2] == 1 {
-                let code = i > 0 && bytes[i - 1] == 0 ? i - 1 : i
-                if let unitStart, unitStart < code { try body(unitStart..<code) }
-                unitStart = i + 3
-                i += 3
-            } else {
-                i += 1
+        // Where the next start code's `01` may be: a start code needs two zeros before it
+        var next = 2
+        while next < bytes.count, let found = memchr(base + next, 1, bytes.count - next) {
+            let one = base.distance(to: UnsafeRawPointer(found))
+            guard bytes[one - 1] == 0, bytes[one - 2] == 0 else {
+                next = one + 1
+                continue
             }
+            let start = one - 2
+            let code = start > 0 && bytes[start - 1] == 0 ? start - 1 : start
+            if let unitStart, unitStart < code { try body(unitStart..<code) }
+            unitStart = one + 1
+            next = one + 3
         }
         if let unitStart, unitStart < bytes.count { try body(unitStart..<bytes.count) }
     }

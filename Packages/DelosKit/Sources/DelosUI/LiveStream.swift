@@ -46,6 +46,9 @@ final class LiveStream: StreamSteps {
         let watchdog = WatchdogVideoRenderer(renderer: renderer)
         let video = VideoOutput(renderer: watchdog, supportedFormats: formats)
         session = StreamSession(videoSink: video, audioSink: AudioOutput())
+        // Debug builds: the throughput line reads the core's FEC and reordering counters of this stream (weakly: the line
+        // is global and must not keep a finished stream's renderer alive)
+        StreamPerf.standard?.setPacketSource { [weak session] in session?.videoStatistics() }
         statisticsSource = StreamStatisticsSource(video: video.statistics, renderer: renderer, session: session, watchdog: watchdog)
         events = session.events
     }
@@ -75,6 +78,11 @@ final class LiveStream: StreamSteps {
             virtualDisplayReady: record.virtualDisplay?.capable == true && record.virtualDisplay?.driverReady == true,
             metered: metered)
         let nvidia = record.isNvidiaServer
+        // What goes out (GeForce Experience gets 0 above 60 fps in the launch query): the throughput lines start from it
+        StreamPerf.standard?.note(String(
+            format: "launch mode=%dx%dx%g fps=%d refresh=%d pacing=%@ bitrate=%d nvidia=%d", plan.request.width,
+            plan.request.height, plan.request.frameRate, plan.configuration.fps, display.maxFramesPerSecond,
+            settings.framePacing.rawValue, plan.configuration.bitrateKbps, nvidia ? 1 : 0))
         var sessionURL: String?
         let choice = LaunchChoice.of(app: appID, running: record.runningAppID)
         // Never quit another app unasked: the library's game menu is the confirmed way to quit it and start this one

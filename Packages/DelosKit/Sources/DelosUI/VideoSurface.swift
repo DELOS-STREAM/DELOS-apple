@@ -344,6 +344,7 @@ final class VideoHostView: UIView {
         #endif
         let display = StreamDisplay.describe(screen, external: external)
         let plan = renderer.attached(to: display)
+        StreamPerf.standard?.note(plan.perfText(on: display))
         let link = CADisplayLink(target: self, selector: #selector(refreshTick))
         link.preferredFrameRateRange = plan.frameRateRange
         link.add(to: .main, forMode: .common)
@@ -645,7 +646,9 @@ final class VideoHostView: NSView {
 
         // Keeps the screen at the planned refresh rate (``DisplayRefreshPlanner``): a ProMotion display slows down when
         // nothing asks for more; a mode switch the plan asks for is made for this app only
-        let plan = renderer.attached(to: StreamDisplay.describe(screen))
+        let display = StreamDisplay.describe(screen)
+        let plan = renderer.attached(to: display)
+        StreamPerf.standard?.note(plan.perfText(on: display))
         StreamDisplay.applyMode(plan, on: screen)
         let link = displayLink(target: self, selector: #selector(refreshTick))
         link.preferredFrameRateRange = plan.frameRateRange

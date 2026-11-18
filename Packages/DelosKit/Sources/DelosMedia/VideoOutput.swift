@@ -17,14 +17,24 @@ public final class VideoOutput: VideoDecodeUnitSink, @unchecked Sendable {
     private var hdrActive = false
     /// The receive thread runs at the interactive quality of service from the stream's first frame on.
     private var threadRaised = false
+    /// Debug builds: the per-second throughput line (``StreamPerf``).
+    private let perf: StreamPerf?
 
-    public init(
+    public convenience init(
         renderer: any VideoRenderer, supportedFormats: VideoFormats,
         hdrMetadata: @escaping @Sendable () -> HDRMetadata? = HDRMetadata.current
+    ) {
+        self.init(renderer: renderer, supportedFormats: supportedFormats, hdrMetadata: hdrMetadata, perf: StreamPerf.standard)
+    }
+
+    init(
+        renderer: any VideoRenderer, supportedFormats: VideoFormats, hdrMetadata: @escaping @Sendable () -> HDRMetadata?,
+        perf: StreamPerf?
     ) {
         self.renderer = renderer
         self.supportedFormats = supportedFormats
         self.hdrMetadata = hdrMetadata
+        self.perf = perf
     }
 
     /// Direct submit only. Reference frame invalidation (HEVC/AV1) stays off until it is verified against a real PC: with
@@ -59,6 +69,8 @@ public final class VideoOutput: VideoDecodeUnitSink, @unchecked Sendable {
         statistics.configure(width: width, height: height, codec: name, renderer: renderer.name)
         renderer.flush()
         renderer.setHDR(!format.isDisjoint(with: .tenBit))
+        // The frame rate the core negotiated with the host: the one the stream asked for
+        perf?.begin(requestedFPS: frameRate)
         return true
     }
 
@@ -77,6 +89,7 @@ public final class VideoOutput: VideoDecodeUnitSink, @unchecked Sendable {
         samples = nil
         frame = []
         renderer.flush()
+        perf?.end()
     }
 
     public func submit(_ unit: borrowing DecodeUnit) -> DecodeResult {
@@ -85,6 +98,10 @@ public final class VideoOutput: VideoDecodeUnitSink, @unchecked Sendable {
             Self.raiseCurrentThread()
             threadRaised = true
         }
+        let started = perf == nil ? 0 : DispatchTime.now().uptimeNanoseconds
+        perf?.received(
+            frameNumber: unit.frameNumber, bytes: unit.fullLength, firstPacketUs: unit.receiveTimeUs,
+            completeUs: unit.enqueueTimeUs, hostTimeUs: unit.presentationTimeUs)
         statistics.record(
             frameNumber: UInt32(truncatingIfNeeded: unit.frameNumber), bytes: unit.fullLength,
             hostLatencyTenths: unit.hostProcessingLatencyTenthsOfMs, hdr: unit.hdrActive)
@@ -98,7 +115,8 @@ public final class VideoOutput: VideoDecodeUnitSink, @unchecked Sendable {
         // Each key frame is where the picture's description may change: the host's HDR mode and metadata are read then
         if keyFrame { updateHDR(unit.hdrActive) }
         let sample = frame.withUnsafeBytes { try? samples!.sample(for: $0, keyFrame: keyFrame) }
-        guard let sample else { return .needIDRFrame }
-        return renderer.enqueue(sample) ? .ok : .needIDRFrame
+        let accepted = sample.map { renderer.enqueue($0) } ?? false
+        if let perf { perf.submitted(seconds: Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000_000) }
+        return accepted ? .ok : .needIDRFrame
     }
 }

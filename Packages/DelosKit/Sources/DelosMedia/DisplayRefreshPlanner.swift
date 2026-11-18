@@ -309,3 +309,15 @@ public enum DisplayRefreshPlanner {
             ? fps : desiredRefreshRate
     }
 }
+
+extension DisplayRefreshPlanner.Plan {
+    /// The plan on `display` in the words of the ``StreamPerf`` display line: what the display reports, the rate the host is
+    /// told and asked for, and the rate the display link asks for.
+    public func perfText(on display: VideoDisplay) -> String {
+        func rate(_ value: Double) -> String { value.isFinite ? String(format: "%g", value) : "-" }
+        let fastest = display.supportedModes.map(\.refreshRate).max() ?? display.currentMode.refreshRate
+        return "display max=\(rate(fastest)) current=\(rate(display.currentRefreshRate)) ceiling=\(rate(display.refreshRateCeiling)) "
+            + "external=\(display.externalDisplay ? 1 : 0) vrr=\(vrr ? 1 : 0) refresh=\(rate(displayRefreshRate)) "
+            + "stream=\(rate(streamFrameRate)) link=\(rate(surfaceFrameRate)) pacing=\(pacing.rawValue) change=\(pacingChange)"
+    }
+}
