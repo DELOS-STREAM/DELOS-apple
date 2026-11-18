@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- The app icon: the mark of DELOS for Android (the gold ring and the blue moon on the dark background), drawn from its
+  vector for iPhone and iPad (with a dark and a tinted variant), for the Mac (the rounded shape at every size) and for
+  Apple TV (the layered icon and the Top Shelf images).
 - Debug builds log the video path once a second (os_log category `StreamPerf` and the diagnostic log): the frame rate
   asked for and received, lost frame numbers, the rate the PC encoded at, FEC failures, the receive thread's time per
   frame, the decoder's backlog and time, the queue's drops by reason, the display link's rate, the GPU time, the

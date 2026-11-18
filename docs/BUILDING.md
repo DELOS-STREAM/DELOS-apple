@@ -43,6 +43,7 @@ transports/providers, never the configured endpoint or the owner's paired PC.
 | `sh tools/test.sh` | The package tests, the app build for the iOS and tvOS simulators and for the Mac, and the repository checks |
 | `cd Packages/DelosKit && swift test` | Only the package tests, on the Mac |
 | `python3 tools/l10n/import_android.py ../Delos` | Regenerates the String Catalog from a DELOS for Android checkout (after editing `tools/l10n/keys.txt`) |
+| `python3 tools/icon/generate_app_icon.py` | Redraws the app icon catalog (`App/Shared/Assets.xcassets`) from the numbers of the Android icon's vector (needs Pillow) |
 
 Debug builds read launch arguments for screenshots of each background, theme and palette: `-DelosBackground <kind>`
 (`aurora`, `tide`, `silk`, `contour`, `nebula`, `plasma`, `lava`, `caustics`, `bokeh`, `orbit` or `still`),
