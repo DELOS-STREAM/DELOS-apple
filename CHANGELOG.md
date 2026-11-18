@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- The link test: Settings → Stream has Test link and Use recommended bitrate under the bitrate. Test link measures
+  what the network carries from the PC with Vibepollo's UDP probe (a portal shows each step, B stops it) and keeps
+  the result per PC and kind of network with its date; the bitrate row then says the recommendation and why, and its
+  help names both numbers. The bitrate is only changed by pressing Use recommended bitrate. App settings show the
+  same recommendation. Not verified against a real PC.
 - On-screen controls on iPhone and iPad, as on DELOS for Android: the D-pad, A/B/X/Y, bumpers, triggers, Back,
   Guide, Start, L3/R3, the trackpad button and fixed or free sticks in the DELOS style, any number of fingers at
   once, sent to the PC as controller 0. The default layout is computed for every screen shape; the gear edits it
