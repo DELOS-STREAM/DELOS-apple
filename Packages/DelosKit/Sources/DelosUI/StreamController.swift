@@ -507,6 +507,7 @@ final class StreamController {
     private func fail(_ text: ResultText) {
         // Once the player leaves or the app goes to the background, what the interrupted attempt throws is no failure
         guard !suspended, phase == .connecting || phase == .streaming else { return }
+        endPictureInPicture()
         stopPlaytime()
         stopStatistics()
         stopInput()
@@ -1161,9 +1162,31 @@ final class StreamController {
     /// came back to a black screen and a failure), so the stream is closed now, as Disconnect does: the game keeps
     /// running on the PC. The loader shows until ``returnedToForeground()`` connects again. Synchronous, so a return
     /// right after it finds the stream suspended; the returned task ends when the connection is closed.
+    ///
+    /// With Picture in Picture the stream stays: shown in its window, it is watched (``pictureInPicture(_:)``); while the
+    /// window may still come (it starts as the app leaves), the stream is closed only after ``pictureInPictureGrace`` without
+    /// it, and the returned task ends then.
     @discardableResult
     func enteredBackground() -> Task<Void, Never>? {
+        inBackground = true
+        guard phase == .connecting || phase == .streaming, !suspended, !pictureInPictureShown else { return nil }
+        guard pictureInPictureMayStart else { return suspend() }
+        let grace = pictureInPictureGrace
+        let task = Task { [weak self] in
+            try? await Task.sleep(for: grace)
+            guard !Task.isCancelled, let self, self.inBackground, !self.pictureInPictureShown else { return }
+            self.pictureInPictureWait = nil
+            await self.suspend()?.value
+        }
+        pictureInPictureWait = task
+        return task
+    }
+
+    /// Closes the stream for the background (``enteredBackground()``).
+    @discardableResult
+    private func suspend() -> Task<Void, Never>? {
         guard phase == .connecting || phase == .streaming, !suspended else { return nil }
+        endPictureInPicture()
         stopStatistics()
         suspended = true
         hideMenu()
@@ -1177,13 +1200,81 @@ final class StreamController {
     }
 
     /// The app is back: the same game is resumed on the PC with a new connection, launched once the closed one has
-    /// stopped.
+    /// stopped. A stream that Picture in Picture kept is the player's again.
     func returnedToForeground() {
+        inBackground = false
+        pictureInPictureWait?.cancel()
+        pictureInPictureWait = nil
+        leavePictureInPicture()
         guard suspended else { return }
         suspended = false
         if let brightnessChosen { brightness?.set(brightnessChosen) }
         steps = makeSteps()
         run()
+    }
+
+    // MARK: Picture in Picture
+
+    /// The profile turned Picture in Picture on (`checkbox_enable_pip`) and the stream can be shown in it
+    /// (``PictureInPictureVideo``); the screen sets it.
+    var pictureInPictureEnabled = false
+    /// The system may take the stream into its Picture in Picture window when the app leaves (AVKit's automatic start):
+    /// the stream runs (Android's `pipAutoEnter`: connected).
+    var pictureInPictureMayStart: Bool { pictureInPictureEnabled && phase == .streaming }
+    /// The window shows the stream: Android's observer mode. Nothing reaches the PC, what was held came up there, the
+    /// menu and the keyboards are closed, and the connection stays while the app is in the background.
+    @ObservationIgnored private(set) var pictureInPictureShown = false
+    /// How long the background waits for the window before the stream is closed as without it.
+    @ObservationIgnored var pictureInPictureGrace: Duration = .seconds(2)
+    @ObservationIgnored private var pictureInPictureWait: Task<Void, Never>?
+    @ObservationIgnored private var inBackground = false
+
+    /// What AVKit's Picture in Picture window did (``PictureInPictureEvent``).
+    func pictureInPicture(_ event: PictureInPictureEvent) {
+        switch event {
+        case .starting:
+            guard pictureInPictureMayStart, !pictureInPictureShown else { return }
+            pictureInPictureShown = true
+            pictureInPictureWait?.cancel()
+            pictureInPictureWait = nil
+            hideMenu()
+            systemKeyboardShown = false
+            closeFullKeyboard()
+            restoreBrightness()
+            input?.paused = true
+            onScreen?.releaseAll()
+            touchScreen?.cancelAll(time: Self.milliseconds(ProcessInfo.processInfo.systemUptime))
+        case .failed:
+            guard inBackground else { return leavePictureInPicture() }
+            // The window did not come: the stream is closed as without it
+            pictureInPictureWait?.cancel()
+            pictureInPictureWait = nil
+            suspend()
+        case .stopped(let restored):
+            guard pictureInPictureShown else { return }
+            // Closed from its own button while the app is away: the stream is closed as without it
+            if inBackground, !restored {
+                suspend()
+            } else {
+                leavePictureInPicture()
+            }
+        }
+    }
+
+    /// The stream is the player's again after its window: the input (unless the menu or the launch scene has it) and the
+    /// chosen brightness.
+    private func leavePictureInPicture() {
+        guard pictureInPictureShown else { return }
+        pictureInPictureShown = false
+        if let brightnessChosen { brightness?.set(brightnessChosen) }
+        if phase == .streaming, !menuOpen, !loader.cancellable { input?.paused = false }
+    }
+
+    /// The stream ends or is closed: whatever the window did, nothing is resumed.
+    private func endPictureInPicture() {
+        pictureInPictureShown = false
+        pictureInPictureWait?.cancel()
+        pictureInPictureWait = nil
     }
 
     // MARK: Leaving
@@ -1209,6 +1300,7 @@ final class StreamController {
         hideMenu()
         // No return from the background starts another attempt now; the one that ran is the one the PC quits
         suspended = false
+        endPictureInPicture()
         let steps = self.steps
         leavingQuit = quit
         leavingScene = scene
@@ -1273,7 +1365,7 @@ final class StreamController {
     /// The launch scene is over: the stream is the player's.
     func loaderEnded() {
         loader.ended()
-        if phase == .streaming, !menuOpen { input?.paused = false }
+        if phase == .streaming, !menuOpen, !pictureInPictureShown { input?.paused = false }
     }
 
     /// One touch on the stream (``touches(_:_:area:time:)``).

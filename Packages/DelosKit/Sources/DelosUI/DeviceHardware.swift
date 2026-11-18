@@ -3,8 +3,6 @@ import Foundation
 import AVKit
 import CoreHaptics
 import CoreMotion
-#elseif os(macOS)
-import AVKit
 #endif
 
 /// What this device's hardware has, for the settings rows that need it (`SettingsCapabilities.read` of DELOS for
@@ -38,9 +36,11 @@ enum DeviceHardware {
         #endif
     }
 
-    /// Picture in Picture for video.
+    /// Picture in Picture for the stream (``PictureInPictureVideo``): iPhone and iPad, where AVKit starts it on its own when
+    /// the app leaves during a stream (`canStartPictureInPictureAutomaticallyFromInline`, Android's auto-enter). The Mac
+    /// keeps streaming in a window behind the others and has no automatic start, nor has Apple TV, so neither shows the row.
     static var pictureInPicture: Bool {
-        #if os(iOS) || os(macOS)
+        #if os(iOS)
         AVPictureInPictureController.isPictureInPictureSupported()
         #else
         false

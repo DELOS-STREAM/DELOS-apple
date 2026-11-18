@@ -121,11 +121,14 @@ struct StreamScreen: View {
         // The Metal renderer unless the debug switch asks for the display layer (RendererChoice); the Display settings
         // (scale mode, upscaler, refresh rate) go with it
         let device = StreamDevice.current
-        let renderer = RendererChoice.current.makeRenderer(
-            pacing: settings.framePacing, fps: settings.streamFPS(refreshRate: device.maxFramesPerSecond),
-            options: settings.videoRenderOptions(
-                displayWidth: device.pixelWidth, displayHeight: device.pixelHeight, decodable: device.decodable,
-                displaySupportsHDR: device.hdrDisplay))
+        let options = settings.videoRenderOptions(
+            displayWidth: device.pixelWidth, displayHeight: device.pixelHeight, decodable: device.decodable,
+            displaySupportsHDR: device.hdrDisplay)
+        let made = RendererChoice.current.makeRenderer(
+            pacing: settings.framePacing, fps: settings.streamFPS(refreshRate: device.maxFramesPerSecond), options: options)
+        // Picture in Picture (`checkbox_enable_pip`) where the device has it: the renderer with the layer it shows
+        let pictureInPicture = settings.bool(.enablePip) && DeviceHardware.pictureInPicture
+        let renderer: any VideoRenderer = pictureInPicture ? PictureInPictureVideo(wrapping: made, options: options) : made
         // Android's notice when the upscaler cannot keep up (once per stream and mode); nothing is switched off
         renderer.observeUpscalerOverload { [toasts] _, _ in
             Task { @MainActor in toasts?.show(UpscalerOverload.message, icon: Symbols.warning, durationMs: 6500, kind: .warning) }
@@ -144,6 +147,7 @@ struct StreamScreen: View {
             }
         }
         controller.rumbleConfiguration = settings.rumble
+        controller.pictureInPictureEnabled = pictureInPicture
         controller.controllerOptions = ControllerOptions(settings: settings)
         controller.keyboardOptions = FullKeyboardOptions(settings)
         controller.fullKeyboard.prefs = KeyboardPrefs(settings)
@@ -422,7 +426,9 @@ struct StreamContent: View {
                         keyboard: controller.systemKeyboardShown && !controller.menuOpen,
                         onText: { controller.typed($0) },
                         onBackspace: { controller.typedBackspace() },
-                        onKeyboardHidden: { controller.keyboardDismissed() }
+                        onKeyboardHidden: { controller.keyboardDismissed() },
+                        pictureInPicture: controller.pictureInPictureMayStart,
+                        onPictureInPicture: { controller.pictureInPicture($0) }
                     )
                     .ignoresSafeArea()
                     .opacity(pictureOpacity(cover))

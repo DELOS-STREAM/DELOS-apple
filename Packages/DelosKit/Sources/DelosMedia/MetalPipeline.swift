@@ -133,6 +133,7 @@ final class MetalPipeline: @unchecked Sendable {
     private let observer = Mutex<(@Sendable (PresentedFrame) -> Void)?>(nil)
     private let conversionChanged = Mutex<(@Sendable (ColorConversion, HDRPictureInfo?) -> Void)?>(nil)
     private let overloadObserver = Mutex<(@Sendable (UpscalerMode, Bool) -> Void)?>(nil)
+    private let decodedObserver = Mutex<(@Sendable (CVPixelBuffer) -> Void)?>(nil)
 
     init?(
         pacing: FramePacing, fps: Int, options: VideoRenderOptions = VideoRenderOptions(),
@@ -157,6 +158,12 @@ final class MetalPipeline: @unchecked Sendable {
     /// The HDR metadata of the pictures is reported with it.
     func observeConversion(_ body: (@Sendable (ColorConversion, HDRPictureInfo?) -> Void)?) {
         conversionChanged.withLock { $0 = body }
+    }
+
+    /// Called with every decoded picture as VideoToolbox returns it, on its thread (Picture in Picture's copy of the
+    /// stream, ``PictureInPictureVideo``).
+    func observeDecoded(_ body: (@Sendable (CVPixelBuffer) -> Void)?) {
+        decodedObserver.withLock { $0 = body }
     }
 
     /// Called once per stream and mode when the upscaler could not keep up for about two seconds, with the mode and
@@ -238,6 +245,7 @@ final class MetalPipeline: @unchecked Sendable {
             s.decodeSeconds += frame.decodeSeconds
             if s.upscalerActive { s.window.arrived(at: now) }
         }
+        decodedObserver.withLock { $0 }?(frame.pixelBuffer)
     }
 
     func flush() {

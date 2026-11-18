@@ -86,6 +86,11 @@ public final class MetalRenderer: VideoRenderer {
         pipeline.observeUpscalerOverload(body)
     }
 
+    /// Called with every decoded picture, on VideoToolbox's thread (``PictureInPictureVideo`` shows them in its layer).
+    public func observeDecoded(_ body: (@Sendable (CVPixelBuffer) -> Void)?) {
+        pipeline.observeDecoded(body)
+    }
+
     @MainActor public func resize(to bounds: CGRect, scale: CGFloat) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)

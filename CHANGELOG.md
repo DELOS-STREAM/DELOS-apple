@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Picture in Picture on iPhone and iPad (Settings → Appearance → Enable Picture-in-Picture observer mode): when DELOS
+  leaves during a stream, the stream keeps playing in the system's Picture in Picture window, with its sound and its
+  connection, and nothing is sent to the PC; what was held comes up there, and the stream menu and the keyboards close.
+  The window's restore button, or going back to DELOS, gives the stream back as it was; closing the window closes the
+  stream as leaving the app does, and the return connects again. The Mac keeps streaming in its window and Apple TV
+  has no automatic start, so neither shows the setting. Not verified on a device.
 - The controller Home button notice: on iOS, iPadOS and macOS 27 the system keeps a controller's Home button unless
   Settings → General → Game Controller leaves DELOS's Home action to the app. When a controller with a Home button
   connects and the system keeps it, an information toast says so once per launch, names the other ways to the stream
