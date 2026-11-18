@@ -229,6 +229,22 @@ icon, the PC's name in Unbounded 36 and the note in Figtree 24. The geometry and
 `DelosRoot` gives it the modal focus and every command: only B passes (on tvOS the Menu button, through a focus sink).
 Android has no way to cancel without a B; here a tap or a click on a portal that can be cancelled does it too.
 
+### Links from outside the app
+
+`art://` links and opened `.art` shortcut files (`ShellLink.kt`, the link effect of `Shell.kt`, ShortcutTrampoline and
+`ArtFile` of Android) reach the app's `onOpenURL` and wait in `ShellLinkInbox` until a profile exists. `ShellLink` reads
+them: `art://host[:port]?pin=…&passphrase=…&name=…` pairs (the authority as written; a one-time code only with both
+values, and only a valid one skips the PIN screen), `art://launch?host_uuid=…&host_name=…&app_uuid=…&app_id=…&app_name=…`
+starts. A `.art` file (`[key] value` lines, `#` comments, at most 64 KB, read whole or not at all) becomes the same launch
+link; an unreadable one or one naming no valid PC is refused with a toast at once, as ShortcutTrampoline does before it
+asks. `ShellActions.openLink` asks first (OPEN cue, the `shell_link_*` dialogs). After Start, `LaunchLink.target`
+validates like `validateHostInput`/`validateAppInput`, the PC is found by its id or name (`scut_pc_not_found`), and the
+portal connects to it (waking it if it sleeps); the game is found among its apps by UUID, id or name
+(`scut_invalid_app_id`) and starts unless another game runs (`scut_game_running`, the library stays open). A PC that is
+not paired shows the stream's result overlay for a game and a toast for a PC alone. Closest equivalents: a PC that does
+not wake ends with the portal's "did not wake up" toast instead of the result overlay, and Android's own PC shortcuts
+(`ShellLink.OpenPc`) and other apps' intents have no Apple counterpart (no launcher shortcuts).
+
 ## Video formats
 
 `DelosMedia` turns what the host sends into what VideoToolbox decodes, without FFmpeg:
@@ -1418,7 +1434,8 @@ Experience. The value of `LiGetLaunchUrlQueryParameters()` from the streaming co
 `NSLocalNetworkUsageDescription` comes from `INFOPLIST_KEY_NSLocalNetworkUsageDescription` in `Config/Shared.xcconfig`.
 `NSBonjourServices` is an array, which `INFOPLIST_KEY_*` settings cannot express, and `CADisableMinimumFrameDurationOnPhone`
 has no such setting; both are in `Config/Info.plist`, which Xcode merges with the generated keys (`INFOPLIST_FILE` next to
-`GENERATE_INFOPLIST_FILE = YES`).
+`GENERATE_INFOPLIST_FILE = YES`). So are the `art` URL scheme (`CFBundleURLTypes`) and the `.art` shortcut file
+(`CFBundleDocumentTypes` with the imported type `io.github.meitoncz.delos.art`, opened in place).
 
 ## Verification
 

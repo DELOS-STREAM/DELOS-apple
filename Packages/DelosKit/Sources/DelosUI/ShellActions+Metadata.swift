@@ -17,7 +17,7 @@ extension ShellActions {
     }
 
     func openMetadataMenu(hostID: String, app: HostApp) {
-        guard metadata.offers(app) else { return }
+        guard !GameMetadataModel.isBuiltIn(app) else { return }
         let menu = ContextMenu(title: L("metadata_menu_title", app.title), items: [
             MenuItem(icon: Symbols.search, label: L("metadata_menu_search")) { [self] in
                 searchMetadata(app: app, term: app.title, anchor: layers.menuAnchor)

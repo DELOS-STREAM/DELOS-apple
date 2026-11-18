@@ -241,6 +241,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   Shift + M, or holding Escape for a second, opens the stream menu and frees the pointer, as does L3 + R3. Command-Q,
   Quit and closing the window disconnect the stream first. `sh tools/mac.sh` builds an ad-hoc signed copy, starts it
   and takes a screenshot of its window. Not yet tried with a real stream.
+- Links and shortcut files from outside the app, as on DELOS for Android: an `art://` link pairs with a PC (with its
+  one-time code when it has one) or starts a game or opens a PC, and an opened `.art` shortcut file starts its game. Each
+  asks first in a dialog, since a link can come from any web page or app. A PC that sleeps is woken and waited for, a
+  game already running on the PC is never quit (its library opens with a toast), and a link naming no known PC or game
+  says so in a toast. A link that arrives before the first profile waits for it. Not verified on a device.
 
 ### Changed
 
@@ -271,6 +276,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   left, top and bottom edges of the screen (the status bar and the home indicator no longer widen one of them) and
   materialises from the left edge (growing, sharpening from a blur, on a spring) and goes back into it; with reduced
   motion it fades. Not verified on a device yet.
+- The game menu offers Metadata for every game except DELOS's own entries, also without a metadata service (its
+  actions then say the service is unavailable). The home screen's notes for no paired PC and an offline PC point to
+  the Devices screen.
+- The info row's badges, when they do not fit, bounce like Android's: still for 0.7 s, linear to the end at 56 px/s, a
+  0.9 s pause, back, a 0.9 s pause. Disconnect and Quit from the stream menu play SELECT when the library returns.
 
 ### Removed
 

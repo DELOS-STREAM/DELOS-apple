@@ -33222,67 +33222,67 @@
         }
       }
     },
-    "home_no_pc_note": {
+    "home_no_pc_devices_note": {
       "extractionState": "manual",
       "localizations": {
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zatím PC spáruj v klasické aplikaci Delos.\nPárování v novém rozhraní přijde v kroku 6.6."
+            "value": "Spáruj PC na obrazovce Zařízení."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Koppel einen PC vorerst in der klassischen Delos-App.\nKoppeln in der neuen Oberfläche kommt in Schritt 6.6."
+            "value": "Koppel einen PC auf dem Bildschirm Geräte."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "For now, pair a PC in the classic Delos app.\nPairing in the new UI comes in step 6.6."
+            "value": "Pair a PC on the Devices screen."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "De momento, empareja un PC en la app clásica de Delos.\nEl emparejamiento en la nueva interfaz llegará en el paso 6.6."
+            "value": "Empareja un PC en la pantalla Dispositivos."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pour l’instant, associe un PC dans l’app Delos classique.\nL’association dans la nouvelle interface arrive à l’étape 6.6."
+            "value": "Associe un PC depuis l’écran Appareils."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "今のところ、PCのペアリングはクラシック版 Delosアプリで行ってください。\n新しいUIでのペアリングはステップ6.6で対応します。"
+            "value": "「デバイス」画面でPCをペアリングしてください。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "지금은 기존 Delos 앱에서 PC를 페어링해 주세요.\n새 UI의 페어링은 6.6단계에서 추가돼요."
+            "value": "기기 화면에서 PC를 페어링해 주세요."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Por enquanto, pareie um PC no app Delos clássico.\nO pareamento na nova interface chega na etapa 6.6."
+            "value": "Pareie um PC na tela Dispositivos."
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Поки що створи пару з ПК у класичному застосунку Delos.\nСтворення пари в новому інтерфейсі з’явиться на кроці 6.6."
+            "value": "Створи пару з ПК на екрані «Пристрої»."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "目前请在经典版 Delos 应用中配对 PC。\n新界面的配对将在第 6.6 步推出。"
+            "value": "请在“设备”页面配对 PC。"
           }
         }
       }
@@ -33352,67 +33352,67 @@
         }
       }
     },
-    "home_offline_note": {
+    "home_offline_devices_note": {
       "extractionState": "manual",
       "localizations": {
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zapni PC, nebo ho probuď z klasické aplikace Delos.\nProbuzení odsud přijde v kroku 6.6."
+            "value": "Zapni PC, nebo ho probuď z jeho menu na obrazovce Zařízení."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Starte den PC oder weck ihn in der klassischen Delos-App auf.\nAufwecken von hier kommt in Schritt 6.6."
+            "value": "Starte den PC oder weck ihn über sein Menü auf dem Bildschirm Geräte auf."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Start the PC, or wake it from the classic Delos app.\nWaking it from here comes in step 6.6."
+            "value": "Start the PC, or wake it from its menu on the Devices screen."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enciende el PC o reactívalo desde la app clásica de Delos.\nReactivarlo desde aquí llegará en el paso 6.6."
+            "value": "Enciende el PC o reactívalo desde su menú en la pantalla Dispositivos."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Démarre le PC, ou réveille-le depuis l’app Delos classique.\nLe réveil depuis ici arrive à l’étape 6.6."
+            "value": "Démarre le PC, ou réveille-le depuis son menu dans l’écran Appareils."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "PCを起動するか、クラシック版 Delosアプリから起動してください。\nここからの起動はステップ6.6で対応します。"
+            "value": "PCを起動するか、「デバイス」画面のPCのメニューから起動してください。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "PC를 켜거나 기존 Delos 앱에서 깨워 주세요.\n여기서 깨우는 기능은 6.6단계에서 추가돼요."
+            "value": "PC를 켜거나 기기 화면의 PC 메뉴에서 깨워 주세요."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ligue o PC ou ative-o pelo app Delos clássico.\nAtivá-lo por aqui chega na etapa 6.6."
+            "value": "Ligue o PC ou ative-o pelo menu dele na tela Dispositivos."
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Увімкни ПК або розбуди його з класичного застосунку Delos.\nРозбудити звідси можна буде на кроці 6.6."
+            "value": "Увімкни ПК або розбуди його через його меню на екрані «Пристрої»."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "请开启 PC，或在经典版 Delos 应用中唤醒。\n在此处唤醒将在第 6.6 步推出。"
+            "value": "请开启 PC，或在“设备”页面通过其菜单唤醒。"
           }
         }
       }
@@ -49564,6 +49564,266 @@
         }
       }
     },
+    "scut_art_unreadable": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tento soubor zástupce nelze přečíst"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Verknüpfungsdatei kann nicht gelesen werden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This shortcut file cannot be read"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se puede leer este archivo de acceso directo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce fichier de raccourci est illisible"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このショートカットファイルを読み取れません"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 바로가기 파일을 읽을 수 없어요"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não é possível ler este arquivo de atalho"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цей файл ярлика не вдається прочитати"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取此快捷方式文件"
+          }
+        }
+      }
+    },
+    "scut_game_running": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hra %1$@ už běží · nejdřív ji ukonči v aplikaci Delos"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ läuft bereits · beende es zuerst in Delos"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ is already running · quit it from Delos first"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ ya se está ejecutando · ciérralo primero desde Delos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ est déjà lancé · quitte-le d’abord depuis Delos"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@はすでに実行中です · 先に Delosで終了してください"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@이(가) 이미 실행 중이에요 · 먼저 Delos에서 종료해 주세요"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ já está em execução · saia dele pelo app Delos primeiro"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ уже запущено · спершу заверши її в Delos"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 已在运行 · 请先在 Delos 中退出"
+          }
+        }
+      }
+    },
+    "scut_invalid_app_id": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zadaná aplikace není platná"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die angegebene App ist ungültig"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Provided App is not valid"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La aplicación indicada no es válida"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’application indiquée n’est pas valide"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "指定されたアプリは無効です"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지정한 앱이 올바르지 않아요"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O app informado não é válido"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Указаний застосунок недійсний"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提供的应用无效"
+          }
+        }
+      }
+    },
+    "scut_invalid_uuid": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zadané PC není platné"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der angegebene PC ist ungültig"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Provided PC is not valid"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El PC indicado no es válido"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le PC indiqué n’est pas valide"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "指定されたPCは無効です"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지정한 PC가 올바르지 않아요"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O PC informado não é válido"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Указаний ПК недійсний"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提供的 PC 无效"
+          }
+        }
+      }
+    },
     "scut_other_game_running": {
       "extractionState": "manual",
       "localizations": {
@@ -49625,6 +49885,71 @@
           "stringUnit": {
             "state": "translated",
             "value": "另一个应用已在运行 · 请先在 Delos 中退出"
+          }
+        }
+      }
+    },
+    "scut_pc_not_found": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PC nebylo nalezeno"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PC nicht gefunden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PC not found"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PC no encontrado"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PC introuvable"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PCが見つかりません"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PC를 찾을 수 없어요"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PC não encontrado"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ПК не знайдено"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未找到 PC"
           }
         }
       }
@@ -67830,6 +68155,656 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "shell_link_pair_action": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spárovat"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Koppeln"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pair"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emparejar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Associer"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ペアリング"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "페어링"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parear"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "З’єднати"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "配对"
+          }
+        }
+      }
+    },
+    "shell_link_pair_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odkaz žádá aplikaci Delos o spárování s tímto PC. Pokračuj jen v případě, že tento odkaz pochází od tebe."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Link fordert Delos auf, mit diesem PC zu koppeln. Fahr nur fort, wenn du ihn selbst geöffnet hast."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A link asks Delos to pair with this PC. Continue only if you opened it yourself."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un enlace pide a Delos que se empareje con este PC. Continúa solo si lo has abierto tú."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un lien demande à Delos de s’associer à ce PC. Continue seulement si tu l’as ouvert toi-même."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リンクにより、DelosがPCとペアリングするよう求められています。ご自身で開いた場合のみ続行してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "링크가 Delos에 이 PC와 페어링하도록 요청하고 있어요. 직접 연 링크일 때만 계속해 주세요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um link pede ao app Delos para parear com este PC. Continue só se você mesmo o abriu."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Посилання просить Delos створити пару з цим ПК. Продовжуй, лише якщо відкрив його сам."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有链接请求 Delos 与此 PC 配对。仅在你自己打开该链接时才继续。"
+          }
+        }
+      }
+    },
+    "shell_link_pair_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spárovat s %1$@?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit %1$@ koppeln?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pair with %1$@?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Emparejar con %1$@?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Associer avec %1$@ ?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@とペアリングしますか？"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@와(과) 페어링할까요?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parear com %1$@?"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Створити пару з %1$@?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "与 %1$@ 配对？"
+          }
+        }
+      }
+    },
+    "shell_link_start_action": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spustit"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lancer"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開始"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시작"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запустити"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启动"
+          }
+        }
+      }
+    },
+    "shell_link_start_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odkaz žádá aplikaci Delos o spuštění %1$@ na %2$@. Pokračuj jen v případě, že tento odkaz pochází od tebe."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Link fordert Delos auf, %1$@ auf %2$@ zu starten. Fahr nur fort, wenn du ihn selbst geöffnet hast."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A link asks Delos to start %1$@ on %2$@. Continue only if you opened it yourself."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un enlace pide a Delos que inicie %1$@ en %2$@. Continúa solo si lo has abierto tú."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un lien demande à Delos de lancer %1$@ sur %2$@. Continue seulement si tu l’as ouvert toi-même."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リンクにより、Delosが%2$@で%1$@を開始するよう求められています。ご自身で開いた場合のみ続行してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "링크가 Delos에 %2$@에서 %1$@을(를) 시작하도록 요청하고 있어요. 직접 연 링크일 때만 계속해 주세요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um link pede ao app Delos para iniciar %1$@ em %2$@. Continue só se você mesmo o abriu."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Посилання просить Delos запустити %1$@ на %2$@. Продовжуй, лише якщо відкрив його сам."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有链接请求 Delos 在 %2$@ 上启动 %1$@。仅在你自己打开该链接时才继续。"
+          }
+        }
+      }
+    },
+    "shell_link_start_message_game": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odkaz žádá aplikaci Delos o spuštění %1$@ na PC. Pokračuj jen v případě, že tento odkaz pochází od tebe."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Link fordert Delos auf, %1$@ auf einem PC zu starten. Fahr nur fort, wenn du ihn selbst geöffnet hast."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A link asks Delos to start %1$@ on a PC. Continue only if you opened it yourself."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un enlace pide a Delos que inicie %1$@ en un PC. Continúa solo si lo has abierto tú."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un lien demande à Delos de lancer %1$@ sur un PC. Continue seulement si tu l’as ouvert toi-même."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リンクにより、DelosがPCで%1$@を開始するよう求められています。ご自身で開いた場合のみ続行してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "링크가 Delos에 PC에서 %1$@을(를) 시작하도록 요청하고 있어요. 직접 연 링크일 때만 계속해 주세요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um link pede ao app Delos para iniciar %1$@ em um PC. Continue só se você mesmo o abriu."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Посилання просить Delos запустити %1$@ на ПК. Продовжуй, лише якщо відкрив його сам."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有链接请求 Delos 在 PC 上启动 %1$@。仅在你自己打开该链接时才继续。"
+          }
+        }
+      }
+    },
+    "shell_link_start_message_host": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odkaz žádá aplikaci Delos o spuštění aplikace na %1$@. Pokračuj jen v případě, že tento odkaz pochází od tebe."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Link fordert Delos auf, eine App auf %1$@ zu starten. Fahr nur fort, wenn du ihn selbst geöffnet hast."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A link asks Delos to start an app on %1$@. Continue only if you opened it yourself."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un enlace pide a Delos que inicie una app en %1$@. Continúa solo si lo has abierto tú."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un lien demande à Delos de lancer une appli sur %1$@. Continue seulement si tu l’as ouvert toi-même."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リンクにより、Delosが%1$@でアプリを開始するよう求められています。ご自身で開いた場合のみ続行してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "링크가 Delos에 %1$@에서 앱을 시작하도록 요청하고 있어요. 직접 연 링크일 때만 계속해 주세요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um link pede ao app Delos para iniciar um app em %1$@. Continue só se você mesmo o abriu."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Посилання просить Delos запустити застосунок на %1$@. Продовжуй, лише якщо відкрив його сам."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有链接请求 Delos 在 %1$@ 上启动应用。仅在你自己打开该链接时才继续。"
+          }
+        }
+      }
+    },
+    "shell_link_start_message_unnamed": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odkaz žádá aplikaci Delos o spuštění aplikace na PC. Pokračuj jen v případě, že tento odkaz pochází od tebe."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Link fordert Delos auf, eine App auf einem PC zu starten. Fahr nur fort, wenn du ihn selbst geöffnet hast."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A link asks Delos to start an app on a PC. Continue only if you opened it yourself."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un enlace pide a Delos que inicie una app en un PC. Continúa solo si lo has abierto tú."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un lien demande à Delos de lancer une appli sur un PC. Continue seulement si tu l’as ouvert toi-même."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リンクにより、DelosがPCでアプリを開始するよう求められています。ご自身で開いた場合のみ続行してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "링크가 Delos에 PC에서 앱을 시작하도록 요청하고 있어요. 직접 연 링크일 때만 계속해 주세요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um link pede ao app Delos para iniciar um app em um PC. Continue só se você mesmo o abriu."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Посилання просить Delos запустити застосунок на ПК. Продовжуй, лише якщо відкрив його сам."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有链接请求 Delos 在 PC 上启动应用。仅在你自己打开该链接时才继续。"
+          }
+        }
+      }
+    },
+    "shell_link_start_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spustit %1$@?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ starten?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start %1$@?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Iniciar %1$@?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lancer %1$@ ?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@を開始しますか？"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@을(를) 시작할까요?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar %1$@?"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запустити %1$@?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启动 %1$@？"
+          }
+        }
+      }
+    },
+    "shell_link_start_title_unnamed": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spustit aplikaci?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App starten?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start an app?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Iniciar una app?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lancer une appli ?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アプリを開始しますか？"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱을 시작할까요?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar um app?"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запустити застосунок?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启动应用？"
           }
         }
       }

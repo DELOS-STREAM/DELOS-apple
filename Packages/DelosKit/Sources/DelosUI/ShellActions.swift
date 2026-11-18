@@ -212,11 +212,10 @@ final class ShellActions {
                 .compactMap { $0 }.reduce(nil) { facts, next in
                     facts.map { L("home_meta_join", $0, next) } ?? next
                 })
-        // DELOS's own entries (Desktop, Remote Input, ...) have bundled artwork and no metadata: no entry for either
+        // DELOS's own entries (Desktop, Remote Input, ...) have bundled artwork and no metadata: no entry for either.
+        // Like Android the Metadata entry shows without a configured service too; its actions then say it is unavailable.
         if !GameMetadataModel.isBuiltIn(app) {
             items.append(MenuItem(icon: Symbols.photoLibrary, label: L("home_menu_artwork")) { [self] in openArtwork(hostID: hostID, app: app) })
-        }
-        if metadata.offers(app) {
             items.append(MenuItem(icon: Symbols.metadata, label: L("home_menu_metadata")) { [self] in openMetadataMenu(hostID: hostID, app: app) })
         }
         items.append(MenuItem(icon: Symbols.settings, label: L("home_menu_settings")) { [self] in openAppSettings(hostID: hostID, app: app) })
