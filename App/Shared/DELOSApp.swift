@@ -81,6 +81,9 @@ struct DELOSApp: App {
     @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var macDelegate
     #endif
 
+    /// `art://` links and `.art` files opened with DELOS, until the shell handles them.
+    @State private var links = ShellLinkInbox()
+
     init() {
         DelosFonts.register()
     }
@@ -92,15 +95,17 @@ struct DELOSApp: App {
         // The title bar is hidden, so the traffic lights lie over the corner of the stage; below 960 × 540 points
         // the status bar's first button would reach them.
         Window("DELOS", id: "main") {
-            DelosRoot()
+            DelosRoot(links: links)
                 .frame(minWidth: 960, minHeight: 540)
+                .onOpenURL { links.receive($0) }
         }
         .defaultSize(width: 1920, height: 1080)
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
         #else
         WindowGroup {
-            DelosRoot()
+            DelosRoot(links: links)
+                .onOpenURL { links.receive($0) }
         }
         #endif
     }

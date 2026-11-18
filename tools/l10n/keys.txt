@@ -391,6 +391,23 @@ shell_profile_updated
 shell_default_profile_name
 common_cancel
 
+# Links and shortcut files from outside the app (art://, .art)
+shell_link_pair_title
+shell_link_pair_message
+shell_link_pair_action
+shell_link_start_title
+shell_link_start_title_unnamed
+shell_link_start_message
+shell_link_start_message_game
+shell_link_start_message_host
+shell_link_start_message_unnamed
+shell_link_start_action
+scut_pc_not_found
+scut_invalid_uuid
+scut_invalid_app_id
+scut_game_running
+scut_art_unreadable
+
 # Status bar, navigation and side menu
 shell_nav_settings
 shell_nav_profile

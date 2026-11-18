@@ -98,11 +98,12 @@ final class ConnectFlow {
 
     var isActive: Bool { portal != nil }
 
-    /// Connects to the PC [hostID]; nothing while a portal is up.
-    func connect(_ hostID: String) {
+    /// Connects to the PC [hostID]; nothing while a portal is up. [arrived] runs once its library opened (a link's game
+    /// starts from there).
+    func connect(_ hostID: String, arrived: (@MainActor () -> Void)? = nil) {
         guard portal == nil, task == nil else { return }
         task = Task { [weak self] in
-            await self?.run(hostID)
+            await self?.run(hostID, then: arrived)
             self?.task = nil
         }
     }
@@ -114,7 +115,7 @@ final class ConnectFlow {
         task?.cancel()
     }
 
-    private func run(_ id: String) async {
+    private func run(_ id: String, then: (@MainActor () -> Void)? = nil) async {
         guard let name = environment.hostName(id) else { return }
         portals += 1
         let number = portals
@@ -171,6 +172,7 @@ final class ConnectFlow {
         if arrived {
             burst = false
             phase = .idle
+            then?()
         }
     }
 
