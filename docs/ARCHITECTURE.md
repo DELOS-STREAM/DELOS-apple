@@ -586,13 +586,7 @@ rise 90 px from .8 one after the other (100 ms + 42 ms each, 620 ms, the spring)
 the first and Left on the first to the last (a held direction never reaches the menu, so it never wraps onto Quit by
 repeat). A row that does not fit a narrow stage keeps the tile size and scrolls with the focus.
 
-The tiles are Resume, Keyboard (iPhone and iPad: the system keyboard over the stream, what is typed goes to the PC as text,
-Return, Tab and Backspace as keys; `VideoHostView` is its first responder, it comes up once the menu has closed and goes down
-when the menu opens again or the stream stops running; the keys of an iPad's hardware keyboard go to the PC through
-GameController alone, so the keyboard does not type them a second time; debug builds log the tile press, the first
-responder's changes with the frames that caused a resign, the system keyboard's notifications, the hardware keyboard's
-connections and `MenuKeyOwnerView`'s claims as `KeyboardTileLog`, subsystem `io.github.meitoncz.delos`, category
-`KeyboardTile`), Overlay (statistics), Brightness (iPhone and iPad: the screen's brightness for the
+The tiles are Resume, Keyboard (every device: the Delos full keyboard, `FullKeyboard*.swift`, below), Overlay (statistics), Brightness (iPhone and iPad: the screen's brightness for the
 length of the stream, given back when it ends or the app leaves the screen), More, Disconnect and Quit app. Brightness and
 More open a popover (`StreamPopover.swift`): a frosted card above the tile that opened it with the shared caret (`CardCaret`, 60 x 24) in one
 outline, a header with a back circle and the title, 72 px rows on one gliding plate (a slider takes left and right, a held
@@ -609,10 +603,29 @@ Bitrate, Send clipboard and Get clipboard have their actions (`StreamController.
 Upscaler and Supersampling (the renderer has none), Zoom, Mouse mode and Local
 Left out of Android's menu, because the platform has no such action: Bitrate (the core cannot change the bitrate of a
 running stream), Upscaler and Supersampling (the renderer's controls exist, `VideoRenderer.setUpscaler` and `upscalerStatus`; the tiles do not yet), Send and Get clipboard, Zoom, Mouse mode and Local
-mouse cursor (touch is the trackpad only), On-screen controls, Open Android keyboard, Touch sensitivity, Rumble feel, Gyro
-smoothing. The captions of Overlay, Keyboard and More are empty: Android's texts describe its own statistics, keyboard and
-rows, and no Android string fits. The recorded buttons only open the menu (the input is paused while the menu is open, so
-they cannot close it).
+mouse cursor (touch is the trackpad only), Touch sensitivity, Rumble feel, Gyro
+smoothing. More has On-screen controls and, on iPhone and iPad, Open system keyboard (Android's Open Android keyboard: the
+system keyboard over the stream, what is typed goes to the PC as text, Return, Tab and Backspace as keys; `VideoHostView` is
+its first responder, it comes up once the menu has closed and goes down when the menu opens again or the stream stops
+running; the keys of an iPad's hardware keyboard go to the PC through GameController alone, so the keyboard does not type
+them a second time; debug builds log the row, the first responder's changes with the frames that caused a resign, the
+system keyboard's notifications, the hardware keyboard's connections and `MenuKeyOwnerView`'s claims as `KeyboardTileLog`,
+subsystem `io.github.meitoncz.delos`, category `KeyboardTile`). The captions of Overlay and More are empty: Android's texts
+describe its own statistics and rows; Keyboard's says D-pad, A and B, and names the system keyboard only where More has it.
+The recorded buttons only open the menu (the input is paused while the menu is open, so they cannot close it).
+
+The Delos full keyboard (`FullKeyboard.kt` of Android) is a bar docked to the bottom with Android's 80 keys in six rows
+(`FullKeyboardKeys`), a gliding gold ring for the controller, a popup over a pressed character key, the A / B / L3 / X / Y
+hint strip while a controller drives it, the shade to .38 and the profile's size, width, alignment and opacity
+(`KeyboardMetrics`, `KeyboardPrefs`). `FullKeyboardState` holds what it shows and does: each finger or the pointer holds its
+own key, a modifier held 300 ms stays latched (sticky modifiers on), Caps Lock is tracked, A presses the focused key and
+toggles a modifier's latch, B closes, L3 latches Shift, X and Y are Backspace and Space and repeat (350 / 100 ms), the D-pad
+(as a hat) and the left stick move the focus with the same repeat. While it is up, `GameInput.padCapture` gives it every
+controller reading instead of the PC (which gets a neutral controller, so what was held comes up), the stream menu's
+shortcut and a tap of Home still open the menu, `mouseSuspended` frees the pointer for the keys, and on Apple TV the Siri
+Remote's surface and click drive it (`SiriRemoteKeyboard`, Back closes it). Its keys reach the PC through
+`GameInput.sendVirtualKey`, with the modifiers its own keys and the hardware keyboard hold down; hiding it releases every
+key and latch.
 
 It opens with a tap of a controller's Home button: `GuideTapHold` decides each press, a release within 500 ms opens the
 menu and sends nothing to the PC, a press held for 500 ms becomes Guide on the PC at that moment, while the button is

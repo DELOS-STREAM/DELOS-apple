@@ -687,6 +687,7 @@ stream_menu_row_send_keys
 stream_menu_row_commands
 stream_menu_row_task_manager
 stream_menu_row_screen_brightness
+stream_menu_row_system_keyboard
 stream_menu_no_commands
 stream_menu_bitrate_applying
 stream_menu_bitrate_accepted
@@ -713,6 +714,17 @@ stream_help_commands
 stream_help_task_manager
 stream_help_format_keys
 stream_help_format_command
+stream_help_open_system_keyboard
+stream_help_delos_keyboard
+stream_help_delos_keyboard_system
+
+# Delos full keyboard
+keyboard_hint_press
+keyboard_hint_close
+keyboard_hint_shift
+keyboard_hint_delete
+keyboard_hint_space
+keyboard_title
 game_menu_send_keys_esc
 game_menu_send_keys_f11
 game_menu_send_keys_alt_f4

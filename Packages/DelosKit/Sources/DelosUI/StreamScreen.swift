@@ -141,6 +141,15 @@ struct StreamScreen: View {
         }
         controller.rumbleConfiguration = settings.rumble
         controller.controllerOptions = ControllerOptions(settings: settings)
+        controller.keyboardOptions = FullKeyboardOptions(settings)
+        controller.fullKeyboard.prefs = KeyboardPrefs(settings)
+        #if os(iOS)
+        let keyboardHaptics = KeyboardHaptics()
+        controller.keyboardHaptic = { keyboardHaptics.play($0) }
+        #elseif os(tvOS)
+        // The Siri Remote is the controller of Apple TV: the keyboard opens with its focus and hints
+        controller.fullKeyboard.hasController = { true }
+        #endif
         controller.leavingHold = .seconds(ExitLook.handoff(reduced: reducedMotion))
         controller.menuOpened = { [navigator] in navigator.cancelRepeats?() }
         controller.statisticsChosen = keepStatisticsOverlay
@@ -198,6 +207,12 @@ struct StreamScreen: View {
                     feedback?.play(.back)
                     Task { await controller.cancelLoader() }
                 }
+                return true
+            }
+            // The Siri Remote's Back closes the full keyboard (a controller's B does it through the keyboard itself)
+            if fromRemote, command == .back, !controller.menuOpen, controller.fullKeyboard.open, !hasGamepad() {
+                feedback?.play(.back)
+                controller.closeFullKeyboard()
                 return true
             }
             let remoteMenu = fromRemote && (command == .options || (command == .back && !hasGamepad()))
@@ -342,7 +357,7 @@ struct StreamContent: View {
                         },
                         ignoresPointer: { controller.hasMouse },
                         capturesPointer: capturesPointer,
-                        keyboard: controller.keyboardShown && !controller.menuOpen,
+                        keyboard: controller.systemKeyboardShown && !controller.menuOpen,
                         onText: { controller.typed($0) },
                         onBackspace: { controller.typedBackspace() },
                         onKeyboardHidden: { controller.keyboardDismissed() }
@@ -365,6 +380,12 @@ struct StreamContent: View {
                     .blur(radius: controller.menuOpen ? stage.px(StreamDockLayout.videoBlur) : 0)
             }
             #endif
+            // The Delos full keyboard over the picture and the on-screen controls, under the launch scene and the menu
+            if controller.fullKeyboard.present, controller.phase == .streaming {
+                FullKeyboardLayer(state: controller.fullKeyboard)
+                    .ignoresSafeArea()
+                    .blur(radius: controller.menuOpen ? stage.px(StreamDockLayout.videoBlur) : 0)
+            }
             if let director, director.isActive, launching {
                 LaunchLoader(director: director, card: card, onCancel: {
                     layers?.feedback?.play(.back)
@@ -477,10 +498,11 @@ struct StreamContent: View {
     }
 
     /// The input released (Control + Alt + Shift + Z) or the local pointer shown (Control + Alt + Shift + C) frees the pointer
-    /// too (Android's `disableCapture` and `showCursor`, which both release the pointer capture).
+    /// too (Android's `disableCapture` and `showCursor`, which both release the pointer capture); so does the full keyboard,
+    /// whose keys the pointer clicks.
     private var capturesPointer: Bool {
         Self.capturesPointer(phase: controller.phase, menuOpen: controller.menuOpen, loaderUp: director?.isActive == true)
-            && controller.inputGrabbed && !controller.localCursorVisible
+            && controller.inputGrabbed && !controller.localCursorVisible && !controller.fullKeyboard.open
     }
 
     /// The pointer is the stream's (locked and hidden, ``PointerLock``): the stream runs and neither its menu, the loader

@@ -73,15 +73,18 @@ enum StreamMenuText {
         }
     }
 
-    /// The help (caption) of a tile: the complete text of Android's menu. Overlay, Keyboard and More have none, because
-    /// Android's texts describe its own compact statistics, keyboard and rows.
-    static func caption(_ item: BarItem) -> String {
+    /// The help (caption) of a tile: the complete text of Android's menu. Overlay and More have none, because Android's texts
+    /// describe its own compact statistics and rows; Keyboard's names the system keyboard only where More has its row.
+    static func caption(_ item: BarItem, capabilities: StreamMenuCapabilities = .platform) -> String {
         switch item {
         case .resume: L("stream_help_resume")
+        case .keyboard:
+            L(capabilities.systemKeyboard ? "stream_help_delos_keyboard_system" : "stream_help_delos_keyboard",
+              StreamMenuButtonsText.name(.a), StreamMenuButtonsText.name(.b))
         case .brightness: L("stream_help_brightness")
         case .disconnect: L("stream_help_disconnect")
         case .quit: L("stream_help_quit_game")
-        case .keyboard, .overlay, .more: ""
+        case .overlay, .more: ""
         }
     }
 }

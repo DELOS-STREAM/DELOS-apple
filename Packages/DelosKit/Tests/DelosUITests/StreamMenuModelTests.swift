@@ -6,14 +6,23 @@ struct StreamMenuModelTests {
     typealias L = StreamMenuLayout
 
     @Test func theTilesFollowAndroidsOrderAndTheDevice() {
-        let phone = StreamMenuCapabilities(keyboard: true, brightness: true)
+        let phone = StreamMenuCapabilities(systemKeyboard: true, brightness: true)
         #expect(phone.tiles == [.resume, .keyboard, .overlay, .brightness, .more, .disconnect, .quit])
-        let desktop = StreamMenuCapabilities(keyboard: false, brightness: false)
-        #expect(desktop.tiles == [.resume, .overlay, .more, .disconnect, .quit])
+        // The Delos full keyboard is on every device; only the system keyboard's More row needs one
+        let desktop = StreamMenuCapabilities(systemKeyboard: false, brightness: false)
+        #expect(desktop.tiles == [.resume, .keyboard, .overlay, .more, .disconnect, .quit])
         #expect(Set(BarItem.allCases.map(\.id)).count == BarItem.allCases.count)
         #expect(BarItem(id: AnyHashable("stream-more")) == .more)
         #expect(BarItem(id: AnyHashable("elsewhere")) == nil)
         #expect(BarItem(id: nil) == nil)
+    }
+
+    @Test func theKeyboardTilesHelpNamesItsButtonsAndTheSystemKeyboardOnlyWhereMoreHasIt() {
+        let phone = StreamMenuText.caption(.keyboard, capabilities: StreamMenuCapabilities(systemKeyboard: true, brightness: true))
+        #expect(phone == DelosUI.L("stream_help_delos_keyboard_system", "A", "B"))
+        let desktop = StreamMenuText.caption(.keyboard, capabilities: StreamMenuCapabilities(systemKeyboard: false, brightness: false))
+        #expect(desktop == DelosUI.L("stream_help_delos_keyboard", "A", "B"))
+        #expect(!desktop.isEmpty && desktop != phone)
     }
 
     @Test func backGoesOneLevelUpToTheRowOrTheTile() {
