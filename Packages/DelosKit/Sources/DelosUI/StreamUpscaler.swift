@@ -133,7 +133,7 @@ final class NoUpscaler: UpscalerControl {
     var status: UpscalerStatus { .off }
     var supersamplingMode: Bool { false }
     var supersamplingLevel: Int { 1 }
-    var mode: UpscalerMode { .standard }
+    var mode: UpscalerMode { .spatial }
     var sharpness: Int { 50 }
     func setEnabled(_ on: Bool) {}
     func setMode(_ mode: UpscalerMode) {}
