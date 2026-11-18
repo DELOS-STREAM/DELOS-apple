@@ -106,6 +106,14 @@ final class StreamController {
 
     @ObservationIgnored private let makeSteps: @MainActor () -> any StreamSteps
     @ObservationIgnored private var steps: any StreamSteps
+    /// The Send keys page's combinations: the built-in ones unless the profile cleared them, then the profile's custom ones
+    /// (`GameMenu.specialKeyOptions`, ``StreamSpecialKeys``); the screen sets them.
+    @ObservationIgnored var specialKeys: [SpecialKeys.Option] = SpecialKeys.all
+    /// The profile's custom key file could not be read past some combination: the Send keys page says so when it opens.
+    @ObservationIgnored var specialKeysFailed = false
+    /// Shows a toast over the stream: its text, its kind and how long it stays (``ToastTiming/streamShortMs`` or
+    /// ``ToastTiming/streamLongMs``, Android's `DelosToast.SHORT` and `LONG` of a stream).
+    @ObservationIgnored var toast: (@MainActor (String, ToastKind?, Double) -> Void)?
     @ObservationIgnored private var display: DisplayInfo?
     @ObservationIgnored private var attempt: Task<Void, Never>?
     @ObservationIgnored private var listener: Task<Void, Never>?
@@ -434,7 +442,7 @@ final class StreamController {
                     help: L("stream_help_screen_brightness"), activate: {}, set: { [self] in setBrightness($0) })
             ])
         case .keys:
-            let pills = SpecialKeys.all.enumerated().map { index, option in
+            let pills = specialKeys.enumerated().map { index, option in
                 let label = StreamMenuText.specialKey(option.label)
                 return StreamMenuPill(
                     id: "\(index)", label: label, help: L("stream_help_format_keys", label), run: { [self] in send(option.combo) })
@@ -460,6 +468,8 @@ final class StreamController {
             return
         }
         menu.open(page, focusing: menuContent(page).ids.first ?? StreamMenuState.backID)
+        // GameMenu.java:144: a custom key file that could not be read
+        if page == .keys, specialKeysFailed { toast?(L("wrong_import_format"), .warning, ToastTiming.streamShortMs) }
     }
 
     /// B (or the back circle): one level up, to the row that opened the page or to its tile; on the dock it resumes.

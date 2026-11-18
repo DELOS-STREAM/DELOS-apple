@@ -1,4 +1,5 @@
 import DelosData
+import DelosInput
 import Foundation
 #if os(iOS)
 import UIKit
@@ -83,5 +84,15 @@ enum StreamMenuText {
         case .quit: L("stream_help_quit_game")
         case .keyboard, .overlay, .more: ""
         }
+    }
+}
+
+/// The Send keys page's combinations for a profile (`GameMenu.specialKeyOptions` of DELOS for Android, GameMenu.java:63-149):
+/// Android's built-in ones unless `checkbox_enable_clear_default_special_button` clears them, then the profile's imported
+/// custom keys. [failed]: the custom file could not be read past some combination (`wrong_import_format`).
+enum StreamSpecialKeys {
+    static func options(clearDefaults: Bool, custom: String?) -> (options: [SpecialKeys.Option], failed: Bool) {
+        let parsed = CustomKeyCombos.parse(custom ?? "")
+        return ((clearDefaults ? [] : SpecialKeys.all) + parsed.options, parsed.failed)
     }
 }

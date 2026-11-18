@@ -138,13 +138,18 @@ struct StreamScreen: View {
             switch event {
             // DelosToast.SHORT and LONG of a stream (`ToastTiming.STREAM_SHORT_MS`, `STREAM_LONG_MS`)
             case .mouseEmulation(let on):
-                toasts?.show(on ? L("stream_mouse_emulation_on") : L("stream_mouse_emulation_off"), icon: Symbols.info, durationMs: 4000)
+                toasts?.show(on ? L("stream_mouse_emulation_on") : L("stream_mouse_emulation_off"), icon: Symbols.info, durationMs: ToastTiming.streamShortMs)
             case .controllerTypeChanged:
-                toasts?.show(L("toast_controller_type_changed"), icon: Symbols.info, durationMs: 6500)
+                toasts?.show(L("toast_controller_type_changed"), icon: Symbols.info, durationMs: ToastTiming.streamLongMs)
             case .keyCombo:
                 break
             }
         }
+        controller.toast = { [toasts] text, kind, duration in toasts?.show(text, durationMs: duration, kind: kind) }
+        let keys = StreamSpecialKeys.options(
+            clearDefaults: settings.bool(.enableClearDefaultSpecialButton), custom: profileID.flatMap { CustomSpecialKeys().load(profile: $0) })
+        controller.specialKeys = keys.options
+        controller.specialKeysFailed = keys.failed
         self.renderer = renderer
         self.controller = controller
         navigator.takeInput(controller) { [navigator] command in

@@ -366,3 +366,16 @@ private func streaming(
         #expect(controller.brightnessPercent == 65)
     }
 }
+
+struct StreamSpecialKeysTests {
+    @Test func defaultsThenCustomUnlessCleared() {
+        let custom = #"{"data":[{"name":"Mine","keys":["VK_F5"]}]}"#
+        let all = StreamSpecialKeys.options(clearDefaults: false, custom: custom)
+        #expect(all.options.count == SpecialKeys.all.count + 1)
+        #expect(all.options.last?.label == "Mine")
+        let cleared = StreamSpecialKeys.options(clearDefaults: true, custom: custom)
+        #expect(cleared.options.map(\.label) == ["Mine"])
+        #expect(!cleared.failed)
+        #expect(StreamSpecialKeys.options(clearDefaults: false, custom: nil).options == SpecialKeys.all)
+    }
+}
