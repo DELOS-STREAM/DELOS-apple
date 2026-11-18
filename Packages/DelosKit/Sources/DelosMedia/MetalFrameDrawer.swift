@@ -47,17 +47,20 @@ struct UpscaleRequest {
     var sequence: Int
     /// When the frame was decoded (seconds): the temporal history starts again after a gap.
     var frameTime: Double
-    /// SGSR 2 reuses the previous frame's optical flow (``FlowGovernor``).
+    /// MetalFX Temporal reuses the previous frame's optical flow (``FlowGovernor``).
     var reuseFlow: Bool
 }
 
 /// What a drawing through the upscaler did, for the renderer's statistics and load decisions.
 /// Command buffers are thread-safe Metal objects; the report crosses into the pipeline's lock and completion handlers.
 struct UpscaleReport: @unchecked Sendable {
+    /// The mode that ran: the requested one, or Sharpen only where this device lacks its MetalFX scaler.
     var mode: UpscalerMode
     var dimensions: UpscalerDimensions
     /// True when this frame was upscaled now, false when an earlier upscaled picture was presented again.
     var fresh: Bool
+    /// The requested mode could not run here and Sharpen only stood in (the status is unavailable).
+    var fellBack = false
     /// Sharpen only: the conversion and the pass in command buffers of their own, so their GPU times are known apart
     /// (Android's `SharpenMeter` copy and pass spans).
     var preparation: (any MTLCommandBuffer)?
@@ -98,7 +101,8 @@ final class MetalFrameDrawer: @unchecked Sendable {
         var format: MTLPixelFormat
     }
 
-    init?(device: (any MTLDevice)? = MTLCreateSystemDefaultDevice()) {
+    /// `metalFX`: the MetalFX scalers to use, nil for those of `device` (tests pass ``MetalFXSupport/none``).
+    init?(device: (any MTLDevice)? = MTLCreateSystemDefaultDevice(), metalFX: MetalFXSupport? = nil) {
         guard let device, let queue = device.makeCommandQueue(),
               let library = try? device.makeDefaultLibrary(bundle: .module) else { return nil }
         var textureCache: CVMetalTextureCache?
@@ -109,7 +113,7 @@ final class MetalFrameDrawer: @unchecked Sendable {
         self.queue = queue
         self.textureCache = textureCache
         cache = MetalPipelineCache(device: device, library: library)
-        upscaler = MetalUpscaler(cache: cache)
+        upscaler = MetalUpscaler(cache: cache, support: metalFX ?? MetalFXSupport.probe(device))
     }
 
     /// The rectangle of a `width` × `height` target the picture fills, in pixels: as large as fits, in the middle.
@@ -178,28 +182,31 @@ final class MetalFrameDrawer: @unchecked Sendable {
         request: UpscaleRequest
     ) -> Bool {
         let settings = request.settings
+        // Without the mode's MetalFX scaler Sharpen only stands in, and the status says the upscaler is unavailable
+        let mode = upscaler.support.effectiveMode(settings.mode)
+        let fellBack = mode != settings.mode
         let format: MTLPixelFormat = wide ? .rgba16Float : .rgba8Unorm
-        if upscaledMode != settings.mode {
-            // A new mode starts with a fresh history (Android: `drawnQuality` changed)
-            upscaledMode = settings.mode
+        if upscaledMode != mode {
+            // A new mode starts with a fresh history
+            upscaledMode = mode
             upscaler.reset()
         }
         let key = UpscaleKey(
-            sequence: request.sequence, mode: settings.mode, presentationWidth: geometry.presentationWidth,
+            sequence: request.sequence, mode: mode, presentationWidth: geometry.presentationWidth,
             presentationHeight: geometry.presentationHeight, level: settings.supersamplingLevel,
-            sharpness: settings.mode == .sharpen ? settings.sharpness : 0, format: format)
+            sharpness: mode == .sharpen ? settings.sharpness : 0, format: format)
         let sharpness = Float(settings.sharpness) / 100
         var report: UpscaleReport
         let picture: UpscaledPicture
         if let upscaled, upscaled.key == key {
             picture = upscaled.picture
-            report = UpscaleReport(mode: settings.mode, dimensions: picture.dimensions, fresh: false)
+            report = UpscaleReport(mode: mode, dimensions: picture.dimensions, fresh: false, fellBack: fellBack)
         } else {
             if sourceTexture?.width != size.width || sourceTexture?.height != size.height || sourceTexture?.pixelFormat != format {
-                sourceTexture = cache.texture(format, width: size.width, height: size.height, usage: [.renderTarget, .shaderRead])
+                sourceTexture = cache.texture(format, width: size.width, height: size.height, usage: MetalUpscaler.sourceUsage)
             }
             guard let source = sourceTexture else { return false }
-            let sharpenOnly = settings.mode == .sharpen
+            let sharpenOnly = mode == .sharpen
             // Sharpen only measures its preparation and its pass apart, each in a command buffer of its own
             guard let preparation = sharpenOnly ? queue.makeCommandBuffer() : commandBuffer else { return false }
             let whole = MTLViewport(originX: 0, originY: 0, width: Double(size.width), height: Double(size.height), znear: 0, zfar: 1)
@@ -208,19 +215,18 @@ final class MetalFrameDrawer: @unchecked Sendable {
             else { return false }
             if sharpenOnly { preparation.commit() }
             guard var made = upscaler.upscale(
-                source: source, mode: settings.mode,
+                source: source, mode: mode,
                 presentation: (geometry.presentationWidth, geometry.presentationHeight),
                 supersamplingLevel: settings.supersamplingLevel, frameTime: request.frameTime, hdr: conversion.isHDR,
                 reuseFlow: request.reuseFlow, commandBuffer: commandBuffer)
             else { return false }
-            report = UpscaleReport(mode: settings.mode, dimensions: made.dimensions, fresh: true)
+            report = UpscaleReport(mode: mode, dimensions: made.dimensions, fresh: true, fellBack: fellBack)
             if sharpenOnly {
                 if sharpenedTexture?.width != size.width || sharpenedTexture?.height != size.height || sharpenedTexture?.pixelFormat != format {
                     sharpenedTexture = cache.texture(format, width: size.width, height: size.height, usage: [.renderTarget, .shaderRead])
                 }
                 guard let sharpened = sharpenedTexture, let pass = queue.makeCommandBuffer(),
-                      upscaler.sharpen(made, sharpness: sharpness, into: sharpened, viewport: nil, crop: MetalPipelineCache.wholePicture,
-                                       commandBuffer: pass)
+                      upscaler.sharpen(made, sharpness: sharpness, into: sharpened, commandBuffer: pass)
                 else { return false }
                 pass.commit()
                 made.texture = sharpened
@@ -230,20 +236,19 @@ final class MetalFrameDrawer: @unchecked Sendable {
             picture = made
             upscaled = (key, picture)
         }
-        let stream = (width: size.width, height: size.height)
         if let arrival {
             // The arrival poses the upscaled picture: it is presented into the arrival's texture first
-            let sourceSize = picture.presentFragment == nil
-                ? (width: picture.texture.width, height: picture.texture.height)
-                : (width: geometry.presentationWidth, height: geometry.presentationHeight)
+            let sourceSize = picture.sharpenAtPresentation
+                ? (width: geometry.presentationWidth, height: geometry.presentationHeight)
+                : (width: picture.texture.width, height: picture.texture.height)
             guard let source = arrivalSource(width: sourceSize.width, height: sourceSize.height, wide: wide),
-                  upscaler.present(picture, stream: stream, sharpness: sharpness, into: source, viewport: nil,
+                  upscaler.present(picture, sharpness: sharpness, into: source, viewport: nil,
                                    crop: MetalPipelineCache.wholePicture, commandBuffer: commandBuffer),
                   drawArrival(source, pose: arrival, into: target, geometry: geometry, commandBuffer: commandBuffer)
             else { return false }
         } else {
             arrivalTexture = nil
-            guard upscaler.present(picture, stream: stream, sharpness: sharpness, into: target, viewport: geometry.viewport,
+            guard upscaler.present(picture, sharpness: sharpness, into: target, viewport: geometry.viewport,
                                    crop: geometry.crop, commandBuffer: commandBuffer)
             else { return false }
         }
@@ -251,7 +256,7 @@ final class MetalFrameDrawer: @unchecked Sendable {
         return true
     }
 
-    /// The upscaler is off: its textures and history go (Android closes the SGSR renderer).
+    /// The upscaler is off: its textures, scalers and history go.
     private func releaseUpscaler() {
         guard upscaled != nil || sourceTexture != nil || upscaledMode != nil else { return }
         upscaled = nil

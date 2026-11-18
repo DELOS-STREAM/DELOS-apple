@@ -15,23 +15,24 @@ public enum VideoScaleMode: String, CaseIterable, Sendable {
     }
 }
 
-/// The upscaler's methods (`list_sgsr_quality`, Android `preferences/UpscalerMode.java:13-18`). The declaration order is
-/// Android's: the stream menu's Mode row order, and ``index`` the renderers' mode number.
+/// The upscaler's methods (`list_sgsr_quality`; the stored values are those of earlier builds: `standard`, `temporal`,
+/// `sharpen`). The declaration order is the stream menu's Mode row order, and ``index`` the renderers' mode number.
 public enum UpscalerMode: String, CaseIterable, Sendable {
-    /// SGSR 1, Qualcomm's spatial upscaler.
-    case standard
-    /// SGSR 1 in its high quality variant.
-    case high
-    /// SGSR 2 adapted to video: optical flow, history.
+    /// MetalFX Spatial (`MTLFXSpatialScaler`) on the current frame.
+    case spatial = "standard"
+    /// MetalFX Temporal (`MTLFXTemporalScaler`) with motion vectors from the video's optical flow.
     case temporal
-    /// SGSR 2 with the reactive mask and the chroma-aware history clip.
-    case temporalQuality = "temporal-quality"
     /// No scaling: one contrast-adaptive sharpen pass at the stream's own resolution.
     case sharpen
 
-    /// The stored value's mode; anything unknown (an older or newer build's value) is Standard.
+    /// The stored value's mode. The two retired modes map to their successors (`high` to Spatial, `temporal-quality` to
+    /// Temporal); anything unknown (a newer build's value) is Spatial.
     public init(value: String) {
-        self = Self(rawValue: value) ?? .standard
+        switch value {
+        case "high": self = .spatial
+        case "temporal-quality": self = .temporal
+        default: self = Self(rawValue: value) ?? .spatial
+        }
     }
 
     /// The mode at a stream menu position, clamped into the list.
@@ -43,8 +44,8 @@ public enum UpscalerMode: String, CaseIterable, Sendable {
     /// The position in the stream menu's Mode row; also the bit of the once-per-stream overload notice.
     public var index: Int { Self.allCases.firstIndex(of: self)! }
 
-    /// SGSR 2 modes keep a history of earlier frames.
-    public var isTemporal: Bool { self == .temporal || self == .temporalQuality }
+    /// MetalFX Temporal keeps a history of earlier frames.
+    public var isTemporal: Bool { self == .temporal }
 
     /// Whether the mode changes the picture's size (upscaling, or supersampling when the stream already matches the
     /// view). Sharpen only does not: the supersampling quality means nothing to it.
@@ -61,20 +62,20 @@ public struct UpscalerSettings: Sendable, Equatable {
     /// 1 (4/3 of the view, the "1.33×" choice) or 2 (twice the view).
     public var supersamplingLevel: Int { didSet { supersamplingLevel = Self.clampLevel(supersamplingLevel) } }
 
-    public init(enabled: Bool = false, mode: UpscalerMode = .standard, sharpness: Int = 50, supersamplingLevel: Int = 1) {
+    public init(enabled: Bool = false, mode: UpscalerMode = .spatial, sharpness: Int = 50, supersamplingLevel: Int = 1) {
         self.enabled = enabled
         self.mode = mode
         self.sharpness = Self.clampSharpness(sharpness)
         self.supersamplingLevel = Self.clampLevel(supersamplingLevel)
     }
 
-    /// Android `SgsrRenderer.setSharpness`: clamped into 0–100.
+    /// Clamped into 0–100.
     static func clampSharpness(_ value: Int) -> Int { max(0, min(100, value)) }
-    /// Android `SgsrRenderer.setSupersamplingLevel`: 2 and above is 2, anything else 1.
+    /// 2 and above is 2, anything else 1.
     static func clampLevel(_ value: Int) -> Int { value >= 2 ? 2 : 1 }
 }
 
-/// What the upscaler is doing right now (Android `UpscalerStatus.java`), for the stream menu's status pill.
+/// What the upscaler is doing right now, for the stream menu's status pill.
 public enum UpscalerStatus: Sendable, Equatable {
     /// Not requested and not running.
     case off
@@ -84,7 +85,8 @@ public enum UpscalerStatus: Sendable, Equatable {
     case stopping
     /// Running with this method.
     case on(UpscalerMode)
-    /// Requested but impossible here (no Metal upscaler on this renderer, or it failed): the picture is drawn directly.
+    /// Requested but impossible here: the display layer renderer has no upscaler, or the upscaler failed (the picture is
+    /// drawn directly), or this device lacks the MetalFX scaler of the chosen mode (Sharpen only runs instead).
     case unavailable
 
     /// Starting or stopping: the on/off switch waits.

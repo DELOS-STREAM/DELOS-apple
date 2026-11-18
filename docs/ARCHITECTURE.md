@@ -340,36 +340,54 @@ watchdog compares it with the frames it submitted over a window of a second or m
 
 ### Upscalers, scale modes and the refresh rate
 
-Android's upscaler (Settings → Display: `checkbox_sgsr`, `list_sgsr_quality`, `seekbar_sgsr_sharpness`,
-`list_sgsr_supersampling_level`) is ported shader by shader from its GLSL (`app/src/main/assets/sgsr`) to
-`UpscalerShaders.metal`, not replaced by MetalFX: MetalFX's spatial scaler has no sharpness or mode inputs that map to
-Android's, and its temporal scaler needs engine depth and motion that a decoded stream does not have. Every pass works in
-texel index space, as the GLSL does, so the textures' top-left origin gives the same pixels as GL's bottom-left one.
+The upscaler (Settings → Display: `checkbox_sgsr`, `list_sgsr_quality`, `seekbar_sgsr_sharpness`,
+`list_sgsr_supersampling_level`; the storage keys and the stored mode values `standard`, `temporal`, `sharpen` are those
+of earlier builds, and `SettingKey.migrated` maps the retired `high` and `temporal-quality` to `standard` and `temporal`)
+is MetalFX plus the passes of `UpscalerShaders.metal` (`MetalUpscaler`). The input is the decoded picture converted to
+RGB at the stream's size: 8-bit, or half floats for 10-bit streams, which keep HDR's encoded PQ/HLG values in 0–1, so
+both scalers run in MetalFX's perceptual colour mode and without exposure.
 
-| Mode (`UpscalerMode`) | Passes (Android source) |
+| Mode (`UpscalerMode`) | Passes |
 |---|---|
-| Standard | `sgsr1Fragment` (Qualcomm SGSR 1, `sgsr1.frag`) from the stream's RGB picture to the internal size, then `supersamplePresentFragment` (`supersample_present.frag`: the bounded sharpen at 0.375 × sharpness) into the picture's place |
-| High | `sgsr1HighFragment` (`sgsr1_high.frag`, SGSR 1's high-quality target), then the same presentation |
-| Temporal, Temporal quality | `TemporalReconstruction` (`SgsrTemporal.java`): a luma pyramid of four levels for this and the previous frame, Lucas-Kanade backward and forward flow on an 8-pixel grid (`sgsrFlow`, `video_flow.comp`), a whole-frame cut detector (`sgsrSceneChange`), for the quality mode the reactive mask (`sgsrActivate`, `video_activate.comp`), and `sgsr2VideoFragment` (`sgsr2_video.frag`) into a half-float history at the internal size; `temporalPresentFragment` sharpens only the presented picture (0.75 × sharpness). The history starts again after a gap of more than 50 ms between two frames' decode times (Android: SurfaceTexture time), after an HDR change and with a new mode |
-| Sharpen only | No scaling: `sharpenOnlyFragment` (FidelityFX CAS on the five-sample cross, `sharpen_only.frag`) at the stream's size, then a plain bilinear presentation, as Android's compositor scales its stream-sized output |
+| MetalFX Spatial (`standard`) | `MTLFXSpatialScaler` from the stream's RGB picture to the scaler size, then `casFragment` (FidelityFX CAS on the five-sample cross at the sharpness) samples it into the picture's place |
+| MetalFX Temporal (`temporal`) | `VideoMotion` makes the inputs a game would render: a luma pyramid of four levels for this and the previous frame, Lucas-Kanade backward and forward flow on an 8-pixel grid (`videoFlow`, each level sampled from its own mip level), a whole-frame cut detector (`videoSceneChange`), and `videoMotion`, which writes per-pixel motion vectors (`rg16Float`: the backward flow, where the pixel was in the previous frame minus where it is, in input pixels; motion vector scale 1) and a reactive mask (`r16Float`: high where the flow is unsure, where backward and forward flow disagree, where the luma does not match where the flow points and where the previous position is outside the picture; 1 everywhere on a cut). `MTLFXTemporalScaler` then reconstructs at the scaler size with jitter 0, a constant depth plane and the mask; `casFragment` sharpens while presenting, so the sharpening never enters MetalFX's history |
+| Sharpen only (`sharpen`) | No scaling: `casFragment` at the stream's size, then a plain bilinear presentation |
 
-`UpscalerDimensions` is `SgsrDimensions.java`: the presentation size is the picture's rectangle (even), and a stream that
-already has that size (within 2 pixels) is reconstructed at 4/3 of it at supersampling level 1 ("1.33×") and twice it at
-level 2, within 3840 × 3840, 3840 × 2160 pixels and the GPU's texture limit. 10-bit streams keep HDR's encoded PQ/HLG
-values through the passes in half-float textures, as Android's P010 output does. A drawing of the same frame again (a resize,
-the arrival) presents the upscaled picture again and never feeds the history twice; during the arrival the upscaled
-picture is what the arrival poses.
+Depth: decoded video has none, and MetalFX Temporal requires a depth texture. It gets a `depth32Float` plane cleared
+once to 0.5 (`isDepthReversed` false), the middle of the range so that neither the near nor the far clear value applies:
+depth then never separates one pixel from another, and disocclusions come from the reactive mask instead. The history is
+dropped (`reset`) on the first frame, after a gap of more than 50 ms between two frames' decode times or a frame out of
+order, after a change between SDR and HDR, with a new mode and with a new scaler. A cut is found on the GPU in the frame it
+happens, too late for the CPU's `reset` of that frame's encoding, so it makes the whole reactive mask 1, which tells
+MetalFX to ignore the history at every pixel.
 
-The load follows `SgsrRenderer.java`: at most two frames of the upscaler's GPU work in flight (`GPUInFlight`; a frame that
-waits is replaced by a newer one and counted as "GPU busy", and 250 ms of waiting clears the count), its GPU time per frame
-from the command buffers' `gpuStartTime`/`gpuEndTime`, one-second windows (`UpscalerWindowMeter`) that let `FlowGovernor`
-reuse SGSR 2's flow every second frame above 70 % of the frame period (back below 45 %) and let `OverloadDetector` report an
-overload after two windows above 90 % or with more than 20 % busy drops. As on Android the overload only tells (a warning
-toast with Android's English text, once per stream and mode); nothing is switched off. Sixty failed drawings in a row
-switch the upscaler off for the stream (`upscalerStatus` = unavailable), Android's fallback to direct output. The display
-layer draws no shader: a requested upscaler is unavailable there. `VideoRenderer.setUpscaler`, `upscalerSettings`,
-`upscalerStatus` (off, starting, stopping, on with the mode, unavailable), `isSupersampling` and `setScaleMode` are what
-the stream menu's Upscaler page uses.
+`UpscalerDimensions` gives the presentation size (the picture's rectangle, even) and the internal size: a stream that
+already has the presentation size (within 2 pixels) is supersampled at 4/3 of it at level 1 ("1.33×") and twice it at
+level 2, within 3840 × 3840, 3840 × 2160 pixels and the GPU's texture limit. MetalFX writes the stream enlarged by one
+factor on both axes (`MetalUpscaler.scalerOutput`): the smaller of the two factors to the internal size (the
+presentation stretches the rest for Stretch), at most the temporal scaler's largest factor on this GPU
+(`supportedInputContentMaxScale`). MetalFX only enlarges: a stream as large as the picture or larger skips the scaler
+and is sampled into it by `casFragment` directly. The scalers and their textures are made again when the mode, the
+sizes or the bit depth change. A drawing of the same frame again (a resize, the arrival) presents the upscaled picture
+again and never feeds the history twice; during the arrival the upscaled picture is what the arrival poses.
+
+Availability (`MetalFXSupport`): MetalFX is part of iOS, iPadOS and macOS, where `supportsDevice` decides per GPU, and of
+tvOS only from 27.1 (the scalers' API is `tvos(27.1)` in the SDK; the app targets tvOS 18). The simulators' SDKs have no
+MetalFX framework, so the code is compiled out there
+(`canImport(MetalFX)`). Where a mode's scaler is missing the drawer runs Sharpen only instead, `upscalerStatus` reports
+unavailable and the statistics line says "Sharpen only"; Settings adds a note to the mode row (`StreamDevice.metalFXSpatial`,
+`metalFXTemporal`).
+
+The load: at most two frames of the upscaler's GPU work in flight (`GPUInFlight`; a frame that waits is replaced by a
+newer one and counted as "GPU busy", and 250 ms of waiting clears the count), its GPU time per frame from the command
+buffers' `gpuStartTime`/`gpuEndTime`, one-second windows (`UpscalerWindowMeter`) that let `FlowGovernor` reuse
+MetalFX Temporal's optical flow every second frame above 70 % of the frame period (back below 45 %) and let
+`OverloadDetector` report an overload after two windows above 90 % or with more than 20 % busy drops. The overload only
+tells (a warning toast, once per stream and mode); nothing is switched off. Sixty failed drawings in a row switch the
+upscaler off for the stream (`upscalerStatus` = unavailable) and the picture is drawn directly. The display layer draws no
+shader: a requested upscaler is unavailable there. `VideoRenderer.setUpscaler`, `upscalerSettings`, `upscalerStatus`
+(off, starting, stopping, on with the mode, unavailable), `isSupersampling` and `setScaleMode` are what the stream menu's
+Upscaler page uses.
 
 The scale mode (`list_video_scale_mode`) places the picture in both renderers: the display layer's `videoGravity`
 (`resizeAspect`, `resizeAspectFill`, `resize`) and the Metal drawer's `PictureGeometry`.
@@ -392,7 +410,7 @@ plan reports the peak rate and asks the display link for the stream's own rate; 
 The statistics gain Android's 1 % low (`FrameTimes`, both renderers: the Metal renderer stamps the refresh a frame is shown
 at, the display layer the time it hands a frame over), the Render latency (decoded picture to the drawable's
 `presentedTime`, average / nearest-rank 95th percentile / maximum per window, `StageWindow`; the display layer reports no
-presented time), the Upscaling time, the scale line in Android's words ("Upscaled to: …", "Supersampled to: …", "Sharpen
+presented time), the Upscaling time, the scale line ("Upscaled to: …", "Supersampled to: …", "Sharpen
 only: …"), the Sharpen pass (pass and conversion in command buffers of their own) and the GPU busy drops.
 
 ### What was measured without a stream

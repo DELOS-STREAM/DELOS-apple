@@ -614,6 +614,8 @@ extension StreamDevice {
         device.deviceMotion = DeviceHardware.motion
         device.haptics = DeviceHardware.haptics
         device.pictureInPicture = DeviceHardware.pictureInPicture
+        device.metalFXSpatial = MetalFXSupport.system.spatial
+        device.metalFXTemporal = MetalFXSupport.system.temporal
         return device
     }
 }

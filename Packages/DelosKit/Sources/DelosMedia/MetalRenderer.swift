@@ -12,8 +12,8 @@ import Synchronization
 /// `AVSampleBufferDisplayLayer`'s internals.
 ///
 /// The second path of decision L4 and the default (``RendererChoice``). It is where the launch scene's arrival
-/// (``LaunchArrival``), the upscalers (SGSR 1, SGSR 2, Sharpen only: ``MetalUpscaler``), the scale modes, HDR tone mapping
-/// (issue #11) and PyroWave (issue #13) draw.
+/// (``LaunchArrival``), the upscalers (MetalFX Spatial, MetalFX Temporal, Sharpen only: ``MetalUpscaler``), the scale
+/// modes, HDR tone mapping (issue #11) and PyroWave (issue #13) draw.
 ///
 /// `CAMetalDisplayLink` exists on iOS and tvOS 17, and on macOS 14 (the app's minimum is 15), so the Mac needs no second
 /// display-link kind.
