@@ -85,8 +85,12 @@ final class StreamController {
     }
 
     private(set) var phase = Phase.connecting {
-        // The keyboard belongs to the running stream: not over the loader, the exit or the result overlay
-        didSet { if phase != .streaming { keyboardShown = false } }
+        // The keyboards belong to the running stream: not over the loader, the exit or the result overlay
+        didSet {
+            guard phase != .streaming else { return }
+            systemKeyboardShown = false
+            closeFullKeyboard()
+        }
     }
     /// "Calling up <PC>" and the line of the current stage.
     private(set) var greeting = ""
@@ -116,8 +120,15 @@ final class StreamController {
     let capabilities: StreamMenuCapabilities
     /// The screen's brightness in percent, in steps of 5 (the Brightness page's slider).
     private(set) var brightnessPercent = 100
-    /// The on-screen keyboard is wanted over the stream (the Keyboard tile): it is raised while the menu is closed.
-    private(set) var keyboardShown = false
+    /// The system keyboard is wanted over the stream (More's Open system keyboard): it is raised while the menu is closed.
+    private(set) var systemKeyboardShown = false
+    /// The Delos full keyboard (the Keyboard tile): over the stream, it takes the controllers while it is up.
+    let fullKeyboard: FullKeyboardState
+    /// The profile's keyboard settings: sticky modifiers and vibration (`checkbox_enable_sticky_modifier_key_virtual_keyboard`,
+    /// `checkbox_vibrate_keyboard`).
+    @ObservationIgnored var keyboardOptions = FullKeyboardOptions()
+    /// Plays the keyboard's vibrations (iPhone and iPad; the screen sets it).
+    @ObservationIgnored var keyboardHaptic: (@MainActor (KeyHaptic) -> Void)?
     private(set) var statistics: StreamStatistics?
     /// "Poor connection" or "Slow connection" over the running stream while the core judges it so (``StreamWarnings``).
     private(set) var connectionNotice: String?
@@ -212,6 +223,7 @@ final class StreamController {
         statisticsOverlay: StatisticsOverlay = .off, playtime: PlaytimeTracker? = nil, playtimeFlushInterval: Duration = .seconds(30),
         menuButtons: Set<ShortcutButton> = [], menuSwipe: Bool = true, onScreenControls: OnScreenControls? = nil,
         upscaler: (any UpscalerControl)? = nil,
+        fullKeyboard: FullKeyboardState = FullKeyboardState(),
         makeSteps: @escaping @MainActor () -> any StreamSteps
     ) {
         self.playtime = playtime
@@ -224,12 +236,14 @@ final class StreamController {
         var capabilities = capabilities
         capabilities.brightness = capabilities.brightness && brightness != nil
         self.capabilities = capabilities
+        self.fullKeyboard = fullKeyboard
         if let brightness { brightnessPercent = Self.rounded(brightness.percent) }
         onScreen = onScreenControls
-        self.upscaler = upscaler ?? UnavailableUpscaler(settings: StreamSettings())
+        self.upscaler = upscaler ?? NoUpscaler()
         steps = makeSteps()
         greeting = L("stream_loader_greeting", steps.pcName)
         onScreen?.output.send = { [weak self] state in self?.onScreenSent(state) }
+        fullKeyboard.host = self
     }
 
     /// Starts the stream on `display`; the first call starts it, later ones (the view laid out again) do nothing.
@@ -493,6 +507,7 @@ final class StreamController {
         menuOpened?()
         input?.paused = true
         onScreen?.releaseAll()
+        fullKeyboard.releaseInput()
     }
 
     func closeMenu() {
@@ -624,11 +639,7 @@ final class StreamController {
                 help: L("stream_help_mouse_mode"), activate: { [self] in openMenuPage(.mouse) }))
         }
         rows += onScreenRows
-        if capabilities.keyboard {
-            rows.append(StreamMenuRow(
-                id: MenuRowID.systemKeyboard.rawValue, icon: Symbols.keyboard, label: L("stream_menu_row_system_keyboard"), value: .action,
-                help: L("stream_help_open_system_keyboard"), activate: { [self] in toggleKeyboard() }))
-        }
+        rows += systemKeyboardRows
         if capabilities.touchscreen {
             rows.append(StreamMenuRow(
                 id: MenuRowID.touchSensitivity.rawValue, icon: Symbols.touchSensitivity, label: L("stream_menu_row_touch_sensitivity"),
@@ -1008,18 +1019,63 @@ final class StreamController {
         steps.clipboard?.get()
     }
 
-    /// The Keyboard tile: the menu closes, then the on-screen keyboard comes up or goes away.
-    func toggleKeyboard() {
-        KeyboardTileLog.note("tile: Keyboard pressed; offered \(capabilities.keyboard), shown \(keyboardShown), menu open \(menuOpen)")
-        guard capabilities.keyboard else { return }
+    /// The Keyboard tile (`toggleFullKeyboard`): the menu closes, then the Delos full keyboard comes up (it takes the
+    /// controllers and the pointer) or goes away.
+    func toggleFullKeyboard() {
         closeMenu()
-        keyboardShown.toggle()
+        guard phase == .streaming else { return }
+        if fullKeyboard.open {
+            closeFullKeyboard()
+        } else {
+            fullKeyboard.show()
+            input?.padCapture = { [weak self] old, new in self?.fullKeyboard.controller(old, new) }
+            input?.mouseSuspended = true
+            #if os(tvOS)
+            remoteKeyboard.start()
+            #endif
+        }
+    }
+
+    #if os(tvOS)
+    /// The Siri Remote drives the full keyboard while it is up.
+    @ObservationIgnored private lazy var remoteKeyboard = SiriRemoteKeyboard { [weak self] old, new in
+        self?.fullKeyboard.controller(old, new)
+    }
+    #endif
+
+    /// The full keyboard goes away (its Hide key, B, the tile): what it held comes up at the PC, the controllers and the
+    /// pointer are the game's again.
+    func closeFullKeyboard() {
+        fullKeyboard.hide()
+        input?.padCapture = nil
+        input?.mouseSuspended = false
+        #if os(tvOS)
+        remoteKeyboard.stop()
+        #endif
+    }
+
+    /// More's Open system keyboard (`toggleSystemKeyboard`): the menu closes, then the system keyboard comes up or goes away.
+    func toggleSystemKeyboard() {
+        KeyboardTileLog.note("row: system keyboard; offered \(capabilities.systemKeyboard), shown \(systemKeyboardShown), menu open \(menuOpen)")
+        guard capabilities.systemKeyboard else { return }
+        closeMenu()
+        systemKeyboardShown.toggle()
     }
 
     /// The system took the keyboard away (its own hide button).
     func keyboardDismissed() {
-        KeyboardTileLog.note("tile: the keyboard went away, the tile turns off")
-        keyboardShown = false
+        KeyboardTileLog.note("row: the system keyboard went away")
+        systemKeyboardShown = false
+    }
+
+    /// More's row that raises the system keyboard (Android's Open Android keyboard), where there is one.
+    private var systemKeyboardRows: [StreamMenuRow] {
+        guard capabilities.systemKeyboard else { return [] }
+        return [
+            StreamMenuRow(
+                id: MenuRowID.systemKeyboard.rawValue, icon: Symbols.androidKeyboard, label: L("stream_menu_row_system_keyboard"),
+                value: .action, help: L("stream_help_open_system_keyboard"), activate: { [self] in toggleSystemKeyboard() })
+        ]
     }
 
     func typed(_ text: String) {
@@ -1069,7 +1125,8 @@ final class StreamController {
         stopStatistics()
         suspended = true
         hideMenu()
-        keyboardShown = false
+        systemKeyboardShown = false
+        closeFullKeyboard()
         restoreBrightness()
         stopInput()
         phase = .connecting
@@ -1221,4 +1278,33 @@ final class StreamController {
 
     /// Whether a mouse is connected, whose pointer touches are already the PC's mouse.
     var hasMouse: Bool { input?.hasMouse ?? false }
+}
+
+/// The profile's settings of the Delos full keyboard that are not its size.
+struct FullKeyboardOptions: Equatable, Sendable {
+    /// `checkbox_enable_sticky_modifier_key_virtual_keyboard`: a modifier held 300 ms stays down.
+    var stickyModifiers = true
+    /// `checkbox_vibrate_keyboard`.
+    var vibrate = false
+}
+
+extension FullKeyboardOptions {
+    init(_ settings: StreamSettings) {
+        self.init(stickyModifiers: settings.bool(.enableStickyModifierKeyVirtualKeyboard), vibrate: settings.bool(.vibrateKeyboard))
+    }
+}
+
+/// The keyboard's keys go to the PC through the stream's input, with the modifiers that are down (``GameInput/sendVirtualKey(_:pressed:)``).
+extension StreamController: FullKeyboardHost {
+    var stickyModifiers: Bool { keyboardOptions.stickyModifiers }
+
+    func sendKey(_ code: Int, down: Bool) {
+        guard let key = UInt8(exactly: code) else { return }
+        input?.sendVirtualKey(key, pressed: down)
+    }
+
+    func haptic(_ haptic: KeyHaptic) {
+        guard keyboardOptions.vibrate else { return }
+        keyboardHaptic?(haptic)
+    }
 }

@@ -84,10 +84,16 @@ public final class WatchdogVideoRenderer: VideoRenderer {
     public func presentationCounters() async -> VideoPresentationCounters? { await renderer.presentationCounters() }
     @MainActor public var hostLayer: CALayer { renderer.hostLayer }
     @MainActor public func resize(to bounds: CGRect, scale: CGFloat) { renderer.resize(to: bounds, scale: scale) }
-    @MainActor public func attached(maxFramesPerSecond: Int) { renderer.attached(maxFramesPerSecond: maxFramesPerSecond) }
+    @MainActor public func attached(to display: VideoDisplay) -> DisplayRefreshPlanner.Plan { renderer.attached(to: display) }
     @MainActor public func detached() { renderer.detached() }
     public func startArrival(duration: Double) { renderer.startArrival(duration: duration) }
     public func cancelArrival() { renderer.cancelArrival() }
+    public func setScaleMode(_ mode: VideoScaleMode) { renderer.setScaleMode(mode) }
+    public func setUpscaler(_ settings: UpscalerSettings) { renderer.setUpscaler(settings) }
+    public var upscalerSettings: UpscalerSettings { renderer.upscalerSettings }
+    public var upscalerStatus: UpscalerStatus { renderer.upscalerStatus }
+    public var isSupersampling: Bool { renderer.isSupersampling }
+    public func observeUpscalerOverload(_ body: (@Sendable (UpscalerMode, Bool) -> Void)?) { renderer.observeUpscalerOverload(body) }
 
     func observe(_ counters: VideoPresentationCounters?, now: UInt64) {
         let displayed = counters.flatMap { value -> Int? in

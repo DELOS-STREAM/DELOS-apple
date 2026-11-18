@@ -149,6 +149,14 @@ struct StreamMenu: View {
         .coordinateSpace(name: Self.space)
         .environment(\.modalFocus, controller.picker?.focus ?? (popOpen ? controller.menu.focus : nil))
         .onAppear { focus.focus(Self.resumeID) }
+        // The renderer's upscaler status and supersampling, read again every 250 ms while the menu is up (StreamMenuRoot.kt:286-296)
+        .task(id: open) {
+            guard open, let upscaler = controller.upscaler as? RendererUpscaler else { return }
+            while !Task.isCancelled {
+                upscaler.refresh()
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+        }
         .task {
             try? await Task.sleep(for: .milliseconds(Int(D.enterTotal(count: count)) + 50))
             if open { animating = false }
@@ -248,7 +256,7 @@ struct StreamMenu: View {
 
     /// The help of the tile that has the focus (the one that opened the page while the popover is open).
     private var caption: String {
-        StreamMenuText.caption(BarItem(id: focus.focused) ?? tiles.first ?? .resume, upscaler: controller.upscaler)
+        StreamMenuText.caption(BarItem(id: focus.focused) ?? tiles.first ?? .resume, upscaler: controller.upscaler, capabilities: controller.capabilities)
     }
 
     private func tilesRow(t: Double, exitT: Double, geometry: DockGeometry) -> some View {
@@ -312,7 +320,7 @@ struct StreamMenu: View {
         guard StreamMenuNavigation.tileWorks(opensPage: item.page != nil, popoverOpen: popOpen) else { return }
         switch item {
         case .resume: controller.closeMenu()
-        case .keyboard: controller.toggleKeyboard()
+        case .keyboard: controller.toggleFullKeyboard()
         case .overlay: controller.cycleStatistics()
         case .brightness, .bitrate, .upscaler, .more:
             if let page = item.page { controller.openMenuPage(page) }
@@ -324,8 +332,8 @@ struct StreamMenu: View {
     private func spec(_ item: BarItem) -> DockTile.Spec {
         switch item {
         case .resume: DockTile.Spec(icon: Symbols.resume, label: L("stream_menu_tile_resume"))
-        // A keyboard turns accent while it is up and has no On / Off pill
-        case .keyboard: DockTile.Spec(icon: Symbols.keyboard, label: L("stream_menu_tile_keyboard"), on: controller.keyboardShown, showState: false)
+        // The Delos keyboard turns accent while it is up and has no On / Off pill
+        case .keyboard: DockTile.Spec(icon: Symbols.keyboard, label: L("stream_menu_tile_keyboard"), on: controller.fullKeyboard.open, showState: false)
         // The pill says which overlay is up: Off, On (the full panel) or Compact
         case .overlay:
             DockTile.Spec(

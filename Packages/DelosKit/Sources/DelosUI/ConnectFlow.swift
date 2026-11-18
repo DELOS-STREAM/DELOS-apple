@@ -1,4 +1,5 @@
 import DelosData
+import DelosHost
 import DelosInput
 import Foundation
 import Observation
@@ -38,6 +39,13 @@ protocol ConnectEnvironment: AnyObject {
     func toast(_ text: String, icon: String, kind: ToastKind)
     /// Opens the PC's library.
     func arrive(_ id: String)
+    /// The kind of network the device is on now.
+    var transport: LinkTransport { get }
+    /// The link test of the PC from [startKbps] on [transport] (`LinkTester.run`): a fresh answer of the PC, then the
+    /// search; [onStep] hears every probe. Cancelling the task stops it.
+    func testLink(_ id: String, startKbps: Int, transport: LinkTransport, onStep: @escaping @MainActor (LinkStep) -> Void) async -> LinkTestRun
+    /// Keeps a confirmed result with its date (`LinkTestStore.put`).
+    func storeLinkTest(_ id: String, _ test: LinkTest)
 }
 
 /// Connecting to a PC (`ShellDeviceActions.connect` of DELOS for Android): the portal opens, a PC that is not online is
@@ -60,6 +68,8 @@ final class ConnectFlow {
         case connecting
         /// The burst: the library opens under it.
         case arriving
+        /// The link test runs (`testLink`).
+        case testingLink
     }
 
     /// The times of the flow, in seconds (`DeviceFlows.kt`).
@@ -98,23 +108,78 @@ final class ConnectFlow {
 
     var isActive: Bool { portal != nil }
 
-    /// Connects to the PC [hostID]; nothing while a portal is up.
-    func connect(_ hostID: String) {
+    /// Connects to the PC [hostID]; nothing while a portal is up. [arrived] runs once its library opened (a link's game
+    /// starts from there).
+    func connect(_ hostID: String, arrived: (@MainActor () -> Void)? = nil) {
         guard portal == nil, task == nil else { return }
         task = Task { [weak self] in
-            await self?.run(hostID)
+            await self?.run(hostID, then: arrived)
             self?.task = nil
         }
     }
 
-    /// B while a PC wakes up: stops waiting. The connecting step and the burst cannot be cancelled.
+    /// B while a PC wakes up or the link is tested: stops it. The connecting step and the burst cannot be cancelled.
     func cancel() {
         guard portal?.cancellable == true else { return }
         environment.play(.back)
         task?.cancel()
     }
 
-    private func run(_ id: String) async {
+    /// Measures what the network carries from the PC [hostID] (`DeviceActions.testLink`), starting at [startKbps] (the
+    /// selected bitrate): a portal that B cancels says what is being tested, the result is kept with its date and said in
+    /// a toast. It never changes a setting. Nothing while a portal is up.
+    func testLink(_ hostID: String, startKbps: Int) {
+        guard portal == nil, task == nil else { return }
+        task = Task { [weak self] in
+            await self?.runLinkTest(hostID, startKbps: startKbps)
+            self?.task = nil
+        }
+    }
+
+    private func runLinkTest(_ id: String, startKbps: Int) async {
+        guard let name = environment.hostName(id) else { return }
+        portals += 1
+        let number = portals
+        let transport = environment.transport
+        phase = .testingLink
+        defer {
+            portal = nil
+            burst = false
+            phase = .idle
+        }
+        environment.play(.open)
+        showLinkPortal(number, name, L("devices_link_portal_start", transport.label, Self.backButton))
+        let result = await environment.testLink(id, startKbps: startKbps, transport: transport) { [weak self] step in
+            guard let self, portal?.id == number else { return }
+            showLinkPortal(number, name, L(
+                step.confirming ? "devices_link_portal_confirming" : "devices_link_portal_testing",
+                linkMbps(step.kbps), transport.label, Self.backButton))
+        }
+        if Task.isCancelled {
+            environment.toast(L("devices_link_stopped"), icon: Symbols.info, kind: .info)
+            return
+        }
+        switch result {
+        case .done(let test, let jitter):
+            environment.storeLinkTest(id, test)
+            environment.play(.select)
+            environment.toast(
+                L(jitter ? "devices_link_done_jitter" : "devices_link_done", transport.label, linkMbps(test.wireKbps)),
+                icon: Symbols.checkCircle, kind: .success)
+        case .failed, .noRate:
+            environment.play(.error)
+            environment.toast(result.failureText ?? "", icon: Symbols.error, kind: .error)
+        case .cancelled:
+            environment.toast(L("devices_link_stopped"), icon: Symbols.info, kind: .info)
+        }
+    }
+
+    private func showLinkPortal(_ number: Int, _ name: String, _ sub: String) {
+        burst = false
+        portal = Portal(id: number, icon: Symbols.linkTest, label: L("devices_link_portal_title", name), sub: sub, cancellable: true)
+    }
+
+    private func run(_ id: String, then: (@MainActor () -> Void)? = nil) async {
         guard let name = environment.hostName(id) else { return }
         portals += 1
         let number = portals
@@ -171,6 +236,7 @@ final class ConnectFlow {
         if arrived {
             burst = false
             phase = .idle
+            then?()
         }
     }
 
@@ -244,4 +310,9 @@ final class AppConnectEnvironment: ConnectEnvironment {
     func play(_ cue: Cue) { layers.feedback?.play(cue) }
     func toast(_ text: String, icon: String, kind: ToastKind) { toasts.show(text, icon: icon, kind: kind) }
     func arrive(_ id: String) { open(id) }
+    var transport: LinkTransport { .current }
+    func testLink(_ id: String, startKbps: Int, transport: LinkTransport, onStep: @escaping @MainActor (LinkStep) -> Void) async -> LinkTestRun {
+        await LinkTester.run(hosts: hosts, hostID: id, startKbps: startKbps, transport: transport, onStep: onStep)
+    }
+    func storeLinkTest(_ id: String, _ test: LinkTest) { LinkTestStore.shared.put(hostID: id, test: test) }
 }

@@ -41,7 +41,8 @@ struct GameSettingsScreen: View {
         self.focus = focus
         self.navigator = navigator
         self.actions = actions
-        _model = State(initialValue: GameSettingsModel(hostID: hostID, app: app, profileID: profileID, device: .current))
+        _model = State(initialValue: GameSettingsModel(
+            hostID: hostID, app: app, profileID: profileID, device: .current, host: { [hosts = actions.hosts] in hosts.host($0) }))
         // The banner blurs the app's art like the app's background
         _heroBlur = State(initialValue: AppearanceStore().load(profile: profileID).heroBlur)
     }

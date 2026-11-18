@@ -1,4 +1,5 @@
 import DelosData
+import DelosMedia
 import Foundation
 import Testing
 @testable import DelosUI
@@ -57,15 +58,20 @@ import Testing
         #expect(StreamMenuNavigation.afterBack(.upscaler) == PageExit(page: .main, focusTile: .upscaler, focusRow: nil))
     }
 
-    @Test func theUpscalerWithoutARendererKeepsTheChoicesAndSaysUnavailable() {
+    @Test func theDisplayLayersUpscalerKeepsTheChoicesAndSaysUnavailable() {
         var settings = StreamSettings()
         settings.set(.upscaler, .bool(true))
         settings.set(.upscalerMode, .text("sharpen"))
-        let upscaler = UnavailableUpscaler(settings: settings)
+        var options = VideoRenderOptions()
+        options.upscaler = settings.upscalerSettings
+        let upscaler = RendererUpscaler(renderer: RendererChoice.layer.makeRenderer(pacing: .latency, fps: 60, options: options))
         #expect(!upscaler.available && upscaler.status == .unavailable && upscaler.mode == .sharpen)
         #expect(upscaler.status.pill == L("stream_menu_upscaler_unavailable"))
+        upscaler.setSharpness(30)
+        #expect(upscaler.sharpness == 30)
         #expect(UpscalerMode.sharpen.next(1) == .standard && UpscalerMode.standard.next(-1) == .sharpen)
         #expect(UpscalerSave.values(upscaler)[.upscalerMode] == .text("sharpen"))
+        #expect(UpscalerMode.sharpen.label == L("sgsr_quality_sharpen"))
     }
 
     @Test func helpParagraphsFlowIntoOneLine() {

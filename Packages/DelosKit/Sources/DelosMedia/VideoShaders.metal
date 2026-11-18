@@ -19,12 +19,14 @@ struct VideoVertex {
     float2 coordinate;
 };
 
-// One triangle that covers the viewport; the viewport is the aspect-fitted rectangle of the picture.
-vertex VideoVertex videoVertex(uint id [[vertex_id]]) {
+// One triangle that covers the viewport; the viewport is the picture's rectangle on the target (the scale mode's). `crop`
+// is the part of the picture the viewport shows: origin in xy, size in zw, (0, 0, 1, 1) for the whole picture (Fill
+// shows less, its edges cut off).
+vertex VideoVertex videoVertex(uint id [[vertex_id]], constant float4 &crop [[buffer(0)]]) {
     float2 corner = float2((id << 1) & 2, id & 2);
     VideoVertex out;
     out.position = float4(corner * 2.0 - 1.0, 0.0, 1.0);
-    out.coordinate = float2(corner.x, 1.0 - corner.y);
+    out.coordinate = crop.xy + float2(corner.x, 1.0 - corner.y) * crop.zw;
     return out;
 }
 

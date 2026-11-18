@@ -9,6 +9,19 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- The link test: Settings → Stream has Test link and Use recommended bitrate under the bitrate. Test link measures
+  what the network carries from the PC with Vibepollo's UDP probe (a portal shows each step, B stops it) and keeps
+  the result per PC and kind of network with its date; the bitrate row then says the recommendation and why, and its
+  help names both numbers. The bitrate is only changed by pressing Use recommended bitrate. App settings show the
+  same recommendation. Not verified against a real PC.
+- The Delos full keyboard on every device, as on DELOS for Android: the stream menu's Keyboard tile raises a bar of
+  80 keys over the stream. Fingers (several at once) or the pointer press keys; a controller moves a gold ring
+  with the D-pad or the left stick, A presses, B closes, L3 latches Shift, X and Y type Backspace and Space; on Apple
+  TV the Siri Remote drives it. Modifiers held for a moment stay down (sticky modifiers), keys carry the modifiers
+  that are down, Caps Lock and Shift change the legends, a popup shows the character typed, and the profile's
+  keyboard size, width, alignment, opacity and vibration apply. While it is up the controllers type instead of
+  playing, and everything held comes up at the PC when it closes. The system keyboard of iPhone and iPad moved to
+  More → Open system keyboard.
 - On-screen controls on iPhone and iPad, as on DELOS for Android: the D-pad, A/B/X/Y, bumpers, triggers, Back,
   Guide, Start, L3/R3, the trackpad button and fixed or free sticks in the DELOS style, any number of fingers at
   once, sent to the PC as controller 0. The default layout is computed for every screen shape; the gear edits it
@@ -53,6 +66,17 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   library saying why; the hint bar over the result shows Select and Back to library.
 - While artwork downloads or game info is looked up, a glass pill above the button hints shows what runs, "x of N" and
   a bar. Strings Android does not translate have their English text in every language of the catalog.
+- The Metal renderer upscales the stream as DELOS for Android does: SGSR 1 Standard and High, SGSR 2 Temporal and
+  Temporal quality (optical flow and history), and Sharpen only (contrast-adaptive sharpening), ported from Android's
+  shaders with its sharpness and its 1.33× / 2× supersampling of streams that already match the view. Two frames of
+  GPU work at most, a lighter optical flow under load, and a warning when the upscaler cannot keep up with the frame
+  rate. The video fills the view as chosen (fit, fill, stretch), the display runs the refresh rate Android's planner
+  picks (reduce refresh rate, enforce display mode on the Mac, display criteria on Apple TV, variable refresh rate),
+  HEVC and AV1 streams recover from loss with reference frame invalidation, and the receive thread runs at the
+  interactive quality of service. The statistics know the 1 % low, the render latency (average, 95th percentile,
+  maximum), the upscaling time, the Sharpen pass and the upscaler's target. The look on a device, the GPU cost and
+  real streams are not verified.
+
 - Pairing waits for the trusted paired state instead of a fixed delay, and manual-address entry reports a PC
   that was not added. The start screen retargets its initial PC focus as discovery changes. On compact stages,
   the profile chip shares the status line, clears the measured status cluster and truncates long names.
@@ -225,6 +249,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   Shift + M, or holding Escape for a second, opens the stream menu and frees the pointer, as does L3 + R3. Command-Q,
   Quit and closing the window disconnect the stream first. `sh tools/mac.sh` builds an ad-hoc signed copy, starts it
   and takes a screenshot of its window. Not yet tried with a real stream.
+- Links and shortcut files from outside the app, as on DELOS for Android: an `art://` link pairs with a PC (with its
+  one-time code when it has one) or starts a game or opens a PC, and an opened `.art` shortcut file starts its game. Each
+  asks first in a dialog, since a link can come from any web page or app. A PC that sleeps is woken and waited for, a
+  game already running on the PC is never quit (its library opens with a toast), and a link naming no known PC or game
+  says so in a toast. A link that arrives before the first profile waits for it. Not verified on a device.
 
 ### Changed
 
@@ -255,6 +284,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   left, top and bottom edges of the screen (the status bar and the home indicator no longer widen one of them) and
   materialises from the left edge (growing, sharpening from a blur, on a spring) and goes back into it; with reduced
   motion it fades. Not verified on a device yet.
+- The game menu offers Metadata for every game except DELOS's own entries, also without a metadata service (its
+  actions then say the service is unavailable). The home screen's notes for no paired PC and an offline PC point to
+  the Devices screen.
+- The info row's badges, when they do not fit, bounce like Android's: still for 0.7 s, linear to the end at 56 px/s, a
+  0.9 s pause, back, a 0.9 s pause. Disconnect and Quit from the stream menu play SELECT when the library returns.
 
 ### Removed
 

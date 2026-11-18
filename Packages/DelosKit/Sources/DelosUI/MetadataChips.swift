@@ -174,16 +174,22 @@ struct BadgeStrip<Facts: View, Tags: View>: View {
         .task(id: overflow > 0 && !reduceMotion) {
             shifted = false
             guard overflow > 0, !reduceMotion else { return }
-            // A short pause, a slow glide to the end, a pause, and back
+            // MarqueeMotion.bounceOffset (MarqueeText.kt:53-68): still 0.7 s, linear to the end at 56 stage px/s, a 0.9 s
+            // pause, back at the same speed, a 0.9 s pause, and again
+            try? await Task.sleep(for: .seconds(SettingsReadingMotion.startDelay))
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1.2))
+                let leg = Self.bounceLeg(overflow: overflow, pxPerSecond: Double(stage.px(SettingsReadingMotion.speed)))
+                withAnimation(.linear(duration: leg)) { shifted = true }
+                try? await Task.sleep(for: .seconds(leg + SettingsReadingMotion.loopDelay))
                 guard !Task.isCancelled else { return }
-                withAnimation(.easeInOut(duration: max(overflow / 60, 1.2))) { shifted = true }
-                try? await Task.sleep(for: .seconds(max(overflow / 60, 1.2) + 1.2))
-                guard !Task.isCancelled else { return }
-                withAnimation(.easeInOut(duration: max(overflow / 60, 1.2))) { shifted = false }
-                try? await Task.sleep(for: .seconds(max(overflow / 60, 1.2)))
+                withAnimation(.linear(duration: leg)) { shifted = false }
+                try? await Task.sleep(for: .seconds(leg + SettingsReadingMotion.loopDelay))
             }
         }
+    }
+
+    /// How long one way of the bounce takes: [overflow] at [pxPerSecond] (never zero).
+    static func bounceLeg(overflow: Double, pxPerSecond: Double) -> Double {
+        max(overflow / pxPerSecond, 0.001)
     }
 }

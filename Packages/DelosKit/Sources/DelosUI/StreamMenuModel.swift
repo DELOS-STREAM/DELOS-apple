@@ -4,8 +4,8 @@ import Foundation
 /// dock a page belongs to, where the focus goes when a page closes, and where the popover with its caret sits. Sizes are
 /// stage pixels.
 
-/// The tiles of the dock, in Android's order (`BarItem`, StreamMenuLayout.kt:20). Keyboard and Brightness exist only where
-/// the device has them (``StreamMenuCapabilities``).
+/// The tiles of the dock, in Android's order (`BarItem`, StreamMenuLayout.kt:20). Brightness exists only where the device
+/// has it (``StreamMenuCapabilities``); Keyboard (the Delos full keyboard) is on every device.
 enum BarItem: Int, CaseIterable, Sendable {
     case resume, keyboard, overlay, brightness, bitrate, upscaler, more, disconnect, quit
 
@@ -43,8 +43,9 @@ enum BarItem: Int, CaseIterable, Sendable {
 
 /// What this device can do for the menu's tiles and pages.
 struct StreamMenuCapabilities: Equatable, Sendable {
-    /// The system keyboard can be raised over the stream (iPhone and iPad; the Mac has its keyboard, Apple TV none).
-    var keyboard: Bool
+    /// The system keyboard can be raised over the stream (iPhone and iPad; the Mac has its keyboard, Apple TV none): the More
+    /// page's Open system keyboard row (Android's Open Android keyboard).
+    var systemKeyboard: Bool
     /// The screen's brightness can be changed (iPhone and iPad).
     var brightness: Bool
     /// The stream has a touchscreen (iPhone and iPad): More offers Zoom and Touch sensitivity.
@@ -52,9 +53,9 @@ struct StreamMenuCapabilities: Equatable, Sendable {
 
     static let platform: StreamMenuCapabilities = {
         #if os(iOS)
-        StreamMenuCapabilities(keyboard: true, brightness: true, touchscreen: true)
+        StreamMenuCapabilities(systemKeyboard: true, brightness: true, touchscreen: true)
         #else
-        StreamMenuCapabilities(keyboard: false, brightness: false)
+        StreamMenuCapabilities(systemKeyboard: false, brightness: false)
         #endif
     }()
 
@@ -62,7 +63,6 @@ struct StreamMenuCapabilities: Equatable, Sendable {
     var tiles: [BarItem] {
         BarItem.allCases.filter { item in
             switch item {
-            case .keyboard: keyboard
             case .brightness: brightness
             default: true
             }

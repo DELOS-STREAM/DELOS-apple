@@ -75,12 +75,14 @@ enum StreamMenuText {
     }
 
     /// The help (caption) of a tile (`circleHelpKey` and `streamMenuHelp`, StreamMenuLayout.kt:556-591): the upscaler's starts
-    /// with its status and is Supersampling's while the stream is supersampled. The Keyboard tile raises the system keyboard
-    /// here (DELOS for Android's is its own keyboard), so its help says that.
-    @MainActor static func caption(_ item: BarItem, upscaler: any UpscalerControl) -> String {
+    /// with its status and is Supersampling's while the stream is supersampled; Keyboard's names the system keyboard only where
+    /// More has its row.
+    @MainActor static func caption(_ item: BarItem, upscaler: any UpscalerControl = NoUpscaler(), capabilities: StreamMenuCapabilities = .platform) -> String {
         switch item {
         case .resume: L("stream_help_resume")
-        case .keyboard: L("stream_help_keyboard_system")
+        case .keyboard:
+            L(capabilities.systemKeyboard ? "stream_help_delos_keyboard_system" : "stream_help_delos_keyboard",
+              StreamMenuButtonsText.name(.a), StreamMenuButtonsText.name(.b))
         // The text carries a literal percent sign (`1%% low`): formatted so it reads once
         case .overlay: String(format: L("stream_help_overlay"))
         case .brightness: L("stream_help_brightness")

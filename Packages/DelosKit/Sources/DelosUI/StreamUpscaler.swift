@@ -1,99 +1,50 @@
 import DelosData
+import DelosMedia
 import Foundation
 import Observation
 
-/// The upscaler's methods (`UpscalerMode` of DELOS for Android, preferences/UpscalerMode.java:13-18): the order is the stream
-/// menu's Mode row, the raw value is what `list_sgsr_quality` stores.
-enum UpscalerMode: String, CaseIterable, Sendable {
-    case standard
-    case high
-    case temporal
-    case temporalQuality = "temporal-quality"
-    /// No scaling: the stream keeps its resolution and only a sharpen pass runs.
-    case sharpen
-
-    /// The mode of a stored value; anything unknown is Standard (`fromValue`).
-    init(stored: String?) {
-        self = stored.flatMap(UpscalerMode.init(rawValue:)) ?? .standard
-    }
-
-    /// The mode at a position of the Mode row, clamped into the list (`fromIndex`).
-    init(index: Int) {
-        self = Self.allCases[min(max(index, 0), Self.allCases.count - 1)]
-    }
-
-    var index: Int { Self.allCases.firstIndex(of: self) ?? 0 }
-
-    /// The name the Mode row and the settings list show.
+extension UpscalerMode {
+    /// The name the Mode row shows: the label of the setting's own choice (`list_sgsr_quality` in the settings catalog), so the
+    /// stream menu and Settings always name a method alike.
     var label: String {
-        switch self {
-        case .standard: L("sgsr_quality_standard")
-        case .high: L("sgsr_quality_high")
-        case .temporal: L("sgsr_quality_temporal")
-        case .temporalQuality: L("sgsr_quality_temporal_quality")
-        case .sharpen: L("sgsr_quality_sharpen")
-        }
+        UpscalerModeText.choice(self)?.label ?? rawValue
     }
 
-    /// The help of the mode in the settings list (`SettingsHelp.choice` of `list_sgsr_quality`).
+    /// The help of the method, the same as the setting's choice (`SettingsHelp.choice`).
     var help: String {
-        switch self {
-        case .standard: L("help_list_sgsr_quality_standard")
-        case .high: L("help_list_sgsr_quality_high")
-        case .temporal: L("help_list_sgsr_quality_temporal")
-        case .temporalQuality: L("help_list_sgsr_quality_temporal_quality")
-        case .sharpen: L("help_list_sgsr_quality_sharpen")
-        }
+        UpscalerModeText.choice(self)?.help ?? ""
     }
 
-    /// The mode changes the picture's size; Sharpen only does not, so the supersampling quality means nothing for it.
-    var scales: Bool { self != .sharpen }
-
-    /// The mode one press in [direction] (-1 or +1) leads to: the list wraps around (`nextUpscalerMode`).
+    /// The method one press in [direction] (-1 or +1) leads to: the list wraps around (`nextUpscalerMode`).
     func next(_ direction: Int) -> UpscalerMode {
         let count = Self.allCases.count
         return Self.allCases[((index + direction) % count + count) % count]
     }
 }
 
-/// What the renderer's upscaler is doing (`UpscalerStatus`, binding/video/UpscalerStatus.java:9-47).
-struct UpscalerStatus: Equatable, Sendable {
-    enum State: Equatable, Sendable {
-        /// Not requested and not running.
-        case off
-        /// Requested; its output stage is still being built.
-        case starting
-        /// Removed; its output stage is still being torn down.
-        case stopping
-        /// Running; ``mode`` says which method when the renderer knows it.
-        case on
-        /// Requested but impossible on this stream: the picture is drawn directly.
-        case unavailable
+/// The upscaler's methods as the settings catalog lists them.
+private enum UpscalerModeText {
+    static func choice(_ mode: UpscalerMode) -> CatalogChoice? {
+        guard case .choice(let choices)? = SettingsCatalog.spec(SettingKey.upscalerMode.rawValue)?.kind else { return nil }
+        return choices.first { $0.value == mode.rawValue }
     }
+}
 
-    var state: State
-    var mode: UpscalerMode?
-
-    static let off = UpscalerStatus(state: .off)
-    static let unavailable = UpscalerStatus(state: .unavailable)
-
-    /// Starting or stopping: the on/off switch waits.
-    var isChanging: Bool { state == .starting || state == .stopping }
-
+extension UpscalerStatus {
     /// The status as the upscaler's help says it first (`statusText`, StreamMenuLayout.kt:645-652).
     var text: String {
-        switch state {
+        switch self {
         case .off: L("common_off")
         case .starting: L("stream_menu_upscaler_starting")
         case .stopping: L("stream_menu_upscaler_stopping")
-        case .on: mode.map { L("stream_menu_upscaler_on_mode", $0.label) } ?? L("common_on")
+        case .on(let mode): L("stream_menu_upscaler_on_mode", mode.label)
         case .unavailable: L("stream_menu_upscaler_unavailable_status")
         }
     }
 
     /// The one word in the tile's pill (`pillText`, StreamMenuLayout.kt:655-661).
     var pill: String {
-        switch state {
+        switch self {
         case .off: L("common_off")
         case .starting: L("stream_menu_upscaler_starting")
         case .stopping: L("stream_menu_upscaler_stopping")
@@ -104,8 +55,7 @@ struct UpscalerStatus: Equatable, Sendable {
 }
 
 /// The live upscaler and supersampling controls of the running stream (`StreamMenuHost`'s upscaler part,
-/// StreamMenuHost.kt:62-77; `surfaceController` of DELOS for Android). A renderer that upscales implements it; until one
-/// does, ``UnavailableUpscaler`` answers.
+/// StreamMenuHost.kt:62-77; `surfaceController` of DELOS for Android). ``RendererUpscaler`` is the stream's renderer behind it.
 @MainActor
 protocol UpscalerControl: AnyObject {
     /// This device and stream can run the upscaler at all; without it the Upscaler page's rows cannot be used.
@@ -126,31 +76,69 @@ protocol UpscalerControl: AnyObject {
     func setSupersamplingLevel(_ level: Int)
 }
 
-/// The upscaler of a renderer that has none: the profile's choices are kept and shown (and saved for the game when the page
-/// changes them), the status is Off, or Unavailable while it is asked for, and the page's rows cannot be used. No renderer of
-/// DELOS for Apple upscales yet; Android's is SGSR on OpenGL ES (binding/video/SgsrRenderer).
+/// The upscaler of the stream's renderer (``VideoRenderer/setUpscaler(_:)``): each change goes to the renderer at once, and the
+/// status the renderer reports is read again every 250 ms while the stream menu shows it (StreamMenuRoot.kt:286-296).
 @MainActor
 @Observable
-final class UnavailableUpscaler: UpscalerControl {
-    private(set) var requested: Bool
-    private(set) var mode: UpscalerMode
-    private(set) var sharpness: Int
-    private(set) var supersamplingLevel: Int
+final class RendererUpscaler: UpscalerControl {
+    @ObservationIgnored private let renderer: any VideoRenderer
+    /// The renderer draws through Metal, where the upscaler runs; the display layer has none.
+    let available: Bool
+    private(set) var settings: UpscalerSettings
+    private(set) var status: UpscalerStatus
+    private(set) var supersamplingMode: Bool
 
-    init(settings: StreamSettings) {
-        requested = settings.bool(.upscaler)
-        mode = UpscalerMode(stored: settings.text(.upscalerMode))
-        sharpness = settings.int(.upscalerSharpness)
-        supersamplingLevel = settings.text(.upscalerSupersampling) == "2" ? 2 : 1
+    /// The renderer was made with the stream's upscaler settings (``StreamSettings/videoRenderOptions``); the Metal renderer
+    /// runs the upscaler, the display layer cannot.
+    init(renderer: any VideoRenderer) {
+        self.renderer = renderer
+        available = renderer is MetalRenderer
+        settings = renderer.upscalerSettings
+        status = renderer.upscalerStatus
+        supersamplingMode = renderer.isSupersampling
     }
 
+    var requested: Bool { settings.enabled }
+    var supersamplingLevel: Int { settings.supersamplingLevel }
+    var mode: UpscalerMode { settings.mode }
+    var sharpness: Int { settings.sharpness }
+
+    func setEnabled(_ on: Bool) { change { $0.enabled = on } }
+    func setMode(_ mode: UpscalerMode) { change { $0.mode = mode } }
+    func setSharpness(_ percent: Int) { change { $0.sharpness = percent } }
+    func setSupersamplingLevel(_ level: Int) { change { $0.supersamplingLevel = level } }
+
+    /// Reads what the renderer is doing now (the status and whether it supersamples).
+    func refresh() {
+        let now = renderer.upscalerStatus
+        if now != status { status = now }
+        let supersampling = renderer.isSupersampling
+        if supersampling != supersamplingMode { supersamplingMode = supersampling }
+    }
+
+    private func change(_ edit: (inout UpscalerSettings) -> Void) {
+        var next = settings
+        edit(&next)
+        settings = next
+        renderer.setUpscaler(next)
+        refresh()
+    }
+}
+
+/// The upscaler of a stream without a renderer (a controller made without one): nothing to upscale, the rows cannot be used.
+@MainActor
+final class NoUpscaler: UpscalerControl {
     var available: Bool { false }
-    var status: UpscalerStatus { requested ? .unavailable : .off }
+    var requested: Bool { false }
+    var status: UpscalerStatus { .off }
     var supersamplingMode: Bool { false }
-    func setEnabled(_ on: Bool) { requested = on }
-    func setMode(_ mode: UpscalerMode) { self.mode = mode }
-    func setSharpness(_ percent: Int) { sharpness = min(max(percent, 0), 100) }
-    func setSupersamplingLevel(_ level: Int) { supersamplingLevel = level >= 2 ? 2 : 1 }
+    var supersamplingLevel: Int { 1 }
+    var mode: UpscalerMode { .standard }
+    var sharpness: Int { 50 }
+    func setEnabled(_ on: Bool) {}
+    func setMode(_ mode: UpscalerMode) {}
+    func setSharpness(_ percent: Int) {}
+    func setSupersamplingLevel(_ level: Int) {}
 }
 
 /// The upscaler's settings as the stream menu keeps them for the running game (`upscalerSaveValues`, settings/UpscalerSave.kt):

@@ -109,15 +109,15 @@ struct StreamStatsOverlay: View {
     }
 
     /// The panel's rows in Android's order (StreamStats.kt:255-270); a reading the stream does not have is left out with its
-    /// label. The sharpen pass row of Android is not here: no renderer of this app sharpens the picture.
+    /// label.
     private var rows: [(label: String, value: String)] {
         var result = [(L("stream_stats_decoder"), statistics.renderer)]
         result.append((L("stream_stats_incoming"), "\(number(statistics.incomingFPS)) FPS"))
         if let fps = statistics.renderingFPS {
             result.append((L("stream_stats_rendering"), "\(number(fps)) FPS"))
         }
-        if let low = statistics.onePercentLowFPS {
-            result.append((L("stream_stats_one_percent_low", 1), "\(number(low)) FPS"))
+        if let low = statistics.onePercentLowText {
+            result.append((L("stream_stats_one_percent_low", 1), low))
         }
         if let network = statistics.networkMilliseconds, let variance = statistics.networkVarianceMilliseconds {
             result.append((L("stream_stats_network"), "\(number(network, places: 0)) ms ± \(number(variance, places: 0)) ms"))
@@ -129,13 +129,19 @@ struct StreamStatsOverlay: View {
         if let decoding = statistics.decodingText {
             result.append((L("stream_stats_decoding"), decoding))
         }
-        if let processing = statistics.processingMilliseconds, processing > 0 {
-            result.append((L("stream_stats_upscaling"), "\(number(processing, places: 2)) ms"))
+        if let upscaling = statistics.upscalingText {
+            result.append((L("stream_stats_upscaling"), upscaling))
         }
         if let queue = statistics.frameQueueText {
             result.append((L("stream_stats_frame_queue"), queue))
         }
-        if let delay = statistics.presentationDelayMilliseconds {
+        if let sharpen = statistics.sharpenPassText {
+            result.append((L("stream_stats_sharpen_pass"), sharpen))
+        }
+        // The renderer's decoded-to-presented latency; the display layer reports only how late its frames were shown
+        if let latency = statistics.renderLatencyText {
+            result.append((L("stream_stats_render_latency"), latency))
+        } else if let delay = statistics.presentationDelayMilliseconds {
             result.append((L("stream_stats_render_latency"), "\(number(delay, places: 2)) ms"))
         }
         if let total = statistics.totalMilliseconds {
