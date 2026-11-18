@@ -36,7 +36,7 @@ public struct UpscalerSizes: Sendable, Equatable {
     }
 
     /// The sizes the upscaler will use for a stream of `stream` pixels on a view of `view` pixels placed by `scaleMode`,
-    /// as ``MetalUpscaler/upscale(source:mode:presentation:supersamplingLevel:frameTime:hdr:reuseFlow:commandBuffer:)``
+    /// as ``MetalUpscaler/upscale(source:mode:presentation:supersamplingLevel:frameTime:hdr:commandBuffer:)``
     /// decides them: the mode this GPU runs for `mode` (``MetalFXSupport/effectiveMode(_:)``), the presentation size
     /// (``PictureGeometry``), the internal size (``UpscalerDimensions/plan(source:presentation:maxTextureSize:supersamplingLevel:)``:
     /// supersampling only when the stream already has the picture's size and the larger size fits the limits) and MetalFX's

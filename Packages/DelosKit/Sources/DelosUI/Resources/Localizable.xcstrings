@@ -40831,61 +40831,61 @@
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Prostorové zvětšení aktuálního snímku. Málo zatěžuje GPU."
+            "value": "Prostorové zvětšení aktuálního snímku. Málo zatěžuje GPU. Doporučeno."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Räumliche Hochskalierung des aktuellen Frames. Wenig GPU-Last."
+            "value": "Räumliche Hochskalierung des aktuellen Frames. Wenig GPU-Last. Empfohlen."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Spatial upscaling of the current frame. Light on the GPU."
+            "value": "Spatial upscaling of the current frame. Light on the GPU. Recommended."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Escalado espacial del fotograma actual. Consume poca GPU."
+            "value": "Escalado espacial del fotograma actual. Consume poca GPU. Recomendado."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mise à l’échelle spatiale de l’image courante. Coûte peu de GPU."
+            "value": "Mise à l’échelle spatiale de l’image courante. Coûte peu de GPU. Recommandé."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "現在のフレームを空間的にアップスケールします。GPU負荷は小さいです。"
+            "value": "現在のフレームを空間的にアップスケールします。GPU負荷は小さいです。推奨のモードです。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "현재 프레임을 공간적으로 업스케일해요. GPU를 적게 써요."
+            "value": "현재 프레임을 공간적으로 업스케일해요. GPU를 적게 써요. 권장하는 모드예요."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Upscaling espacial do quadro atual. Custa pouca GPU."
+            "value": "Upscaling espacial do quadro atual. Custa pouca GPU. Recomendado."
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Просторове масштабування поточного кадру. Мало навантажує GPU."
+            "value": "Просторове масштабування поточного кадру. Мало навантажує GPU. Рекомендовано."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "对当前帧进行空间超分。GPU 开销小。"
+            "value": "对当前帧进行空间超分。GPU 开销小。推荐使用。"
           }
         }
       }
@@ -40896,61 +40896,61 @@
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Časové zvětšení s pohybem z optického toku videa. Nejvíc GPU."
+            "value": "Experimentální, pro zašuměné streamy s nízkým bitratem: časové zvětšení s pohybem z optického toku videa. Stojí několikrát víc GPU než MetalFX Spatial."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zeitliche Hochskalierung mit Bewegung per Optical Flow des Videos. Meiste GPU-Last."
+            "value": "Experimentell, für verrauschte Streams mit niedriger Bitrate: zeitliche Hochskalierung mit Bewegung per Optical Flow des Videos. Kostet ein Mehrfaches der GPU-Last von MetalFX Spatial."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Temporal upscaling with motion from the video's optical flow. Most GPU."
+            "value": "Experimental, for noisy, low-bitrate streams: temporal upscaling with motion from the video's optical flow. Costs several times more GPU than MetalFX Spatial."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Escalado temporal con movimiento por flujo óptico del vídeo. El que más GPU usa."
+            "value": "Experimental, para streams con ruido y bitrate bajo: escalado temporal con movimiento por flujo óptico del vídeo. Consume varias veces más GPU que MetalFX Spatial."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mise à l’échelle temporelle avec le mouvement du flux optique de la vidéo. Le plus de GPU."
+            "value": "Expérimental, pour les streams bruités à faible débit : mise à l’échelle temporelle avec le mouvement du flux optique de la vidéo. Coûte plusieurs fois plus de GPU que MetalFX Spatial."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ビデオのオプティカルフローから得た動きで時間的にアップスケールします。GPU負荷が最大です。"
+            "value": "試験的な機能で、ノイズの多い低ビットレートのストリーム向けです。ビデオのオプティカルフローから得た動きで時間的にアップスケールします。GPU負荷はMetalFX Spatialの数倍です。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "비디오의 옵티컬 플로로 찾은 움직임으로 시간적 업스케일을 해요. GPU를 가장 많이 써요."
+            "value": "실험적 기능이며, 노이즈가 많은 낮은 비트레이트 스트림에 맞아요. 비디오의 옵티컬 플로로 찾은 움직임으로 시간적 업스케일을 해요. MetalFX Spatial보다 GPU를 몇 배 더 써요."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Upscaling temporal com movimento por fluxo óptico do vídeo. Maior uso de GPU."
+            "value": "Experimental, para streams com ruído e bitrate baixo: upscaling temporal com movimento por fluxo óptico do vídeo. Custa várias vezes mais GPU que o MetalFX Spatial."
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Часове масштабування з рухом з оптичного потоку відео. Найбільше навантаження на GPU."
+            "value": "Експериментальний, для зашумлених стрімів із низьким бітрейтом: часове масштабування з рухом з оптичного потоку відео. Навантажує GPU в кілька разів більше, ніж MetalFX Spatial."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "利用视频光流获取的运动信息进行时间超分。GPU 占用最高。"
+            "value": "实验性功能，适合噪点多的低码率串流：利用视频光流获取的运动信息进行时间超分。GPU 开销是 MetalFX Spatial 的数倍。"
           }
         }
       }
@@ -105148,61 +105148,61 @@
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "MetalFX Temporal"
+            "value": "MetalFX Temporal (experimentální)"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "MetalFX Temporal"
+            "value": "MetalFX Temporal (experimentell)"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "MetalFX Temporal"
+            "value": "MetalFX Temporal (experimental)"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "MetalFX Temporal"
+            "value": "MetalFX Temporal (experimental)"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "MetalFX Temporal"
+            "value": "MetalFX Temporal (expérimental)"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "MetalFX Temporal"
+            "value": "MetalFX Temporal（試験的）"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "MetalFX Temporal"
+            "value": "MetalFX Temporal (실험적)"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "MetalFX Temporal"
+            "value": "MetalFX Temporal (experimental)"
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "MetalFX Temporal"
+            "value": "MetalFX Temporal (експериментальний)"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "MetalFX Temporal"
+            "value": "MetalFX Temporal（实验性）"
           }
         }
       }
