@@ -109,7 +109,9 @@ struct TabRow<ID: Hashable>: View {
         .padding(.horizontal, stage.cpx(collapse && !on ? 16 : 22))
         .frame(height: stage.targetPx(66))
         .selectionPillTarget(tab.id)
+        .accessibilityElement()
         .accessibilityLabel(tab.label)
+        .accessibilityValue(tab.badge > 0 ? "\(tab.badge)" : "")
         .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
     }
 }

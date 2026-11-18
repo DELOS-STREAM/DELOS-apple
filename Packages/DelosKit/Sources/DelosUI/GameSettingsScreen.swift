@@ -180,6 +180,7 @@ struct GameSettingsScreen: View {
                             model.slide(row.id, to: value)
                         }, onStep: { direction in steppedByTouch(row, direction) }, onReset: { resetRow(row.id) })
                     }
+                    .accessibilityStepper(row.adjustable) { direction in steppedByTouch(row, direction) }
                     .id(row.id)
                     .anchorPreference(key: SettingsRowAnchors.self, value: .bounds) { [row.id: $0] }
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { rowFrames[row.id] = $0 }

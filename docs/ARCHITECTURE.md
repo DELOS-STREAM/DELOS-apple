@@ -208,7 +208,21 @@ Each new toast posts one `AccessibilityNotification.Announcement`, using the sam
 accessibility label, including Undo when offered. `ToastAnnouncement` assigns high speech priority to errors and low
 priority to ordinary messages; animation ticks never repost it. Actual VoiceOver speech/interrupt ordering on physical
 devices is not verified. The card receives a stage zoomed by the interface scale, so its geometry, text-width cap,
-glyphs, action chip and shadows all grow together while the outer screen-edge insets stay fixed.
+glyphs, action chip and shadows all grow together while the outer screen-edge insets stay fixed. A poor-connection
+notice over the stream is announced the same way when it appears or changes.
+
+### Accessibility
+
+An icon of the icon font (`SymbolView`) is hidden from VoiceOver: its glyph is a private-use character. Every focus item
+(`FocusItem`) is one button made of its texts, whose activation runs A (a settings row that a first tap only focuses
+changes at once) and whose context menu, if any, is the named action Menu; an item that holds a text field
+(`holdingField()`) keeps the field reachable instead. An icon-only item labels itself with an existing string; a cover
+and an artwork tile read the game's name or the image's title and their badges; a selected avatar, PC, tab or chip
+carries the selected trait; headings carry the header trait. A settings or stream menu row reads its name and its value
+(a switch On or Off, a slider its number with the unit), a switch has the toggle trait, a choice or slider is adjustable
+(swipe up and down step it as left and right do, `accessibilityStepper`), and a custom row's reset is a named action.
+An open layer (context menu, dialog) is modal and VoiceOver's escape gesture goes back as B does. Nothing of this
+changes what is drawn. What VoiceOver actually speaks and focuses is not verified on a device.
 
 ### Connecting to a PC: the portal
 
@@ -1426,9 +1440,12 @@ User-visible text comes from DELOS for Android's string resources, so both apps 
 languages. `tools/l10n/keys.txt` lists the names the Apple app uses; `tools/l10n/import_android.py <Android checkout>`
 copies them with every translation into `DelosUI/Resources/Localizable.xcstrings` (placeholders converted to Apple's
 format, plurals as plural variations, item i of a string array as `<array>_<i>`). Swift reads them with `L("name")`;
-`tools/l10n/check_usage.py` (part of `tools/test.sh`) fails when a used name is missing or lacks a language.
-`App/Shared/InfoPlist.xcstrings` gives the app bundle the same ten languages; without it iOS shows the package's strings
-in English only.
+`tools/l10n/check_usage.py` (part of `tools/test.sh`) fails when a used name is missing, when an entry of either catalog
+lacks a language, or when a text names DELOS for Android's platform (Android, Snapdragon, SGSR, MediaCodec, Vulkan):
+such a text gets a platform-neutral sibling on the Android side, which the Apple app lists instead.
+`App/Shared/InfoPlist.xcstrings` gives the app bundle the same ten languages (without it iOS shows the package's strings
+in English only) and holds the Info.plist's system texts (the local network prompt, the Mac's copyright line), written
+there since Android has no such texts.
 
 ## The streaming core
 

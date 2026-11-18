@@ -169,6 +169,7 @@ private struct DialogFieldView: View {
             // The note above is centered; the value reads from the start of the field
             .multilineTextAlignment(.leading)
         }
+        .holdingField()
         .onChange(of: typing) { _, now in editing = now == index }
         .onChange(of: editing) { _, now in
             if now {

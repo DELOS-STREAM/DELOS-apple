@@ -420,6 +420,8 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
     let tap: (@MainActor (_ wasFocused: Bool) -> Void)?
     let clickCue: Cue?
     let content: (Bool) -> Content
+    /// The item holds a text field (``holdingField()``).
+    private var holdsField = false
     @Environment(Layers.self) private var layers: Layers?
     @Environment(\.focusReveal) private var reveal
     @State private var pressed = false
@@ -454,6 +456,24 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
         self.tap = tap
         self.clickCue = clickCue
         self.content = content
+    }
+
+    /// The item holds a text field: VoiceOver reaches the field itself instead of one button made of the item's content.
+    func holdingField() -> Self {
+        var item = self
+        item.holdsField = true
+        return item
+    }
+
+    /// What VoiceOver sees of the item (``FocusItemAccessibility``).
+    private var accessibility: FocusItemAccessibility {
+        FocusItemAccessibility(field: holdsField, menu: menu != nil, activate: {
+            model.focus(AnyHashable(id))
+            activate(action)
+        }, openMenu: {
+            model.focus(AnyHashable(id))
+            layers?.openContextMenu(of: model)
+        })
     }
 
     /// The squeeze of an activation: held ``Motion/pressHold`` ms, a new activation restarts it.
@@ -542,6 +562,7 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
             }
             // The Siri Remote's select is A, not a touch
             .onTapGesture { activate(action) }
+            .modifier(accessibility)
             .environment(\.pressed, pressed)
             .id(id)
         if menu != nil {
@@ -576,6 +597,7 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
                     activate(action)
                 }
             }
+            .modifier(accessibility)
             .environment(\.pressed, pressed)
             .id(id)
         if menu != nil {
@@ -599,6 +621,33 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
         }
     }
     #endif
+}
+
+/// What VoiceOver sees of a ``FocusItem``: one button made of the item's texts (icons are hidden, an icon-only item labels
+/// itself), whose activation is A, so a settings row that a first tap only focuses changes at once. An item with a
+/// context menu offers it as a named action; an item that holds a text field keeps the field reachable.
+private struct FocusItemAccessibility: ViewModifier {
+    let field: Bool
+    let menu: Bool
+    let activate: @MainActor () -> Void
+    let openMenu: @MainActor () -> Void
+
+    func body(content: Content) -> some View {
+        if field {
+            content.accessibilityElement(children: .contain)
+        } else if menu {
+            button(content).accessibilityAction(named: L("shell_hint_menu")) { openMenu() }
+        } else {
+            button(content)
+        }
+    }
+
+    private func button(_ content: Content) -> some View {
+        content
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { activate() }
+    }
 }
 
 

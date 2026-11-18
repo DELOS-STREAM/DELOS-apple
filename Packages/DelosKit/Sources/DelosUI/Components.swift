@@ -75,6 +75,7 @@ struct Heading: View {
                 .font(DelosFonts.unbounded(stage.tpx(stage.compact ? 48 : 64)))
                 .tracking(-stage.tpx(stage.compact ? 48 : 64) * 0.01)
                 .foregroundStyle(colors.text.color)
+                .accessibilityAddTraits(.isHeader)
             if let sub {
                 Text(sub)
                     .font(DelosFonts.figtree(stage.tpx(26)))
@@ -177,6 +178,8 @@ struct CircleItem: View {
         .frame(width: stage.px(max(width ?? 220, side)))
         .animation(.focusScale(pressed: pressed, reduced: reduceMotion), value: CirclePress(focused: focused, pressed: pressed))
         .animation(reduceMotion ? .timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000) : Motion.spring(Motion.pillPop), value: selected)
+        // The check badge: the default PC, the chosen avatar
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     /// `.circle::before`: a 52 px circle in the secondary color with a check, centered on the circle's edge at the top

@@ -53,9 +53,11 @@ struct SymbolView: View {
             Text(symbol == Symbols.check ? Symbols.checkCircle : symbol)
                 .font(DelosFonts.symbol(stage.tpx(size), filled: true))
                 .opacity(filled ? 1 : 0)
-                .accessibilityHidden(true)
         }
         .foregroundStyle(color.color)
         .animation(Motion.out(Motion.iconFill), value: filled)
+        // A glyph of the icon font is a private-use character that VoiceOver cannot read: an icon is decoration, and an
+        // icon-only control carries its own label
+        .accessibilityHidden(true)
     }
 }

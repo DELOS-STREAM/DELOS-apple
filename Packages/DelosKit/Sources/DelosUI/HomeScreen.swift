@@ -748,6 +748,7 @@ private struct GameTitle: View {
                         AnimatedArtLayer(source: animation, playing: artMotion, width: Int(box.width * displayScale),
                                          height: Int(box.height * displayScale), fit: true, alignment: .leading, covering: $animating)
                     }
+                    .accessibilityElement()
                     .accessibilityLabel(app.title)
                     .modifier(TitleEntrance(key: key + "/logo", reduced: reduceMotion))
             } else if resolved {
@@ -920,6 +921,7 @@ private struct Cover: View {
                             .padding(.horizontal, stage.px(14))
                             .padding(.vertical, stage.px(6))
                             .background(Capsule().fill(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0.55)))
+                            .accessibilityElement()
                             .accessibilityLabel(mark.label)
                     }
                 }
@@ -949,6 +951,9 @@ private struct Cover: View {
         .focusLook(focused, scale: 1.055, ring: 5, glowBlur: 80, glowY: 30, corner: geometry.corner, anchor: wide ? .trailing : .center, sweep: true,
                    glowSpread: -18, gap: 5)
         .task(id: "\(app.id)#\(art.artwork.version)") { await load() }
+        // The picture says nothing to VoiceOver: the cover reads as the game's name, its badge and its corner marks
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(([app.title, badge?.label].compactMap { $0 } + marks.map(\.label)).joined(separator: ", "))
     }
 
     private func load() async {

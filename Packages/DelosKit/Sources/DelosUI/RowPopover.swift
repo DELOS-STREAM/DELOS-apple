@@ -336,8 +336,11 @@ private struct ValueField: View {
             }
             .contentShape(Rectangle())
             .onTapGesture { if !editing { begin() } }
+            // The field while it is typed in stays reachable; otherwise it is one button that reads the value
+            .accessibilityElement(children: editing ? .contain : .ignore)
             .accessibilityLabel(tr("row_slider_enter_value"))
-            .accessibilityAddTraits(.isButton)
+            .accessibilityValue(editing ? "" : spec.label(model.value))
+            .accessibilityAddTraits(editing ? [] : .isButton)
             if editing {
                 Button(action: commit) {
                     SymbolView(symbol: Symbols.check, size: 40, color: colors.onAccent)
@@ -416,8 +419,11 @@ private struct HoldStepButton: View {
             .opacity(atEnd ? 0.4 : 1)
             .contentShape(Circle())
             .touching(onChanged: { _ in if holding == nil { begin() } }, onEnded: { end() })
+            .accessibilityElement()
             .accessibilityLabel(tr(direction < 0 ? "row_slider_decrease" : "row_slider_increase"))
             .accessibilityAddTraits(.isButton)
+            // The press-and-hold gesture is a touch's; VoiceOver's activation steps once
+            .accessibilityAction { model.step(direction) }
             .onDisappear { end() }
     }
 

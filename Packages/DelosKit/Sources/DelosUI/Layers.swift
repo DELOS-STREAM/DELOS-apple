@@ -311,6 +311,9 @@ struct LayerHost: View {
             }
         }
         .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.exit / 1000), value: layers.generation)
+        // VoiceOver stays inside an open layer, and its escape gesture goes back as B does
+        .accessibilityAddTraits(layers.layer == nil ? [] : .isModal)
+        .accessibilityAction(.escape) { layers.back() }
     }
 
     private static func fade(_ ms: Double) -> AnyTransition {

@@ -84,6 +84,7 @@ struct PortalOverlay: View {
             if holdsFocus {
                 FocusItem(id: "portal", model: focus, action: {}) { _ in Color.clear.frame(width: 2, height: 2) }
                     .onAppear { focus.focus("portal") }
+                    .accessibilityHidden(true)
             }
             #endif
         }

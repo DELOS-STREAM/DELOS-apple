@@ -269,6 +269,7 @@ struct ArtChip: View, Equatable {
                 }
             }
             .modifier(ChipFocus(focused: focused))
+            .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

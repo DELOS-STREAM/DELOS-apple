@@ -222,6 +222,7 @@ private struct PopoverContent: View {
                         ) { focused in
                             PopoverRow(row: row, focused: focused, index: index, plate: plate)
                         }
+                        .accessibilityStepper(row.adjustable) { direction in row.adjust(direction) }
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("stream-menu")) } action: { menu.rowFrames[row.id] = $0 }
                     }
                 }
@@ -297,6 +298,7 @@ private struct BackCircle: View {
             .scaleEffect(focused && !reducedMotion ? 1.06 : 1)
             .animation(.easeOut(duration: Motion.fade / 1000), value: focused)
             .contentShape(Circle())
+            .accessibilityElement()
             .accessibilityLabel(L("stream_menu_hint_back"))
             .accessibilityAddTraits(.isButton)
     }
@@ -374,8 +376,16 @@ private struct PopoverRow: View {
             let delay = Motion.menuDelay + Double(min(index + 1, Motion.staggerCap)) * Motion.staggerRow
             withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: Motion.rowIn / 1000).delay(delay / 1000)) { appeared = true }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
+        // The name and the value (a switch reads On or Off); the focus item makes it a button
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(row.label)
+        .accessibilityValue(row.accessibilityValue)
+        .accessibilityHint(row.enabled ? "" : L("settings_screen_unavailable"))
+        .accessibilityAddTraits(isToggle ? .isToggle : [])
+    }
+
+    private var isToggle: Bool {
+        if case .toggle = row.value { true } else { false }
     }
 
     @ViewBuilder private var value: some View {

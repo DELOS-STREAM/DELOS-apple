@@ -321,9 +321,11 @@ struct SettingsSearchView: View {
                     FocusItem(id: Self.deleteID, model: focus, action: delete) { focused in
                         circle(Symbols.backspace, focused: focused, size: key)
                     }
+                    .accessibilityLabel(L("settings_screen_search_delete"))
                     FocusItem(id: Self.clearID, model: focus, action: clear) { focused in
                         circle(Symbols.clear, focused: focused, size: key)
                     }
+                    .accessibilityLabel(L("settings_screen_search_clear"))
                 }
             }
             .padding(.top, stage.px(gap))
@@ -383,6 +385,7 @@ struct SettingsSearchView: View {
                 focused: focused, width: width)
                 .multilineTextAlignment(.leading)
         }
+        .holdingField()
         .onChange(of: typing) { _, now in editing = now }
         .onChange(of: editing) { _, now in
             if now {

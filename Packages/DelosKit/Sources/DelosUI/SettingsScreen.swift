@@ -254,6 +254,7 @@ struct SettingsScreen: View {
                                 slide(row.id, to: value)
                             }, onStep: { direction in steppedByTouch(row, direction) })
                     }
+                    .accessibilityStepper(row.adjustable) { direction in steppedByTouch(row, direction) }
                     .id(row.id)
                     .anchorPreference(key: SettingsRowAnchors.self, value: .bounds) { [row.id: $0] }
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { rowFrames[row.id] = $0 }
@@ -724,6 +725,13 @@ struct SettingRowView: View {
         .zIndex(focused ? 1 : 0)
         // The scale of a focused row: the prototype's spring over Motion.ROW_FOCUS
         .animation(reduceMotion ? nil : Motion.spring(Motion.rowFocus), value: focused)
+        // VoiceOver reads the row as its name and its value, a switch as a switch; the reset button is an action
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(row.accessibilityLabel)
+        .accessibilityValue(row.accessibilityValue)
+        .accessibilityHint(row.enabled ? row.impact.map(ImpactAxes.description) ?? "" : L("settings_screen_unavailable"))
+        .accessibilityAddTraits(row.value.isToggle ? .isToggle : [])
+        .modifier(RowResetAction(onReset: row.customLine == nil ? nil : onReset))
     }
 
     @ViewBuilder private var value: some View {
@@ -771,6 +779,74 @@ struct SettingRowView: View {
                     .frame(maxWidth: stage.px(stage.compact ? 180 : 220), alignment: .trailing)
             }
             SymbolView(symbol: Symbols.chevronRight, size: 30, color: arrows)
+        }
+    }
+}
+
+extension SettingValue {
+    var isToggle: Bool {
+        if case .toggle = self { true } else { false }
+    }
+}
+
+extension SettingRow {
+    /// What VoiceOver reads as the row's name: the label, then the line under it (a custom row's badge and the profile's
+    /// value).
+    var accessibilityLabel: String {
+        [label, customLine.map { _ in L("row_badge_custom") }, customLine ?? note].compactMap { $0 }.joined(separator: ", ")
+    }
+
+    /// What VoiceOver reads as the row's value: what the row shows beside its name, a switch as On or Off.
+    var accessibilityValue: String {
+        switch value {
+        case .toggle(let on): L(on ? "common_on" : "common_off")
+        case .choice(let label, _, _): label
+        case let .slider(number, range, step, divisor, unit):
+            SliderSpec(value: number, min: range.lowerBound, max: range.upperBound, step: step, divisor: divisor, unit: unit, minText: sliderMinText)
+                .label(number)
+        case .action(let label): label ?? ""
+        case .text(let text): text
+        case .appSettings(let language): language
+        case .info(let text): text
+        }
+    }
+
+    /// VoiceOver's swipe up and down steps the row as the arrows and a controller's left and right do
+    /// (``View/accessibilityStepper(_:step:)``): a choice or a slider.
+    var adjustable: Bool {
+        switch value {
+        case .choice, .slider: enabled
+        default: false
+        }
+    }
+}
+
+/// A custom row's reset button, which the row's single accessibility element hides, as a named action.
+private struct RowResetAction: ViewModifier {
+    let onReset: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        if let onReset {
+            content.accessibilityAction(named: L("row_reset_to_profile")) { onReset() }
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    /// VoiceOver's swipe up and down on an [adjustable] row (a choice or a slider) steps it by +1 or -1 through [step].
+    @ViewBuilder func accessibilityStepper(_ adjustable: Bool, step: @escaping (Int) -> Void) -> some View {
+        if adjustable {
+            accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: step(1)
+                case .decrement: step(-1)
+                @unknown default: break
+                }
+            }
+        } else {
+            self
         }
     }
 }

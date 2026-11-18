@@ -76,6 +76,37 @@ struct StreamMenuRow: Identifiable {
         }
         return SettingRow(id: id, tab: .stream, section: "", icon: icon, label: label, value: shared, help: help, enabled: enabled)
     }
+
+    /// What VoiceOver reads as the row's value: the confirmation word, the slider's number, On or Off, the choice, the text.
+    var accessibilityValue: String {
+        if let confirmation { return confirmation }
+        switch value {
+        case .action: return ""
+        case let .slider(number, _, _, _, _, _): return sliderSpec?.label(number) ?? "\(number)"
+        case .toggle(let on): return L(on ? "common_on" : "common_off")
+        case .choice(let label, _, _): return label
+        case .text(let text): return text.isEmpty ? L("stream_menu_not_set") : text
+        }
+    }
+
+    /// VoiceOver's swipe up and down steps the row as left and right do: a choice or a slider that can change.
+    var adjustable: Bool {
+        guard enabled else { return false }
+        switch value {
+        case .choice: return step != nil
+        case .slider: return set != nil
+        default: return false
+        }
+    }
+
+    /// One step of an adjustable row, -1 or +1.
+    @MainActor func adjust(_ direction: Int) {
+        if let step {
+            step(direction)
+        } else if let next = stepped(direction) {
+            set?(next)
+        }
+    }
 }
 
 /// A text choice of the Send keys or Commands page: one pill in a row that scrolls when they do not fit.
