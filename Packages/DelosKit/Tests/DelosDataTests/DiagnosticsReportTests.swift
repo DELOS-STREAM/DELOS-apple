@@ -77,7 +77,7 @@ let diagnosticsInfo = DeviceInfo(
         var settings = StreamSettings(resolution: StreamResolution(width: 1920, height: 1080), fps: 120, bitrateKbps: 80_000)
         settings.hdr = true
         let snapshot = Dictionary(uniqueKeysWithValues: StreamSettingsSnapshot.read(settings))
-        #expect(snapshot.count == 9)
+        #expect(snapshot.count == 8)
         #expect(snapshot["Resolution"] == "1920x1080")
         #expect(snapshot["Frame rate"] == "120")
         #expect(snapshot["Bitrate"] == "80000 kbps")

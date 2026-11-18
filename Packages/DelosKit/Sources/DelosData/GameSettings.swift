@@ -18,7 +18,6 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
         case frameRate = "list_fps"
         case bitrate = "seekbar_bitrate_kbps"
         case codec = "video_format"
-        case pyroWaveChroma = "list_pyrowave_chroma"
         case framePacing = "frame_pacing"
         case asyncDecode = "checkbox_async_decode"
         case gamepadMotionSensors = "checkbox_gamepad_motion_sensors"
@@ -51,6 +50,8 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
 
     public var resolution: Resolution?
     public var fps: Int?
+    /// With ``fps``: the app's frame rate is the custom refresh rate (``StreamSettings/customFrameRateChosen``).
+    public var customFrameRateChosen: Bool?
     public var bitrateKbps: Int?
     public var codec: VideoCodec?
     public var hdr: Bool?
@@ -92,7 +93,10 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
         case .fixed(let value)?: settings.resolution = value
         case nil: break
         }
-        if let fps { settings.fps = fps }
+        if let fps {
+            settings.fps = fps
+            settings.customFrameRateChosen = customFrameRateChosen ?? false
+        }
         if let bitrateKbps { settings.bitrateKbps = bitrateKbps }
         if let codec { settings.codec = codec }
         if let hdr { settings.hdr = hdr }
@@ -107,7 +111,10 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
     /// changed (an unchanged one is not an override). A bitrate that went back to following leaves the profile's.
     public mutating func record(from before: StreamSettings, to after: StreamSettings) {
         if after.resolution != before.resolution { resolution = after.resolution.map(Resolution.fixed) ?? .automatic }
-        if after.fps != before.fps { fps = after.fps }
+        if after.fps != before.fps || after.customFrameRateChosen != before.customFrameRateChosen {
+            fps = after.fps
+            customFrameRateChosen = after.customFrameRateChosen
+        }
         if after.bitrateKbps != before.bitrateKbps { bitrateKbps = after.bitrateKbps }
         if after.codec != before.codec { codec = after.codec }
         if after.hdr != before.hdr { hdr = after.hdr }
@@ -124,7 +131,9 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
     public mutating func reset(_ key: Key) {
         switch key {
         case .resolution: resolution = nil
-        case .frameRate: fps = nil
+        case .frameRate:
+            fps = nil
+            customFrameRateChosen = nil
         case .bitrate:
             bitrateKbps = nil
             codecBitrates = [:]
@@ -140,7 +149,10 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
     /// set since.
     public mutating func restoreMissing(from backup: GameSettingsOverride) {
         if resolution == nil { resolution = backup.resolution }
-        if fps == nil { fps = backup.fps }
+        if fps == nil {
+            fps = backup.fps
+            customFrameRateChosen = backup.customFrameRateChosen
+        }
         if bitrateKbps == nil { bitrateKbps = backup.bitrateKbps }
         if codec == nil { codec = backup.codec }
         if hdr == nil { hdr = backup.hdr }
@@ -163,6 +175,7 @@ public struct GameSettingsOverride: Codable, Equatable, Sendable {
         if let storedFPS { clamped.fps = storedFPS }
         if let storedBitrate { clamped.bitrateKbps = storedBitrate }
         fps = storedFPS == nil ? nil : clamped.fps
+        customFrameRateChosen = storedFPS == nil ? nil : value(.customFrameRateChosen)
         bitrateKbps = storedBitrate == nil ? nil : clamped.bitrateKbps
         codec = value(.codec)
         hdr = value(.hdr)

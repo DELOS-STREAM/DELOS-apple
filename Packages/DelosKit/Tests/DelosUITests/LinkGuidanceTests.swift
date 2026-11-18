@@ -10,7 +10,7 @@ import Testing
     private let utc = TimeZone(identifier: "UTC")!
     private let now: Int64 = 1_794_052_800_000
     private let day: Int64 = 24 * 60 * 60_000
-    private let pw = LinkFormat.of(codec: .pyroWave, width: 1920, height: 1080, fps: 60, hdr: false, chroma444: false)!
+    private let pw = LinkFormat.of(codec: .pyroWave, width: 1920, height: 1080, fps: 60, hdr: false)!
     private var tested: LinkTest { LinkTest(wireKbps: 180_000, testedAtMs: now - day, transport: .wifi, criticalFECPercent: 50, packetSize: 1392) }
     private let supported = PyroWaveHostInfo(
         wireBudgetVersion: 1, udpProbeVersion: 1, udpHandshakeVersion: 1, hostLinkMbps: 1000, bandwidthProbeBytes: 0,
@@ -60,22 +60,21 @@ import Testing
     }
 
     @Test func formatsAreBuiltForEveryCodec() {
-        let pyro = LinkFormat.of(codec: .pyroWave, width: 1920, height: 1080, fps: 60, hdr: false, chroma444: false)!
+        let pyro = LinkFormat.of(codec: .pyroWave, width: 1920, height: 1080, fps: 60, hdr: false)!
         #expect(pyro.label == "1080p60 PyroWave 4:2:0")
         #expect(pyro.defaultKbps == 225_000)
-        #expect(LinkFormat.of(codec: .pyroWave, width: 1920, height: 1080, fps: 60, hdr: false, chroma444: true)!.label == "1080p60 PyroWave 4:4:4")
-        #expect(LinkFormat.of(codec: .pyroWave, width: 1920, height: 1080, fps: 60, hdr: true, chroma444: true)!.label == "1080p60 HDR PyroWave 4:2:0")
-        let hevc = LinkFormat.of(codec: .hevc, width: 1920, height: 1080, fps: 60, hdr: false, chroma444: false)!
+        #expect(LinkFormat.of(codec: .pyroWave, width: 1920, height: 1080, fps: 60, hdr: true)!.label == "1080p60 HDR PyroWave 4:2:0")
+        let hevc = LinkFormat.of(codec: .hevc, width: 1920, height: 1080, fps: 60, hdr: false)!
         #expect(hevc.codec == .hevc && hevc.label == "1080p60 HEVC" && hevc.defaultKbps == 20_000)
-        #expect(LinkFormat.of(codec: .av1, width: 3840, height: 2160, fps: 60, hdr: false, chroma444: false)!.defaultKbps == 80_000)
-        let auto = LinkFormat.of(codec: .automatic, width: 2560, height: 1440, fps: 120, hdr: false, chroma444: false)!
+        #expect(LinkFormat.of(codec: .av1, width: 3840, height: 2160, fps: 60, hdr: false)!.defaultKbps == 80_000)
+        let auto = LinkFormat.of(codec: .automatic, width: 2560, height: 1440, fps: 120, hdr: false)!
         #expect(auto.codec == .automatic && auto.label == "1440p120")
-        #expect(LinkFormat.of(codec: .automatic, width: 0, height: 1080, fps: 60, hdr: false, chroma444: false) == nil)
-        #expect(LinkFormat.of(codec: .automatic, width: 1920, height: 1080, fps: 0, hdr: false, chroma444: false) == nil)
+        #expect(LinkFormat.of(codec: .automatic, width: 0, height: 1080, fps: 60, hdr: false) == nil)
+        #expect(LinkFormat.of(codec: .automatic, width: 1920, height: 1080, fps: 0, hdr: false) == nil)
     }
 
     @Test func anOrdinaryCodecGetsTheSameSentenceWithItsOwnUsefulMaximum() {
-        let hevc = LinkFormat.of(codec: .hevc, width: 1920, height: 1080, fps: 60, hdr: false, chroma444: false)!
+        let hevc = LinkFormat.of(codec: .hevc, width: 1920, height: 1080, fps: 60, hdr: false)!
         var roomy = tested
         roomy.wireKbps = 665_000
         let g = LinkGuidance(format: hevc, info: .none, tested: roomy)

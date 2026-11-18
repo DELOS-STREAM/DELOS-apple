@@ -278,7 +278,10 @@ buffer starts the schedule again instead of carrying delay. `DisplayLayerRendere
 timebase that follows the host clock; the layer shows it at the first refresh at or after it. Settings → Stream →
 Video frame pacing offers these modes plus Balanced with FPS limit, Warp Drive and Warp 2. The cap follows Android's
 near-refresh rules in both the launch request and core configuration; Warp requests 2x/4x the selected host FPS and
-uses immediate presentation, not interpolation. Nano Pacer is not offered without a genuine decoded-frame queue.
+uses immediate presentation, not interpolation. Android's Fast V-Sync (Nano Pacer) is not offered: Lowest latency
+already shows each frame at the first refresh after it is decoded, which is all it adds. The renderers pace at the
+plan's stream rate once the display is known (`FramePacer.retime(fps:)` at `attached(to:)`), the rate the host is told,
+so Cap FPS uses the refresh rate the display really runs on both sides.
 See [Decoder equivalents](DECODER_EQUIVALENTS.md) for the verified public API boundary, platform differences and
 unverified hardware behavior; no private options are applied to the display layer's internal decoder.
 
@@ -290,12 +293,16 @@ so `VideoOutput` and `VideoSamples` are unchanged:
 
 | Part | What it does |
 |---|---|
-| `VideoDecoder` | A `VTDecompressionSession`: hardware decoding where the device has it (not required, so the simulator falls back to software), `RealTime`, asynchronous, one frame at a time in arrival order (no B-frames). It outputs Metal-compatible, IOSurface-backed two-plane 4:2:0 buffers, 8 or 10 bits, video or full range, and measures the time from submit to output. A new format description (new parameter sets, another resolution) builds a new session; an error or an invalidated session (the app was in the background) makes the renderer refuse non-key frames until the next key frame, which `VideoOutput` turns into an IDR request |
+| `VideoDecoder` | A `VTDecompressionSession`: hardware decoding where the device has it (not required, so the simulator falls back to software), `RealTime`, one frame at a time in arrival order (no B-frames), asynchronous with `checkbox_async_decode` (`kVTDecodeFrame_EnableAsynchronousDecompression`; VideoToolbox returns the frames in decode order, and a session that goes away waits for the frames still in flight first), else each frame is decoded before the core's thread takes the next. It outputs Metal-compatible, IOSurface-backed two-plane 4:2:0 buffers, 8 or 10 bits, video or full range, and measures the time from submit to output. A new format description (new parameter sets, another resolution) builds a new session; an error or an invalidated session (the app was in the background) makes the renderer refuse non-key frames until the next key frame, which `VideoOutput` turns into an IDR request |
 | `FrameQueue` | The decoded pictures wait here (at most four; a newer one pushes the oldest out). Each gets the time `FramePacer` gives it, the same three modes as the display layer. At each refresh the queue hands out the oldest frame that is due (a frame is due within half a refresh before its time, so it is shown at the refresh nearest to it); when more than one frame would stay due behind it, it skips ahead and the skipped frames count as dropped. In Lowest latency no frame may stay behind, so the newest due frame wins. A struct that takes times as arguments: a fake clock tests it |
 | `CAMetalDisplayLink` | Calls back once per refresh with the drawable and the time its picture appears (`targetPresentationTimestamp`), from a thread of its own (the main thread is busy with the interface), at the refresh rate of the plan (`DisplayRefreshPlanner`, below). It exists on iOS and tvOS 17 and on macOS 14, so the Mac needs no `CADisplayLink` variant. A refresh without a frame draws nothing and the layer keeps the last picture; the last picture is drawn again when the layer's size changed, when the upscaler was switched on or off, at every refresh while the launch arrival moves it, and once more when the arrival ends |
 | `MetalFrameDrawer` | The pixel buffer's planes become textures through a `CVMetalTextureCache` (no copy), `VideoShaders.metal` converts Y'CbCr to RGB and the picture is placed on the drawable on black by the scale mode (`PictureGeometry`: Fit, Fill with the edges cut off through the vertex shader's crop, Stretch). `ColorConversion` reads range and bit depth from the pixel format and the matrix and transfer function from the buffer's attachments; BT.601, BT.709 and BT.2020 matrices, limited and full range, 8 and 10 bits. The transfer function stays as encoded and the layer is tagged with the matching colour space (BT.709, BT.2020, PQ, HLG): tone mapping and linearising for HDR start in the shader, where `VideoUniforms.transfer` is already passed. With the upscaler on, the picture is converted at its own size first and `MetalUpscaler` draws it |
 | Arrival | The launch scene's arrival on the live picture (`LaunchArrival`, `arrivalFragment` in `VideoShaders.metal`). `startArrival(duration:)` starts it on the renderer's own clock; at each refresh the pose is computed for that refresh's presentation time from the exit's opening (0…1 over 2.2 s). From 55 % of the opening until its end the picture is converted into an RGB texture of its own size (8-bit, or half floats for 10-bit pictures, so HDR's encoded values pass unchanged), its mip levels are generated, and the pass draws it into the fitted rectangle: zoom (118 % with a blur of 20 source pixels, read from the mip levels, until 68 %), then a spring that settles to 100 % with a squash, a skew of at most 0.55°, a wave and an RGB split of up to 9 source pixels. At the end, or at `cancelArrival()` when the scene goes away early, the picture is drawn through the plain path again, byte for byte the picture without the arrival. `ArrivalRenderingTests` compares the pass with a CPU reference of the shader (0.012 per channel) and checks the blur, the identity and a 10-bit PQ picture in a half-float target; `ArrivalPipelineTests` drives it with a virtual clock |
 | `MetalPipeline` | The three of them without the layer and the display link: the core's thread enqueues, VideoToolbox's delivers pictures, the display link's thread draws, behind one short lock. The replay tests drive it with a virtual clock and virtual refreshes |
+
+`checkbox_enable_view_top_center` places a picture that leaves room at the top: `PictureGeometry` puts Fit's viewport at
+the top and lets Fill cut off only the bottom (Stretch fills the view either way); the display layer, whose gravity can
+only center, gets a frame of the picture's own size at the top; `TouchSurface` measures touches against the same place.
 
 For an observed PQ or HLG picture, `LayerRetagger` uses an `rgba16Float` drawable and enables the Metal layer's
 extended dynamic range with the matching BT.2100 transfer tag; returning to SDR restores `bgra8Unorm` and turns EDR
@@ -330,9 +337,7 @@ release builds ignore it) selects the display layer, for comparisons:
 
     xcrun devicectl device process launch --device <id> --console io.github.meitoncz.delos.debug -DelosRenderer layer
 
-There is no Settings row. Android's row for the same idea, Fast V-Sync (Nano Pacer), says in its help line "MediaCodec
-only", which is not true here, and the Android help text cannot be changed on this side. The row follows when the owner
-has compared the renderers on the iPad and decided; it would then reuse `pacing_fast_vsync`.
+There is no Settings row.
 
 What a stuck-renderer watchdog can sample from either renderer is `VideoRenderer.presentationCounters()`
 (`VideoPresentationCounters`: `totalFrames` shown plus dropped, `droppedFrames`, `accumulatedDelaySeconds`). For
@@ -956,6 +961,18 @@ from the settings and the device (`StreamDevice`: the screen's native pixels and
 applies every change, so the view only draws; the help is `SettingsHelp.details` (the chosen value and its line, a
 blank line, `help_<key>`). Where Android's help names something not ported (Warp modes for the frame rate, the stream
 menu's bitrate), the summary of the catalog or no value line is used instead.
+
+Every row does something on Apple. Rows Android has with no meaning here are removed, not hidden: auto orientation and
+its resolution swap (the app is landscape only), PyroWave 4:4:4 chroma (PyroWave is not offered), the trackpad's
+drag-and-drop haptics and threshold, Force QWERTY (HID usages do not depend on the layout), LFR and Ultra low latency
+(MediaCodec options; VideoToolbox's `RealTime` is always on), and the on-screen virtual keys with their layout files
+(not ported yet; the Send keys page's custom keys stay). The others have their Apple equivalent:
+`seekbar_metered_bitrate_kbps` applies when `NWPathMonitor` calls the path expensive or constrained at launch
+(`StreamPlan.bitrateKbps(_:at:metered:)`, a quarter of the bitrate unless chosen), `checkbox_prevent_packet_loss`
+sends `LiSendEmptyPayload` every 20 ms from 1 s after the connection (`StreamSession.keepWiFiAwake()`),
+`checkbox_enable_commit_text` sends what the system keyboard types as UTF-8 text, and off presses each character's key
+on the US layout (`TypedKeys`, text only for a character without one), and a fractional `custom_refresh_rate` is its own
+choice next to the whole rates (`StreamSettings.customFrameRateChosen`) that launches at the exact rate.
 
 | Input | Rows |
 |---|---|

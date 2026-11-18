@@ -82,22 +82,18 @@ public enum VideoCodec: String, CaseIterable, Codable, Sendable {
 /// PyroWave author's regression at 35 dB PSNR-HVS-M-H from twice the screen height; HDR10 gets 1.2x. PyroWave is
 /// intra-only, so it needs several times HEVC's bitrate: about 220 Mbps for 1080p60.
 public enum PyroWaveBitrate {
-    private static let coefficients420 = [
+    private static let coefficients = [
         611.9945665176643, 87.22375978784984, -374.2744854882103, 138.525763156332,
         404.3879014230974, -64.04327593791751, -194.8035057145124, -12.904253458542499,
     ]
-    private static let coefficients444 = [
-        719.659360640365, 51.9223145866537, -522.3229212980714, 104.10383129754959,
-        605.6153091742109, 87.26139899802612, -306.13390524230874, -110.39755862218644,
-    ]
 
-    /// The recommended bitrate in kbps, rounded up to 5 Mbps and capped at the slider's maximum; 4:4:4 never with HDR
-    /// (the HDR bridge is 4:2:0), as `getDefaultBitrate` of DELOS for Android.
-    public static func recommendedKbps(width: Int, height: Int, fps: Int, chroma444: Bool, hdr: Bool) -> Int {
+    /// The recommended bitrate in kbps for 4:2:0 (the only chroma offered on Apple), rounded up to 5 Mbps and capped at
+    /// the slider's maximum, as `getDefaultBitrate` of DELOS for Android.
+    public static func recommendedKbps(width: Int, height: Int, fps: Int, hdr: Bool) -> Int {
         let pixels = min(max(Double(width) * Double(height), 1280 * 720), 3840 * 2160)
         let x = (pixels * 1e-6).squareRoot() - 2
         var power = 1.0, estimate = 0.0
-        for coefficient in chroma444 && !hdr ? coefficients444 : coefficients420 {
+        for coefficient in coefficients {
             estimate += power * coefficient
             power *= x
         }
@@ -112,6 +108,9 @@ public struct StreamSettings: Codable, Equatable, Sendable {
     public var resolution: StreamResolution?
     /// Frames per second, 60 by default as on Android.
     public var fps = 60 { didSet { fps = Self.clampFPS(fps) } }
+    /// The frame rate chosen is the custom refresh rate (`custom_refresh_rate`, Android's `list_fps` holding its text):
+    /// ``fps`` is its nearest whole rate and the launch asks for the exact one (``launchFrameRate(refreshRate:)``).
+    public var customFrameRateChosen = false
     /// Nil: ``StreamPlan/defaultBitrateKbps(width:height:fps:)`` for the resolution and frame rate, so it follows them.
     public var bitrateKbps: Int? { didSet { bitrateKbps = bitrateKbps.map(Self.clampBitrate) } }
     public var codec = VideoCodec.automatic
@@ -180,7 +179,7 @@ public struct StreamSettings: Codable, Equatable, Sendable {
     public func pyroWaveRecommendedKbps(displayResolution: StreamResolution) -> Int? {
         guard codec == .pyroWave else { return nil }
         let r = resolution ?? displayResolution
-        return PyroWaveBitrate.recommendedKbps(width: r.width, height: r.height, fps: fps, chroma444: text(.pyrowaveChroma) == "444", hdr: hdr)
+        return PyroWaveBitrate.recommendedKbps(width: r.width, height: r.height, fps: fps, hdr: hdr)
     }
 
     /// Changes the codec as Android's settings store does (docs/PER_APP_SETTINGS.md "Inheritance and codec bitrates"):
@@ -201,7 +200,7 @@ public struct StreamSettings: Codable, Equatable, Sendable {
         }
     }
 
-    /// With PyroWave, a change of resolution, frame rate, HDR or chroma recalculates its recommended bitrate.
+    /// With PyroWave, a change of resolution, frame rate or HDR recalculates its recommended bitrate.
     public mutating func followPyroWave(displayResolution: StreamResolution) {
         if let kbps = pyroWaveRecommendedKbps(displayResolution: displayResolution) { bitrateKbps = kbps }
     }
@@ -230,7 +229,21 @@ public struct StreamSettings: Codable, Equatable, Sendable {
         case .warp2: fps * 4
         case .capFPS:
             refreshRate > 49 && fps >= refreshRate && fps - refreshRate <= 3 ? refreshRate - 1 : fps
-        case .latency, .balanced, .smoothness, .fastVSync: fps
+        case .latency, .balanced, .smoothness: fps
+        }
+    }
+
+    /// The frame rate the launch asks the host for (`setRefreshRate`, a float on Android): ``streamFPS(refreshRate:)``,
+    /// or the exact custom refresh rate ("59.94") while that is the chosen one.
+    public func launchFrameRate(refreshRate: Int) -> Double {
+        let stream = streamFPS(refreshRate: refreshRate)
+        guard customFrameRateChosen, case .custom(_, let text)? = StreamChoices.customFrameRate(self), let exact = Double(text)
+        else { return Double(stream) }
+        switch framePacing {
+        case .warp: return exact * 2
+        case .warp2: return exact * 4
+        case .capFPS where stream != fps: return Double(stream)
+        default: return exact
         }
     }
 
@@ -246,6 +259,7 @@ public struct StreamSettings: Codable, Equatable, Sendable {
         func value<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T { (try? c.decodeIfPresent(T.self, forKey: key)) ?? fallback }
         resolution = value(.resolution, d.resolution).flatMap { $0.isValid ? $0 : nil }
         fps = Self.clampFPS(value(.fps, d.fps))
+        customFrameRateChosen = value(.customFrameRateChosen, d.customFrameRateChosen)
         bitrateKbps = value(.bitrateKbps, d.bitrateKbps).map(Self.clampBitrate)
         codec = value(.codec, d.codec)
         hdr = value(.hdr, d.hdr)
@@ -289,13 +303,30 @@ public enum StreamChoices {
     public enum FrameRate: Hashable, Sendable {
         case preset(Int)
         case native(Int)
-        /// `custom_refresh_rate` (as typed, "59.94"), streamed at its nearest whole rate.
+        /// `custom_refresh_rate` (as typed, "59.94"): its nearest whole rate is the stream's, the exact one the launch's.
         case custom(Int, text: String)
 
         public var fps: Int {
             switch self {
             case .preset(let fps), .native(let fps), .custom(let fps, _): fps
             }
+        }
+
+        /// The value Android's `list_fps` stores: the whole rate, or the custom rate's text.
+        var value: String {
+            switch self {
+            case .preset(let fps), .native(let fps): "\(fps)"
+            case .custom(_, let text): text
+            }
+        }
+
+        public var isCustom: Bool {
+            if case .custom = self { true } else { false }
+        }
+
+        /// The choice is the frame rate [settings] has.
+        public func isChosen(by settings: StreamSettings) -> Bool {
+            fps == settings.fps && isCustom == settings.customFrameRateChosen
         }
     }
 
@@ -345,12 +376,13 @@ public enum StreamChoices {
     }
 
     /// The presets up to the display's highest refresh rate (at least 60, with 2 Hz to spare; every preset when
-    /// [unlocked], `checkbox_unlock_fps`), then that rate when the presets do not have it, then the [custom] rate.
+    /// [unlocked], `checkbox_unlock_fps`), then that rate when the presets do not have it, then the [custom] rate unless
+    /// it is one of them ("59.94" is its own choice next to 60, "60" is not).
     public static func frameRates(maxFramesPerSecond: Int, unlocked: Bool = false, custom: FrameRate? = nil) -> [FrameRate] {
         let limit = max(60, maxFramesPerSecond + 2)
         let list = presetFrameRates.filter { unlocked || $0 <= limit }.map(FrameRate.preset) + [.native(maxFramesPerSecond)]
             + (custom.map { [$0] } ?? [])
-        return unique(list.filter { $0.fps > 0 }, by: \.fps)
+        return unique(list.filter { $0.fps > 0 }, by: \.value)
     }
 
     private static func unique<T, K: Hashable>(_ list: [T], by key: (T) -> K) -> [T] {
@@ -373,7 +405,15 @@ public enum StreamChoices {
         }
         let rates = frameRates(
             maxFramesPerSecond: maxFramesPerSecond, unlocked: settings.bool(.unlockFps), custom: customFrameRate(settings))
-        if !rates.contains(where: { $0.fps == settings.fps }) { next.fps = rates.first { $0.fps == 60 }?.fps ?? rates[0].fps }
+        if !rates.contains(where: { $0.isChosen(by: settings) }) {
+            // A whole rate only the custom rate gives (stored before the custom choice had its own flag) is that choice
+            if rates.contains(where: { $0.isCustom && $0.fps == settings.fps }) {
+                next.customFrameRateChosen = true
+            } else {
+                next.fps = rates.first { $0.fps == 60 }?.fps ?? rates[0].fps
+                next.customFrameRateChosen = false
+            }
+        }
         if !VideoCodec.choices(decodable: decodable, pyroWave: pyroWave).contains(settings.codec) { next.codec = .automatic }
         return next
     }

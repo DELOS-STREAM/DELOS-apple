@@ -141,7 +141,7 @@ import Testing
     @Test func theAppOverridesAndroidsKeys() {
         // STREAM_KEYS and DISPLAY_KEYS of DELOS for Android, plus the host audio override
         #expect(GameSettingsOverride.Key.allCases.map(\.rawValue) == [
-            "list_resolution", "list_fps", "seekbar_bitrate_kbps", "video_format", "list_pyrowave_chroma", "frame_pacing",
+            "list_resolution", "list_fps", "seekbar_bitrate_kbps", "video_format", "frame_pacing",
             "checkbox_async_decode", "checkbox_gamepad_motion_sensors", "checkbox_gamepad_motion_fallback", "checkbox_force_device_motion",
             "seekbar_gyro_smoothing", "checkbox_host_audio", "checkbox_enable_hdr", "checkbox_full_range", "list_video_scale_mode",
             "list_vrr", "seekbar_resolution_scale_factor", "checkbox_use_virtual_display", "checkbox_enforce_display_mode",

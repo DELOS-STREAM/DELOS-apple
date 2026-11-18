@@ -66,11 +66,14 @@ final class LiveStream: StreamSteps {
         guard let app else { throw .appNotFound }
         appName = app.title
 
+        // A metered network (NWPathMonitor: expensive or constrained) streams at the metered bitrate
+        let metered = await NetworkPath.isMetered()
         let plan = StreamPlan(
             app: app, settings: settings, display: StreamResolution(width: display.pixelWidth, height: display.pixelHeight),
             decodable: formats, refreshRate: display.maxFramesPerSecond,
             displaySupportsHDR: HDRDisplay.isSupported,
-            virtualDisplayReady: record.virtualDisplay?.capable == true && record.virtualDisplay?.driverReady == true)
+            virtualDisplayReady: record.virtualDisplay?.capable == true && record.virtualDisplay?.driverReady == true,
+            metered: metered)
         let nvidia = record.isNvidiaServer
         var sessionURL: String?
         let choice = LaunchChoice.of(app: appID, running: record.runningAppID)
@@ -105,8 +108,7 @@ final class LiveStream: StreamSteps {
             self?.serverCommands = reply.info.serverCommands
         }
         self.plan = (StreamPlan.serverInformation(record, address: client.address, sessionURL: sessionURL), plan.configuration)
-        warnings = StreamWarnings.of(
-            settings: settings, decodable: formats, displaySupportsHDR: HDRDisplay.isSupported, metered: await NetworkPath.isMetered())
+        warnings = StreamWarnings.of(settings: settings, decodable: formats, displaySupportsHDR: HDRDisplay.isSupported, metered: metered)
     }
 
     /// Called each time the PC did not answer the launch and is asked again (the loader's "unlocking" lines).
@@ -123,6 +125,8 @@ final class LiveStream: StreamSteps {
     func connect() async throws(StreamError) {
         guard let plan else { throw .cancelled }
         try await session.start(server: plan.server, configuration: plan.configuration)
+        // `checkbox_prevent_packet_loss`: empty payloads keep the device's Wi-Fi awake between frames
+        if settings.bool(.preventPacketLoss) { await session.keepWiFiAwake() }
     }
 
     func stop() async {

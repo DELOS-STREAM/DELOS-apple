@@ -40,7 +40,6 @@ import Testing
         #expect(DisplayRefreshPlanner.mayReduceRefreshRate(.capFPS, reduceRefreshRate: false))
         #expect(DisplayRefreshPlanner.mayReduceRefreshRate(.balanced, reduceRefreshRate: true))
         #expect(!DisplayRefreshPlanner.mayReduceRefreshRate(.latency, reduceRefreshRate: true))
-        #expect(!DisplayRefreshPlanner.mayReduceRefreshRate(.fastVSync, reduceRefreshRate: true))
         #expect(!DisplayRefreshPlanner.isNativeResolution(width: 1920, height: 1080))
         #expect(DisplayRefreshPlanner.isNativeResolution(width: 2400, height: 1080))
     }
@@ -55,7 +54,6 @@ import Testing
         #expect(reduced.bestMode == hz60 && reduced.displayRefreshRate == 60 && reduced.surfaceFrameRate == 60)
         #expect(self.plan(hz144, 60, pacing: .smoothness).bestMode == hz60)
         #expect(self.plan(hz60, 60, pacing: .latency, reduce: true).bestMode == hz120)
-        #expect(self.plan(hz60, 60, pacing: .fastVSync, reduce: true).bestMode == hz120)
         #expect(self.plan(hz60, 30).bestMode == hz120)
         #expect(self.plan(hz144, 30, reduce: true).bestMode == hz60)
         #expect(self.plan(hz60, 90).bestMode == hz90)

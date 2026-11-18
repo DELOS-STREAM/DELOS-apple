@@ -23,6 +23,6 @@ extension StreamSettings {
             scaleMode: VideoScaleMode(value: text(.videoScaleMode)), upscaler: upscalerSettings,
             vrr: VariableRefreshRate(value: text(.vrr)), reduceRefreshRate: bool(.reduceRefreshRate),
             enforceDisplayMode: bool(.enforceDisplayMode), streamWidth: size.width, streamHeight: size.height, frameRate: fps,
-            hdr: !formats.isDisjoint(with: .tenBit))
+            hdr: !formats.isDisjoint(with: .tenBit), topAligned: bool(.enableViewTopCenter), asyncDecode: bool(.asyncDecode))
     }
 }

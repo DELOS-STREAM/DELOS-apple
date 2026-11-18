@@ -22,11 +22,13 @@ struct VideoZoom: Equatable {
     var ty = 0.0
 }
 
-/// The picture the stream shows: its size and how the surface places it (the Display settings' scale mode).
+/// The picture the stream shows: its size and how the surface places it (the Display settings' scale mode and
+/// `checkbox_enable_view_top_center`).
 struct TouchPicture: Equatable {
     var width: Int
     var height: Int
     var fit: PictureFit
+    var topAligned = false
 }
 
 /// The touch screen, the pencil and the pointer of the stream (``TouchScreen``), and what the stream menu's Mouse page
@@ -75,7 +77,7 @@ extension StreamController {
         let picture = touchPicture
         let surface = TouchSurface(
             width: area.width, height: area.height, videoWidth: picture?.width ?? 0, videoHeight: picture?.height ?? 0,
-            fit: picture?.fit ?? .stretch)
+            fit: picture?.fit ?? .stretch, topAligned: picture?.topAligned ?? false)
         touchScreen?.touchSlop = 8 * area.scale
         touchScreen?.setSurface(surface)
         input?.absoluteMouseArea = touchOptions.absoluteMouseMode ? surface.pictureSize : nil

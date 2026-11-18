@@ -1122,7 +1122,7 @@ final class StreamController {
     }
 
     func typed(_ text: String) {
-        input?.type(text)
+        input?.type(text, asText: keyboardOptions.commitText)
     }
 
     func typedBackspace() {
@@ -1435,11 +1435,15 @@ struct FullKeyboardOptions: Equatable, Sendable {
     var stickyModifiers = true
     /// `checkbox_vibrate_keyboard`.
     var vibrate = false
+    /// `checkbox_enable_commit_text`: what the system keyboard types goes as text, not as key presses.
+    var commitText = false
 }
 
 extension FullKeyboardOptions {
     init(_ settings: StreamSettings) {
-        self.init(stickyModifiers: settings.bool(.enableStickyModifierKeyVirtualKeyboard), vibrate: settings.bool(.vibrateKeyboard))
+        self.init(
+            stickyModifiers: settings.bool(.enableStickyModifierKeyVirtualKeyboard), vibrate: settings.bool(.vibrateKeyboard),
+            commitText: settings.bool(.enableCommitText))
     }
 }
 

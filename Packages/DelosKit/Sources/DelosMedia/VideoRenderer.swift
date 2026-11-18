@@ -123,7 +123,38 @@ public final class DisplayLayerRenderer: VideoRenderer {
 
     public func setScaleMode(_ mode: VideoScaleMode) {
         options.withLock { $0.scaleMode = mode }
-        DispatchQueue.main.async { [self] in layer.videoGravity = Self.gravity(mode) }
+        DispatchQueue.main.async { [self] in
+            layer.videoGravity = Self.gravity(mode)
+            if let bounds { placeLayer(in: bounds) }
+        }
+    }
+
+    /// The view's bounds the layer was last placed in (main thread only).
+    private nonisolated(unsafe) var bounds: CGRect?
+
+    /// The layer's frame in [bounds]: the whole view, or with `checkbox_enable_view_top_center` the picture's own
+    /// rectangle at the top (the layer's gravity can only center), so Fit leaves its bars below and Fill cuts off the bottom.
+    static func frame(in bounds: CGRect, options: VideoRenderOptions) -> CGRect {
+        guard options.topAligned, options.scaleMode != .stretch, options.streamWidth > 0, options.streamHeight > 0,
+              bounds.width > 0, bounds.height > 0 else { return bounds }
+        let scaleX = bounds.width / CGFloat(options.streamWidth), scaleY = bounds.height / CGFloat(options.streamHeight)
+        let scale = options.scaleMode == .fit ? min(scaleX, scaleY) : max(scaleX, scaleY)
+        let width = (CGFloat(options.streamWidth) * scale).rounded(), height = (CGFloat(options.streamHeight) * scale).rounded()
+        #if os(macOS)
+        // An AppKit view's layer counts from the bottom
+        let top = bounds.maxY - height
+        #else
+        let top = bounds.minY
+        #endif
+        return CGRect(x: bounds.minX + ((bounds.width - width) / 2).rounded(), y: top, width: width, height: height)
+    }
+
+    @MainActor private func placeLayer(in bounds: CGRect) {
+        self.bounds = bounds
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.frame = Self.frame(in: bounds, options: options.withLock { $0 })
+        CATransaction.commit()
     }
 
     /// The display layer draws no shader: a requested upscaler is unavailable here.
@@ -138,14 +169,13 @@ public final class DisplayLayerRenderer: VideoRenderer {
     @MainActor public func attached(to display: VideoDisplay) -> DisplayRefreshPlanner.Plan {
         let plan = options.withLock { $0 }.refreshPlan(for: display, pacing: pacing, fps: fps)
         vrr.withLock { $0 = plan.vrr }
+        // The host streams the plan's rate (Cap FPS at the refresh rate the display really runs): pace at it
+        pacer.withLock { $0.retime(fps: Int(plan.streamFrameRate.rounded())) }
         return plan
     }
 
     @MainActor public func resize(to bounds: CGRect, scale: CGFloat) {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        layer.frame = bounds
-        CATransaction.commit()
+        placeLayer(in: bounds)
     }
 
     public func enqueue(_ sample: CMSampleBuffer) -> Bool {

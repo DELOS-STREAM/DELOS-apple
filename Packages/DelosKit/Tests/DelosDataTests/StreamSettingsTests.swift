@@ -305,4 +305,31 @@ import Testing
         #expect(try !JSONDecoder().decode(StreamSettings.self, from: Data("{}".utf8)).hdr)
         #expect(try !JSONDecoder().decode(StreamSettings.self, from: Data(#"{"hdr":"yes"}"#.utf8)).hdr)
     }
+
+    @Test func aMeteredNetworkAsksForTheMeteredBitrate() {
+        let size = StreamResolution(width: 1920, height: 1080)
+        var s = StreamSettings(bitrateKbps: 40_000)
+        #expect(StreamPlan.bitrateKbps(s, at: size, metered: false) == 40_000)
+        // Unset: a quarter of the normal bitrate, as the row's help and Android's PreferenceConfiguration say
+        #expect(StreamPlan.bitrateKbps(s, at: size, metered: true) == 10_000)
+        s.set(.meteredBitrate, .int(5_000))
+        #expect(StreamPlan.bitrateKbps(s, at: size, metered: true) == 5_000)
+        #expect(StreamPlan.bitrateKbps(s, at: size, metered: false) == 40_000)
+        // The default bitrate follows the resolution, and so does its quarter
+        let following = StreamSettings()
+        #expect(StreamPlan.bitrateKbps(following, at: size, metered: true) == StreamPlan.defaultBitrateKbps(width: 1920, height: 1080, fps: 60) / 4)
+    }
+
+    @Test func theCustomFrameRateChoiceIsStoredAndKeptByNormalizing() throws {
+        var s = StreamSettings(fps: 48)
+        s.set(.customRefreshRate, .text("47.95"))
+        // Stored before the choice had its own flag: the whole rate only the custom rate gives is that choice
+        let normalized = StreamChoices.normalized(s, displayWidth: 1920, displayHeight: 1080, maxFramesPerSecond: 60, decodable: .h264)
+        #expect(normalized.fps == 48 && normalized.customFrameRateChosen)
+        let decoded = try JSONDecoder().decode(StreamSettings.self, from: JSONEncoder().encode(normalized))
+        #expect(decoded.customFrameRateChosen && decoded.launchFrameRate(refreshRate: 60) == 47.95)
+        var warp = decoded
+        warp.framePacing = .warp
+        #expect(warp.launchFrameRate(refreshRate: 60) == 95.9)
+    }
 }

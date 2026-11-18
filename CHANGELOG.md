@@ -293,6 +293,14 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- Every Settings row now does something on Apple. The metered bitrate applies when the network is expensive or in Low
+  Data Mode at the stream's start (a quarter of the bitrate unless set). Wi-Fi keep-alive sends an empty packet to the
+  PC every 20 ms during a stream. Asynchronous decoding switches VideoToolbox's asynchronous decompression in the Metal
+  renderer (off: each frame is decoded before the next). Top center display puts a picture that does not fill the
+  screen at the top (Fit) or cuts only its bottom (Fill), for touches too. Commit-text input sends what the system
+  keyboard types as text; off, each character is pressed as its key on the US layout, as games that read single keys
+  expect. A fractional custom refresh rate (59.94) is its own frame rate choice next to 60 and the PC is asked for
+  exactly that rate. Not verified on a device or against a PC.
 - The side menu's header shows the connected PC with a live dot and state (online, streaming, connecting, asleep,
   offline) under the profile name, and a card with the profile's whole streaming time (every game on every PC) and its
   last stream, in the library's stat-block style.
@@ -328,6 +336,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Removed
 
+- Settings rows without an Apple meaning: Auto orientation and Auto invert resolution (the app is landscape only),
+  PyroWave chroma (no PyroWave 4:4:4), the trackpad's drag-and-drop vibration and threshold, Force QWERTY (keys do not
+  depend on the layout), LFR and Ultra low latency (MediaCodec options; VideoToolbox already decodes in real time), the
+  Fast V-Sync frame pacing (Lowest latency already shows each frame at the next refresh), and the on-screen virtual key
+  rows with their layout import and export, until the virtual keys are ported. A stored Fast V-Sync becomes Balanced.
 - The Moonlight for iOS/tvOS reference app it was forked from (Objective-C, storyboards, Core Data), its prebuilt
   FFmpeg, SDL2 and Opus libraries (71 MB without recorded sources) and the X1Kit and moonlight-common-c submodules.
 - The inherited Moonlight workflow that ran on every push and pull request, and the Moonlight bot configurations.
@@ -336,6 +349,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- Balanced with FPS limit paced frames at the display's highest refresh rate while the PC was capped below the rate the
+  display really runs (Low Power Mode, a 60 Hz mode); both now use the same rate.
 - Down from the top navigation returns to the cover the focus went up from, not to the cover under the button.
 - The library's row of covers, the filter sheet's chip rows and every other row and list that follows the focus glide
   smoothly: one spring that every step retargets and that keeps its speed, driven at up to 120 frames a second, instead of

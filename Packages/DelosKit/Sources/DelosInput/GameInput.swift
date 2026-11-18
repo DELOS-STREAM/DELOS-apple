@@ -1073,8 +1073,10 @@ public final class GameInput {
         }
     }
 
-    /// Text typed on the on-screen keyboard: Return, Tab and Backspace are keys, the rest goes as text.
-    public func type(_ text: String) {
+    /// Text typed on the on-screen keyboard: Return, Tab and Backspace are keys. The rest goes as text when [asText]
+    /// (`checkbox_enable_commit_text`: swipe typing and dictation arrive whole); otherwise every character with a key on
+    /// the US layout is pressed as that key (``TypedKeys``), and only the others go as text.
+    public func type(_ text: String, asText: Bool = true) {
         var run = ""
         func flush() {
             guard !run.isEmpty else { return }
@@ -1085,7 +1087,13 @@ public final class GameInput {
             switch character {
             case "\n", "\r", "\r\n": flush(); send(KeyCombo([VirtualKey.enter]))
             case "\t": flush(); send(KeyCombo([VirtualKey.tab]))
-            default: run.append(character)
+            default:
+                if !asText, let combo = TypedKeys.combo(for: character) {
+                    flush()
+                    send(combo)
+                } else {
+                    run.append(character)
+                }
             }
         }
         flush()

@@ -20,6 +20,8 @@ public struct TouchSurface: Equatable, Sendable {
     public var pictureY: Double
     public var pictureWidth: Double
     public var pictureHeight: Double
+    /// The picture sits at the top where it leaves room (`checkbox_enable_view_top_center`), also when unzoomed again.
+    public var topAligned = false
 
     public init(width: Double, height: Double, pictureX: Double, pictureY: Double, pictureWidth: Double, pictureHeight: Double) {
         self.width = width
@@ -30,8 +32,9 @@ public struct TouchSurface: Equatable, Sendable {
         self.pictureHeight = pictureHeight
     }
 
-    /// A surface of `width` × `height` showing a `videoWidth` × `videoHeight` picture placed by `fit`.
-    public init(width: Double, height: Double, videoWidth: Int, videoHeight: Int, fit: PictureFit) {
+    /// A surface of `width` × `height` showing a `videoWidth` × `videoHeight` picture placed by `fit`; at the top instead
+    /// of the middle when `topAligned` (`checkbox_enable_view_top_center`, the renderers' placement).
+    public init(width: Double, height: Double, videoWidth: Int, videoHeight: Int, fit: PictureFit, topAligned: Bool = false) {
         var pictureWidth = width, pictureHeight = height
         if videoWidth > 0, videoHeight > 0, width > 0, height > 0, fit != .stretch {
             let scaleX = width / Double(videoWidth), scaleY = height / Double(videoHeight)
@@ -41,7 +44,8 @@ public struct TouchSurface: Equatable, Sendable {
         }
         self.init(
             width: width, height: height, pictureX: ((width - pictureWidth) / 2).rounded(.down),
-            pictureY: ((height - pictureHeight) / 2).rounded(.down), pictureWidth: pictureWidth, pictureHeight: pictureHeight)
+            pictureY: topAligned ? 0 : ((height - pictureHeight) / 2).rounded(.down), pictureWidth: pictureWidth, pictureHeight: pictureHeight)
+        self.topAligned = topAligned
     }
 
     /// The picture's size in whole pixels, at least 1 × 1.
@@ -95,11 +99,12 @@ public struct PanZoom: Equatable, Sendable {
         constrain(to: surface)
     }
 
-    /// `constrainToBounds`: centred along an axis where the picture is no larger than the surface, else no edge inside it.
+    /// `constrainToBounds`: centred along an axis where the picture is no larger than the surface (at the top of a
+    /// top-aligned surface), else no edge inside it.
     public mutating func constrain(to surface: TouchSurface) {
         let width = surface.pictureWidth * scale, height = surface.pictureHeight * scale
         x = surface.width >= width ? (surface.width - width) / 2 : max(surface.width - width, min(x, 0))
-        y = surface.height >= height ? (surface.height - height) / 2 : max(surface.height - height, min(y, 0))
+        y = surface.height >= height ? (surface.topAligned ? 0 : (surface.height - height) / 2) : max(surface.height - height, min(y, 0))
     }
 
     /// A point of the surface in pixels of the unzoomed picture.

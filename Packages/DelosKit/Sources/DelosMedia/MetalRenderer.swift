@@ -107,6 +107,8 @@ public final class MetalRenderer: VideoRenderer {
     @MainActor public func attached(to display: VideoDisplay) -> DisplayRefreshPlanner.Plan {
         let plan = options.refreshPlan(for: display, pacing: pacing, fps: fps)
         pipeline.setVRR(plan.vrr)
+        // The host streams the plan's rate (Cap FPS at the refresh rate the display really runs): pace at it
+        pipeline.retime(fps: Int(plan.streamFrameRate.rounded()))
         ticker?.stop()
         let ticker = MetalDisplayLinkTicker(layer: layer, frameRate: plan.surfaceFrameRate) { [pipeline] tick in
             pipeline.tick(tick)

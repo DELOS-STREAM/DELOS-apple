@@ -188,6 +188,8 @@ struct StreamDevice: Equatable, Sendable {
             return !upscaler && !pyroWave
         case SettingKey.gamepadMotionFallback.rawValue, SettingKey.forceDeviceMotion.rawValue: return !deviceMotion
         case SettingKey.enablePip.rawValue: return !pictureInPicture
+        // What the system keyboard types: only iPhone and iPad raise one in a stream (`StreamMenuCapabilities.systemKeyboard`)
+        case SettingKey.enableCommitText.rawValue: return !touchscreen
         case "checkbox_vibrate_fallback", "seekbar_vibrate_fallback_strength", "checkbox_enable_device_rumble", "list_rumble_feel",
              SettingKey.vibrateOsc.rawValue, SettingKey.vibrateKeyboard.rawValue:
             return !haptics
@@ -366,17 +368,22 @@ struct StreamSettingsForm: Equatable {
         }
     }
 
-    var frameRateOptions: [(value: Int, label: String)] {
+    var frameRateOptions: [(value: StreamChoices.FrameRate, label: String)] {
         StreamChoices.frameRates(
             maxFramesPerSecond: device.maxFramesPerSecond, unlocked: settings.bool(.unlockFps),
             custom: StreamChoices.customFrameRate(settings)
         ).map { choice in
             switch choice {
-            case .preset(let fps): (fps, Self.presetLabel(fps: fps))
-            case .native(let fps): (fps, L("settings_fps_native", fps))
-            case .custom(let fps, let text): (fps, L("settings_fps_custom", text))
+            case .preset(let fps): (choice, Self.presetLabel(fps: fps))
+            case .native(let fps): (choice, L("settings_fps_native", fps))
+            case .custom(_, let text): (choice, L("settings_fps_custom", text))
             }
         }
+    }
+
+    private mutating func chooseFrameRate(_ choice: StreamChoices.FrameRate) {
+        settings.fps = choice.fps
+        settings.customFrameRateChosen = choice.isCustom
     }
 
     var codecOptions: [(value: VideoCodec, label: String)] {
@@ -431,10 +438,11 @@ struct StreamSettingsForm: Equatable {
     /// The bitrate the slider shows: the chosen one, else the default for the resolution and frame rate.
     var effectiveBitrate: Int { settings.bitrate(at: effectiveResolution) }
 
-    /// The frame pacing modes in Android's order; Fast V-Sync not with PyroWave (`SettingsCapabilities.choices`).
+    /// The frame pacing modes in Android's order. Fast V-Sync is not offered: Latency already shows each frame at the
+    /// first refresh after it is decoded, which is all Android's Nano pacer adds over it.
     var framePacingOptions: [(value: FramePacing, label: String)] {
-        let order: [FramePacing] = [.warp2, .warp, .latency, .balanced, .capFPS, .smoothness, .fastVSync]
-        return order.filter { $0 != .fastVSync || settings.codec != .pyroWave }.map { ($0, Self.pacingLabel($0)) }
+        let order: [FramePacing] = [.warp2, .warp, .latency, .balanced, .capFPS, .smoothness]
+        return order.map { ($0, Self.pacingLabel($0)) }
     }
 
     private static func pacingLabel(_ mode: FramePacing) -> String {
@@ -445,7 +453,6 @@ struct StreamSettingsForm: Equatable {
         case .smoothness: L("pacing_smoothness")
         case .warp: L("pacing_warp")
         case .warp2: L("pacing_warp2")
-        case .fastVSync: L("pacing_fast_vsync")
         }
     }
 
@@ -457,7 +464,6 @@ struct StreamSettingsForm: Equatable {
         case .smoothness: L("help_frame_pacing_smoothness")
         case .warp: L("help_frame_pacing_warp")
         case .warp2: L("help_frame_pacing_warp2")
-        case .fastVSync: L("help_frame_pacing_fast_vsync")
         }
     }
 
@@ -484,7 +490,7 @@ struct StreamSettingsForm: Equatable {
             row = SettingRow(
                 id: spec.id, tab: spec.tab, section: spec.section, icon: spec.icon, label: spec.label,
                 value: .choice(label: label, options: options.map(\.label), selected: selected),
-                help: details(spec, value: known?.label, explanation: known?.help ?? Self.dynamicHelp(spec.id), unavailable: selected == nil))
+                help: details(spec, value: known?.label, explanation: known?.help, unavailable: selected == nil))
         case let .slider(range, step, divisor, unit):
             row = SettingRow(
                 id: spec.id, tab: spec.tab, section: spec.section, icon: spec.icon, label: spec.label,
@@ -503,11 +509,6 @@ struct StreamSettingsForm: Equatable {
         guard var row else { return nil }
         row.enabled = row.enabled && enabled
         return row
-    }
-
-    /// An explanation of the chosen value that no `help_<key>_<value>` text has (`SettingsHelp.choice`).
-    private static func dynamicHelp(_ id: String) -> String? {
-        id == "keyboard_axi_list" ? L("help_dynamic_keyboard_layout") : nil
     }
 
     /// The rows with a field of their own in ``StreamSettings``. The five rumble rows (`checkbox_enable_rumble`,
@@ -550,7 +551,7 @@ struct StreamSettingsForm: Equatable {
 
     private func frameRateRow(_ spec: CatalogSpec) -> SettingRow {
         let options = frameRateOptions
-        let selected = options.firstIndex { $0.value == settings.fps }
+        let selected = options.firstIndex { $0.value.isChosen(by: settings) }
         let label = selected.map { options[$0].label } ?? L("settings_choice_unavailable", "\(settings.fps)")
         return SettingRow(
             id: spec.id, tab: spec.tab, section: spec.section, icon: spec.icon, label: spec.label,
@@ -611,10 +612,6 @@ struct StreamSettingsForm: Equatable {
     /// Every value of a list row with its label, as the catalog has them.
     private func allChoices(_ spec: CatalogSpec) -> [CatalogChoice] {
         guard case .choice(let choices) = spec.kind else { return [] }
-        // The classic array repeats one label for the five layouts: number them (`settings_layout_number`)
-        if spec.id == SettingKey.keyLayout.rawValue {
-            return choices.enumerated().map { CatalogChoice(value: $1.value, label: L("settings_layout_number", $0 + 1), help: $1.help) }
-        }
         return choices
     }
 
@@ -627,10 +624,7 @@ struct StreamSettingsForm: Equatable {
         let pyro = settings.codec == .pyroWave
         switch spec.id {
         // PyroWave has its own decoder; the hardware decoder's options do not apply
-        case SettingKey.asyncDecode.rawValue, SettingKey.ultraLowLatency.rawValue: if pyro { return false }
-        case SettingKey.lowLatencyFrameBalance.rawValue: if pyro || settings.framePacing == .fastVSync { return false }
-        // 4:4:4 is PyroWave-only and never offered with HDR (the HDR path is 4:2:0)
-        case SettingKey.pyrowaveChroma.rawValue: if !pyro || settings.hdr { return false }
+        case SettingKey.asyncDecode.rawValue: if pyro { return false }
         case SettingKey.upscaler.rawValue, SettingKey.upscalerMode.rawValue, SettingKey.upscalerSharpness.rawValue:
             if !device.upscaler && !pyro { return false }
         case SettingKey.upscalerSupersampling.rawValue:
@@ -673,12 +667,8 @@ struct StreamSettingsForm: Equatable {
         case Self.bitrate:
             return settings.pyroWaveRecommendedKbps(displayResolution: device.defaultResolution)
                 .map { L("help_note_pyrowave_recommends", $0 / 1000) }
-        case Self.framePacing where settings.framePacing == .fastVSync: return L("help_note_fast_vsync_lfr")
-        case Self.framePacing where settings.bool(.lowLatencyFrameBalance): return L("help_note_lfr_balanced")
-        case SettingKey.asyncDecode.rawValue, SettingKey.ultraLowLatency.rawValue, SettingKey.lowLatencyFrameBalance.rawValue:
+        case SettingKey.asyncDecode.rawValue:
             return pyro ? L("help_note_not_with_pyrowave") : nil
-        case SettingKey.pyrowaveChroma.rawValue where !pyro: return L("help_note_needs_pyrowave")
-        case SettingKey.pyrowaveChroma.rawValue where settings.hdr: return L("help_note_hdr_420")
         case SettingKey.upscalerMode.rawValue where !device.metalFXRuns(settings.text(.upscalerMode)):
             return L("help_note_metalfx_unavailable")
         case SettingKey.upscalerSupersampling.rawValue where settings.text(.upscalerMode) == "sharpen": return L("help_note_sharpen_only")
@@ -710,7 +700,9 @@ struct StreamSettingsForm: Equatable {
         let before = settings
         switch id {
         case Self.resolution: settings.resolution = Self.next(settings.resolution, in: resolutionOptions.map(\.value), direction)
-        case Self.frameRate: settings.fps = Self.next(settings.fps, in: frameRateOptions.map(\.value), direction)
+        case Self.frameRate:
+            let choices = frameRateOptions.map(\.value)
+            chooseFrameRate(Self.next(choices.first { $0.isChosen(by: settings) } ?? .preset(settings.fps), in: choices, direction))
         case Self.codec: setCodec(Self.next(settings.codec, in: codecOptions.map(\.value), direction))
         case Self.framePacing: settings.framePacing = Self.next(settings.framePacing, in: framePacingOptions.map(\.value), direction)
         case Self.bitrate: setBitrate(effectiveBitrate + direction * StreamSettings.bitrateStep)
@@ -743,7 +735,7 @@ struct StreamSettingsForm: Equatable {
         let before = settings
         switch id {
         case Self.resolution: if resolutionOptions.indices.contains(index) { settings.resolution = resolutionOptions[index].value }
-        case Self.frameRate: if frameRateOptions.indices.contains(index) { settings.fps = frameRateOptions[index].value }
+        case Self.frameRate: if frameRateOptions.indices.contains(index) { chooseFrameRate(frameRateOptions[index].value) }
         case Self.codec: if codecOptions.indices.contains(index) { setCodec(codecOptions[index].value) }
         case Self.framePacing: if framePacingOptions.indices.contains(index) { settings.framePacing = framePacingOptions[index].value }
         case Self.statsPosition: if StatsPosition.allCases.indices.contains(index) { settings.set(.statsPosition, .text(StatsPosition.allCases[index].rawValue)) }
@@ -772,12 +764,11 @@ struct StreamSettingsForm: Equatable {
         }
     }
 
-    /// What follows a change, as Android's store writes it: PyroWave's bitrate follows the resolution, frame rate, HDR
-    /// and chroma, and the choices are normalized again when "Unlock all FPS" changes.
+    /// What follows a change, as Android's store writes it: PyroWave's bitrate follows the resolution, frame rate and HDR,
+    /// and the choices are normalized again when "Unlock all FPS" changes.
     private mutating func settled(after before: StreamSettings) {
         if settings.codec == .pyroWave, settings.codec == before.codec,
-           settings.resolution != before.resolution || settings.fps != before.fps || settings.hdr != before.hdr
-            || settings.text(.pyrowaveChroma) != before.text(.pyrowaveChroma) {
+           settings.resolution != before.resolution || settings.fps != before.fps || settings.hdr != before.hdr {
             settings.followPyroWave(displayResolution: device.defaultResolution)
         }
         if settings.bool(.unlockFps) != before.bool(.unlockFps) { settings = Self.normalized(settings, device: device) }
@@ -821,6 +812,8 @@ struct StreamSettingsForm: Equatable {
             while text.hasSuffix("0") { text.removeLast() }
             if text.hasSuffix(".") { text.removeLast() }
             settings.set(.customRefreshRate, .text(text))
+            // The chosen custom rate follows its new value
+            if settings.customFrameRateChosen { settings.fps = min(max(Int(fps.rounded()), 1), 1000) }
         case SettingKey.customBitrate.rawValue:
             guard let mbps = Double(value), mbps.isFinite, mbps > 0, mbps <= 9999 else { return L("settings_error_bitrate_range") }
             settings.set(.customBitrate, .text(value))
