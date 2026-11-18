@@ -74,23 +74,28 @@ final class LiveStream: StreamSteps {
             displaySupportsHDR: HDRDisplay.isSupported,
             virtualDisplayReady: record.virtualDisplay?.capable == true && record.virtualDisplay?.driverReady == true)
         let nvidia = record.isNvidiaServer
-        let sessionURL: String?
-        switch LaunchChoice.of(app: appID, running: record.runningAppID) {
-        case .otherAppRunning:
-            // Never quit another app unasked: the library's game menu is the confirmed way to quit it and start this one
-            throw .otherAppRunning
-        case .resume:
+        var sessionURL: String?
+        let choice = LaunchChoice.of(app: appID, running: record.runningAppID)
+        // Never quit another app unasked: the library's game menu is the confirmed way to quit it and start this one
+        if choice == .otherAppRunning { throw .otherAppRunning }
+        // A PC that is unlocking or whose server is still starting does not answer at first: it is asked again
+        // (NvConnection.java:413-458, DelosStreamActivity.java:1657-1664)
+        for attempt in 0... {
             do {
-                sessionURL = try await client.resume(plan.request, nvidiaServer: nvidia, pin: pin)
+                switch choice {
+                case .resume: sessionURL = try await client.resume(plan.request, nvidiaServer: nvidia, pin: pin)
+                default: sessionURL = try await client.launch(plan.request, nvidiaServer: nvidia, pin: pin)
+                }
+                break
+            } catch where LaunchRetry.isUnanswered(error) {
+                let test = await PortTest.run(PortTest.launchPorts)
+                if let failure = LaunchRetry.after(attempt: attempt, test: test) { throw failure }
+                waiting?()
+                try? await Task.sleep(for: LaunchRetry.pause)
+                if Task.isCancelled { throw .offline }
             } catch {
-                throw Self.resumeFailure(error)
-            }
-        case .launch:
-            do {
-                sessionURL = try await client.launch(plan.request, nvidiaServer: nvidia, pin: pin)
-            } catch HostError.hostStatus(code: 403, _) {
-                throw .denied
-            } catch {
+                if choice == .resume { throw Self.resumeFailure(error) }
+                if case HostError.hostStatus(code: 403, _) = error { throw .denied }
                 throw .launchFailed(detail: Self.detail(error))
             }
         }
@@ -102,6 +107,19 @@ final class LiveStream: StreamSteps {
             self?.serverCommands = reply.info.serverCommands
         }
         self.plan = (StreamPlan.serverInformation(record, address: client.address, sessionURL: sessionURL), plan.configuration)
+        warnings = StreamWarnings.of(
+            settings: settings, decodable: formats, displaySupportsHDR: HDRDisplay.isSupported, metered: await NetworkPath.isMetered())
+    }
+
+    /// Called each time the PC did not answer the launch and is asked again (the loader's "unlocking" lines).
+    var waiting: (@MainActor () -> Void)?
+    /// The warnings of this launch (``StreamWarnings``); empty before ``launch(display:)``.
+    private(set) var warnings: [String] = []
+    /// The bitrate the stream was set up with.
+    var bitrateKbps: Int? { plan?.configuration.bitrateKbps }
+
+    func testPorts(_ ports: UInt32) async -> PortTest.Result {
+        await PortTest.run(ports)
     }
 
     func connect() async throws(StreamError) {

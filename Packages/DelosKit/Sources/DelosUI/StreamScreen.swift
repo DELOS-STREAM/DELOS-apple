@@ -131,6 +131,7 @@ struct StreamScreen: View {
         controller.rumbleConfiguration = settings.rumble
         controller.controllerOptions = ControllerOptions(settings: settings)
         controller.leavingHold = .seconds(ExitLook.handoff(reduced: reducedMotion))
+        controller.warningsDisabled = settings.bool(.disableWarnings)
         controller.menuOpened = { [navigator] in navigator.cancelRepeats?() }
         controller.statisticsChosen = keepStatisticsOverlay
         controller.onScreenOpacityChosen = keepOnScreenOpacity
@@ -376,6 +377,9 @@ struct StreamContent: View {
                 // Over the menu's backdrop, sharp (Android moves it into the menu's window, DelosStreamActivity.java:2046)
                 if controller.statisticsOverlay.isShown, let statistics = controller.statistics {
                     StreamStatsOverlay(statistics: statistics, overlay: controller.statisticsOverlay, position: settings.statsPosition)
+                }
+                if let notice = controller.connectionNotice {
+                    StreamConnectionNotice(text: notice)
                 }
             case .leaving, .ended:
                 if exitScene, let exitPortal, let leavingSince {

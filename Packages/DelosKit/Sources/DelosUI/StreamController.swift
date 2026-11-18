@@ -40,6 +40,14 @@ protocol StreamSteps: AnyObject {
     func setRuntimeBitrate(_ kbps: Int) async throws -> Int
     /// The clipboard sync with the PC once ``launch(display:)`` knows it; nil before and without one.
     var clipboard: ClipboardSync? { get }
+    /// Called each time the PC did not answer the launch and is asked again (the loader's "unlocking" lines).
+    var waiting: (@MainActor () -> Void)? { get set }
+    /// What the launch warns about (``StreamWarnings``), known once ``launch(display:)`` returned.
+    var warnings: [String] { get }
+    /// The bitrate the stream was set up with, in kbps; nil before the launch.
+    var bitrateKbps: Int? { get }
+    /// The core's connection test of [ports] (``PortTest``).
+    func testPorts(_ ports: UInt32) async -> PortTest.Result
 }
 
 extension StreamSteps {
@@ -49,6 +57,14 @@ extension StreamSteps {
     /// Without a PC that answers, a bitrate change is a command the host does not have (``BitrateFailure/unsupported``).
     func setRuntimeBitrate(_ kbps: Int) async throws -> Int { throw HostError.httpStatus(404) }
     var clipboard: ClipboardSync? { nil }
+    var waiting: (@MainActor () -> Void)? {
+        get { nil }
+        set {}
+    }
+    var warnings: [String] { [] }
+    var bitrateKbps: Int? { nil }
+    /// Without the network the test cannot tell anything.
+    func testPorts(_ ports: UInt32) async -> PortTest.Result { .inconclusive }
 }
 
 /// One stream on the screen (`DelosStreamActivity` with `StreamLoader` of DELOS for Android): launch, the connecting
@@ -103,6 +119,15 @@ final class StreamController {
     /// The on-screen keyboard is wanted over the stream (the Keyboard tile): it is raised while the menu is closed.
     private(set) var keyboardShown = false
     private(set) var statistics: StreamStatistics?
+    /// "Poor connection" or "Slow connection" over the running stream while the core judges it so (``StreamWarnings``).
+    private(set) var connectionNotice: String?
+    /// The profile turned the stream's warnings off (`checkbox_disable_warnings`); the screen sets it.
+    @ObservationIgnored var warningsDisabled = false
+    /// The launch's warnings were shown for this stream.
+    @ObservationIgnored private var warned = false
+
+    /// The stream's bitrate now: what the Bitrate page applied last, else what the stream was set up with.
+    var currentBitrateKbps: Int { bitrate.appliedKbps ?? steps.bitrateKbps ?? 0 }
 
     @ObservationIgnored private let makeSteps: @MainActor () -> any StreamSteps
     @ObservationIgnored private var steps: any StreamSteps
@@ -195,6 +220,7 @@ final class StreamController {
     func retry() {
         guard case .failed = phase, display != nil else { return }
         endAttempt()
+        warned = false
         steps = makeSteps()
         run()
     }
@@ -210,6 +236,7 @@ final class StreamController {
         line = StageLines.line(.platform, pcName: steps.pcName)
         let steps = self.steps
         let cleanup = self.cleanup
+        steps.waiting = { [weak self] in self?.waitingForPC(from: id) }
         listener = Task { [weak self] in
             for await event in steps.events {
                 self?.handle(event, from: id)
@@ -228,13 +255,40 @@ final class StreamController {
                 return
             }
             guard let self, self.isCurrent(id), self.phase == .connecting else { return }
+            self.showWarnings(steps.warnings)
             do throws(StreamError) {
                 try await steps.connect()
                 if self.isCurrent(id) { self.connected() }
             } catch {
-                if self.isCurrent(id), let text = StreamText.startFailure(error) { self.fail(text) }
+                // A failed stage may be a network that blocks its ports (DelosStreamActivity.java:1657-1683)
+                var ports: UInt32 = 0
+                if case let .stageFailed(stage, _) = error { ports = PortTest.ports(stage: stage) }
+                let test = ports == 0 ? PortTest.Result.passed : await steps.testPorts(ports)
+                if self.isCurrent(id), let text = StreamText.startFailure(error, ports: Self.describe(ports), blocked: test.blocked) {
+                    self.fail(text)
+                }
             }
         }
+    }
+
+    /// The ports of a failure as the result lists them; nil without any.
+    private static func describe(_ ports: UInt32) -> String? {
+        ports == 0 ? nil : PortTest.describe(ports)
+    }
+
+    /// The PC did not answer the launch and is asked again: the loader tells an "unlocking" line.
+    private func waitingForPC(from id: Int) {
+        guard isCurrent(id), phase == .connecting else { return }
+        line = StageLines.line(.unlocking, pcName: steps.pcName)
+        progress = min(progress + 0.08, 0.92)
+    }
+
+    /// The launch's warnings, long toasts (`DelosToast.LONG`, ``ToastTiming/streamLongMs``); once per stream, not again when
+    /// it connects again after the background.
+    private func showWarnings(_ warnings: [String]) {
+        guard !warned else { return }
+        warned = true
+        for warning in warnings { toast?(warning, .warning, ToastTiming.streamLongMs) }
     }
 
     private func isCurrent(_ id: Int) -> Bool { id == attemptID }
@@ -273,7 +327,27 @@ final class StreamController {
             stopPlaytime()
             stopStatistics()
             stopInput()
-            if let text = StreamText.termination(termination) { fail(text) } else { phase = .ended }
+            connectionNotice = nil
+            guard termination != .graceful else {
+                phase = .ended
+                return
+            }
+            // A lost video stream may be a network that blocks its ports (DelosStreamActivity.java:1700-1722)
+            let ports = PortTest.ports(termination: termination)
+            guard ports != 0 else {
+                if let text = StreamText.termination(termination) { fail(text) }
+                return
+            }
+            let steps = self.steps
+            Task { [weak self] in
+                let test = await steps.testPorts(ports)
+                guard let self, self.isCurrent(id), let text = StreamText.termination(termination, ports: Self.describe(ports), blocked: test.blocked)
+                else { return }
+                self.fail(text)
+            }
+        case .connectionStatus(let status):
+            guard phase == .streaming else { return }
+            connectionNotice = StreamWarnings.connection(status, bitrateKbps: currentBitrateKbps, disabled: warningsDisabled)
         case let .rumble(controller, low, high):
             input?.rumble(controller: controller, low: low, high: high)
         case let .triggerRumble(controller, left, right):
@@ -654,6 +728,7 @@ final class StreamController {
         statisticsTask?.cancel()
         statisticsTask = nil
         statistics = nil
+        connectionNotice = nil
     }
 
     // MARK: Background
@@ -712,16 +787,20 @@ final class StreamController {
         let steps = self.steps
         leavingQuit = quit
         leavingScene = scene
-        phase = .leaving(quit ? L("stream_exit_quitting", steps.appName) : L("stream_exit_disconnecting"))
+        phase = .leaving(quit ? StreamText.quitting(appName: steps.appName) : L("stream_exit_disconnecting"))
         stopInput()
         let stopped = endAttempt()
         let hold = scene ? leavingHold : .zero
         let task = Task { @MainActor [weak self] in
             let began = ContinuousClock.now
             await stopped.value
-            if quit, await !steps.quitApp() {
-                self?.phase = .failed(StreamText.quitFailure(appName: steps.appName))
-                return
+            if quit {
+                guard await steps.quitApp() else {
+                    self?.phase = .failed(StreamText.quitFailure(appName: steps.appName))
+                    return
+                }
+                // DelosStreamActivity.java:1642-1647: a long success toast
+                self?.toast?(StreamText.quitSuccess(appName: steps.appName), .success, ToastTiming.streamLongMs)
             }
             // The exit scene plays out before the library comes back
             try? await ContinuousClock().sleep(until: began.advanced(by: hold))
