@@ -25,8 +25,9 @@ struct RefreshTick: @unchecked Sendable {
 /// report an overload once per stream and mode (``OverloadDetector``; nothing is changed automatically), and a streak of
 /// 60 failed drawings switches it off for the stream (the picture is then drawn directly).
 ///
-/// Three threads meet here: the core's video thread (`enqueue`), VideoToolbox's (decoded pictures) and the display link's
-/// (`tick`); the queue and the counters are behind one lock that is held for a few assignments only.
+/// Three threads meet here: the core's video thread (`enqueue`, which hands the frame to the decoder's own thread), the
+/// decoder's or VideoToolbox's (decoded pictures) and the display link's (`tick`); the queue and the counters are behind
+/// one lock that is held for a few assignments only.
 final class MetalPipeline: @unchecked Sendable {
     typealias Clock = @Sendable () -> Double
 
@@ -136,21 +137,27 @@ final class MetalPipeline: @unchecked Sendable {
     private let conversionChanged = Mutex<(@Sendable (ColorConversion, HDRPictureInfo?) -> Void)?>(nil)
     private let overloadObserver = Mutex<(@Sendable (UpscalerMode, Bool) -> Void)?>(nil)
     private let decodedObserver = Mutex<(@Sendable (CVPixelBuffer) -> Void)?>(nil)
+    /// Debug builds: the per-second throughput line (``StreamPerf``).
+    private let perf: StreamPerf?
 
     init?(
         pacing: FramePacing, fps: Int, options: VideoRenderOptions = VideoRenderOptions(),
         clock: @escaping Clock = { CACurrentMediaTime() }, device: (any MTLDevice)? = MTLCreateSystemDefaultDevice(),
-        metalFX: MetalFXSupport? = nil
+        metalFX: MetalFXSupport? = nil, perf: StreamPerf? = StreamPerf.standard
     ) {
         guard let drawer = MetalFrameDrawer(device: device, metalFX: metalFX) else { return nil }
         self.drawer = drawer
         self.clock = clock
+        self.perf = perf
         topAligned = options.topAligned
         state = Mutex(State(queue: FrameQueue(pacing: pacing, fps: fps), scaleMode: options.scaleMode, upscaler: options.upscaler))
         decoder = VideoDecoder(
-            asynchronous: options.asyncDecode,
+            asynchronous: options.asyncDecode, perf: perf,
             onFrame: { [weak self] frame in self?.decoded(frame) },
-            onFailure: { [weak self] _ in self?.state.withLock { $0.awaitingKeyFrame = true } })
+            onFailure: { [weak self] _ in
+                self?.perf?.decodeFailed()
+                self?.state.withLock { $0.awaitingKeyFrame = true }
+            })
     }
 
     /// Called for every frame that is drawn, on the thread that draws.
@@ -223,6 +230,11 @@ final class MetalPipeline: @unchecked Sendable {
         state.withLock { $0.queue.retime(fps: fps) }
     }
 
+    /// The rate the display link asks for, for the throughput line.
+    func setLinkFrameRate(_ rate: Double) {
+        perf?.setLinkFrameRate(rate)
+    }
+
     // MARK: Frames in
 
     func enqueue(_ sample: CMSampleBuffer) -> Bool {
@@ -235,7 +247,9 @@ final class MetalPipeline: @unchecked Sendable {
             return true
         }
         guard accepted else { return false }
-        return decoder.decode(sample)
+        let submitted = decoder.decode(sample)
+        if submitted { perf?.decodeSubmitted() }
+        return submitted
     }
 
     static func isKeyFrame(_ sample: CMSampleBuffer) -> Bool {
@@ -247,16 +261,25 @@ final class MetalPipeline: @unchecked Sendable {
 
     private func decoded(_ frame: DecodedFrame) {
         let now = clock()
-        state.withLock { s in
+        let overflowed = state.withLock { s -> Int in
+            let dropped = s.queue.counters.dropped
             s.queue.push(NumberedFrame(frame: frame, sequence: s.decoded, arrival: now), arrival: now)
             s.decoded += 1
             s.decodeSeconds += frame.decodeSeconds
             if s.upscalerActive { s.window.arrived(at: now) }
+            return s.queue.counters.dropped - dropped
+        }
+        if let perf {
+            perf.decodeReturned(seconds: frame.decodeSeconds)
+            perf.queued()
+            perf.dropped(.queueFull, count: overflowed)
         }
         decodedObserver.withLock { $0 }?(frame.pixelBuffer)
     }
 
     func flush() {
+        // Frames still waiting for the decoder belong to the stream before the flush
+        decoder.discardPending()
         state.withLock { s in
             s.queue.flush()
             s.lastFrame = nil
@@ -284,11 +307,17 @@ final class MetalPipeline: @unchecked Sendable {
         let size = tick.drawable.map { (width: $0.texture.width, height: $0.texture.height) }
         let now = clock()
         var report: (UpscalerMode, Bool)?
+        var queueChange = (shown: 0, skipped: 0, repeated: 0, gpuBusy: 0)
         let work = state.withLock { s -> Work? in
             let pose = s.arrivalPose(at: tick.presentation)
             let upscaling = s.upscalerActive
+            let before = s.queue.counters
             var taken = s.queue.take(at: tick.presentation, refresh: tick.refresh).map { (frame: $0.frame, due: $0.due) }
+            let after = s.queue.counters
+            queueChange = (after.presented - before.presented, after.dropped - before.dropped,
+                           after.repeatedRefreshes - before.repeatedRefreshes, 0)
             if taken != nil, s.held != nil {
+                queueChange.gpuBusy = 1
                 // The frame held back for the GPU is replaced by a newer one and will never be shown
                 s.held = nil
                 s.gpuBusySkipped += 1
@@ -324,6 +353,11 @@ final class MetalPipeline: @unchecked Sendable {
             return Work(frame: last, due: nil, pose: pose, scaleMode: s.scaleMode, upscale: upscale(last))
         }
         if let report { reportOverload(report) }
+        if let perf {
+            perf.tick(presentation: tick.presentation, shown: queueChange.shown > 0, repeated: queueChange.repeated > 0)
+            perf.dropped(.skipped, count: queueChange.skipped)
+            perf.dropped(.gpuBusy, count: queueChange.gpuBusy)
+        }
         guard let work else { return }
         draw(work, tick: tick, now: now)
     }
@@ -388,6 +422,19 @@ final class MetalPipeline: @unchecked Sendable {
                 }
             }
             #endif
+        }
+        if let perf {
+            // The drawing's GPU time, with the upscaler's own command buffers when it ran; late: after its refresh
+            nonisolated(unsafe) let parts = work.upscale == nil ? nil : drawer.lastReport.map { ($0.preparation, $0.pass) }
+            let presentation = tick.drawable == nil ? Double.infinity : tick.presentation
+            commandBuffer.addCompletedHandler { buffer in
+                func seconds(_ part: (any MTLCommandBuffer)?) -> Double {
+                    guard let part, part.status == .completed else { return 0 }
+                    return part.gpuEndTime - part.gpuStartTime
+                }
+                let total = buffer.gpuEndTime - buffer.gpuStartTime + seconds(parts?.0) + seconds(parts?.1)
+                perf.gpuFinished(seconds: total, late: buffer.gpuEndTime > presentation)
+            }
         }
         commandBuffer.commit()
         if tick.drawable == nil { commandBuffer.waitUntilCompleted() }

@@ -105,9 +105,13 @@ enum SyntheticStream {
         let failures = Mutex(0)
         let decoder = VideoDecoder(onFrame: { frame in decoded.withLock { $0.append(frame) } }, onFailure: { _ in failures.withLock { $0 += 1 } })
         defer { decoder.invalidate() }
-        // The pictures decode one after the other as fast as VideoToolbox gives them back
+        // The pictures decode one after the other as fast as VideoToolbox gives them back. The decoder's own thread takes
+        // at most a quarter second of frames ahead (`maximumPending`): the loop lets it catch up every 16
         let started = DispatchTime.now().uptimeNanoseconds
-        for sample in samples { #expect(decoder.decode(sample)) }
+        for (index, sample) in samples.enumerated() {
+            #expect(decoder.decode(sample))
+            if index % 16 == 15 { decoder.finishFrames() }
+        }
         decoder.finishFrames()
         let wall = Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000_000
         #expect(failures.withLock { $0 } == 0)

@@ -86,7 +86,8 @@ public final class MetalRenderer: VideoRenderer {
         pipeline.observeUpscalerOverload(body)
     }
 
-    /// Called with every decoded picture, on VideoToolbox's thread (``PictureInPictureVideo`` shows them in its layer).
+    /// Called with every decoded picture, on the decoder's or VideoToolbox's thread (``PictureInPictureVideo`` shows them in
+    /// its layer).
     public func observeDecoded(_ body: (@Sendable (CVPixelBuffer) -> Void)?) {
         pipeline.observeDecoded(body)
     }
@@ -109,6 +110,7 @@ public final class MetalRenderer: VideoRenderer {
         pipeline.setVRR(plan.vrr)
         // The host streams the plan's rate (Cap FPS at the refresh rate the display really runs): pace at it
         pipeline.retime(fps: Int(plan.streamFrameRate.rounded()))
+        pipeline.setLinkFrameRate(plan.surfaceFrameRate)
         ticker?.stop()
         let ticker = MetalDisplayLinkTicker(layer: layer, frameRate: plan.surfaceFrameRate) { [pipeline] tick in
             pipeline.tick(tick)

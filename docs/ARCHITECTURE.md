@@ -307,7 +307,7 @@ so `VideoOutput` and `VideoSamples` are unchanged:
 
 | Part | What it does |
 |---|---|
-| `VideoDecoder` | A `VTDecompressionSession`: hardware decoding where the device has it (not required, so the simulator falls back to software), `RealTime`, one frame at a time in arrival order (no B-frames), asynchronous with `checkbox_async_decode` (`kVTDecodeFrame_EnableAsynchronousDecompression`; VideoToolbox returns the frames in decode order, and a session that goes away waits for the frames still in flight first), else each frame is decoded before the core's thread takes the next. It outputs Metal-compatible, IOSurface-backed two-plane 4:2:0 buffers, 8 or 10 bits, video or full range, and measures the time from submit to output. A new format description (new parameter sets, another resolution) builds a new session; an error or an invalidated session (the app was in the background) makes the renderer refuse non-key frames until the next key frame, which `VideoOutput` turns into an IDR request |
+| `VideoDecoder` | A `VTDecompressionSession`: hardware decoding where the device has it (not required, so the simulator falls back to software), `RealTime`, one frame at a time in arrival order (no B-frames). The core's receive thread only hands a frame over: the decoding runs on the decoder's own thread (user-interactive), as Android's `MediaCodec` decodes apart from the thread that queues its input; decoding on the receive thread held it 1.5 to 7 ms a 1080p frame (below, "120 fps"). That thread calls VideoToolbox asynchronously with `checkbox_async_decode` (`kVTDecodeFrame_EnableAsynchronousDecompression`; VideoToolbox returns the frames in decode order, and a session that goes away waits for the frames still in flight first), else it decodes each frame before the next. At most 30 frames (a quarter second at 120 fps) wait for it; beyond that they are dropped and the stream asks for a key frame, and a flush drops them too. It outputs Metal-compatible, IOSurface-backed two-plane 4:2:0 buffers, 8 or 10 bits, video or full range, and measures the time from submit to output. A new format description (new parameter sets, another resolution) builds a new session; an error or an invalidated session (the app was in the background) makes the renderer refuse non-key frames until the next key frame, which `VideoOutput` turns into an IDR request |
 | `FrameQueue` | The decoded pictures wait here (at most four; a newer one pushes the oldest out). Each gets the time `FramePacer` gives it, the same three modes as the display layer. At each refresh the queue hands out the oldest frame that is due (a frame is due within half a refresh before its time, so it is shown at the refresh nearest to it); when more than one frame would stay due behind it, it skips ahead and the skipped frames count as dropped. In Lowest latency no frame may stay behind, so the newest due frame wins. A struct that takes times as arguments: a fake clock tests it |
 | `CAMetalDisplayLink` | Calls back once per refresh with the drawable and the time its picture appears (`targetPresentationTimestamp`), from a thread of its own (the main thread is busy with the interface), at the refresh rate of the plan (`DisplayRefreshPlanner`, below). It exists on iOS and tvOS 17 and on macOS 14, so the Mac needs no `CADisplayLink` variant. A refresh without a frame draws nothing and the layer keeps the last picture; the last picture is drawn again when the layer's size changed, when the upscaler was switched on or off, at every refresh while the launch arrival moves it, and once more when the arrival ends |
 | `MetalFrameDrawer` | The pixel buffer's planes become textures through a `CVMetalTextureCache` (no copy), `VideoShaders.metal` converts Y'CbCr to RGB and the picture is placed on the drawable on black by the scale mode (`PictureGeometry`: Fit, Fill with the edges cut off through the vertex shader's crop, Stretch). `ColorConversion` reads range and bit depth from the pixel format and the matrix and transfer function from the buffer's attachments; BT.601, BT.709 and BT.2020 matrices, limited and full range, 8 and 10 bits. The transfer function stays as encoded and the layer is tagged with the matching colour space (BT.709, BT.2020, PQ, HLG): tone mapping and linearising for HDR start in the shader, where `VideoUniforms.transfer` is already passed. With the upscaler on, the picture is converted at its own size first and `MetalUpscaler` draws it |
@@ -488,6 +488,44 @@ iPad's decoder and GPU were not measured.
 `MetalFrameDrawer` is tested against a CPU reference of the conversion with buffers in each range and depth, `FrameQueue`
 with a fake clock (order, tolerance, backlog, capacity, flush, lateness, peak, a stall that catches up, a stream
 faster or slower than the display), `VideoDecoder` with the three fixtures, `RendererChoice` and the layer's size in pixels.
+
+### 120 fps: the receive thread and the throughput line
+
+The owner's iPad Pro 13" (M5) never reached 120 fps, at 1080p and at 1440 × 1080 (issue #15, 2026-11-18). The core
+submits each frame on its receive thread (direct submit), the thread that also takes every packet from the socket. The
+Metal renderer decoded the frame on that thread before returning (`checkbox_async_decode` is off by default, as on
+Android, and with it on VideoToolbox may still decode inside the call), and `AnnexB` scanned every byte of the frame in
+a Swift loop. Android's `MediaCodec` never holds the receive thread for a decode. Now `VideoDecoder` decodes on a thread
+of its own and the scan finds the `01` bytes with `memchr`.
+
+`StreamThroughputBenchmark` measures it (a harness, `DELOS_STREAM_BENCH=1 swift test --filter StreamThroughputBenchmark`):
+the Mac's encoder makes 360 frames of noise at 120 fps, and they go in real time, as the core's decode units, through
+`VideoOutput` into `MetalPipeline`, whose refreshes a second thread calls at 120 Hz, drawing into a 2752 × 2064 target
+(the iPad Pro 13" panel). Debug build on an M6 Mac (2026-11-18), the steady seconds, receive thread time per frame p50 /
+p99 in ms:
+
+| Stream (measured bitrate) | Before, sync | Before, async | After, sync | After, async | Decode p50 | Shown |
+|---|---|---|---|---|---|---|
+| HEVC 1920 × 1080 (97 Mbps) | 1.55–3.68 / 4.3 | 0.75 / 3.6 | 0.09 / 0.22 | 0.08 / 0.21 | 1.4–1.6 ms | 120 fps |
+| H.264 1920 × 1080 (362 Mbps) | 6.9 / 10.2 | 2.2 / 8.5 | 0.05 / 0.08 | 0.05 / 0.34 | 4.7–5.2 ms | 120 fps |
+| HEVC 1440 × 1080 (73 Mbps) | 1.46 / 2.1 | 1.84 / 2.5 | 0.04 / 0.13 | 0.02 / 0.15 | 0.8–1.3 ms | 120 fps |
+
+The scan alone took 0.35 to 2.3 ms a frame before and 0.01 to 0.05 ms after. The GPU drew a frame in 0.16 to 0.31 ms
+(p99 under 6 ms), the refreshes ran at 120.0 Hz and no drawing was late. The Mac showed 120 fps in every case before
+too: its decoder fits in a frame. On a device the receive thread also takes every packet (a 1080p frame at 40 Mbps is
+about 30 of them), so whether the old 1.5 to 7 ms a frame capped the iPad is for its log to tell. The core's own work
+per packet (`RtpvAddPacket` through the depacketizer, a C harness with a synthetic Sunshine stream and its parity) was
+0.8 µs at -O0 with `LC_DEBUG` (the FEC check of debug builds included) and 0.1 µs at -O2: under 2 % of the receive
+thread at 200 KB frames, so the debug build's core is not a cap and keeps Android's flags.
+
+Debug builds log the path once a second under the os_log category `StreamPerf` (subsystem `io.github.meitoncz.delos`)
+and in the diagnostic log (`StreamPerf`, DelosMedia), plus a `StreamPerf launch` line (the launch's mode, the configured
+fps, the refresh rate told to the host, the pacing, the bitrate) and a `StreamPerf display` line (the display's rates, the
+refresh plan, the display link's rate). What the fields separate: `in` below `req` with `gap` above 0 is the network (or
+`fecfail`); `in` below `req` with no gap and `host` below `req` is the PC encoding fewer frames; `submit` near 8 ms is
+the receive thread; `decq` growing or `dect` near 8 ms is the decoder; `skip` and `repeat` with `in` at 120 are frames
+arriving in bunches (Wi-Fi); `tickhz` below 120 is the display (`lpm=1`, `thermal`, Limit Frame Rate); `late` is the
+GPU. In a debug build the core's FEC check recovers one synthetic packet per frame, so FEC recoveries are not shown.
 
 ## Stream output
 
@@ -1663,6 +1701,9 @@ has no such setting; both are in `Config/Info.plist`, which Xcode merges with th
   an image against the live service, and a stream that takes the app's overrides.
 - Moving the focus with a real game controller on iPhone and iPad (the simulator has no controller); the logic is
   covered by the unit tests only.
+- 120 fps on the iPad Pro M5 with the decoder on its own thread (issue #15), the `StreamPerf` lines of a real stream,
+  the iPad's decode time and the receive thread's load with a real socket; the decoder's backlog limit (30 frames) on a
+  real network.
 - The Metal renderer on a real display (`-DelosRenderer metal`): `CAMetalDisplayLink` callbacks, the GPU end times against
   the refresh times (`lateRefreshes`), whether it makes the 120 fps stream on the iPad Pro M5 steadier than the
   display layer (issue #9: the replay is a model of the layer), the delay of the extra frame in Balanced, how the colours

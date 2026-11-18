@@ -89,6 +89,8 @@ import VideoToolbox
         let ten = try #require(HardwareProbe.Streams.hevcMain10Description)
         let decoder = VideoDecoder(onFrame: { _ in }, onFailure: { _ in })
         _ = decoder.decode(eight)
+        // The session is made on the decoder's own thread
+        decoder.finishFrames()
         #expect(decoder.sessionDepth == false)
         guard HardwareProbe.hevcMain10 else { return }
         // A 10-bit format arrives (the stream restarted as HDR): the session is made again for it

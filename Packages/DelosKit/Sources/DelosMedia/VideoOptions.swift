@@ -132,9 +132,9 @@ public struct VideoRenderOptions: Sendable, Equatable {
     public var hdr: Bool
     /// `checkbox_enable_view_top_center`: a picture that does not fill the view sits at its top, not in its middle.
     public var topAligned: Bool
-    /// `checkbox_async_decode`: the Metal renderer's decoder runs VideoToolbox asynchronously
-    /// (`kVTDecodeFrame_EnableAsynchronousDecompression`), so the core's video thread hands the next frame on without
-    /// waiting for the picture; off, each frame is decoded before the next is taken.
+    /// `checkbox_async_decode`: the Metal renderer's decoder thread runs VideoToolbox asynchronously
+    /// (`kVTDecodeFrame_EnableAsynchronousDecompression`), so it hands the next frame on without waiting for the picture;
+    /// off, it decodes each frame before the next. Either way the core's receive thread only hands the frame over.
     public var asyncDecode: Bool
 
     public init(

@@ -138,4 +138,25 @@ import Testing
         // A 120 FPS stream on ProMotion runs at 120 Hz
         #expect(VideoRenderOptions(frameRate: 120).refreshPlan(for: promotion, pacing: .latency, fps: 120).surfaceFrameRate == 120)
     }
+
+    /// The iPad Pro 13" (M5) panel and the owner's 1080p and 1440 × 1080 streams at 120 fps: no pacing and no refresh
+    /// setting plans 60 Hz; the display link asks for 120, the host is told 120 and asked for the configured rate (119
+    /// with Balanced with FPS limit, twice or four times 120 with Warp).
+    @Test(arguments: FramePacing.allCases, [1920, 1440])
+    func a120FPSStreamOnTheIPadProRunsAt120Hz(pacing: FramePacing, width: Int) {
+        let panel = VideoDisplay.builtIn(width: 2752, height: 2064, maxFramesPerSecond: 120)
+        for reduce in [false, true] {
+            let options = VideoRenderOptions(reduceRefreshRate: reduce, streamWidth: width, streamHeight: 1080, frameRate: 120)
+            let plan = options.refreshPlan(for: panel, pacing: pacing, fps: 120)
+            #expect(plan.surfaceFrameRate == 120)
+            #expect(plan.displayRefreshRate == 120)
+            let expected: Double = switch pacing {
+            case .capFPS: 119
+            case .warp: 240
+            case .warp2: 480
+            default: 120
+            }
+            #expect(plan.streamFrameRate == expected)
+        }
+    }
 }

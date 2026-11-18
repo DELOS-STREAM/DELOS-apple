@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Debug builds log the video path once a second (os_log category `StreamPerf` and the diagnostic log): the frame rate
+  asked for and received, lost frame numbers, the rate the PC encoded at, FEC failures, the receive thread's time per
+  frame, the decoder's backlog and time, the queue's drops by reason, the display link's rate, the GPU time, the
+  thermal state and Low Power Mode, plus one line for the launch request and one for the display plan.
 - Picture in Picture on iPhone and iPad (Settings → Appearance → Enable Picture-in-Picture observer mode): when DELOS
   leaves during a stream, the stream keeps playing in the system's Picture in Picture window, with its sound and its
   connection, and nothing is sent to the PC; what was held comes up there, and the stream menu and the keyboards close.
@@ -372,6 +376,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   gives a fullscreen variant.
 - The stream menu no longer hides the supersampling level when a 2× that does not fit leaves the stream unsupersampled,
   so 1.33× can be chosen again.
+- The Metal renderer decoded every frame on the core's receive thread, which also takes every packet from the network:
+  1.5 to 7 ms a 1080p frame on an M6 Mac, of the 8.3 ms a 120 fps frame has. The decoder now has its own thread (both
+  with Asynchronous decoding on and off) and the receive thread spends about 0.1 ms a frame, and the start codes of a
+  frame are found with a vectorized search instead of a byte-by-byte loop. Whether it was what held the iPad Pro below
+  120 fps is not verified on a device.
 - Balanced with FPS limit paced frames at the display's highest refresh rate while the PC was capped below the rate the
   display really runs (Low Power Mode, a 60 Hz mode); both now use the same rate.
 - Down from the top navigation returns to the cover the focus went up from, not to the cover under the button.
