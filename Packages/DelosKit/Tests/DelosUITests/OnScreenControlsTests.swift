@@ -586,7 +586,7 @@ private final class OscSink: StreamInputSink, @unchecked Sendable {
         let toggle = try #require(rows.first { $0.id == MenuRowID.onScreenControls.rawValue })
         guard case .toggle(true) = toggle.value else { Issue.record("on"); return }
         let opacity = try #require(rows.first { $0.id == MenuRowID.onScreenOpacity.rawValue })
-        guard case .slider(90, 0...100, 5, " %") = opacity.value else { Issue.record("90 % in steps of 5"); return }
+        guard case .slider(90, 0...100, 5, " %", 1, nil) = opacity.value else { Issue.record("90 % in steps of 5"); return }
         opacity.set?(45)
         #expect(controls.options.opacity == 45 && kept == [45])
         toggle.activate()

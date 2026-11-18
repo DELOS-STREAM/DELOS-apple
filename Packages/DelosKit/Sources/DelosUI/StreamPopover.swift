@@ -141,6 +141,7 @@ private struct PopoverContent: View {
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reducedMotion
     @Namespace private var plate
+    @Environment(Layers.self) private var layers: Layers?
 
     private typealias M = StreamMenuLayout
 
@@ -171,6 +172,10 @@ private struct PopoverContent: View {
         case .keys: L("stream_menu_title_keys")
         case .commands: L("stream_menu_title_commands")
         case .brightness: L("stream_menu_title_brightness")
+        case .bitrate: L("stream_menu_title_bitrate")
+        case .upscaler: controller.upscaler.supersamplingMode ? L("stream_menu_title_supersampling") : L("stream_menu_title_upscaler")
+        case .mouse: L("stream_menu_title_mouse")
+        case .rumble: L("stream_menu_title_rumble")
         case .main: ""
         }
     }
@@ -212,10 +217,12 @@ private struct PopoverContent: View {
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                         FocusItem(
                             id: StreamMenuState.rowID(row.id), model: menu.focus, clickCue: row.enabled ? cue(row) : .error,
-                            action: { if !menu.swallowsAccept(), row.enabled { row.activate() } }
+                            action: { if !menu.swallowsAccept(), row.enabled { row.activate() } },
+                            tap: { wasFocused in tapped(row, wasFocused: wasFocused) }
                         ) { focused in
                             PopoverRow(row: row, focused: focused, index: index, plate: plate)
                         }
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("stream-menu")) } action: { menu.rowFrames[row.id] = $0 }
                     }
                 }
                 .padding(.vertical, stage.px(2))
@@ -249,7 +256,27 @@ private struct PopoverContent: View {
     }
 
     private func cue(_ row: StreamMenuRow) -> Cue {
-        if case .action = row.value { .open } else { .select }
+        if case .action = row.value { .open } else if case .text = row.value { .open } else { .select }
+    }
+
+    /// A tap on a row (StreamMenuPopover.kt:474-482): a choice or slider row's first tap focuses it, the next opens its popup;
+    /// a disabled row refuses with the error cue; the others act.
+    private func tapped(_ row: StreamMenuRow, wasFocused: Bool) {
+        let menu = controller.menu
+        switch row.tap(wasFocused: wasFocused) {
+        case .refuse:
+            layers?.feedback?.play(.error)
+        case .focus:
+            menu.focus.focus(StreamMenuState.rowID(row.id))
+            layers?.feedback?.play(.move)
+        case .popup:
+            layers?.feedback?.play(.open)
+            controller.openPicker(row.id)
+        case .activate:
+            menu.focus.focus(StreamMenuState.rowID(row.id))
+            layers?.feedback?.play(cue(row))
+            row.activate()
+        }
     }
 }
 
@@ -352,26 +379,50 @@ private struct PopoverRow: View {
     }
 
     @ViewBuilder private var value: some View {
-        switch row.value {
-        case .action:
-            SymbolView(symbol: Symbols.chevronRight, size: 28, color: focused ? colors.accent : colors.text3.opacity(0.5))
-        case let .slider(number, range, _, unit):
-            HStack(spacing: stage.px(14)) {
-                PopoverSlider(value: number, range: range, focused: focused, step: row.set == nil ? 1 : sliderStep, onChange: { row.set?($0) })
-                Text("\(number)\(unit)")
-                    .font(DelosFonts.figtree(stage.tpx(M.rowSize), .medium))
-                    .monospacedDigit()
-                    .foregroundStyle(colors.text.color)
-                    .lineLimit(1)
-                    .frame(width: stage.px(M.numberMinWidth * stage.textScale), alignment: .trailing)
+        let text = DelosFonts.figtree(stage.tpx(M.rowSize), .medium)
+        let chevron = focused ? colors.accent : colors.text3.opacity(0.5)
+        if let confirmation = row.confirmation {
+            // A check and a word instead of the chevron (StreamMenuPopover.kt:577-580)
+            HStack(spacing: stage.px(8)) {
+                SymbolView(symbol: Symbols.check, size: 28, color: colors.accent)
+                Text(confirmation).font(DelosFonts.figtree(stage.tpx(M.rowSize), .semibold)).foregroundStyle(colors.accent.color).lineLimit(1)
             }
-        case .toggle(let on):
-            PopoverSwitch(on: on)
+        } else {
+            switch row.value {
+            case .action:
+                SymbolView(symbol: Symbols.chevronRight, size: 28, color: chevron)
+            case let .slider(number, range, step, _, _, _):
+                HStack(spacing: stage.px(14)) {
+                    PopoverSlider(value: number, range: range, focused: focused, step: row.set == nil ? 1 : step, onChange: { row.set?($0) })
+                    Text(row.sliderSpec?.label(number) ?? "\(number)")
+                        .font(text)
+                        .monospacedDigit()
+                        .foregroundStyle(colors.text.color)
+                        .lineLimit(1)
+                        .frame(width: stage.px(M.numberMinWidth * stage.textScale), alignment: .trailing)
+                }
+            case .toggle(let on):
+                PopoverSwitch(on: on)
+            case .choice(let label, _, _):
+                // ◀ value ▶; a touch on an arrow steps at once (StreamMenuPopover.kt:582-594)
+                HStack(spacing: stage.px(14)) {
+                    SymbolView(symbol: Symbols.chevronLeft, size: 28, color: chevron)
+                        .contentShape(Rectangle())
+                        .onTapGesture { if row.enabled { row.step?(-1) } }
+                    Text(label).font(text).foregroundStyle(colors.text2.color).lineLimit(1)
+                        .frame(minWidth: stage.px(M.choiceValueMinWidth * stage.textScale))
+                    SymbolView(symbol: Symbols.chevronRight, size: 28, color: chevron)
+                        .contentShape(Rectangle())
+                        .onTapGesture { if row.enabled { row.step?(1) } }
+                }
+            case .text(let value):
+                HStack(spacing: stage.px(14)) {
+                    Text(value.isEmpty ? L("stream_menu_not_set") : value).font(text).foregroundStyle(colors.text2.color).lineLimit(1)
+                        .frame(maxWidth: stage.px(420), alignment: .trailing)
+                    SymbolView(symbol: Symbols.chevronRight, size: 28, color: chevron)
+                }
+            }
         }
-    }
-
-    private var sliderStep: Int {
-        if case let .slider(_, _, step, _) = row.value { step } else { 1 }
     }
 }
 

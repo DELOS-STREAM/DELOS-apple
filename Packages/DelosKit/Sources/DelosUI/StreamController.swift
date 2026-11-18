@@ -157,8 +157,8 @@ final class StreamController {
     /// How the stream menu opens besides a tap of Home (the profile's `ui_stream_menu_buttons` and `ui_stream_menu_swipe`).
     @ObservationIgnored private let menuButtons: Set<ShortcutButton>
     @ObservationIgnored private let menuSwipe: Bool
-    /// The profile's controller, keyboard and mouse settings for the stream's input.
-    @ObservationIgnored var controllerOptions = ControllerOptions()
+    /// The profile's controller, keyboard and mouse settings for the stream's input (the More page's gyro smoothing changes it).
+    var controllerOptions = ControllerOptions()
     /// Called with what the input asks the screen to show (``GameInput/Event``: the mouse emulation, a controller
     /// announced as a generic one).
     @ObservationIgnored var inputNotice: (@MainActor (GameInput.Event) -> Void)?
@@ -186,11 +186,32 @@ final class StreamController {
     let onScreen: OnScreenControls?
     /// Called with the opacity the More page's slider chose: the screen keeps it in the profile.
     @ObservationIgnored var onScreenOpacityChosen: (@MainActor (Int) -> Void)?
+    /// The upscaler of the stream's renderer (the Upscaler tile and page).
+    let upscaler: any UpscalerControl
+    /// The bitrate the Bitrate page's slider asks for, kbps.
+    private(set) var bitrateRequested = 20_000
+    static let bitrateRange = 1000...1_000_000
+    /// The link test's recommendation for this stream (the Bitrate page's Fill row), nil without one.
+    @ObservationIgnored var bitrateRecommendation: (@MainActor () -> BitrateRecommendation?)?
+    /// Called with the rumble preset the Rumble feel page chose: the screen keeps it in the profile.
+    @ObservationIgnored var rumblePresetChosen: (@MainActor (RumblePreset) -> Void)?
+    /// Keeps what the menu changes for this game (`ui_game_…` overrides): nil for a stream without a game to keep it for.
+    @ObservationIgnored var saveForGame: (@MainActor ([SettingKey: StoredSetting]) -> Void)?
+    @ObservationIgnored private lazy var autoSave = MenuAutoSave(
+        values: { [unowned self] setting in
+            switch setting {
+            case .upscaler: UpscalerSave.values(upscaler)
+            case .gyroSmoothing: [.gyroSmoothing: .int(min(max(controllerOptions.gyroSmoothing, 0), 100))]
+            }
+        },
+        write: { [unowned self] values in saveForGame?(values) })
+    @ObservationIgnored private var autoSaveTask: Task<Void, Never>?
 
     init(
         capabilities: StreamMenuCapabilities = .platform, brightness: (any ScreenBrightness)? = nil,
         statisticsOverlay: StatisticsOverlay = .off, playtime: PlaytimeTracker? = nil, playtimeFlushInterval: Duration = .seconds(30),
         menuButtons: Set<ShortcutButton> = [], menuSwipe: Bool = true, onScreenControls: OnScreenControls? = nil,
+        upscaler: (any UpscalerControl)? = nil,
         makeSteps: @escaping @MainActor () -> any StreamSteps
     ) {
         self.playtime = playtime
@@ -200,9 +221,12 @@ final class StreamController {
         self.menuButtons = menuButtons
         self.menuSwipe = menuSwipe
         self.brightness = brightness
-        self.capabilities = StreamMenuCapabilities(keyboard: capabilities.keyboard, brightness: capabilities.brightness && brightness != nil)
+        var capabilities = capabilities
+        capabilities.brightness = capabilities.brightness && brightness != nil
+        self.capabilities = capabilities
         if let brightness { brightnessPercent = Self.rounded(brightness.percent) }
         onScreen = onScreenControls
+        self.upscaler = upscaler ?? UnavailableUpscaler(settings: StreamSettings())
         steps = makeSteps()
         greeting = L("stream_loader_greeting", steps.pcName)
         onScreen?.output.send = { [weak self] state in self?.onScreenSent(state) }
@@ -479,8 +503,44 @@ final class StreamController {
 
     /// The menu is gone, with the page that was open in it.
     private func hideMenu() {
+        if menuOpen { menuClosedAt = .now }
         menuOpen = false
+        picker = nil
         menu.close()
+        // StreamMenu.kt:233-242: what the menu changed is written when it closes
+        flushAutoSave()
+    }
+
+    /// How long the menu plays its exit after it closed (the screen sets it, ``StreamDockLayout/closeTotal(count:)``): taps
+    /// in that time are still the menu's and do nothing (`outsideTapAction` with `closing`, StreamMenuLayout.kt:133-140).
+    @ObservationIgnored var menuExitDuration: TimeInterval = 0
+    @ObservationIgnored private var menuClosedAt = Date.distantPast
+
+    /// The menu plays its exit.
+    func menuClosing(at now: Date = .now) -> Bool {
+        !menuOpen && now.timeIntervalSince(menuClosedAt) < menuExitDuration
+    }
+
+    // MARK: Touch popups of the rows
+
+    /// The options list of a choice row or the popup of a slider row a tap opened (issue #92, StreamMenuRoot.kt:236-252).
+    private(set) var picker: RowPopupState?
+
+    /// A tap on the row [id] of the open page that already had the focus: its options or its slider come up.
+    func openPicker(_ id: String) {
+        guard menuOpen, case let .rows(rows) = menuContent(menu.page), let row = rows.first(where: { $0.id == id }),
+              let setting = row.settingRow else { return }
+        picker = RowPopupState.open(setting) { [weak self] value in self?.setRow(id, value) }
+    }
+
+    func closePicker() {
+        picker = nil
+    }
+
+    /// The picker's choice or slider value for the row [id] of the open page.
+    func setRow(_ id: String, _ value: Int) {
+        guard case let .rows(rows) = menuContent(menu.page), let row = rows.first(where: { $0.id == id }), row.enabled else { return }
+        row.set?(value)
     }
 
     /// The Overlay tile: off → full → compact → off (`toggleHUD` of DELOS for Android). The choice is kept for the next streams.
@@ -491,23 +551,14 @@ final class StreamController {
 
     // MARK: Pages of the menu
 
-    /// What a page shows (`PageRows` of DELOS for Android's stream menu), for the actions this device has.
+    /// What a page shows (`PageRows` of DELOS for Android's stream menu, StreamMenuRoot.kt:528-676), for the actions this device
+    /// has.
     func menuContent(_ page: MenuPage) -> StreamMenuContent {
         switch page {
         case .main:
             return .rows([])
         case .more:
-            return .rows([
-                StreamMenuRow(
-                    id: MenuRowID.keys.rawValue, icon: Symbols.keyboardCommandKey, label: L("stream_menu_row_send_keys"), value: .action,
-                    help: L("stream_help_send_keys"), activate: { [self] in openMenuPage(.keys) }),
-                StreamMenuRow(
-                    id: MenuRowID.commands.rawValue, icon: Symbols.terminal, label: L("stream_menu_row_commands"), value: .action,
-                    help: L("stream_help_commands"), activate: { [self] in openMenuPage(.commands) }),
-                StreamMenuRow(
-                    id: MenuRowID.taskManager.rawValue, icon: Symbols.taskManager, label: L("stream_menu_row_task_manager"), value: .action,
-                    help: L("stream_help_task_manager"), activate: { [self] in send(SpecialKeys.taskManager) }),
-            ] + onScreenRows)
+            return .rows(moreRows)
         case .brightness:
             return .rows([
                 StreamMenuRow(
@@ -515,6 +566,14 @@ final class StreamController {
                     value: .slider(value: brightnessPercent, range: Self.brightnessRange, step: Self.brightnessStep, unit: " %"),
                     help: L("stream_help_screen_brightness"), activate: {}, set: { [self] in setBrightness($0) })
             ])
+        case .bitrate:
+            return .rows(bitrateRows)
+        case .upscaler:
+            return .rows(upscalerRows)
+        case .mouse:
+            return .rows(mouseRows)
+        case .rumble:
+            return .rows(rumbleRows)
         case .keys:
             let pills = specialKeys.enumerated().map { index, option in
                 let label = StreamMenuText.specialKey(option.label)
@@ -534,6 +593,196 @@ final class StreamController {
         }
     }
 
+    /// The More page's rows in Android's order (StreamMenuRoot.kt:548-574): what this device does not have is left out (the
+    /// touch rows without a touchscreen, the system keyboard without one to raise).
+    private var moreRows: [StreamMenuRow] {
+        var rows = [
+            StreamMenuRow(
+                id: MenuRowID.keys.rawValue, icon: Symbols.keyboardCommandKey, label: L("stream_menu_row_send_keys"), value: .action,
+                help: L("stream_help_send_keys"), activate: { [self] in openMenuPage(.keys) }),
+            StreamMenuRow(
+                id: MenuRowID.sendClipboard.rawValue, icon: Symbols.send, label: L("stream_menu_row_send_clipboard"), value: .action,
+                help: L("stream_help_send_clipboard"), activate: { [self] in closeMenu(); sendClipboard() }),
+            StreamMenuRow(
+                id: MenuRowID.getClipboard.rawValue, icon: Symbols.receive, label: L("stream_menu_row_get_clipboard"), value: .action,
+                help: L("stream_help_get_clipboard"), activate: { [self] in closeMenu(); getClipboard() }),
+            StreamMenuRow(
+                id: MenuRowID.commands.rawValue, icon: Symbols.terminal, label: L("stream_menu_row_commands"), value: .action,
+                help: L("stream_help_commands"), activate: { [self] in openMenuPage(.commands) }),
+            StreamMenuRow(
+                id: MenuRowID.taskManager.rawValue, icon: Symbols.taskManager, label: L("stream_menu_row_task_manager"), value: .action,
+                help: L("stream_help_task_manager"), activate: { [self] in send(SpecialKeys.taskManager) }),
+        ]
+        if capabilities.touchscreen {
+            rows.append(StreamMenuRow(
+                id: MenuRowID.zoom.rawValue, icon: Symbols.zoomIn, label: L("stream_menu_row_zoom"), value: .toggle(zoomOn),
+                help: L("stream_help_zoom"), activate: { [self] in toggleZoom() }))
+        }
+        if allowsTouchModeChange {
+            rows.append(StreamMenuRow(
+                id: MenuRowID.mouseMode.rawValue, icon: Symbols.mouse, label: L("stream_menu_row_mouse_mode"), value: .action,
+                help: L("stream_help_mouse_mode"), activate: { [self] in openMenuPage(.mouse) }))
+        }
+        rows += onScreenRows
+        if capabilities.keyboard {
+            rows.append(StreamMenuRow(
+                id: MenuRowID.systemKeyboard.rawValue, icon: Symbols.keyboard, label: L("stream_menu_row_system_keyboard"), value: .action,
+                help: L("stream_help_open_system_keyboard"), activate: { [self] in toggleKeyboard() }))
+        }
+        if capabilities.touchscreen {
+            rows.append(StreamMenuRow(
+                id: MenuRowID.touchSensitivity.rawValue, icon: Symbols.touchSensitivity, label: L("stream_menu_row_touch_sensitivity"),
+                value: .toggle(touchSensitivityOn), help: L("stream_help_touch_sensitivity"), activate: { [self] in toggleTouchSensitivity() }))
+        }
+        rows.append(StreamMenuRow(
+            id: MenuRowID.rumble.rawValue, icon: Symbols.vibration, label: L("stream_menu_row_rumble_feel"),
+            value: .text(L(rumbleConfiguration.profile.labelKey)), help: L("stream_help_rumble_feel", "B"),
+            activate: { [self] in openMenuPage(.rumble) }))
+        // Applies at once and is kept for this game, never the profile (the Settings slider's); usable while a gyroscope source is on
+        let gyroOn = controllerOptions.motionSensors || controllerOptions.motionFallbackToDevice
+        rows.append(StreamMenuRow(
+            id: MenuRowID.gyroSmoothing.rawValue, icon: Symbols.smoothing, label: L("stream_menu_row_gyro_smoothing"),
+            value: .slider(value: controllerOptions.gyroSmoothing, range: 0...100, step: 5, unit: " %", minText: L("stream_menu_gyro_off", 0)),
+            enabled: gyroOn, help: L(gyroOn ? "stream_help_gyro_smoothing" : "stream_help_gyro_smoothing_disabled"), activate: {},
+            set: { [self] in setGyroSmoothing($0) }))
+        return rows
+    }
+
+    /// The Bitrate page (StreamMenuRoot.kt:580-600): the bitrate asked for, the link test's recommendation where there is one
+    /// (its Fill puts it on the slider; nothing is sent before Apply), and Apply with the host's answer on its right.
+    private var bitrateRows: [StreamMenuRow] {
+        let busy = bitrate.busy
+        var rows = [
+            StreamMenuRow(
+                id: MenuRowID.bitrate.rawValue, icon: Symbols.networkCheck, label: L("stream_menu_row_bitrate"),
+                value: .slider(value: bitrateRequested, range: Self.bitrateRange, step: 1000, unit: " Mbps", divisor: 1000),
+                enabled: !busy, help: L("stream_help_bitrate"), activate: {}, set: { [self] in bitrateRequested = $0 })
+        ]
+        if let recommendation = bitrateRecommendation?() {
+            let kbps = min(max(recommendation.kbps, Self.bitrateRange.lowerBound), Self.bitrateRange.upperBound)
+            rows.append(StreamMenuRow(
+                id: "bitrate-recommended", icon: Symbols.recommend, label: recommendation.line, value: .text(L("stream_menu_bitrate_fill")),
+                enabled: !busy, help: recommendation.help, activate: { [self] in bitrateRequested = kbps }))
+        }
+        let status = bitrate.statusText
+        rows.append(StreamMenuRow(
+            id: MenuRowID.applyBitrate.rawValue, icon: Symbols.check, label: L("stream_menu_row_apply"), value: status.map { .text($0) } ?? .action,
+            enabled: !busy, help: bitrate.failureText ?? L("stream_help_apply_bitrate"), activate: { [self] in applyBitrate(bitrateRequested) }))
+        return rows
+    }
+
+    /// The Upscaler page (StreamMenuRoot.kt:601-631): its rows can be used only where the upscaler can run; every change
+    /// applies at once and is kept for this game.
+    private var upscalerRows: [StreamMenuRow] {
+        let available = upscaler.available
+        let status = upscaler.status
+        let supersampling = upscaler.supersamplingMode
+        var rows = [
+            StreamMenuRow(
+                id: MenuRowID.upscalerEnabled.rawValue, icon: Symbols.upscaler, label: L("stream_menu_row_enabled"),
+                value: .toggle(upscaler.requested), enabled: available && !status.isChanging,
+                help: StreamMenuText.helpLine(status.text + "\n\n" + L(supersampling ? "stream_help_supersampling_on" : "stream_help_upscaling")),
+                activate: { [self] in upscaler.setEnabled(!upscaler.requested); upscalerChanged() })
+        ]
+        if supersampling, upscaler.mode.scales {
+            let level = min(max(upscaler.supersamplingLevel, 1), 2)
+            let options = ["1.33× (1440p)", "2× (2160p)"]
+            rows.append(StreamMenuRow(
+                id: MenuRowID.supersamplingQuality.rawValue, icon: Symbols.highQuality, label: L("stream_menu_row_supersampling_quality"),
+                value: .choice(label: options[level - 1], options: options, selected: level - 1), enabled: available,
+                help: L("stream_help_supersampling_quality"), activate: { [self] in setSupersampling(2) },
+                set: { [self] in setSupersampling($0 + 1) }, step: { [self] in setSupersampling($0 < 0 ? 1 : 2) }))
+        }
+        let mode = upscaler.mode
+        rows.append(StreamMenuRow(
+            id: MenuRowID.upscalerMode.rawValue, icon: Symbols.upscalerMode, label: L("stream_menu_row_mode"),
+            value: .choice(label: mode.label, options: UpscalerMode.allCases.map(\.label), selected: mode.index), enabled: available,
+            help: StreamMenuText.helpLine(mode.help + "\n\n" + L("stream_help_mode")),
+            activate: { [self] in setUpscalerMode(upscaler.mode.next(1)) },
+            set: { [self] in setUpscalerMode(UpscalerMode(index: $0)) }, step: { [self] in setUpscalerMode(upscaler.mode.next($0)) }))
+        rows.append(StreamMenuRow(
+            id: MenuRowID.sharpness.rawValue, icon: Symbols.sharpness, label: L("stream_menu_row_sharpness"),
+            value: .slider(value: upscaler.sharpness, range: 0...100, step: 5, unit: " %"), enabled: available,
+            help: L("stream_help_sharpness"), activate: {}, set: { [self] in upscaler.setSharpness($0); upscalerChanged() }))
+        return rows
+    }
+
+    /// The Mouse page (StreamMenuRoot.kt:632-641): the touchscreen mode, and the local pointer.
+    private var mouseRows: [StreamMenuRow] {
+        let modes = touchModeOptions
+        let selected = max(modes.firstIndex { $0.value == selectedTouchMode } ?? 0, 0)
+        var rows: [StreamMenuRow] = []
+        if !modes.isEmpty {
+            let applies = L(rememberMouseMode ? "stream_menu_mouse_applies_saved" : "stream_menu_mouse_applies_stream")
+            rows.append(StreamMenuRow(
+                id: MenuRowID.touchscreenMode.rawValue, icon: Symbols.touchApp, label: L("stream_menu_row_touchscreen_mode"),
+                value: .choice(label: modes[selected].label, options: modes.map(\.label), selected: selected),
+                help: StreamMenuText.helpLine(modes[selected].help + "\n\n" + applies),
+                activate: { [self] in setTouchMode(modes[(selected + 1) % modes.count].value) },
+                set: { [self] in setTouchMode(modes[$0].value) },
+                step: { [self] in setTouchMode(modes[((selected + $0) % modes.count + modes.count) % modes.count].value) }))
+        }
+        rows.append(StreamMenuRow(
+            id: MenuRowID.localCursor.rawValue, icon: Symbols.cursor, label: L("stream_menu_row_local_cursor"), value: .toggle(localCursorVisible),
+            help: L("stream_help_local_cursor_device"), activate: { [self] in toggleLocalCursor() }))
+        return rows
+    }
+
+    /// The Rumble feel page (StreamMenuRoot.kt:658-674): the presets, switched live and saved; the menu stays open so they can
+    /// be compared. The active one says so, one with a problem says that instead and its help tells it.
+    private var rumbleRows: [StreamMenuRow] {
+        let active = rumbleConfiguration.profile
+        let problem = input?.rumbleProblem
+        return RumblePreset.allCases.map { preset in
+            var help = Self.rumbleHelp(preset)
+            let hasProblem = preset == active && problem != nil
+            if hasProblem, let problem { help += "\n" + L("stream_menu_rumble_problem", Self.rumbleProblemText(problem, preset: preset)) }
+            return StreamMenuRow(
+                id: Self.rumbleRowID(preset), icon: Self.rumbleIcon(preset), label: L(preset.labelKey), value: .action, help: help,
+                activate: { [self] in selectRumblePreset(preset) },
+                confirmation: hasProblem ? L("stream_menu_rumble_problem_word") : preset == active ? L("stream_menu_rumble_active") : nil)
+        }
+    }
+
+    nonisolated static func rumbleRowID(_ preset: RumblePreset) -> String { "rumble-\(preset.rawValue)" }
+
+    private static func rumbleIcon(_ preset: RumblePreset) -> String {
+        switch preset {
+        case .original: Symbols.presetOriginal
+        case .soft: Symbols.presetSoft
+        case .kickStart: Symbols.presetKick
+        case .pulsing: Symbols.presetPulsing
+        }
+    }
+
+    /// The preset's explanation, the same as the setting's choice (StreamMenuHelp.kt:28-29).
+    private static func rumbleHelp(_ preset: RumblePreset) -> String {
+        switch preset {
+        case .original: L("help_list_rumble_feel_original")
+        case .soft: L("help_list_rumble_feel_gentle")
+        case .kickStart: L("help_list_rumble_feel_kick_only")
+        case .pulsing: L("help_list_rumble_feel_pulse_25")
+        }
+    }
+
+    /// Why the running rumble could not use its preset's technique (`RumbleProblem.text`): the technique's code name stays.
+    private static func rumbleProblemText(_ problem: RumbleProblem, preset: RumblePreset) -> String {
+        let technique = preset.profile.pulseMilliseconds > 0 ? "PULSE" : "AMPLITUDE"
+        return switch problem {
+        case .noAmplitudeControl: L("rumble_problem_no_amplitude")
+        case .singleVibratorOnly: L("rumble_problem_single_vibrator", technique)
+        case .failed(let reason): L("rumble_problem_failed", technique, reason)
+        }
+    }
+
+    /// Where the focus starts on [page]: the row that opened the page above it is handled by ``go(_:)``; the Rumble page starts
+    /// on the active preset (StreamMenuRoot.kt:663-664), the others on their first item.
+    private func firstFocus(_ page: MenuPage) -> String {
+        if page == .rumble { return StreamMenuState.rowID(Self.rumbleRowID(rumbleConfiguration.profile)) }
+        if page == .bitrate { bitrateRequested = min(max(currentBitrateKbps, Self.bitrateRange.lowerBound), Self.bitrateRange.upperBound) }
+        return menuContent(page).ids.first ?? StreamMenuState.backID
+    }
+
     /// The tile's page opens in the popover; its own tile again closes the popover, another tile's page replaces it.
     func openMenuPage(_ page: MenuPage) {
         guard menuOpen else { return }
@@ -541,14 +790,20 @@ final class StreamController {
             dismissPopover()
             return
         }
-        menu.open(page, focusing: menuContent(page).ids.first ?? StreamMenuState.backID)
+        picker = nil
+        menu.open(page, focusing: firstFocus(page))
         // GameMenu.java:144: a custom key file that could not be read
         if page == .keys, specialKeysFailed { toast?(L("wrong_import_format"), .warning, ToastTiming.streamShortMs) }
     }
 
-    /// B (or the back circle): one level up, to the row that opened the page or to its tile; on the dock it resumes.
+    /// B (or the back circle): a picker closes first; then one level up, to the row that opened the page or to its tile; on the
+    /// dock it resumes.
     func menuBack() {
         guard menuOpen else { return }
+        if picker != nil {
+            closePicker()
+            return
+        }
         guard let exit = StreamMenuNavigation.afterBack(menu.page) else {
             closeMenu()
             return
@@ -565,27 +820,31 @@ final class StreamController {
     /// A tap outside the dock and the popover: the popover closes first, then the menu (it resumes the stream). The tap is the
     /// menu's alone: the game gets no click (the menu paused its input, and a release without a press is not sent).
     func tapOutside() {
-        guard menuOpen else { return }
-        switch StreamMenuNavigation.afterOutsideTap(menu.page) {
+        switch StreamMenuNavigation.afterOutsideTap(menu.page, closing: menuClosing() || !menuOpen) {
         case .dismissPopover(let exit): go(exit)
         case .closeMenu: closeMenu()
+        case .none: break
         }
     }
 
     private func go(_ exit: PageExit) {
+        picker = nil
         menu.go(exit, focusing: exit.focusRow.map { StreamMenuState.rowID($0.rawValue) })
     }
 
-    /// Left (-1) or right (+1) on the focused row of the popover: a slider steps (faster the longer the key is held). False
-    /// when the focused item adjusts nothing, so the focus moves instead.
+    /// Left (-1) or right (+1) on the focused row of the popover: a slider steps (faster the longer the key is held), a choice
+    /// goes to its next value. False when the focused item adjusts nothing, so the focus moves instead.
     @discardableResult
     func adjustFocusedRow(_ direction: Int, repeatCount: Int = 0) -> Bool {
         let focusedID = menu.focus.focused?.base as? String
         guard case let .rows(rows) = menuContent(menu.page),
-            let row = rows.first(where: { StreamMenuState.rowID($0.id) == focusedID }),
-            row.enabled, let set = row.set,
-            let next = row.stepped(direction, steps: row.acceleration(repeatCount: repeatCount))
+            let row = rows.first(where: { StreamMenuState.rowID($0.id) == focusedID }), row.enabled
         else { return false }
+        if case .choice = row.value, let step = row.step {
+            step(direction)
+            return true
+        }
+        guard let set = row.set, let next = row.stepped(direction, steps: row.acceleration(repeatCount: repeatCount)) else { return false }
         set(next)
         return true
     }
@@ -669,7 +928,74 @@ final class StreamController {
     /// Apply of the Bitrate page (`applyBitrate`, StreamMenu.kt:308-331): asks the PC for [kbps] while the stream runs.
     func applyBitrate(_ kbps: Int) {
         let steps = self.steps
-        bitrate.apply(kbps, connected: { [weak self] in self?.phase == .streaming }, change: { try await steps.setRuntimeBitrate($0) })
+        let task = bitrate.apply(kbps, connected: { [weak self] in self?.phase == .streaming }, change: { try await steps.setRuntimeBitrate($0) })
+        // What the host applied goes onto the slider (`accepted`, StreamMenuRoot.kt:596)
+        Task { [weak self] in
+            await task?.value
+            guard let self else { return }
+            switch self.bitrate.result {
+            case .accepted(let applied)?, .limited(let applied)?: self.bitrateRequested = applied
+            default: break
+            }
+        }
+    }
+
+    // MARK: Upscaler, gyro smoothing and rumble feel of the menu
+
+    /// An upscaler change of the page: kept for this game (`upscalerChanged`, StreamMenu.kt:405).
+    private func upscalerChanged() {
+        menuSettingChanged(.upscaler)
+    }
+
+    func setUpscalerMode(_ mode: UpscalerMode) {
+        upscaler.setMode(mode)
+        upscalerChanged()
+    }
+
+    func setSupersampling(_ level: Int) {
+        upscaler.setSupersamplingLevel(level)
+        upscalerChanged()
+    }
+
+    /// The More page's gyro smoothing: the running input takes it at once (the next motion sample uses it), and it is kept for
+    /// this game, never the profile (StreamMenu.kt:449-459).
+    func setGyroSmoothing(_ percent: Int) {
+        let value = min(max(percent, 0), 100)
+        controllerOptions.gyroSmoothing = value
+        input?.gyroSmoothing = value
+        menuSettingChanged(.gyroSmoothing)
+    }
+
+    /// A preset of the Rumble feel page: the running stream rumbles with it from the next event and the profile keeps it; no
+    /// sample plays and the menu stays open (StreamMenu.kt:425-438).
+    func selectRumblePreset(_ preset: RumblePreset) {
+        rumbleConfiguration.profile = preset
+        rumblePresetChosen?(preset)
+    }
+
+    /// Called only by a player's change of a menu row, never while the menu opens: written once it settles.
+    private func menuSettingChanged(_ setting: MenuSavedSetting) {
+        guard saveForGame != nil else { return }
+        autoSave.changed(setting)
+        scheduleAutoSave()
+    }
+
+    private func scheduleAutoSave() {
+        autoSaveTask?.cancel()
+        guard let delay = autoSave.nextDelay() else { return }
+        autoSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self else { return }
+            self.autoSave.tick()
+            self.scheduleAutoSave()
+        }
+    }
+
+    /// Writes the pending menu changes now: the menu closed or the stream ends (`flushAutoSave`).
+    func flushAutoSave() {
+        autoSaveTask?.cancel()
+        autoSaveTask = nil
+        autoSave.flush()
     }
 
     /// Send clipboard of the More page (StreamMenu.kt:453): this device's clipboard to the PC, also a clip DELOS marked.
@@ -862,6 +1188,8 @@ final class StreamController {
             return
         }
         guard phase == .streaming, !menuOpen, !loader.cancellable else { return }
+        // A tap while the menu plays its exit is still the menu's: it never reaches the game (StreamMenuLayout.kt:133-140)
+        if touchPhase == .began, menuClosing() { return }
         if let onScreen, area.width > 0, area.height > 0 {
             let x = Float(point.x / area.width) * Float(onScreen.panel.width), y = Float(point.y / area.height) * Float(onScreen.panel.height)
             let oscPhase: OnScreenControls.Phase = switch touchPhase {

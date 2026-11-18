@@ -4,11 +4,10 @@ import Foundation
 /// dock a page belongs to, where the focus goes when a page closes, and where the popover with its caret sits. Sizes are
 /// stage pixels.
 
-/// The tiles of the dock, in the order they appear. Android has nine; Bitrate and Upscaler are left out here because the
-/// streaming core cannot change the bitrate of a running stream and the renderer has no upscaler, Keyboard and
-/// Brightness exist only where the device has them (``StreamMenuCapabilities``).
+/// The tiles of the dock, in Android's order (`BarItem`, StreamMenuLayout.kt:20). Keyboard and Brightness exist only where
+/// the device has them (``StreamMenuCapabilities``).
 enum BarItem: Int, CaseIterable, Sendable {
-    case resume, keyboard, overlay, brightness, more, disconnect, quit
+    case resume, keyboard, overlay, brightness, bitrate, upscaler, more, disconnect, quit
 
     /// The tile's focus id.
     var id: String {
@@ -17,6 +16,8 @@ enum BarItem: Int, CaseIterable, Sendable {
         case .keyboard: "stream-keyboard"
         case .overlay: "stream-statistics"
         case .brightness: "stream-brightness"
+        case .bitrate: "stream-bitrate"
+        case .upscaler: "stream-upscaler"
         case .more: "stream-more"
         case .disconnect: "stream-disconnect"
         case .quit: "stream-quit"
@@ -32,6 +33,8 @@ enum BarItem: Int, CaseIterable, Sendable {
     var page: MenuPage? {
         switch self {
         case .brightness: .brightness
+        case .bitrate: .bitrate
+        case .upscaler: .upscaler
         case .more: .more
         default: nil
         }
@@ -44,10 +47,12 @@ struct StreamMenuCapabilities: Equatable, Sendable {
     var keyboard: Bool
     /// The screen's brightness can be changed (iPhone and iPad).
     var brightness: Bool
+    /// The stream has a touchscreen (iPhone and iPad): More offers Zoom and Touch sensitivity.
+    var touchscreen = false
 
     static let platform: StreamMenuCapabilities = {
         #if os(iOS)
-        StreamMenuCapabilities(keyboard: true, brightness: true)
+        StreamMenuCapabilities(keyboard: true, brightness: true, touchscreen: true)
         #else
         StreamMenuCapabilities(keyboard: false, brightness: false)
         #endif
@@ -65,16 +70,16 @@ struct StreamMenuCapabilities: Equatable, Sendable {
     }
 }
 
-/// What the popover above the dock shows; ``main`` is no popover (the dock alone).
+/// What the popover above the dock shows; ``main`` is no popover (the dock alone). `MenuPage` of StreamMenuLayout.kt:26.
 enum MenuPage: Equatable, Sendable {
-    case main, more, keys, commands, brightness
+    case main, more, keys, commands, brightness, bitrate, upscaler, mouse, rumble
 
     /// The page B goes back to: the dock for the pages of a tile, More for the pages that More opens.
     var parent: MenuPage? {
         switch self {
         case .main: nil
-        case .keys, .commands: .more
-        case .more, .brightness: .main
+        case .keys, .commands, .mouse, .rumble: .more
+        case .more, .brightness, .bitrate, .upscaler: .main
         }
     }
 
@@ -82,8 +87,10 @@ enum MenuPage: Equatable, Sendable {
     var barItem: BarItem? {
         switch self {
         case .main: nil
-        case .more, .keys, .commands: .more
+        case .more, .keys, .commands, .mouse, .rumble: .more
         case .brightness: .brightness
+        case .bitrate: .bitrate
+        case .upscaler: .upscaler
         }
     }
 
@@ -92,19 +99,37 @@ enum MenuPage: Equatable, Sendable {
         switch self {
         case .keys: .keys
         case .commands: .commands
+        case .mouse: .mouseMode
+        case .rumble: .rumble
         default: nil
         }
     }
 }
 
-/// The rows of the pages by their focus id (the rows of More that open a page of their own, which the focus returns to).
+/// The rows of the pages by their focus id, the More page's in Android's order (StreamMenuRoot.kt:484-501).
 enum MenuRowID: String, Sendable {
     case keys = "more-keys"
+    case sendClipboard = "more-send-clipboard"
+    case getClipboard = "more-get-clipboard"
     case commands = "more-commands"
     case taskManager = "more-task-manager"
+    case zoom = "more-zoom"
+    case mouseMode = "more-mouse-mode"
     case onScreenControls = "more-onscreen-controls"
     case onScreenOpacity = "more-osc-opacity"
+    case systemKeyboard = "more-system-keyboard"
+    case touchSensitivity = "more-touch-sensitivity"
+    case rumble = "more-rumble"
+    case gyroSmoothing = "more-gyro-smoothing"
     case brightness = "brightness-screen"
+    case bitrate = "bitrate-bitrate"
+    case applyBitrate = "bitrate-apply"
+    case upscalerEnabled = "upscaler-enabled"
+    case supersamplingQuality = "upscaler-quality"
+    case upscalerMode = "upscaler-mode"
+    case sharpness = "upscaler-sharpness"
+    case touchscreenMode = "mouse-touchscreen-mode"
+    case localCursor = "mouse-local-cursor"
 }
 
 /// Where the menu goes after a page closes: the [page] to show and what gets the focus there.
@@ -128,15 +153,18 @@ enum StreamMenuNavigation {
         page == .main ? nil : PageExit(page: .main, focusTile: page.barItem, focusRow: nil)
     }
 
-    /// What a tap outside the menu's dock and popover does: with a popover open, the popover closes first; with none, the menu
-    /// itself closes. Either way the tap is the menu's: it never quits, and never reaches the game.
+    /// What a tap outside the menu's dock and popover does (`outsideTapAction`, StreamMenuLayout.kt:133-140): with a popover
+    /// open, the popover closes first; with none, the menu itself closes; nothing while the menu is already closing. Either way
+    /// the tap is the menu's: it never quits, and never reaches the game.
     enum OutsideTap: Equatable, Sendable {
         case dismissPopover(PageExit)
         case closeMenu
+        case none
     }
 
-    static func afterOutsideTap(_ page: MenuPage) -> OutsideTap {
-        afterDismiss(page).map(OutsideTap.dismissPopover) ?? .closeMenu
+    static func afterOutsideTap(_ page: MenuPage, closing: Bool = false) -> OutsideTap {
+        if closing { return .none }
+        return afterDismiss(page).map(OutsideTap.dismissPopover) ?? .closeMenu
     }
 
     /// The tile to press while a popover is open: nothing for a tile without a page (it is dimmed and does nothing).
@@ -157,6 +185,11 @@ enum StreamMenuLayout {
     static let headBottom = 46.0
     static let titleSize = 36.0
     static let titleMaxWidth = 900.0
+
+    /// The card from [cardLeft] to [cardRight] lies over the head (with 24 px of air) (`dockHeadCovered`, StreamMenuLayout.kt:457).
+    static func headCovered(cardLeft: Double, cardRight: Double, headLeft: Double, headRight: Double, air: Double = 24) -> Bool {
+        cardLeft < headRight + air && cardRight > headLeft - air
+    }
     static let hintSize = 24.0
     static let hintGlyph = 44.0
     static let captionSize = 28.0
@@ -212,6 +245,7 @@ enum StreamMenuLayout {
     static let sliderHeight = 12.0
     static let knob = 32.0
     static let numberMinWidth = 104.0
+    static let choiceValueMinWidth = 170.0
     static let helpSize = 22.0
     static let helpLineHeight = 1.4
 
@@ -220,7 +254,9 @@ enum StreamMenuLayout {
         let natural = switch page {
         case .main: 0.0
         case .brightness: 780.0
-        case .more, .keys, .commands: 920.0
+        case .bitrate: 860.0
+        case .upscaler: 980.0
+        case .more, .keys, .commands, .mouse, .rumble: 920.0
         }
         // A stage narrower than the card keeps its margins and the card gets what is left
         return min(natural, stageWidth - 2 * margin)

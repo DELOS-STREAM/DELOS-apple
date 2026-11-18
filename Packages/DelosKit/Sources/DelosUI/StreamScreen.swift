@@ -122,7 +122,7 @@ struct StreamScreen: View {
         let controller = StreamController(
             brightness: Self.deviceBrightness, statisticsOverlay: settings.statisticsOverlay, playtime: playtime,
             menuButtons: ShortcutButton.parse(settings.streamMenuButtons), menuSwipe: settings.streamMenuSwipe,
-            onScreenControls: makeOnScreenControls()
+            onScreenControls: makeOnScreenControls(), upscaler: UnavailableUpscaler(settings: settings)
         ) { [hosts, hostID, appID, settings, toasts] in
             LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer) { text, kind in
                 toasts?.show(text, durationMs: ToastTiming.streamShortMs, kind: kind)
@@ -132,6 +132,23 @@ struct StreamScreen: View {
         controller.controllerOptions = ControllerOptions(settings: settings)
         controller.leavingHold = .seconds(ExitLook.handoff(reduced: reducedMotion))
         controller.warningsDisabled = settings.bool(.disableWarnings)
+        controller.menuExitDuration = StreamDockLayout.closeTotal(count: controller.capabilities.tiles.count) / 1000
+        // The menu's upscaler and gyro smoothing are kept for this game (MenuAutoSave, StreamMenu.kt:345-380), never the profile
+        if let profileID {
+            controller.saveForGame = { [hostID, appID] values in
+                let store = GameSettingsStore()
+                var game = store.load(profile: profileID, hostID: hostID, appID: appID)
+                for (key, value) in values { game.values[key.rawValue] = value }
+                store.save(game, profile: profileID, hostID: hostID, appID: appID)
+            }
+            // The Rumble feel page's preset is the profile's (`RumblePreferences.applyPreset`)
+            controller.rumblePresetChosen = { preset in
+                let store = StreamSettingsStore()
+                var saved = store.load(profile: profileID)
+                saved.rumble.profile = preset
+                store.save(saved, profile: profileID)
+            }
+        }
         controller.menuOpened = { [navigator] in navigator.cancelRepeats?() }
         controller.statisticsChosen = keepStatisticsOverlay
         controller.onScreenOpacityChosen = keepOnScreenOpacity
@@ -154,7 +171,12 @@ struct StreamScreen: View {
         self.renderer = renderer
         self.controller = controller
         navigator.takeInput(controller) { [navigator] command in
-            Self.capture(command, controller: controller, focus: navigator.focus, fromRemote: navigator.commandFromRemote, feedback: layers?.feedback,
+            // A row's popup takes the commands first; B closes it before the page goes back (StreamMenuRoot.kt:250-253)
+            if controller.menuOpen, let picker = controller.picker {
+                picker.capture(command, navigator: navigator, feedback: layers?.feedback, close: { controller.closePicker() })
+                return true
+            }
+            return Self.capture(command, controller: controller, focus: navigator.focus, fromRemote: navigator.commandFromRemote, feedback: layers?.feedback,
                 repeatCount: navigator.commandRepeat)
         }
         IdleTimer.disabled = true
@@ -345,7 +367,9 @@ struct StreamContent: View {
                     .ignoresSafeArea()
                     .opacity(pictureOpacity(cover))
                     // The stream behind the menu is blurred (it follows the gradient behind the tiles)
-                    .blur(radius: controller.menuOpen ? stage.px(StreamDockLayout.videoBlur) : 0)
+                    // Sharp while the Upscaler page is open, so its changes can be judged (StreamMenuRoot.kt:167-170,298-300)
+                    .blur(radius: controller.menuOpen && controller.menu.page != .upscaler ? stage.px(StreamDockLayout.videoBlur) : 0)
+                    .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: StreamDockLayout.gradientIn / 1000), value: controller.menu.page == .upscaler)
                     .animation(
                         .timingCurve(0.25, 0.1, 0.25, 1, duration: (controller.menuOpen ? StreamDockLayout.gradientIn : StreamDockLayout.gradientOut) / 1000),
                         value: controller.menuOpen)
@@ -357,7 +381,7 @@ struct StreamContent: View {
             if let onScreen = controller.onScreen, controller.phase == .streaming {
                 OnScreenControlsCanvas(controls: onScreen, palette: palette)
                     .ignoresSafeArea()
-                    .blur(radius: controller.menuOpen ? stage.px(StreamDockLayout.videoBlur) : 0)
+                    .blur(radius: controller.menuOpen && controller.menu.page != .upscaler ? stage.px(StreamDockLayout.videoBlur) : 0)
             }
             #endif
             if let director, director.isActive, launching {

@@ -7,9 +7,9 @@ struct StreamMenuModelTests {
 
     @Test func theTilesFollowAndroidsOrderAndTheDevice() {
         let phone = StreamMenuCapabilities(keyboard: true, brightness: true)
-        #expect(phone.tiles == [.resume, .keyboard, .overlay, .brightness, .more, .disconnect, .quit])
+        #expect(phone.tiles == [.resume, .keyboard, .overlay, .brightness, .bitrate, .upscaler, .more, .disconnect, .quit])
         let desktop = StreamMenuCapabilities(keyboard: false, brightness: false)
-        #expect(desktop.tiles == [.resume, .overlay, .more, .disconnect, .quit])
+        #expect(desktop.tiles == [.resume, .overlay, .bitrate, .upscaler, .more, .disconnect, .quit])
         #expect(Set(BarItem.allCases.map(\.id)).count == BarItem.allCases.count)
         #expect(BarItem(id: AnyHashable("stream-more")) == .more)
         #expect(BarItem(id: AnyHashable("elsewhere")) == nil)

@@ -74,15 +74,32 @@ enum StreamMenuText {
         }
     }
 
-    /// The help (caption) of a tile: the complete text of Android's menu. Overlay, Keyboard and More have none, because
-    /// Android's texts describe its own compact statistics, keyboard and rows.
-    static func caption(_ item: BarItem) -> String {
+    /// The help (caption) of a tile (`circleHelpKey` and `streamMenuHelp`, StreamMenuLayout.kt:556-591): the upscaler's starts
+    /// with its status and is Supersampling's while the stream is supersampled. The Keyboard tile raises the system keyboard
+    /// here (DELOS for Android's is its own keyboard), so its help says that.
+    @MainActor static func caption(_ item: BarItem, upscaler: any UpscalerControl) -> String {
         switch item {
         case .resume: L("stream_help_resume")
+        case .keyboard: L("stream_help_keyboard_system")
+        // The text carries a literal percent sign (`1%% low`): formatted so it reads once
+        case .overlay: String(format: L("stream_help_overlay"))
         case .brightness: L("stream_help_brightness")
+        case .bitrate: L("stream_help_bitrate")
+        case .upscaler:
+            helpLine(upscaler.status.text + "\n\n" + L(upscaler.supersamplingMode ? "stream_help_supersampling" : "stream_help_upscaler"))
+        case .more: L("stream_help_more")
         case .disconnect: L("stream_help_disconnect")
         case .quit: L("stream_help_quit_game")
-        case .keyboard, .overlay, .more: ""
+        }
+    }
+
+    /// A help's paragraphs as one flowing text, each joined to the next with a space after a full stop, else a middle dot
+    /// (`helpLineText`, StreamMenuLayout.kt:663-673).
+    static func helpLine(_ text: String) -> String {
+        let paragraphs = text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        return paragraphs.reduce("") { line, next in
+            guard let last = line.last else { return next }
+            return ".!?".contains(last) ? "\(line) \(next)" : "\(line) \u{00B7} \(next)"
         }
     }
 }

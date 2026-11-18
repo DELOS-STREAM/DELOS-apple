@@ -102,12 +102,12 @@ private func streaming(
 
     @Test func theTilesAreTheDevicesAndBrightnessNeedsADeviceToSetItOn() async {
         let (phoneController, _) = await streaming(brightness: FakeBrightness())
-        #expect(phoneController.capabilities.tiles == [.resume, .keyboard, .overlay, .brightness, .more, .disconnect, .quit])
+        #expect(phoneController.capabilities.tiles == [.resume, .keyboard, .overlay, .brightness, .bitrate, .upscaler, .more, .disconnect, .quit])
         // Brightness is a tile only where there is a screen to set it on
         let (withoutScreen, _) = await streaming(brightness: nil)
-        #expect(withoutScreen.capabilities.tiles == [.resume, .keyboard, .overlay, .more, .disconnect, .quit])
+        #expect(withoutScreen.capabilities.tiles == [.resume, .keyboard, .overlay, .bitrate, .upscaler, .more, .disconnect, .quit])
         let (desktop, _) = await streaming(capabilities: StreamMenuCapabilities(keyboard: false, brightness: false))
-        #expect(desktop.capabilities.tiles == [.resume, .overlay, .more, .disconnect, .quit])
+        #expect(desktop.capabilities.tiles == [.resume, .overlay, .bitrate, .upscaler, .more, .disconnect, .quit])
     }
 
     @Test func aPageOpensFromItsTileAndItsOwnTileClosesIt() async {
@@ -301,7 +301,11 @@ private func streaming(
         let long = "A very long command name that goes on and on forever"
         let (controller, _) = await streaming(brightness: FakeBrightness(), commands: ["Steam", long])
         guard case let .rows(more) = controller.menuContent(.more) else { Issue.record("More has rows"); return }
-        #expect(more.map(\.id) == ["more-keys", "more-commands", "more-task-manager"])
+        // Android's order (StreamMenuRoot.kt:484-501); no touchscreen here: no Zoom, Touch sensitivity or on-screen controls
+        #expect(more.map(\.id) == [
+            "more-keys", "more-send-clipboard", "more-get-clipboard", "more-commands", "more-task-manager", "more-system-keyboard",
+            "more-rumble", "more-gyro-smoothing",
+        ])
         guard case let .pills(keys, _) = controller.menuContent(.keys) else { Issue.record("Keys has pills"); return }
         #expect(keys.count == 14 && keys.first?.label == L("game_menu_send_keys_esc"))
         #expect(keys.first?.help == L("stream_help_format_keys", L("game_menu_send_keys_esc")))
@@ -340,7 +344,7 @@ private func streaming(
         let task = StreamMenuState.rowID(MenuRowID.taskManager.rawValue)
         controller.menu.open(.more, focusing: task)
         controller.menu.focus.register(AnyHashable(task), frame: CGRect(x: 0, y: 0, width: 1, height: 1)) {
-            if case let .rows(rows) = controller.menuContent(.more) { rows[2].activate() }
+            if case let .rows(rows) = controller.menuContent(.more) { rows.first { $0.id == MenuRowID.taskManager.rawValue }?.activate() }
         }
         // A within the page's grace is the press that opened it: the Task manager row does not run
         #expect(StreamScreen.capture(.accept, controller: controller, focus: focus, at: .now))
