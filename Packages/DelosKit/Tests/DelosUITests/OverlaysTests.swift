@@ -150,10 +150,10 @@ import Testing
         #expect(ToastKind.of(explicit: nil, icon: nil, hasAction: false) == .info)
     }
 
-    @Test func anExplicitKindBeatsTheIconAndAnActionAlwaysWins() {
+    @Test func anExplicitKindBeatsTheIconAndTheAction() {
         #expect(ToastKind.of(explicit: .success, icon: Symbols.linkOff, hasAction: false) == .success)
         #expect(ToastKind.of(explicit: nil, icon: Symbols.delete, hasAction: true) == .action)
-        #expect(ToastKind.of(explicit: .error, icon: Symbols.error, hasAction: true) == .action)
+        #expect(ToastKind.of(explicit: .info, icon: Symbols.gamepadButtons, hasAction: true) == .info)
     }
 
     @Test func everyKindHasItsOwnWordAndIcon() {

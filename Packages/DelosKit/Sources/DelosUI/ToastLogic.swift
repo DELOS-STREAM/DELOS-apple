@@ -27,12 +27,13 @@ enum ToastKind: Sendable, CaseIterable {
         }
     }
 
-    /// The kind of a toast (`toastKindFor`): one with an action is always ``action``; otherwise the caller's [explicit]
-    /// kind; otherwise it is read from the [icon] (a failure icon is an error, a check a success, the warning triangle a
-    /// warning), and everything else is information.
+    /// The kind of a toast (`toastKindFor`): the caller's [explicit] kind; otherwise one with an action is ``action``
+    /// (Undo, the only action of DELOS for Android's toasts); otherwise it is read from the [icon] (a failure icon is an
+    /// error, a check a success, the warning triangle a warning), and everything else is information. An explicit kind
+    /// lets a notice whose action is not Undo (the Home button's settings) keep its own word.
     static func of(explicit: ToastKind?, icon: String?, hasAction: Bool) -> ToastKind {
-        if hasAction { return .action }
         if let explicit { return explicit }
+        if hasAction { return .action }
         switch icon {
         case Symbols.error, Symbols.wifiOff, Symbols.linkOff: return .error
         case Symbols.checkCircle, Symbols.check: return .success
@@ -42,7 +43,8 @@ enum ToastKind: Sendable, CaseIterable {
     }
 }
 
-/// A toast shows at most this many lines of text, then an ellipsis (no marquee: a toast is never focused).
+/// A toast shows at most this many lines of text, then an ellipsis (no marquee: a toast is never focused); a notice
+/// that tells more asks for more (``Toast/maxLines``).
 let toastMaxLines = 2
 
 /// The widest the text of a toast may be (stage pixels): 560 at the interface [scale], and never wider than the stage
