@@ -411,9 +411,10 @@ unavailable and the statistics line says "Sharpen only"; Settings adds a note to
 
 The load: at most two frames of the upscaler's GPU work in flight (`GPUInFlight`; a frame that waits is replaced by a
 newer one and counted as "GPU busy", and 250 ms of waiting clears the count), its GPU time per frame from the command
-buffers' `gpuStartTime`/`gpuEndTime`, one-second windows (`UpscalerWindowMeter`) that let `FlowGovernor` reuse
-MetalFX Temporal's optical flow every second frame above 70 % of the frame period (back below 45 %) and let
-`OverloadDetector` report an overload after two windows above 90 % or with more than 20 % busy drops. The overload only
+buffers' `gpuStartTime`/`gpuEndTime`, and one-second windows (`UpscalerWindowMeter`) from which `OverloadDetector`
+reports an overload after two windows above 90 % of the frame period or with more than 20 % busy drops. MetalFX
+Temporal's optical flow is computed for every frame: reusing it every second frame under load saved about 0.07 ms of
+the 2 ms a frame takes and handed MetalFX motion that was a frame old, which made its history drift. The overload only
 tells (a warning toast, once per stream and mode); nothing is switched off. Sixty failed drawings in a row switch the
 upscaler off for the stream (`upscalerStatus` = unavailable) and the picture is drawn directly. The display layer draws no
 shader: a requested upscaler is unavailable there. `VideoRenderer.setUpscaler`, `upscalerSettings`, `upscalerStatus`

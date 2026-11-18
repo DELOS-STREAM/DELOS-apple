@@ -1,7 +1,7 @@
 import Testing
 @testable import DelosMedia
 
-/// The upscaler's sizes, overload detector, flow governor and GPU work in flight, and its modes and settings.
+/// The upscaler's sizes, overload detector and GPU work in flight, and its modes and settings.
 @Suite struct UpscalerLoadTests {
     // MARK: Sizes
 
@@ -63,34 +63,6 @@ import Testing
         detector.reset()
         let afterReset = detector.onWindow(heavy)
         #expect(!afterReset)
-    }
-
-    // MARK: Flow (FlowGovernorTest)
-
-    @Test func aboveSeventyPercentEverySecondFrameReusesTheFlowUntilBelowFortyFive() {
-        var governor = FlowGovernor()
-        let light = governor.onWindow(window(arrived: 120, draws: 120, busy: 0, gpu: 5))
-        let unchanged = (0..<4).map { _ in governor.reuseFlowThisFrame() }
-        let entered = governor.onWindow(window(arrived: 120, draws: 120, busy: 0, gpu: 6.5))
-        let reduced = (0..<6).map { _ in governor.reuseFlowThisFrame() }
-        let stays = governor.onWindow(window(arrived: 120, draws: 120, busy: 0, gpu: 5))
-        let left = governor.onWindow(window(arrived: 120, draws: 120, busy: 0, gpu: 3.5))
-        #expect(!light && unchanged == [false, false, false, false])
-        #expect(entered && reduced == [false, true, false, true, false, true])
-        #expect(!stays && left && !governor.reduced)
-    }
-
-    @Test func windowsWithoutAGPUTimeOrWithFewFramesAreIgnored() {
-        var governor = FlowGovernor()
-        let changes = [
-            window(arrived: 120, draws: 120, busy: 0, gpu: -1), window(arrived: 5, draws: 5, busy: 0, gpu: 9),
-            window(arrived: 60, draws: 60, busy: 0, gpu: 9),
-        ].map { governor.onWindow($0) }
-        #expect(changes == [false, false, false])
-        _ = governor.onWindow(window(arrived: 120, draws: 120, busy: 0, gpu: 8))
-        governor.reset()
-        let reuse = governor.reuseFlowThisFrame()
-        #expect(!governor.reduced && !reuse)
     }
 
     // MARK: GPU frames in flight (GpuInFlight)

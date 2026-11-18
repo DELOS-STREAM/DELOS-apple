@@ -21,9 +21,9 @@ struct RefreshTick: @unchecked Sendable {
 /// `CAMetalDisplayLink`; the replay tests connect it to a virtual clock and virtual refreshes.
 ///
 /// The upscaler's output stage: at most two frames of its GPU work in flight (a newer frame replaces one held back for the
-/// busy GPU), its load measured in one-second windows that lighten MetalFX Temporal's optical flow (``FlowGovernor``) and
-/// report an overload once per stream and mode (``OverloadDetector``; nothing is changed automatically), and a streak of
-/// 60 failed drawings switches it off for the stream (the picture is then drawn directly).
+/// busy GPU), its load measured in one-second windows that report an overload once per stream and mode
+/// (``OverloadDetector``; nothing is changed automatically, and MetalFX Temporal's motion is computed for every frame),
+/// and a streak of 60 failed drawings switches it off for the stream (the picture is then drawn directly).
 ///
 /// Three threads meet here: the core's video thread (`enqueue`, which hands the frame to the decoder's own thread), the
 /// decoder's or VideoToolbox's (decoded pictures) and the display link's (`tick`); the queue and the counters are behind
@@ -71,7 +71,6 @@ final class MetalPipeline: @unchecked Sendable {
         var inFlight = GPUInFlight()
         var window = UpscalerWindowMeter()
         var overload = OverloadDetector()
-        var flow = FlowGovernor()
         /// Modes (``UpscalerMode/index`` bits) whose overload was already reported in this stream.
         var overloadReported = 0
         var gpuBusySkipped = 0
@@ -97,10 +96,9 @@ final class MetalPipeline: @unchecked Sendable {
 
         var upscalerActive: Bool { upscaler.enabled && !upscalerFailed }
 
-        /// One finished load window: lighten MetalFX Temporal's flow or report an overload. Returns the mode to report, if any.
+        /// One finished load window: report an overload. Returns the mode to report, if any.
         mutating func onWindow(_ window: UpscalerWindow?) -> (UpscalerMode, Bool)? {
             guard let window else { return nil }
-            _ = flow.onWindow(window)
             guard overload.onWindow(window) else { return nil }
             let mode = upscaler.mode, bit = 1 << mode.index
             guard overloadReported & bit == 0 else { return nil }
@@ -193,10 +191,7 @@ final class MetalPipeline: @unchecked Sendable {
     func setUpscaler(_ settings: UpscalerSettings) {
         state.withLock { s in
             if settings.enabled, !s.upscaler.enabled { s.upscalerFailed = false; s.upscalerFailures = 0 }
-            if settings.mode != s.upscaler.mode {
-                s.overload.reset()
-                s.flow.reset()
-            }
+            if settings.mode != s.upscaler.mode { s.overload.reset() }
             s.upscaler = settings
         }
     }
@@ -333,8 +328,7 @@ final class MetalPipeline: @unchecked Sendable {
             }
             func upscale(_ frame: NumberedFrame) -> UpscaleRequest? {
                 guard upscaling else { return nil }
-                return UpscaleRequest(
-                    settings: s.upscaler, sequence: frame.sequence, frameTime: frame.arrival, reuseFlow: s.flow.reuseFlowThisFrame())
+                return UpscaleRequest(settings: s.upscaler, sequence: frame.sequence, frameTime: frame.arrival)
             }
             if let taken {
                 s.lastFrame = taken.frame

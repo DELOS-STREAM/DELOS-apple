@@ -218,7 +218,7 @@ final class MetalUpscaler {
     /// (``MetalFXSupport/effectiveMode(_:)``).
     func upscale(
         source: any MTLTexture, mode: UpscalerMode, presentation: (width: Int, height: Int), supersamplingLevel: Int,
-        frameTime: Double, hdr: Bool, reuseFlow: Bool, commandBuffer: any MTLCommandBuffer
+        frameTime: Double, hdr: Bool, commandBuffer: any MTLCommandBuffer
     ) -> UpscaledPicture? {
         let stream = (width: source.width, height: source.height)
         if mode == .sharpen {
@@ -251,7 +251,7 @@ final class MetalUpscaler {
             }
             guard let motion,
                   let reset = motion.render(
-                    source: source, timestamp: frameTime, hdr: hdr, reuseFlow: reuseFlow, commandBuffer: commandBuffer),
+                    source: source, timestamp: frameTime, hdr: hdr, commandBuffer: commandBuffer),
                   scaler.encodeTemporal(
                     color: source, motion: motion.motion, reactiveMask: motion.reactiveMask, reset: reset,
                     commandBuffer: commandBuffer)
@@ -459,10 +459,11 @@ struct TemporalFrame: Equatable {
 }
 
 /// The motion of decoded video for MetalFX Temporal, which a game would render itself: a luma pyramid of the current and
-/// the previous frame, backward and forward optical flow on an 8-pixel grid in four levels (``FlowGovernor`` may reuse the
-/// previous frame's flow), a whole-frame cut detector, and from them per-pixel motion vectors and a reactive mask at the
-/// stream's size (UpscalerShaders.metal `videoMotion`). A cut cannot reset the scaler from the CPU in the same frame (its
-/// result is on the GPU), so it sets the whole reactive mask to 1, which makes MetalFX ignore the history for that frame.
+/// the previous frame, backward and forward optical flow on an 8-pixel grid in four levels (computed for every frame: a
+/// reused flow is stale by a frame and makes MetalFX drift), a whole-frame cut detector, and from them per-pixel motion
+/// vectors and a reactive mask at the stream's size (UpscalerShaders.metal `videoMotion`). A cut cannot reset the scaler
+/// from the CPU in the same frame (its result is on the GPU), so it sets the whole reactive mask to 1, which makes MetalFX
+/// ignore the history for that frame.
 /// Every pass of a frame runs in one compute encoder (its dispatches run in order), and every texture is made once.
 final class VideoMotion {
     /// The pyramid's levels: `videoLumaPyramid` reduces an 8 × 8 threadgroup to one texel of level 3.
@@ -487,7 +488,6 @@ final class VideoMotion {
     private var previousTimestamp = -Double.infinity
     private var valid = false
     private var hdr = false
-    private var flowComputed = false
 
     init?(cache: MetalPipelineCache, width: Int, height: Int, usage: MTLTextureUsage) {
         self.cache = cache
@@ -528,7 +528,7 @@ final class VideoMotion {
     /// Encodes the motion and the reactive mask of `source` against the previous frame. Returns whether the scaler must
     /// drop its history (``startsAgain(valid:previous:timestamp:hdrChanged:)``), nil when a pass could not be made.
     func render(
-        source: any MTLTexture, timestamp: Double, hdr: Bool, reuseFlow: Bool, commandBuffer: any MTLCommandBuffer
+        source: any MTLTexture, timestamp: Double, hdr: Bool, commandBuffer: any MTLCommandBuffer
     ) -> Bool? {
         let reset = Self.startsAgain(valid: valid, previous: previousTimestamp, timestamp: timestamp, hdrChanged: self.hdr != hdr)
         self.hdr = hdr
@@ -541,14 +541,9 @@ final class VideoMotion {
         if reset, !dispatch("videoLumaPyramid", textures: [luma[1 - index], source], groups: pyramid, encoder: encoder) {
             return nil
         }
-        // Under load (FlowGovernor) every second frame reuses the previous frame's motion; never after a reset, and never
-        // before the first computation
-        if !(reuseFlow && !reset && flowComputed) {
-            guard flow(current: luma[index], previous: luma[1 - index], into: backward, encoder: encoder),
-                  flow(current: luma[1 - index], previous: luma[index], into: forward, encoder: encoder)
-            else { return nil }
-            flowComputed = true
-        }
+        guard flow(current: luma[index], previous: luma[1 - index], into: backward, encoder: encoder),
+              flow(current: luma[1 - index], previous: luma[index], into: forward, encoder: encoder)
+        else { return nil }
         guard dispatch(
             "videoSceneChange", textures: [scene, luma[index], luma[1 - index]], groups: MTLSize(width: 1, height: 1, depth: 1),
             encoder: encoder)

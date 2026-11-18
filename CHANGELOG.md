@@ -358,6 +358,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   the Devices screen.
 - The info row's badges, when they do not fit, bounce like Android's: still for 0.7 s, linear to the end at 56 px/s, a
   0.9 s pause, back, a 0.9 s pause. Disconnect and Quit from the stream menu play SELECT when the library returns.
+- MetalFX Spatial is the recommended upscaler mode (it was and stays the default, also of a new profile) and MetalFX
+  Temporal is marked experimental in Settings and the stream menu: its help says it is meant for noisy, low-bitrate
+  streams and costs several times more GPU. Measured on synthetic video, Temporal was better than Spatial only on a
+  noisy moving picture, at about 4.7 times the GPU time.
 
 ### Removed
 
@@ -371,6 +375,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - The inherited Moonlight workflow that ran on every push and pull request, and the Moonlight bot configurations.
 - Settings → Display → Second display (Automatic, External display, Part of the device): an Apple device has no second
   panel built in, so every second screen is an external display and the choice changed nothing.
+- MetalFX Temporal no longer reuses the previous frame's optical flow on every second frame when the GPU is busy. It
+  saved about 0.07 ms a frame, and motion that was a frame old made the picture drift.
 
 ### Fixed
 

@@ -64,7 +64,7 @@ import Testing
             let command = try #require(drawer.queue.makeCommandBuffer())
             let texture = try picture.texture(drawer.device)
             let reset = try #require(motion.render(
-                source: texture, timestamp: 1 + Double(index) / 60, hdr: false, reuseFlow: false, commandBuffer: command) as Bool?)
+                source: texture, timestamp: 1 + Double(index) / 60, hdr: false, commandBuffer: command) as Bool?)
             #expect(reset == (index == 0))
             command.commit()
             command.waitUntilCompleted()
@@ -174,7 +174,7 @@ import Testing
                         let command = try #require(drawer.queue.makeCommandBuffer())
                         let made = try #require(upscaler.upscale(
                             source: source, mode: mode, presentation: (256, 144), supersamplingLevel: 1,
-                            frameTime: 1 + Double(frame) / 60, hdr: format == .rgba16Float, reuseFlow: false, commandBuffer: command))
+                            frameTime: 1 + Double(frame) / 60, hdr: format == .rgba16Float, commandBuffer: command))
                         #expect(made.texture.width == 256 && made.texture.height == 144 && made.sharpenAtPresentation)
                         #expect(made.dimensions.internalWidth == 256 && !made.dimensions.isSupersampling)
                         let readable = try UpscalerGPU.target(drawer.device, width: 256, height: 144)
@@ -254,7 +254,7 @@ import Testing
                 let command = try #require(drawer.queue.makeCommandBuffer())
                 let made = try #require(upscaler.upscale(
                     source: source, mode: mode, presentation: (width * 2, height * 2), supersamplingLevel: 1,
-                    frameTime: 1 + Double(frame) / 60, hdr: false, reuseFlow: false, commandBuffer: command))
+                    frameTime: 1 + Double(frame) / 60, hdr: false, commandBuffer: command))
                 let readable = try UpscalerGPU.target(drawer.device, width: width * 2, height: height * 2)
                 #expect(upscaler.present(
                     made, sharpness: 0, into: readable, viewport: nil, crop: MetalPipelineCache.wholePicture, commandBuffer: command))

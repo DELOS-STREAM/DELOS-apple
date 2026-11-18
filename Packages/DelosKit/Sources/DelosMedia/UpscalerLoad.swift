@@ -130,45 +130,6 @@ struct OverloadDetector {
     }
 }
 
-/// Lightens MetalFX Temporal's motion estimation while the upscaler's GPU time takes most of the frame period: above 70 %
-/// every second frame reuses the previous frame's optical flow, below 45 % it is computed for every frame again.
-struct FlowGovernor {
-    static let enterShare = 0.70
-    static let leaveShare = 0.45
-
-    private(set) var reduced = false
-    private var frame = 0
-
-    /// True when the state changed.
-    mutating func onWindow(_ window: UpscalerWindow) -> Bool {
-        guard window.gpuAverageMilliseconds >= 0, window.arrivedPerSecond > 0, window.arrived >= OverloadDetector.minimumFrames
-        else { return false }
-        let share = window.gpuAverageMilliseconds / (1000 / window.arrivedPerSecond)
-        if !reduced, share > Self.enterShare {
-            reduced = true
-            frame = 0
-            return true
-        }
-        if reduced, share < Self.leaveShare {
-            reduced = false
-            return true
-        }
-        return false
-    }
-
-    /// For the frame about to be drawn: whether it reuses the previous flow (every second frame while reduced).
-    mutating func reuseFlowThisFrame() -> Bool {
-        guard reduced else { return false }
-        defer { frame += 1 }
-        return frame & 1 == 1
-    }
-
-    mutating func reset() {
-        reduced = false
-        frame = 0
-    }
-}
-
 /// Bounds the upscaler's frames of GPU work in flight (Android `GpuInFlight.java`): with two frames still running the next
 /// draw waits; a frame that never finishes does not freeze the picture, after 250 ms of continuous waiting the count is
 /// cleared.

@@ -52,8 +52,6 @@ struct UpscaleRequest {
     var sequence: Int
     /// When the frame was decoded (seconds): the temporal history starts again after a gap.
     var frameTime: Double
-    /// MetalFX Temporal reuses the previous frame's optical flow (``FlowGovernor``).
-    var reuseFlow: Bool
 }
 
 /// What a drawing through the upscaler did, for the renderer's statistics and load decisions.
@@ -225,7 +223,7 @@ final class MetalFrameDrawer: @unchecked Sendable {
                 source: source, mode: mode,
                 presentation: (geometry.presentationWidth, geometry.presentationHeight),
                 supersamplingLevel: settings.supersamplingLevel, frameTime: request.frameTime, hdr: conversion.isHDR,
-                reuseFlow: request.reuseFlow, commandBuffer: commandBuffer)
+                commandBuffer: commandBuffer)
             else { return false }
             report = UpscaleReport(mode: mode, dimensions: made.dimensions, fresh: true, fellBack: fellBack)
             if sharpenOnly {
