@@ -441,6 +441,14 @@ public final class GameInput {
         for element in controller.physicalInputProfile.allElements {
             element.preferredSystemGestureState = .disabled
         }
+        if let home = gamepad.buttonHome {
+            Self.logger.info("""
+                home button of \(controller.vendorName ?? "?", privacy: .public): bound to a system gesture \
+                \(home.isBoundToSystemGesture), preferred state \(home.preferredSystemGestureState.rawValue)
+                """)
+        } else {
+            Self.logger.info("\(controller.vendorName ?? "?", privacy: .public) reports no home button")
+        }
         controller.playerIndex = GCControllerPlayerIndex(rawValue: Int(number)) ?? .indexUnset
         announce(pad)
         gamepad.valueChangedHandler = { [weak self] gamepad, _ in
@@ -618,6 +626,7 @@ public final class GameInput {
     private func home(_ down: Bool, on pad: Pad, id: ObjectIdentifier) {
         guard down != pad.homeDown else { return }
         pad.homeDown = down
+        Self.logger.info("home \(down ? "down" : "up", privacy: .public)")
         if down {
             guard !paused, pad.guide.onDown(clock()) else { return }
             pad.guideTimer = Task { [weak self] in
