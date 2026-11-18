@@ -215,9 +215,10 @@ public struct HostClient: Sendable {
     }
 
     /// The request as ``perform(_:query:pin:timeout:limit:)`` makes it, a POST of [text] when there is one; the answer
-    /// whatever its status.
+    /// whatever its status. [onHead] hears the status and headers before the body.
     func send(
-        _ path: String, query: String, pin: HostPin?, timeout: Duration?, limit: Int, text: Data? = nil
+        _ path: String, query: String, pin: HostPin?, timeout: Duration?, limit: Int, text: Data? = nil,
+        onHead: (@Sendable (Int, [String: String]) -> Void)? = nil
     ) async throws -> HTTPResponse {
         let common = HTTPRequest.encode(
             [("uniqueid", identity.uniqueID), ("devicename", deviceName), ("uuid", UUID().uuidString)])
@@ -225,7 +226,7 @@ public struct HostClient: Sendable {
         let request = HTTPRequest(
             address: target, path: "/" + path, query: query.isEmpty ? common : query + "&" + common,
             tls: pin.map { TLSPolicy(pinnedCertificate: $0.certificate, identity: identity) },
-            timeout: timeout, maximumBodySize: limit, text: text)
+            timeout: timeout, maximumBodySize: limit, text: text, onHead: onHead)
         return try await HTTPTransport.perform(request)
     }
 }
