@@ -146,6 +146,8 @@ struct HomeScreen: View {
                     }
                 }
             }
+            // The library states without games on the companion screen (`PublishCompanionLibraryState`)
+            .companionPage { CompanionLibraryPublisher.page(content: content, allHidden: listed.isEmpty, hostID: hostID, actions: actions, navigator: navigator) }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // The screen under the sheet blurs like under every layer
             .modifier(LayerBackdropBlur(active: sheetOpen))

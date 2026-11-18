@@ -95,6 +95,8 @@ struct DevicesScreen: View {
         .entranceScope()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { hosts.startDiscovery() }
+        // The focused PC's card on the companion screen (DevicesScreen's `PublishCompanionPc`)
+        .companionPc({ CompanionPcCard.focusedID(focus.focused, prefix: StartScreen.pcID("")) }, context: .devices, actions: actions)
         .task {
             let ids = hosts.paired.map(\.id)
             await withTaskGroup(of: Void.self) { group in

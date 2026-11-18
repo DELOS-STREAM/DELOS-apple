@@ -26,7 +26,7 @@ struct StartScreen: View {
     }
 
     /// The focus id of a PC's circle.
-    static func pcID(_ hostID: String) -> String { "pc-\(hostID)" }
+    nonisolated static func pcID(_ hostID: String) -> String { "pc-\(hostID)" }
 
     /// The line under a paired PC (`pcStatus`): online, asleep (it can be woken: its MAC address is known) or offline,
     /// and whether it is the default one.
@@ -52,6 +52,8 @@ struct StartScreen: View {
         }
         .onAppear { hosts.startDiscovery() }
         .onChange(of: initialPC) { _, next in focus.focus(next) }
+        // The focused PC's card on the companion screen (StartScreen's `PublishCompanionPc`)
+        .companionPc({ CompanionPcCard.focusedID(focus.focused, prefix: Self.pcID("")) }, context: .start, actions: actions)
         .task {
             let ids = hosts.paired.map(\.id)
             await withTaskGroup(of: Void.self) { group in
@@ -425,7 +427,8 @@ public struct DelosRoot: View {
                 focus: entry.focus,
                 onHost: { host in host.pin != nil ? actions.connect(host.id) : go { navigator.push(.pin(hostID: host.id), focus: "cancel") } },
                 onCode: { host in actions.pairWithCode(hostID: host.id) },
-                onAddress: { addByAddress() }
+                onAddress: { addByAddress() },
+                actions: actions
             )
         case .pin(let hostID):
             pinScreen(hostID: hostID, code: nil, entry: entry)

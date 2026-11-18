@@ -34,6 +34,7 @@ struct SettingsScreen: View {
     @Environment(\.stage) private var stage
     @Environment(\.openURL) private var openURL
     @Environment(Layers.self) private var layers: Layers?
+    @Environment(HomeArt.self) private var homeArt
     @State private var form: StreamSettingsForm
     @State private var tab: SettingsTab
     /// The popover that is open on a row (its options, or its slider), and the focus inside the options.
@@ -106,6 +107,16 @@ struct SettingsScreen: View {
     private var searchableRows: [SettingRow] { SettingsTab.availableCases.flatMap { rows(for: $0) } }
     private var focusedRow: SettingRow? { rows.first { focus.focused == AnyHashable($0.id) } }
 
+    /// The focused row's description as the companion screen shows it (`settingsHelp`, SettingsScreen.kt:335-339).
+    private var focusedHelp: CompanionHelp {
+        CompanionHelp.settings(tab: tab, row: focusedRow, colors: colors, appearance: appearance, art: homeArt)
+    }
+
+    /// A companion window shows the help: the description panel (or dock) is left out and the list gets its room.
+    private var hidesDescription: Bool {
+        companionHidesDescription(windowShowsHelp: CompanionHub.shared.showsHelp, help: CompanionHub.shared.shown ? focusedHelp : nil)
+    }
+
     static let searchID = "settings-search"
 
     var body: some View {
@@ -135,6 +146,7 @@ struct SettingsScreen: View {
         #endif
         .onChange(of: tab) { _, next in SettingsSession.shared.tab = next }
         .onChange(of: focus.focused, initial: true) { navigator.setHints(ScreenHints(adjustable: ShellHints.adjustable(focusedRow)), from: focus) }
+        .companionHelp { focusedHelp }
     }
 
     private var content: some View {
@@ -179,10 +191,12 @@ struct SettingsScreen: View {
                 // The list takes the full width; the help is a dock under it, so the focused row and its help are on screen together
                 VStack(spacing: stage.px(HelpDockLayout.listGap)) {
                     list
-                    CompactHelpDock(tab: tab, row: focusedRow, appearance: appearance)
-                        .frame(height: stage.px(HelpDockLayout.height(
-                            stageHeight: stage.height, rowsTop: SettingsLayout.compactListTop + stage.safe.top + 14 + SettingsLayout.sectionHeading,
-                            bottom: bottom, rowHeight: SettingsLayout.tallRow(stage))))
+                    if !hidesDescription {
+                        CompactHelpDock(tab: tab, row: focusedRow, appearance: appearance)
+                            .frame(height: stage.px(HelpDockLayout.height(
+                                stageHeight: stage.height, rowsTop: SettingsLayout.compactListTop + stage.safe.top + 14 + SettingsLayout.sectionHeading,
+                                bottom: bottom, rowHeight: SettingsLayout.tallRow(stage))))
+                    }
                 }
                 .padding(.leading, stage.px(left))
                 .padding(.trailing, stage.px(right))
@@ -191,8 +205,10 @@ struct SettingsScreen: View {
             } else {
                 HStack(alignment: .top, spacing: stage.px(56)) {
                     list
-                    DescriptionPanel(tab: tab, row: focusedRow, appearance: appearance)
-                        .frame(width: stage.px(520))
+                    if !hidesDescription {
+                        DescriptionPanel(tab: tab, row: focusedRow, appearance: appearance)
+                            .frame(width: stage.px(520))
+                    }
                 }
                 .padding(.leading, stage.px(left))
                 .padding(.trailing, stage.px(right))

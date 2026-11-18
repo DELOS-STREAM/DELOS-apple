@@ -91,7 +91,7 @@ final class ShellActions {
     }
 
     /// Asks the online PC to forget this client (`unpair`); the PC leaves the list once it has.
-    private func unpair(_ hostID: String) {
+    func unpair(_ hostID: String) {
         guard let name = hosts.host(hostID)?.name else { return }
         Task {
             let result = await hosts.unpairOnPC(hostID)
@@ -109,7 +109,7 @@ final class ShellActions {
     }
 
     /// Removes the PC from DELOS at once (`remove`): choosing it is the confirmation; the PC can be found and paired again.
-    private func remove(_ hostID: String) {
+    func remove(_ hostID: String) {
         guard let name = hosts.host(hostID)?.name else { return }
         hosts.remove(hostID)
         gameSettings.remove(hostID: hostID)
@@ -118,12 +118,12 @@ final class ShellActions {
         toasts.show(L("devices_removed_toast", name), icon: Symbols.delete)
     }
 
-    private func setDefault(_ host: HostRecord?) {
+    func setDefault(_ host: HostRecord?) {
         profiles.setDefaultPC(host?.id)
         toasts.show(host.map { L("devices_default_set_toast", $0.name) } ?? L("devices_default_cleared_toast"), icon: Symbols.star)
     }
 
-    private func wake(_ hostID: String) {
+    func wake(_ hostID: String) {
         guard let name = hosts.host(hostID)?.name else { return }
         Task {
             let error: String? = switch await hosts.wake(hostID) {
@@ -159,7 +159,7 @@ final class ShellActions {
     }
 
     /// The PC's name in DELOS on this device: empty returns to the PC's own name.
-    private func rename(_ hostID: String) {
+    func rename(_ hostID: String) {
         guard let host = hosts.host(hostID) else { return }
         layers.openDialog(DialogSpec(
             title: L("devices_rename_title"), note: L("devices_rename_note", host.serverName),
