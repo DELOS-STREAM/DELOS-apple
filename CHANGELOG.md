@@ -9,6 +9,15 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- A second screen (an external display or AirPlay screen on iPhone and iPad, another monitor on the Mac) as on
+  DELOS for Android. With Fully External Display Mode a stream goes to a monitor or TV and the device's own screen
+  becomes its touch control: statistics, the stream menu's tiles and pages, and a keyboard. Set to Part of the
+  device, the second screen is a companion screen all the time: Settings → Display → Main screen chooses which
+  screen shows the app (the larger one, or swapped) and the other one shows the focused game with Start or Resume,
+  the focused setting's help (the main screen then gives its list the room), the PC with its actions, pairing,
+  artwork, filters, profiles, the launch steps and a failed stream's result, or the screen's purpose and its
+  buttons. Nothing on it scrolls; it drifts a few points every two minutes and dims after an idle delay (on, one
+  minute by default). Not verified on a real external display.
 - On-screen controls on iPhone and iPad, as on DELOS for Android: the D-pad, A/B/X/Y, bumpers, triggers, Back,
   Guide, Start, L3/R3, the trackpad button and fixed or free sticks in the DELOS style, any number of fingers at
   once, sent to the PC as controller 0. The default layout is computed for every screen shape; the gear edits it

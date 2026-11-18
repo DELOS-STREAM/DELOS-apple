@@ -645,6 +645,47 @@ signed ad hoc; the data protection keychain needs an application identifier from
 `Config/DELOS-macOS-adhoc.entitlements`, the same plus `disable-library-validation`: the hardened runtime only loads
 libraries of the same team, and an ad-hoc signature has none, so the app could not load its own `OpenSSL.framework`
 and debug dylib. A build signed with a team does not need it and uses the plain file. No Developer ID, no notarization.
+
+## Second screens and the companion screen
+
+The port of Android's dual-screen and external-display modes (docs/DUAL_SCREEN.md and docs/EXTERNAL_DISPLAY.md of DELOS for
+Android). Apple devices have no second panel built into them, so the second screen is an external display: on iPhone and
+iPad the scene the system offers with the role `windowExternalDisplayNonInteractive` (USB-C, HDMI adapter, AirPlay
+screen), on the Mac another `NSScreen` (the device's own screen is the built-in one, else the one with the menu bar).
+
+| Settings → Display | What it does |
+|---|---|
+| Second display: Automatic, External display | The screen is a monitor or TV. It is left to the system (mirrored on iPhone and iPad, a free monitor on the Mac) except while a stream runs with Fully External Display Mode (`checkbox_enable_fullexdisplay`, per profile) on: the app's window, and with it the launch scene, the stream and its menu, goes to it (full screen on the Mac) and the device's own screen shows the companion screen as the stream's touch control (Android's control window). The stream is left when that screen goes away during it, as Android finishes it |
+| Second display: Part of the device | The two screens are a pair (Android's built-in companion panel): Main screen decides which one shows the interface and the stream, the other one shows the companion screen, all the time |
+| Main screen (only while paired) | Automatic: the screen with more pixels, the device's own on a tie; Swapped: the other one |
+| Dim the second screen when idle, Dim after (only while paired) | The companion fades to 22 % after 1, 2, 5 or 10 minutes without a touch, in the shell only; on by default (burn-in) |
+
+`ScreenPlanner` (DelosData, `SecondDisplayTests`) is the decision as a pure function of the two screens' sizes and the
+settings. `CompanionDisplays` (DelosUI) carries it out whenever a screen comes or goes, a display setting changes or a
+stream starts or ends: on iPhone and iPad it moves the app's own window between the device's scene and the external one
+(`UIWindow.windowScene`, so the interface keeps its whole state) and puts a `UIHostingController` of `CompanionRoot` into
+the other scene; an external scene left without a window mirrors again. On the Mac it moves the app's window to the main
+screen and fills the other one with a borderless window that never becomes key, closed with the app's window. The App
+target only reports the scenes (`ExternalDisplayScene`, `LandscapeScene`) and starts it (`MacAppDelegate`). Android's
+key-focus workaround has no counterpart: the companion window never takes the keys.
+
+The companion screen itself (`CompanionRoot`, `CompanionContent`) follows Android's rules: the second screen is extra room
+for what helps the main screen, one page at a time, never scrolling. `CompanionHub` is the one exchange: the shell's
+screens publish pages with `.companionPage { … }` (only while a companion window is shown; a screen leaving takes its page
+with it), the highest `PagePriority` wins (game 50, screen and settings help 100, filter sheets 200, launch and results
+300), and with nothing published the fallback card (the screen's title and purpose, the connected PC, clock, battery and
+the hint bar's own entries, published by `DelosRoot`) or the welcome card shows. A running stream binds its controller
+(`CompanionStream`): the loader page while it starts, then the statistics, the dock's own tiles and their sheets and the
+touch keyboard, every button running the very path of its twin on the main screen. `CompanionFit` holds the budgets
+(tall panels from 900 fit pixels), cuts text only at a sentence and counts what does not fit; `FitColumn` drops the
+least important optional blocks before anything could overflow. Burn-in: the content drifts by 3 points every two minutes
+along a 3 × 3 serpentine path, always, and the dim's first touch only wakes it. While the window shows a settings help,
+Settings and App settings leave out their own description. Not ported: the Debug info help and the problem report card,
+which need Debug info and reports (#71).
+
+Not verified: everything on a real external display (no simulator or device was driven): the window moving between
+scenes or screens, the mirroring coming back, touch on the companion, the stream on a TV, and the Mac's full-screen move.
+
 ## Apple TV
 
 One code base; the differences are in `FocusItem`, the root's commands, the stage and the storage.
@@ -921,8 +962,8 @@ opaque black: `TakedownPlaceholder`, Android's `Thumbnails.looksRemoved`) takes 
 the image in use. The filter sheet (type, style, size, sort) narrows and sorts the choices; animated choices play in
 their tiles ([Animated artwork](#animated-artwork)). The first lookup and each list of choices are tried again after
 500, 1200 and 2500 ms while they fail for a passing reason (429, 5xx, a network failure: `SteamGridDBRetry`, Android's
-`SgdbRetry`); the loader stays up meanwhile, and "not reachable" shows only once the fourth attempt has failed. Not
-ported: the companion screen.
+`SgdbRetry`); the loader stays up meanwhile, and "not reachable" shows only once the fourth attempt has failed. The
+companion screen shows the focused image ([Second screens](#second-screens-and-the-companion-screen)).
 
 ### Animated artwork
 
@@ -1106,9 +1147,9 @@ over zero is added, and the library shows under one minute as one minute. The li
 shown again after the stream.
 
 Not ported yet: the default PC's Skip the start screen, the Devices screen's link test,
-the connect portal that wakes and waits, waking an asleep PC on A, the companion screen; in the library the compact layout, the game menu's Artwork, App settings and
+the connect portal that wakes and waits, waking an asleep PC on A; in the library the compact layout, the game menu's Artwork, App settings and
 Hide, the metadata filters (Android's filter modal and its empty-library message), the game's colors in its menu tile, hidden games, wrap-around in the row and per-game settings.
-Not ported yet: the default PC's Skip the start screen, the Devices screen's link test, the companion screen; in the library the compact layout, game metadata (IGDB genres and themes,
+Not ported yet: the default PC's Skip the start screen, the Devices screen's link test; in the library the compact layout, game metadata (IGDB genres and themes,
 HowLongToBeat, HDR chips through the metadata Worker), the game menu's Artwork, Metadata, App settings and Hide, the
 game's colors in its menu tile, hidden games, wrap-around in the row and per-game settings.
 
