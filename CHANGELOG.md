@@ -53,6 +53,17 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   library saying why; the hint bar over the result shows Select and Back to library.
 - While artwork downloads or game info is looked up, a glass pill above the button hints shows what runs, "x of N" and
   a bar. Strings Android does not translate have their English text in every language of the catalog.
+- The Metal renderer upscales the stream as DELOS for Android does: SGSR 1 Standard and High, SGSR 2 Temporal and
+  Temporal quality (optical flow and history), and Sharpen only (contrast-adaptive sharpening), ported from Android's
+  shaders with its sharpness and its 1.33× / 2× supersampling of streams that already match the view. Two frames of
+  GPU work at most, a lighter optical flow under load, and a warning when the upscaler cannot keep up with the frame
+  rate. The video fills the view as chosen (fit, fill, stretch), the display runs the refresh rate Android's planner
+  picks (reduce refresh rate, enforce display mode on the Mac, display criteria on Apple TV, variable refresh rate),
+  HEVC and AV1 streams recover from loss with reference frame invalidation, and the receive thread runs at the
+  interactive quality of service. The statistics know the 1 % low, the render latency (average, 95th percentile,
+  maximum), the upscaling time, the Sharpen pass and the upscaler's target. The look on a device, the GPU cost and
+  real streams are not verified.
+
 - Pairing waits for the trusted paired state instead of a fixed delay, and manual-address entry reports a PC
   that was not added. The start screen retargets its initial PC focus as discovery changes. On compact stages,
   the profile chip shares the status line, clears the measured status cluster and truncates long names.

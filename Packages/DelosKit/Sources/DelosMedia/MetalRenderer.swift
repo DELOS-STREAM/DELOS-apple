@@ -11,9 +11,9 @@ import Synchronization
 /// is shown twice by the system's own pacing, so the interval between shown frames is decided here, not by
 /// `AVSampleBufferDisplayLayer`'s internals.
 ///
-/// The second path of decision L4. It is not the default: ``RendererChoice`` picks it for the debug switch until a stream
-/// on the iPad shows it is steadier (issue #9, #12). It also is where the launch scene's arrival (``LaunchArrival``),
-/// upscalers (SGSR, MetalFX), HDR tone mapping (issue #11) and PyroWave (issue #13) draw.
+/// The second path of decision L4 and the default (``RendererChoice``). It is where the launch scene's arrival
+/// (``LaunchArrival``), the upscalers (SGSR 1, SGSR 2, Sharpen only: ``MetalUpscaler``), the scale modes, HDR tone mapping
+/// (issue #11) and PyroWave (issue #13) draw.
 ///
 /// `CAMetalDisplayLink` exists on iOS and tvOS 17, and on macOS 14 (the app's minimum is 15), so the Mac needs no second
 /// display-link kind.
@@ -23,6 +23,8 @@ public final class MetalRenderer: VideoRenderer {
     private nonisolated(unsafe) let layer: CAMetalLayer
     private let pipeline: MetalPipeline
     private let fps: Int
+    private let pacing: FramePacing
+    private let options: VideoRenderOptions
     /// Created and stopped on the main actor.
     private nonisolated(unsafe) var ticker: MetalDisplayLinkTicker?
 
@@ -30,10 +32,12 @@ public final class MetalRenderer: VideoRenderer {
 
     /// Nil when the device has no Metal GPU or the shader library is missing.
     @MainActor
-    public init?(pacing: FramePacing, fps: Int) {
-        guard let pipeline = MetalPipeline(pacing: pacing, fps: fps) else { return nil }
+    public init?(pacing: FramePacing, fps: Int, options: VideoRenderOptions = VideoRenderOptions()) {
+        guard let pipeline = MetalPipeline(pacing: pacing, fps: fps, options: options) else { return nil }
         self.pipeline = pipeline
         self.fps = fps
+        self.pacing = pacing
+        self.options = options
         layer = CAMetalLayer()
         layer.device = pipeline.drawer.device
         layer.pixelFormat = .bgra8Unorm
@@ -73,6 +77,15 @@ public final class MetalRenderer: VideoRenderer {
         pipeline.counters()
     }
 
+    public func setScaleMode(_ mode: VideoScaleMode) { pipeline.setScaleMode(mode) }
+    public func setUpscaler(_ settings: UpscalerSettings) { pipeline.setUpscaler(settings) }
+    public var upscalerSettings: UpscalerSettings { pipeline.upscaler }
+    public var upscalerStatus: UpscalerStatus { pipeline.upscalerStatus }
+    public var isSupersampling: Bool { pipeline.isSupersampling }
+    public func observeUpscalerOverload(_ body: (@Sendable (UpscalerMode, Bool) -> Void)?) {
+        pipeline.observeUpscalerOverload(body)
+    }
+
     @MainActor public func resize(to bounds: CGRect, scale: CGFloat) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -83,15 +96,19 @@ public final class MetalRenderer: VideoRenderer {
         CATransaction.commit()
     }
 
-    /// Starts the display link at the display's highest refresh rate: ProMotion screens slow down when nothing asks
-    /// for more.
-    @MainActor public func attached(maxFramesPerSecond: Int) {
+    /// Starts the display link at the plan's frame rate (Android's `Surface.setFrameRate`): the highest refresh rate the
+    /// stream divides, the stream's own rate when the refresh rate may be reduced, or with VRR. ProMotion screens slow down
+    /// when nothing asks for more.
+    @MainActor public func attached(to display: VideoDisplay) -> DisplayRefreshPlanner.Plan {
+        let plan = options.refreshPlan(for: display, pacing: pacing, fps: fps)
+        pipeline.setVRR(plan.vrr)
         ticker?.stop()
-        let ticker = MetalDisplayLinkTicker(layer: layer, maxFramesPerSecond: maxFramesPerSecond) { [pipeline] tick in
+        let ticker = MetalDisplayLinkTicker(layer: layer, frameRate: plan.surfaceFrameRate) { [pipeline] tick in
             pipeline.tick(tick)
         }
         ticker.start()
         self.ticker = ticker
+        return plan
     }
 
     @MainActor public func detached() {
@@ -105,17 +122,17 @@ public final class MetalRenderer: VideoRenderer {
 final class MetalDisplayLinkTicker: NSObject, CAMetalDisplayLinkDelegate, @unchecked Sendable {
     private let handler: @Sendable (RefreshTick) -> Void
     private let nominal: Double
-    private let maxFramesPerSecond: Float
+    private let frameRate: Float
     private nonisolated(unsafe) let layer: CAMetalLayer
     private let running = Mutex(false)
     private var lastPresentation: Double?
     private var refresh: Double
 
-    init(layer: CAMetalLayer, maxFramesPerSecond: Int, handler: @escaping @Sendable (RefreshTick) -> Void) {
+    init(layer: CAMetalLayer, frameRate: Double, handler: @escaping @Sendable (RefreshTick) -> Void) {
         self.layer = layer
         self.handler = handler
-        self.maxFramesPerSecond = Float(max(maxFramesPerSecond, 1))
-        nominal = 1 / Double(max(maxFramesPerSecond, 1))
+        self.frameRate = Float(max(frameRate, 1))
+        nominal = 1 / max(frameRate, 1)
         refresh = nominal
     }
 
@@ -127,8 +144,7 @@ final class MetalDisplayLinkTicker: NSObject, CAMetalDisplayLinkDelegate, @unche
         let thread = Thread { [self] in
             let link = CAMetalDisplayLink(metalLayer: layer)
             link.delegate = self
-            link.preferredFrameRateRange = CAFrameRateRange(
-                minimum: maxFramesPerSecond, maximum: maxFramesPerSecond, preferred: maxFramesPerSecond)
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: frameRate, maximum: frameRate, preferred: frameRate)
             link.preferredFrameLatency = 2
             let runLoop = RunLoop.current
             // Keeps the run loop alive between callbacks

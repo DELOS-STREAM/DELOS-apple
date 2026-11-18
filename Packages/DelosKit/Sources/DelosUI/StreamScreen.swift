@@ -112,9 +112,18 @@ struct StreamScreen: View {
 
     private func begin() {
         guard controller == nil else { return }
-        // The display layer unless the debug switch asks for the Metal renderer (RendererChoice)
+        // The Metal renderer unless the debug switch asks for the display layer (RendererChoice); the Display settings
+        // (scale mode, upscaler, refresh rate) go with it
+        let device = StreamDevice.current
         let renderer = RendererChoice.current.makeRenderer(
-            pacing: settings.framePacing, fps: settings.streamFPS(refreshRate: StreamDevice.current.maxFramesPerSecond))
+            pacing: settings.framePacing, fps: settings.streamFPS(refreshRate: device.maxFramesPerSecond),
+            options: settings.videoRenderOptions(
+                displayWidth: device.pixelWidth, displayHeight: device.pixelHeight, decodable: device.decodable,
+                displaySupportsHDR: device.hdrDisplay))
+        // Android's notice when the upscaler cannot keep up (once per stream and mode); nothing is switched off
+        renderer.observeUpscalerOverload { [toasts] _, _ in
+            Task { @MainActor in toasts?.show(UpscalerOverload.message, icon: Symbols.warning, durationMs: 6500, kind: .warning) }
+        }
         let playtime = profileID.map { profile in
             let store = PlaytimeStore()
             return PlaytimeTracker(sink: { [hostID, appID] in store.add($0, profile: profile, hostID: hostID, appID: appID) })
