@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- The Delos full keyboard on every device, as on DELOS for Android: the stream menu's Keyboard tile raises a bar of
+  80 keys over the stream. Fingers (several at once) or the pointer press keys; a controller moves a gold ring
+  with the D-pad or the left stick, A presses, B closes, L3 latches Shift, X and Y type Backspace and Space; on Apple
+  TV the Siri Remote drives it. Modifiers held for a moment stay down (sticky modifiers), keys carry the modifiers
+  that are down, Caps Lock and Shift change the legends, a popup shows the character typed, and the profile's
+  keyboard size, width, alignment, opacity and vibration apply. While it is up the controllers type instead of
+  playing, and everything held comes up at the PC when it closes. The system keyboard of iPhone and iPad moved to
+  More → Open system keyboard.
 - On-screen controls on iPhone and iPad, as on DELOS for Android: the D-pad, A/B/X/Y, bumpers, triggers, Back,
   Guide, Start, L3/R3, the trackpad button and fixed or free sticks in the DELOS style, any number of fingers at
   once, sent to the PC as controller 0. The default layout is computed for every screen shape; the gear edits it
