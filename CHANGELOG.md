@@ -381,6 +381,13 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   with Asynchronous decoding on and off) and the receive thread spends about 0.1 ms a frame, and the start codes of a
   frame are found with a vectorized search instead of a byte-by-byte loop. Whether it was what held the iPad Pro below
   120 fps is not verified on a device.
+- MetalFX Temporal uses its history. Its reactive mask was about 1 at almost every pixel of a moving picture: the
+  flow's confidence counted flat areas and straight edges as unsure, a coarse pyramid level that fine detail aliased in
+  pushed the finer levels into wrong matches, and the luma check failed on the interpolation of fine detail. MetalFX
+  therefore ignored the history and only upscaled each frame on its own, softer than MetalFX Spatial. The motion
+  passes now take about a fifth less GPU time (one compute encoder, the luma pyramid in one pass). Not verified on a
+  device.
+
 - Balanced with FPS limit paced frames at the display's highest refresh rate while the PC was capped below the rate the
   display really runs (Low Power Mode, a 60 Hz mode); both now use the same rate.
 - Down from the top navigation returns to the cover the focus went up from, not to the cover under the button.

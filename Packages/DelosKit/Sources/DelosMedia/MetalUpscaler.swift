@@ -174,7 +174,8 @@ final class MetalUpscaler {
 
     let support: MetalFXSupport
     private let cache: MetalPipelineCache
-    private var motion: VideoMotion?
+    /// MetalFX Temporal's motion of the stream (read by the tests).
+    private(set) var motion: VideoMotion?
     private var scaler: MetalFXScaler?
 
     init(cache: MetalPipelineCache, support: MetalFXSupport) {
@@ -462,10 +463,13 @@ struct TemporalFrame: Equatable {
 /// previous frame's flow), a whole-frame cut detector, and from them per-pixel motion vectors and a reactive mask at the
 /// stream's size (UpscalerShaders.metal `videoMotion`). A cut cannot reset the scaler from the CPU in the same frame (its
 /// result is on the GPU), so it sets the whole reactive mask to 1, which makes MetalFX ignore the history for that frame.
+/// Every pass of a frame runs in one compute encoder (its dispatches run in order), and every texture is made once.
 final class VideoMotion {
+    /// The pyramid's levels: `videoLumaPyramid` reduces an 8 × 8 threadgroup to one texel of level 3.
     static let levels = 4
     /// A larger gap between two frames' times starts the history again.
     static let maximumGap = 0.05
+    static let flowFormat: MTLPixelFormat = .rg16Float
 
     let width: Int
     let height: Int
@@ -490,23 +494,23 @@ final class VideoMotion {
         self.width = width
         self.height = height
         self.usage = usage
+        let kernelUsage: MTLTextureUsage = [.shaderRead, .shaderWrite]
         for _ in 0..<2 {
-            guard let texture = cache.texture(.r8Unorm, width: width, height: height, levels: Self.levels, usage: [.renderTarget, .shaderRead])
+            guard let texture = cache.texture(.r8Unorm, width: width, height: height, levels: Self.levels, usage: kernelUsage)
             else { return nil }
             luma.append(texture)
         }
-        let flowUsage: MTLTextureUsage = [.shaderRead, .shaderWrite]
         for level in 0..<Self.levels {
             let w = ((width >> level) + 7) / 8, h = ((height >> level) + 7) / 8
-            guard let b = cache.texture(.rgba16Float, width: w, height: h, usage: flowUsage),
-                  let f = cache.texture(.rgba16Float, width: w, height: h, usage: flowUsage) else { return nil }
+            guard let b = cache.texture(Self.flowFormat, width: w, height: h, usage: kernelUsage),
+                  let f = cache.texture(Self.flowFormat, width: w, height: h, usage: kernelUsage) else { return nil }
             backward.append(b)
             forward.append(f)
         }
-        guard let scene = cache.texture(.rgba16Float, width: 1, height: 1, usage: flowUsage),
-              let motion = cache.texture(MetalFXScaler.motionFormat, width: width, height: height, usage: flowUsage.union(usage)),
+        guard let scene = cache.texture(.r16Float, width: 1, height: 1, usage: kernelUsage),
+              let motion = cache.texture(MetalFXScaler.motionFormat, width: width, height: height, usage: kernelUsage.union(usage)),
               let reactiveMask = cache.texture(
-                MetalFXScaler.reactiveMaskFormat, width: width, height: height, usage: flowUsage.union(usage))
+                MetalFXScaler.reactiveMaskFormat, width: width, height: height, usage: kernelUsage.union(usage))
         else { return nil }
         self.scene = scene
         self.motion = motion
@@ -529,42 +533,38 @@ final class VideoMotion {
         let reset = Self.startsAgain(valid: valid, previous: previousTimestamp, timestamp: timestamp, hdrChanged: self.hdr != hdr)
         self.hdr = hdr
         previousTimestamp = timestamp
-        guard makeLuma(source, into: luma[index], commandBuffer: commandBuffer) else { return nil }
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return nil }
+        defer { encoder.endEncoding() }
+        let pyramid = MTLSize(width: (width + 7) / 8, height: (height + 7) / 8, depth: 1)
+        guard dispatch("videoLumaPyramid", textures: [luma[index], source], groups: pyramid, encoder: encoder) else { return nil }
         // Both flow inputs come from this frame after a reset, so no uninitialised texture is read
-        if reset, !makeLuma(source, into: luma[1 - index], commandBuffer: commandBuffer) { return nil }
+        if reset, !dispatch("videoLumaPyramid", textures: [luma[1 - index], source], groups: pyramid, encoder: encoder) {
+            return nil
+        }
         // Under load (FlowGovernor) every second frame reuses the previous frame's motion; never after a reset, and never
         // before the first computation
         if !(reuseFlow && !reset && flowComputed) {
-            guard flow(current: luma[index], previous: luma[1 - index], into: backward, commandBuffer: commandBuffer),
-                  flow(current: luma[1 - index], previous: luma[index], into: forward, commandBuffer: commandBuffer)
+            guard flow(current: luma[index], previous: luma[1 - index], into: backward, encoder: encoder),
+                  flow(current: luma[1 - index], previous: luma[index], into: forward, encoder: encoder)
             else { return nil }
             flowComputed = true
         }
         guard dispatch(
             "videoSceneChange", textures: [scene, luma[index], luma[1 - index]], groups: MTLSize(width: 1, height: 1, depth: 1),
-            commandBuffer: commandBuffer)
+            encoder: encoder)
         else { return nil }
         var inputSize = SIMD2<Int32>(Int32(width), Int32(height))
         guard dispatch(
             "videoMotion", textures: [motion, reactiveMask, luma[index], luma[1 - index], backward[0], forward[0], scene],
-            bytes: &inputSize, length: MemoryLayout<SIMD2<Int32>>.stride,
-            groups: MTLSize(width: (width + 7) / 8, height: (height + 7) / 8, depth: 1), commandBuffer: commandBuffer)
+            bytes: &inputSize, length: MemoryLayout<SIMD2<Int32>>.stride, groups: pyramid, encoder: encoder)
         else { return nil }
         index = 1 - index
         valid = true
         return reset
     }
 
-    private func makeLuma(_ source: any MTLTexture, into texture: any MTLTexture, commandBuffer: any MTLCommandBuffer) -> Bool {
-        guard cache.draw("videoLumaFragment", into: texture, textures: [source], uniforms: Int32?.none, commandBuffer: commandBuffer),
-              let blit = commandBuffer.makeBlitCommandEncoder() else { return false }
-        blit.generateMipmaps(for: texture)
-        blit.endEncoding()
-        return true
-    }
-
     private func flow(
-        current: any MTLTexture, previous: any MTLTexture, into output: [any MTLTexture], commandBuffer: any MTLCommandBuffer
+        current: any MTLTexture, previous: any MTLTexture, into output: [any MTLTexture], encoder: any MTLComputeCommandEncoder
     ) -> Bool {
         for level in stride(from: Self.levels - 1, through: 0, by: -1) {
             let w = width >> level, h = height >> level
@@ -575,7 +575,8 @@ final class VideoMotion {
             guard dispatch(
                 "videoFlow", textures: [output[level], current, previous, coarse], bytes: &uniforms,
                 length: MemoryLayout<FlowUniforms>.stride,
-                groups: MTLSize(width: (((w + 7) / 8) + 7) / 8, height: (((h + 7) / 8) + 7) / 8, depth: 1), commandBuffer: commandBuffer)
+                groups: MTLSize(width: (output[level].width + 7) / 8, height: (output[level].height + 7) / 8, depth: 1),
+                encoder: encoder)
             else { return false }
         }
         return true
@@ -583,14 +584,13 @@ final class VideoMotion {
 
     private func dispatch(
         _ kernel: String, textures: [any MTLTexture], bytes: UnsafeRawPointer? = nil, length: Int = 0, groups: MTLSize,
-        commandBuffer: any MTLCommandBuffer
+        encoder: any MTLComputeCommandEncoder
     ) -> Bool {
-        guard let pipeline = cache.compute(kernel), let encoder = commandBuffer.makeComputeCommandEncoder() else { return false }
+        guard let pipeline = cache.compute(kernel) else { return false }
         encoder.setComputePipelineState(pipeline)
         for (index, texture) in textures.enumerated() { encoder.setTexture(texture, index: index) }
         if let bytes { encoder.setBytes(bytes, length: length, index: 0) }
         encoder.dispatchThreadgroups(groups, threadsPerThreadgroup: MTLSize(width: 8, height: 8, depth: 1))
-        encoder.endEncoding()
         return true
     }
 }

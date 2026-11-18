@@ -194,6 +194,89 @@ import Testing
         }
     }
 
+    /// A camera pan over a band-limited scene with the noise of a compressed stream: each frame is the scene averaged over
+    /// its pixels (`scale` pixels per scene unit), shifted by `offset` scene units, with ±`noise` per channel.
+    private static func panFrame(
+        width: Int, height: Int, scale: Float, offset: SIMD2<Float>, noise: Float, seed: UInt32
+    ) -> ReferenceImage {
+        var state = seed
+        func random() -> Float {
+            state = state &* 1_664_525 &+ 1_013_904_223
+            return Float(state >> 8) / Float(1 << 24) - 0.5
+        }
+        let samples = 4
+        return ReferenceImage(width: width, height: height) { i, j in
+            var sum: Float = 0
+            for a in 0..<samples {
+                for b in 0..<samples {
+                    let x = (Float(i) + (Float(a) + 0.5) / Float(samples)) / scale + offset.x
+                    let y = (Float(j) + (Float(b) + 0.5) / Float(samples)) / scale + offset.y
+                    sum += 0.5 + 0.2 * sin(x * 0.9 + 0.7 * sin(y * 0.05)) + 0.2 * cos(y * 0.8 + 0.5 * sin(x * 0.07))
+                        + 0.08 * sin(x * 1.9 + y * 1.3)
+                }
+            }
+            let v = sum / Float(samples * samples)
+            return SIMD4(v + random() * noise, v * 0.8 + 0.1 + random() * noise, 1 - v + random() * noise, 1)
+        }
+    }
+
+    /// The mean absolute RGB difference of two pictures inside a border (the scalers treat the edges differently).
+    private static func innerError(_ a: ReferenceImage, _ b: ReferenceImage, border: Int) -> Float {
+        var sum: Float = 0, count: Float = 0
+        for y in border..<(a.height - border) {
+            for x in border..<(a.width - border) {
+                let p = a.pixels[y * a.width + x], q = b.pixels[y * a.width + x]
+                sum += (abs(p.x - q.x) + abs(p.y - q.y) + abs(p.z - q.z)) / 3
+                count += 1
+            }
+        }
+        return sum / count
+    }
+
+    @Test(.enabled(if: MetalFXSupport.system.spatial && MetalFXSupport.system.temporal))
+    func theTemporalScalerUsesItsHistoryOnAMovingPicture() throws {
+        // The whole temporal path (motion, reactive mask, MTLFXTemporalScaler) on a pan of 0.37 × 0.23 pixels a frame,
+        // compared with the scene at the output size: its first frame has no history, the following ones accumulate
+        let drawer = try UpscalerGPU.drawer()
+        let (width, height, frames) = (160, 90, 10)
+        let step = SIMD2<Float>(0.37, 0.23)
+        var temporalErrors: [Float] = [], spatialDifferences: [Float] = [], masks: [Float] = []
+        let temporal = MetalUpscaler(cache: drawer.cache, support: .system)
+        let spatial = MetalUpscaler(cache: drawer.cache, support: .system)
+        for frame in 0..<frames {
+            let offset = step * Float(frame)
+            let input = Self.panFrame(width: width, height: height, scale: 1, offset: offset, noise: 0.06, seed: UInt32(frame + 1))
+                .quantized
+            let truth = Self.panFrame(width: width * 2, height: height * 2, scale: 2, offset: offset, noise: 0, seed: 0)
+            let source = try input.texture(drawer.device)
+            var outputs: [ReferenceImage] = []
+            for (upscaler, mode) in [(temporal, UpscalerMode.temporal), (spatial, .spatial)] {
+                let command = try #require(drawer.queue.makeCommandBuffer())
+                let made = try #require(upscaler.upscale(
+                    source: source, mode: mode, presentation: (width * 2, height * 2), supersamplingLevel: 1,
+                    frameTime: 1 + Double(frame) / 60, hdr: false, reuseFlow: false, commandBuffer: command))
+                let readable = try UpscalerGPU.target(drawer.device, width: width * 2, height: height * 2)
+                #expect(upscaler.present(
+                    made, sharpness: 0, into: readable, viewport: nil, crop: MetalPipelineCache.wholePicture, commandBuffer: command))
+                command.commit()
+                command.waitUntilCompleted()
+                outputs.append(UpscalerGPU.read(readable))
+            }
+            let motion = try #require(temporal.motion)
+            let mask: [Float16] = try readBack(motion.reactiveMask, drawer: drawer, channels: 1)
+            masks.append(mask.map(Float.init).reduce(0, +) / Float(mask.count))
+            temporalErrors.append(Self.innerError(outputs[0], truth, border: 16))
+            spatialDifferences.append(Self.innerError(outputs[0], outputs[1], border: 16))
+        }
+        // MetalFX may use the history at most pixels: the reactive mask stays low after the first frame
+        #expect(masks.dropFirst().allSatisfy { $0 < 0.35 }, "\(masks)")
+        // The temporal result is its own, not MetalFX Spatial's
+        #expect(spatialDifferences.dropFirst().allSatisfy { $0 > 0.003 }, "\(spatialDifferences)")
+        // The accumulated history brings it closer to the scene than the first frame, which had none
+        let accumulated = temporalErrors[3...].reduce(0, +) / Float(temporalErrors.count - 3)
+        #expect(accumulated < temporalErrors[0] * 0.92, "\(temporalErrors)")
+    }
+
     /// `image` as the scalers' colour input (``MetalUpscaler/sourceUsage``) in `format`.
     private func sourceTexture(_ image: ReferenceImage, format: MTLPixelFormat, drawer: MetalFrameDrawer) throws -> any MTLTexture {
         let plain = try image.texture(drawer.device)
