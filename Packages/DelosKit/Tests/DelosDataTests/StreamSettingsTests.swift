@@ -111,19 +111,43 @@ import Testing
 
     // MARK: Value lists
 
-    @Test func theResolutionsArePresetsThenTheDisplay() {
-        // iPhone 14 Pro Max, portrait pixels as UIScreen reports them
+    @Test func theResolutionsArePresetsThenTheDisplaysAspectThenTheDisplay() {
+        // iPhone 14 Pro Max, portrait pixels as UIScreen reports them: its 19.5:9 presets up to 1440 lines (4K's 4681 is too wide)
         let list = StreamChoices.resolutions(displayWidth: 1290, displayHeight: 2796)
-        #expect(list.dropLast() == StreamResolution.presets.map(StreamChoices.Resolution.preset))
-        #expect(list.last == .native(StreamResolution(width: 2796, height: 1290), portrait: false))
-        // A 16:9 1080p display: its native resolution is the 1080p preset, listed once
+        let presets = StreamResolution.presets.map(StreamChoices.Resolution.preset)
+        #expect(Array(list.prefix(6)) == presets)
+        #expect(Array(list.dropFirst(6)) == [
+            .aspect(StreamResolution(width: 1560, height: 720)), .aspect(StreamResolution(width: 2340, height: 1080)),
+            .aspect(StreamResolution(width: 3122, height: 1440)), .native(StreamResolution(width: 2796, height: 1290), portrait: false),
+        ])
+        // A 16:9 1080p display: no presets of its own, and its native resolution is the 1080p preset, listed once
         #expect(StreamChoices.resolutions(displayWidth: 1920, displayHeight: 1080).count == 6)
-        // A squarish display (aspect below 1.3) also gets its portrait resolution, first
+        #expect(StreamChoices.resolutions(displayWidth: 3840, displayHeight: 2160) == presets)
+        // A squarish display (aspect below 1.3) also gets its portrait resolution, first; its 1440-line preset is its own
+        // resolution and keeps the Native name
         let square = StreamChoices.resolutions(displayWidth: 1600, displayHeight: 1440)
-        #expect(Array(square.suffix(2)) == [
+        #expect(Array(square.dropFirst(6)) == [
+            .aspect(StreamResolution(width: 800, height: 720)), .aspect(StreamResolution(width: 1200, height: 1080)),
+            .aspect(StreamResolution(width: 2400, height: 2160)),
             .native(StreamResolution(width: 1440, height: 1600), portrait: true),
             .native(StreamResolution(width: 1600, height: 1440), portrait: false),
         ])
+    }
+
+    @Test(arguments: [
+        // 13" iPad Pro (M4, M5), 4:3
+        (2064, 2752, [(960, 720), (1440, 1080), (1920, 1440), (2880, 2160)]),
+        // 11" iPad Pro (M4, M5), 1.45:1
+        (1668, 2420, [(1044, 720), (1566, 1080), (2090, 1440), (3134, 2160)]),
+        // A 16:10 Mac display
+        (2560, 1600, [(1152, 720), (1728, 1080), (2304, 1440), (3456, 2160)]),
+        // A 16:9 TV, and a panel within the 2 % tolerance of 16:9
+        (3840, 2160, []),
+        (2400, 1334, []),
+    ])
+    func theDisplaysAspectHasPresetsOfItsOwn(width: Int, height: Int, expected: [(Int, Int)]) {
+        let presets = StreamChoices.aspectPresets(displayWidth: width, displayHeight: height)
+        #expect(presets == expected.map { StreamResolution(width: $0.0, height: $0.1) })
     }
 
     @Test(arguments: [

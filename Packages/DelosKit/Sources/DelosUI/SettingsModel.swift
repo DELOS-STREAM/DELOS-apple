@@ -2,6 +2,10 @@ import DelosCore
 import DelosData
 import DelosInput
 import enum DelosMedia.FramePacing
+import struct DelosMedia.MetalFXSupport
+import enum DelosMedia.UpscalerMode
+import struct DelosMedia.UpscalerSizes
+import enum DelosMedia.VideoScaleMode
 import enum DelosInput.ShortcutButton
 import Foundation
 
@@ -155,21 +159,15 @@ struct StreamDevice: Equatable, Sendable {
     var pictureInPicture = false
     /// A GPU upscaler for the stream (Metal on every supported device).
     var upscaler = true
-    /// MetalFX's spatial and temporal scalers on this GPU (``DelosMedia/MetalFXSupport``); a mode without its scaler runs
-    /// as Sharpen only.
-    var metalFXSpatial = true
-    var metalFXTemporal = true
+    /// MetalFX's spatial and temporal scalers on this GPU and the temporal scaler's scale factors
+    /// (``DelosMedia/MetalFXSupport``); a mode without its scaler runs as Sharpen only. The default is a GPU with both
+    /// scalers and the temporal one up to 3×.
+    var metalFX = MetalFXSupport.scalers(spatial: true, temporal: true, temporalScale: 1...3)
     /// A PyroWave decoder.
     var pyroWave = false
 
     /// Whether the MetalFX scaler of the stored upscaler mode `value` runs here (Sharpen only needs none).
-    func metalFXRuns(_ value: String) -> Bool {
-        switch value {
-        case "standard": metalFXSpatial
-        case "temporal": metalFXTemporal
-        default: true
-        }
-    }
+    func metalFXRuns(_ value: String) -> Bool { metalFX.supports(UpscalerMode(value: value)) }
 
     /// HDR streaming needs a hardware HEVC Main10 decoder and an HDR display, both as on Android
     /// (`SettingsCapabilities`: no HDR10 display or no Main10 hides the row).
@@ -343,8 +341,8 @@ struct StreamSettingsForm: Equatable {
 
     // MARK: The values of the typed rows
 
-    /// The resolutions: the display's own (nil: Android has no such row; it is the default here), the presets, the native
-    /// ones and the custom one.
+    /// The resolutions: the display's own (nil: Android has no such row; it is the default here), the presets, the presets
+    /// in the display's aspect ratio ("1080p · 1440x1080"), the native ones and the custom one.
     var resolutionOptions: [(value: StreamResolution?, label: String)] {
         [(nil, L("settings_screen_dot_join", L("videoformat_auto"), device.defaultResolution.text))]
             + StreamChoices.resolutions(
@@ -353,6 +351,9 @@ struct StreamSettingsForm: Equatable {
             ).map { choice in
                 switch choice {
                 case .preset(let r): (r, Self.presetLabel(r) ?? r.text)
+                case .aspect(let r):
+                    (r, StreamResolution.presets.first { $0.height == r.height }.flatMap(Self.presetLabel)
+                        .map { L("settings_screen_dot_join", $0, r.text) } ?? r.text)
                 case .native(let r, let portrait, let fullscreen): (r, Self.nativeLabel(r, portrait: portrait, fullscreen: fullscreen))
                 case .custom(let r): (r, L("settings_resolution_custom", r.text))
                 }
@@ -435,6 +436,20 @@ struct StreamSettingsForm: Equatable {
     /// The resolution the next stream asks for.
     var effectiveResolution: StreamResolution { settings.resolution ?? device.defaultResolution }
 
+    /// What the upscaler works with for the next stream: its resolution on this display's whole panel, placed by the scale
+    /// mode, with this GPU's MetalFX scalers.
+    var upscalerSizePlan: UpscalerSizePlan {
+        UpscalerSizePlan(
+            stream: effectiveResolution, displayWidth: device.pixelWidth, displayHeight: device.pixelHeight,
+            scaleMode: VideoScaleMode(value: settings.text(.videoScaleMode)), support: device.metalFX)
+    }
+
+    /// The sizes the upscaler will use for the next stream with the chosen mode and supersampling level.
+    var upscalerSizes: UpscalerSizes {
+        let upscaler = settings.upscalerSettings
+        return upscalerSizePlan.sizes(mode: upscaler.mode, level: upscaler.supersamplingLevel)
+    }
+
     /// The bitrate the slider shows: the chosen one, else the default for the resolution and frame rate.
     var effectiveBitrate: Int { settings.bitrate(at: effectiveResolution) }
 
@@ -481,6 +496,8 @@ struct StreamSettingsForm: Equatable {
             row = SettingRow(
                 id: spec.id, tab: spec.tab, section: spec.section, icon: spec.icon, label: spec.label,
                 value: .toggle(spec.key.map(settings.bool) ?? false), help: details(spec, value: nil, explanation: nil))
+        case .choice where spec.id == SettingKey.upscalerSupersampling.rawValue:
+            row = supersamplingRow(spec)
         case .choice:
             let options = choices(spec)
             let current = spec.key.map(settings.text) ?? ""
@@ -536,6 +553,24 @@ struct StreamSettingsForm: Equatable {
         SettingRow(
             id: spec.id, tab: spec.tab, section: spec.section, icon: spec.icon, label: spec.label, value: .toggle(on),
             help: details(spec, value: nil, explanation: nil))
+    }
+
+    /// The supersampling levels with the size each renders at on this display ("1.33× · 3226 × 2224"; the bare factor
+    /// where that size is over the upscaler's limit), and the explanation of the chosen one for this display. The
+    /// catalog's labels and help name a 1080p display's sizes, so they are not shown; without the mode's MetalFX scaler
+    /// the row has no explanation and the note says Sharpen only runs.
+    private func supersamplingRow(_ spec: CatalogSpec) -> SettingRow {
+        let plan = upscalerSizePlan, upscaler = settings.upscalerSettings
+        let choices = allChoices(spec)
+        let current = settings.text(.upscalerSupersampling)
+        let selected = choices.firstIndex { $0.value == current }
+        let labels = choices.map { UpscalerSizeText.levelLabel(Int($0.value) ?? 1, plan: plan, mode: upscaler.mode) }
+        let label = selected.map { labels[$0] } ?? L("settings_choice_unavailable", current)
+        let explanation = UpscalerSizeText.levelHelp(upscaler.supersamplingLevel, plan: plan, mode: upscaler.mode)
+        return SettingRow(
+            id: spec.id, tab: spec.tab, section: spec.section, icon: spec.icon, label: spec.label,
+            value: .choice(label: label, options: labels, selected: selected),
+            help: details(spec, value: label, explanation: explanation, unavailable: selected == nil))
     }
 
     private func resolutionRow(_ spec: CatalogSpec) -> SettingRow {
@@ -671,7 +706,15 @@ struct StreamSettingsForm: Equatable {
             return pyro ? L("help_note_not_with_pyrowave") : nil
         case SettingKey.upscalerMode.rawValue where !device.metalFXRuns(settings.text(.upscalerMode)):
             return L("help_note_metalfx_unavailable")
+        // What the upscaler makes of the next stream on this display
+        case Self.resolution, SettingKey.upscaler.rawValue, SettingKey.upscalerMode.rawValue:
+            guard settings.bool(.upscaler), device.upscaler || pyro else { return nil }
+            return UpscalerSizeText.note(stream: effectiveResolution, sizes: upscalerSizes)
         case SettingKey.upscalerSupersampling.rawValue where settings.text(.upscalerMode) == "sharpen": return L("help_note_sharpen_only")
+        case SettingKey.upscalerSupersampling.rawValue where !device.metalFXRuns(settings.text(.upscalerMode)):
+            return L("help_note_metalfx_unavailable")
+        case SettingKey.upscalerSupersampling.rawValue where upscalerSizes.mode != .sharpen && !upscalerSizePlan.isNativeInput:
+            return L("help_note_supersampling_needs_native", UpscalerSizeText.size(upscalerSizePlan.display))
         default: return nil
         }
     }

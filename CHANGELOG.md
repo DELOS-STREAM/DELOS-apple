@@ -293,6 +293,14 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- Resolution choices on a display that is not 16:9 (iPad, iPhone, a 16:10 Mac) add the 720p, 1080p, 1440p and 4K line
+  counts in the display's own shape, for example 1440x1080 and 1920x1440 on a 13" iPad Pro, so a stream fills the panel
+  without black bars and the upscaler enlarges all of it. The 16:9 presets, Native and Custom stay.
+- Settings and the stream menu show the upscaler's real sizes for this display: the resolution, upscaler and mode rows say
+  what the stream becomes ("1440 × 1080 → 2752 × 2064"), the supersampling levels name the size they render at (or only
+  the factor where that is over the upscaler's limit) and say when the stream is not at the display's size, and the
+  statistics panel shows the stream, the upscaled size and the picture. The supersampling level's impact dims while it
+  does nothing.
 - VoiceOver: icons are no longer read as stray characters; every focusable item is one button with its texts (icon-only
   ones, the covers and the artwork tiles carry a label), double tap does what A does, a context menu is the Menu action,
   settings and stream menu rows read their value (switches On or Off) and choices and sliders adjust with a swipe up or
@@ -359,6 +367,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- On iPad the Native resolution is the whole panel (2752x2064 on a 13" iPad Pro), no longer the area inside the status bar
+  and the home indicator (2752x1960) with the panel as "Native fullscreen"; only an iPhone's notch or Dynamic Island
+  gives a fullscreen variant.
+- The stream menu no longer hides the supersampling level when a 2× that does not fit leaves the stream unsupersampled,
+  so 1.33× can be chosen again.
 - Balanced with FPS limit paced frames at the display's highest refresh rate while the PC was capped below the rate the
   display really runs (Low Power Mode, a 60 Hz mode); both now use the same rate.
 - Down from the top navigation returns to the cover the focus went up from, not to the cover under the button.

@@ -137,10 +137,14 @@ struct StreamScreen: View {
             let store = PlaytimeStore()
             return PlaytimeTracker(sink: { [hostID, appID] in store.add($0, profile: profile, hostID: hostID, appID: appID) })
         }
+        // The stream fills this display's panel: the Upscaler page names the sizes the upscaler uses on it
+        let sizePlan = UpscalerSizePlan(
+            stream: StreamResolution(width: options.streamWidth, height: options.streamHeight),
+            displayWidth: device.pixelWidth, displayHeight: device.pixelHeight, scaleMode: options.scaleMode, support: device.metalFX)
         let controller = StreamController(
             brightness: Self.deviceBrightness, statisticsOverlay: settings.statisticsOverlay, playtime: playtime,
             menuButtons: ShortcutButton.parse(settings.streamMenuButtons), menuSwipe: settings.streamMenuSwipe,
-            onScreenControls: makeOnScreenControls(), upscaler: RendererUpscaler(renderer: renderer)
+            onScreenControls: makeOnScreenControls(), upscaler: RendererUpscaler(renderer: renderer, sizePlan: sizePlan)
         ) { [hosts, hostID, appID, settings, toasts] in
             LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer) { text, kind in
                 toasts?.show(text, durationMs: ToastTiming.streamShortMs, kind: kind)

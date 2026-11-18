@@ -282,9 +282,12 @@ public struct StreamSettings: Codable, Equatable, Sendable {
 
 /// The choices Settings → Stream offers on this device (`SettingsCapabilities.choices` of DELOS for Android).
 public enum StreamChoices {
-    /// A resolution in the list: one of the presets, the display's own, or the one typed as the custom resolution.
+    /// A resolution in the list: one of the presets, a preset in the display's aspect ratio, the display's own, or the one
+    /// typed as the custom resolution.
     public enum Resolution: Hashable, Sendable {
         case preset(StreamResolution)
+        /// A preset's line count in the display's aspect ratio (``StreamChoices/aspectPresets(displayWidth:displayHeight:)``).
+        case aspect(StreamResolution)
         /// The display's resolution (`settings_resolution_native`); [portrait] on a squarish display; [fullscreen] the
         /// whole panel of a display whose safe area is smaller (`settings_resolution_native_fullscreen`).
         case native(StreamResolution, portrait: Bool, fullscreen: Bool = false)
@@ -293,7 +296,7 @@ public enum StreamChoices {
 
         public var resolution: StreamResolution {
             switch self {
-            case .preset(let r), .native(let r, _, _), .custom(let r): r
+            case .preset(let r), .aspect(let r), .native(let r, _, _), .custom(let r): r
             }
         }
     }
@@ -350,28 +353,53 @@ public enum StreamChoices {
         return .custom(min(max(Int(value.rounded()), 1), 1000), text: settings.text(.customRefreshRate))
     }
 
+    /// The line counts the display's aspect ratio repeats: those of the 720p, 1080p, 1440p and 4K presets.
+    public static let aspectPresetLines = [720, 1080, 1440, 2160]
+
+    /// How far the display's aspect ratio may be from the presets' 16:9 before it has presets of its own (2 %).
+    static let aspectTolerance = 0.02
+
+    /// The presets of a display whose aspect ratio is not 16:9 (an iPad's 4:3, a Mac's 16:10, an iPhone's 19.5:9): each
+    /// of ``aspectPresetLines`` with the width of the display's landscape aspect ratio, rounded to even, and none wider or
+    /// taller than the largest preset (3840 × 2160). Empty on a 16:9 display, whose presets are the fixed ones. A stream in
+    /// the display's shape fills it without black bars, and the upscaler enlarges all of it.
+    public static func aspectPresets(displayWidth: Int, displayHeight: Int) -> [StreamResolution] {
+        let w = max(displayWidth, displayHeight), h = min(displayWidth, displayHeight)
+        guard w > 0, h > 0, let largest = StreamResolution.presets.last else { return [] }
+        let aspect = Double(w) / Double(h)
+        guard abs(aspect / (16.0 / 9.0) - 1) > aspectTolerance else { return [] }
+        return aspectPresetLines.compactMap { lines in
+            let width = Int((Double(lines) * aspect / 2).rounded()) * 2
+            return width <= largest.width && lines <= largest.height ? StreamResolution(width: width, height: lines) : nil
+        }
+    }
+
     /// Every preset (VideoToolbox decodes 4K on every device of the minimum systems, which lifts Android's display-based
-    /// cap of the presets to 3840), then the display's resolution in landscape; on a squarish display (aspect below 1.3)
-    /// its portrait one first. Where the safe area ([safeWidth] × [safeHeight]) is smaller than the panel, the safe
-    /// area's resolution comes first and the whole panel's is the fullscreen one, as Android does for a display cutout.
-    /// Then the [custom] resolution. A value the list has already is not repeated.
+    /// cap of the presets to 3840), then the presets in the display's aspect ratio where it is not 16:9
+    /// (``aspectPresets(displayWidth:displayHeight:)``), then the display's resolution in landscape; on a squarish display
+    /// (aspect below 1.3) its portrait one first. Where the safe area ([safeWidth] × [safeHeight]) is smaller than the
+    /// panel, the safe area's resolution comes first and the whole panel's is the fullscreen one, as Android does for a
+    /// display cutout. Then the [custom] resolution. A value the list has already is not repeated.
     public static func resolutions(
         displayWidth: Int, displayHeight: Int, safeWidth: Int? = nil, safeHeight: Int? = nil, custom: StreamResolution? = nil
     ) -> [Resolution] {
-        var list = StreamResolution.presets.map(Resolution.preset)
+        var natives: [Resolution] = []
         func add(_ width: Int, _ height: Int, fullscreen: Bool) {
             let w = max(width, height), h = min(width, height)
             guard w > 0, h > 0 else { return }
             if Double(w) / Double(h) < 1.3 {
-                list.append(.native(StreamResolution(width: h, height: w), portrait: true, fullscreen: fullscreen))
+                natives.append(.native(StreamResolution(width: h, height: w), portrait: true, fullscreen: fullscreen))
             }
-            list.append(.native(StreamResolution(width: w, height: h), portrait: false, fullscreen: fullscreen))
+            natives.append(.native(StreamResolution(width: w, height: h), portrait: false, fullscreen: fullscreen))
         }
         let cutout = safeWidth.map { $0 > 0 } == true && safeHeight.map { $0 > 0 } == true
             && (safeWidth != displayWidth || safeHeight != displayHeight)
         if cutout, let safeWidth, let safeHeight { add(safeWidth & ~1, safeHeight & ~1, fullscreen: false) }
         add(displayWidth, displayHeight, fullscreen: cutout)
-        if let custom { list.append(.custom(custom)) }
+        // A display-aspect preset that is the display's own resolution keeps its Native name
+        let aspect = aspectPresets(displayWidth: displayWidth, displayHeight: displayHeight)
+            .filter { r in !natives.contains { $0.resolution == r } }.map(Resolution.aspect)
+        let list = StreamResolution.presets.map(Resolution.preset) + aspect + natives + (custom.map { [.custom($0)] } ?? [])
         return unique(list, by: \.resolution)
     }
 

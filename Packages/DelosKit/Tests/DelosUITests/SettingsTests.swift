@@ -76,7 +76,8 @@ private let iPhone = StreamDevice(pixelWidth: 1290, pixelHeight: 2796, maxFrames
         guard case let .choice(resolution, options, selected) = value("list_resolution") else { Issue.record("resolution"); return }
         #expect(resolution == "Automatic · \(display.text)")
         #expect(selected == 0)
-        #expect(options == ["Automatic · \(display.text)", "360p", "480p", "720p", "1080p", "1440p", "4K", "Native (2796x1290)"])
+        #expect(options == ["Automatic · \(display.text)", "360p", "480p", "720p", "1080p", "1440p", "4K",
+                            "720p · 1560x720", "1080p · 2340x1080", "1440p · 3122x1440", "Native (2796x1290)"])
         guard case let .choice(fps, rates, _) = value("list_fps") else { Issue.record("fps"); return }
         #expect(fps == "60 FPS")
         #expect(rates == ["30 FPS", "60 FPS", "90 FPS", "120 FPS"])

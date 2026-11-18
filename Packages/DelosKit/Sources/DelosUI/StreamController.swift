@@ -726,25 +726,38 @@ final class StreamController {
     }
 
     /// The Upscaler page (StreamMenuRoot.kt:601-631): its rows can be used only where the upscaler can run; every change
-    /// applies at once and is kept for this game.
+    /// applies at once and is kept for this game. The Enabled row says what the upscaler makes of the stream on this display,
+    /// and the supersampling levels name the size each renders at (``UpscalerSizeText``).
     private var upscalerRows: [StreamMenuRow] {
         let available = upscaler.available
         let status = upscaler.status
         let supersampling = upscaler.supersamplingMode
+        let plan = upscaler.sizePlan
+        let sizes = plan.flatMap { plan in
+            upscaler.requested ? UpscalerSizeText.note(
+                stream: plan.stream, sizes: plan.sizes(mode: upscaler.mode, level: upscaler.supersamplingLevel)) : nil
+        }
         var rows = [
             StreamMenuRow(
                 id: MenuRowID.upscalerEnabled.rawValue, icon: Symbols.upscaler, label: L("stream_menu_row_enabled"),
                 value: .toggle(upscaler.requested), enabled: available && !status.isChanging,
-                help: StreamMenuText.helpLine(status.text + "\n\n" + L(supersampling ? "stream_help_supersampling_on" : "stream_help_upscaling")),
+                help: StreamMenuText.helpLine(
+                    ([status.text] + (sizes.map { [$0] } ?? [])).joined(separator: "\n") + "\n\n"
+                        + L(supersampling ? "stream_help_supersampling_on" : "stream_help_upscaling")),
                 activate: { [self] in upscaler.setEnabled(!upscaler.requested); upscalerChanged() })
         ]
         if supersampling, upscaler.mode.scales {
             let level = min(max(upscaler.supersamplingLevel, 1), 2)
-            let options = ["1.33× (1440p)", "2× (2160p)"]
+            let options = [1, 2].map { level in
+                plan.map { UpscalerSizeText.levelLabel(level, plan: $0, mode: upscaler.mode) }
+                    ?? L(level == 2 ? "sgsr_supersampling_level_2_short" : "sgsr_supersampling_level_1_short")
+            }
+            let explanation = plan.flatMap { UpscalerSizeText.levelHelp(level, plan: $0, mode: upscaler.mode) }
             rows.append(StreamMenuRow(
                 id: MenuRowID.supersamplingQuality.rawValue, icon: Symbols.highQuality, label: L("stream_menu_row_supersampling_quality"),
                 value: .choice(label: options[level - 1], options: options, selected: level - 1), enabled: available,
-                help: L("stream_help_supersampling_quality"), activate: { [self] in setSupersampling(2) },
+                help: StreamMenuText.helpLine(([explanation].compactMap { $0 } + [L("stream_help_supersampling")]).joined(separator: "\n\n")),
+                activate: { [self] in setSupersampling(2) },
                 set: { [self] in setSupersampling($0 + 1) }, step: { [self] in setSupersampling($0 < 0 ? 1 : 2) }))
         }
         let mode = upscaler.mode

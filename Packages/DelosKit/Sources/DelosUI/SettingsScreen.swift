@@ -590,9 +590,11 @@ extension StreamDevice {
         let screen = UIScreen.main
         let size = screen.nativeBounds.size
         let fps = screen.maximumFramesPerSecond
-        // The safe area of the window in pixels: smaller than the panel around a notch or the Dynamic Island
+        // The safe area of the window in pixels: smaller than the panel around a notch or the Dynamic Island. Only an
+        // iPhone has one; an iPad's and a TV's insets are the status bar, the home indicator and overscan, which a stream
+        // covers, so their native resolution is the whole panel (Android counts a display cutout only)
         let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
-        let safe = window.map { $0.bounds.inset(by: $0.safeAreaInsets).size }
+        let safe = UIDevice.current.userInterfaceIdiom != .phone ? nil : window.map { $0.bounds.inset(by: $0.safeAreaInsets).size }
             .map { CGSize(width: $0.width * screen.nativeScale, height: $0.height * screen.nativeScale) }
         #elseif canImport(AppKit)
         let screen = NSScreen.main
@@ -611,8 +613,7 @@ extension StreamDevice {
         device.deviceMotion = DeviceHardware.motion
         device.haptics = DeviceHardware.haptics
         device.pictureInPicture = DeviceHardware.pictureInPicture
-        device.metalFXSpatial = MetalFXSupport.system.spatial
-        device.metalFXTemporal = MetalFXSupport.system.temporal
+        device.metalFX = MetalFXSupport.system
         return device
     }
 }

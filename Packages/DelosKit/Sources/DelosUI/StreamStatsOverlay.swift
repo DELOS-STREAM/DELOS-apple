@@ -61,9 +61,9 @@ struct StreamStatsOverlay: View {
                 Text(verbatim: " · \(statistics.codec)\(statistics.hdr ? " HDR" : "")")
             }
             .font(DelosFonts.figtree(stage.tpx(20), .semibold))
-            // The upscaler's target under the first line (StreamStats.kt:246-252)
-            if let scale = statistics.scaleDescription {
-                Text(verbatim: scale)
+            // The upscaler's sizes under the first line: the stream, what it reconstructs at, the picture (StreamStats.kt:246-252)
+            if let upscale = statistics.upscale {
+                Text(verbatim: UpscalerSizeText.statistics(streamWidth: statistics.width, streamHeight: statistics.height, sizes: upscale))
                     .font(DelosFonts.figtree(stage.tpx(17)))
                     .foregroundStyle(colors.text.color.opacity(0.75))
             }

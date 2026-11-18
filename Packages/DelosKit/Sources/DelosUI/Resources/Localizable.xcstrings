@@ -39005,6 +39005,71 @@
         }
       }
     },
+    "help_note_supersampling_needs_native": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supersampling platí jen pro stream ve velikosti displeje (%1$@)."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supersampling gilt nur für einen Stream in Displaygröße (%1$@)."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supersampling applies only to a stream at the display's size (%1$@)."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El supermuestreo solo se aplica a un stream del tamaño de la pantalla (%1$@)."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le supersampling ne s’applique qu’à un stream à la taille de l’écran (%1$@)."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "スーパーサンプリングはディスプレイと同じサイズ（%1$@）のストリームにのみ適用されます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "슈퍼샘플링은 디스플레이 크기(%1$@)의 스트림에만 적용돼요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O supersampling vale só para um stream do tamanho da tela (%1$@)."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Суперсемплінг діє лише для стріму розміром із дисплей (%1$@)."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "超采样仅适用于与显示屏尺寸相同（%1$@）的串流。"
+          }
+        }
+      }
+    },
     "help_note_unavailable": {
       "extractionState": "manual",
       "localizations": {
@@ -39066,6 +39131,201 @@
           "stringUnit": {
             "state": "translated",
             "value": "已保存的选项不可用"
+          }
+        }
+      }
+    },
+    "help_note_upscaler_supersamples": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler: vykreslí %1$@ v %2$@ a pak zmenší na %3$@."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler: rendert %1$@ mit %2$@ und verkleinert dann auf %3$@."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler: renders %1$@ at %2$@, then reduces it to %3$@."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escalador: renderiza %1$@ a %2$@ y luego lo reduce a %3$@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler : rend %1$@ en %2$@, puis le réduit à %3$@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アップスケーラー：%1$@を%2$@でレンダリングし、%3$@に縮小します。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "업스케일러: %1$@ 화면을 %2$@ 크기로 렌더링한 뒤 %3$@ 크기로 줄여요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler: renderiza %1$@ em %2$@ e depois reduz para %3$@."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Апскейлер: рендерить %1$@ у %2$@, а потім зменшує до %3$@."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "超分：以 %2$@ 渲染 %1$@，再缩小到 %3$@。"
+          }
+        }
+      }
+    },
+    "help_note_upscaler_unscaled": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler: %1$@ se na tomto displeji nezvětšuje (obraz %2$@)."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler: %1$@ wird auf diesem Display nicht vergrößert (Bild %2$@)."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler: %1$@ is not enlarged on this display (picture %2$@)."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escalador: %1$@ no se amplía en esta pantalla (imagen %2$@)."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler : %1$@ n’est pas agrandi sur cet écran (image %2$@)."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アップスケーラー：このディスプレイでは%1$@は拡大されません（画像 %2$@）。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "업스케일러: 이 디스플레이에서는 %1$@ 화면을 확대하지 않아요(화면 %2$@)."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler: %1$@ não é ampliado nesta tela (imagem %2$@)."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Апскейлер: %1$@ не збільшується на цьому дисплеї (зображення %2$@)."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "超分：此显示屏上不放大 %1$@（画面 %2$@）。"
+          }
+        }
+      }
+    },
+    "help_note_upscaler_upscales": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler: %1$@ → %2$@ na tomto displeji."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler: %1$@ → %2$@ auf diesem Display."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler: %1$@ → %2$@ on this display."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escalador: %1$@ → %2$@ en esta pantalla."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler : %1$@ → %2$@ sur cet écran."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アップスケーラー：このディスプレイでは%1$@ → %2$@。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "업스케일러: 이 디스플레이에서 %1$@ → %2$@."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler: %1$@ → %2$@ nesta tela."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Апскейлер: %1$@ → %2$@ на цьому дисплеї."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "超分：此显示屏上 %1$@ → %2$@。"
           }
         }
       }
@@ -40431,6 +40691,136 @@
           "stringUnit": {
             "state": "translated",
             "value": "本设备模拟游戏震动的强度。需要支持振幅控制。不影响界面触感反馈。"
+          }
+        }
+      }
+    },
+    "help_supersampling_renders": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vykresluje %1$@ v rozlišení %2$@."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rendert %1$@ mit %2$@."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renders %1$@ at %2$@."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renderiza %1$@ a %2$@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rend %1$@ en %2$@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@を%2$@でレンダリングします。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 화면을 %2$@ 크기로 렌더링해요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renderiza %1$@ em %2$@."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Рендерить %1$@ у %2$@."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以 %2$@ 渲染 %1$@。"
+          }
+        }
+      }
+    },
+    "help_supersampling_too_large": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ přesahuje limit upscaleru %2$@ pixelů: bez supersamplingu."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ überschreitet das Limit des Upscalers von %2$@ Pixeln: kein Supersampling."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ is over the upscaler's limit of %2$@ pixels: no supersampling."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ supera el límite del escalador de %2$@ píxeles: sin supermuestreo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ dépasse la limite de l’upscaler de %2$@ pixels : pas de supersampling."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@はアップスケーラーの上限%2$@ピクセルを超えるため、スーパーサンプリングしません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 크기는 업스케일러 한도인 %2$@ 픽셀을 넘어서 슈퍼샘플링하지 않아요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ ultrapassa o limite do upscaler de %2$@ pixels: sem supersampling."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ перевищує ліміт апскейлера %2$@ пікселів: без суперсемплінгу."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 超过超分上限 %2$@ 像素：不进行超采样。"
           }
         }
       }
@@ -76059,6 +76449,71 @@
         }
       }
     },
+    "sgsr_supersampling_level_1_short": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1,33×"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1.33×"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1.33×"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1,33×"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1,33×"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1.33×"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1.33×"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1,33×"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1.33×"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1.33×"
+          }
+        }
+      }
+    },
     "sgsr_supersampling_level_2": {
       "extractionState": "manual",
       "localizations": {
@@ -76120,6 +76575,71 @@
           "stringUnit": {
             "state": "translated",
             "value": "2×（2160p）"
+          }
+        }
+      }
+    },
+    "sgsr_supersampling_level_2_short": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2×"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2×"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2×"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2×"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2×"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2×"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2×"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2×"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2×"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2×"
           }
         }
       }
@@ -84078,71 +84598,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "以更大的内部尺寸渲染。会占用 GPU 时间。"
-          }
-        }
-      }
-    },
-    "stream_help_supersampling_quality": {
-      "extractionState": "manual",
-      "localizations": {
-        "cs": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pro 1080p: 1,33× vykresluje v 2560 × 1440, 2× v 3840 × 2160 a stojí víc času GPU a paměti."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Für 1080p: 1,33× rendert mit 2560 × 1440, 2× mit 3840 × 2160 und kostet mehr GPU-Zeit und Speicher."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "For 1080p: 1.33× renders at 2560 × 1440, 2× at 3840 × 2160 and costs more GPU time and memory."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Para 1080p: 1,33× renderiza a 2560 × 1440, 2× a 3840 × 2160 y consume más tiempo de GPU y memoria."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pour le 1080p : 1,33× rend en 2560 × 1440, 2× en 3840 × 2160 et coûte plus de GPU et de mémoire."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "1080pの場合：1.33×は2560 × 1440、2×は3840 × 2160でレンダリングし、GPU時間とメモリをより多く消費します。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "1080p 기준: 1.33×는 2560 × 1440, 2×는 3840 × 2160으로 렌더링하며 GPU 시간과 메모리를 더 써요."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Para 1080p: 1,33× renderiza em 2560 × 1440, 2× em 3840 × 2160 e custa mais tempo de GPU e memória."
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Для 1080p: 1.33× рендерить у 2560 × 1440, 2× — у 3840 × 2160 і більше навантажує GPU та пам’ять."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "对于 1080p：1.33× 渲染为 2560 × 1440，2× 渲染为 3840 × 2160，并占用更多 GPU 时间和显存。"
           }
         }
       }

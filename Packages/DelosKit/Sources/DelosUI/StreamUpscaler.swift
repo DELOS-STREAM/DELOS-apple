@@ -63,10 +63,13 @@ protocol UpscalerControl: AnyObject {
     /// The player asked for the upscaler (`checkbox_sgsr`, or the page's Enabled switch).
     var requested: Bool { get }
     var status: UpscalerStatus { get }
-    /// The stream already matches the display, so the upscaler supersamples (the tile and page say Supersampling).
+    /// The upscaler supersamples, or would: the stream already matches the display and a level fits (the tile and page say
+    /// Supersampling).
     var supersamplingMode: Bool { get }
     /// 1 (1.33×) or 2 (2×).
     var supersamplingLevel: Int { get }
+    /// What the upscaler works with on this display, for the sizes the page shows; nil where nothing is upscaled.
+    var sizePlan: UpscalerSizePlan? { get }
     var mode: UpscalerMode { get }
     /// The final sharpening, 0 … 100.
     var sharpness: Int { get }
@@ -87,15 +90,17 @@ final class RendererUpscaler: UpscalerControl {
     private(set) var settings: UpscalerSettings
     private(set) var status: UpscalerStatus
     private(set) var supersamplingMode: Bool
+    let sizePlan: UpscalerSizePlan?
 
     /// The renderer was made with the stream's upscaler settings (``StreamSettings/videoRenderOptions``); the Metal renderer
-    /// runs the upscaler, the display layer cannot.
-    init(renderer: any VideoRenderer) {
+    /// runs the upscaler, the display layer cannot. [sizePlan] is the stream on this display.
+    init(renderer: any VideoRenderer, sizePlan: UpscalerSizePlan? = nil) {
         self.renderer = renderer
         available = renderer is MetalRenderer
         settings = renderer.upscalerSettings
         status = renderer.upscalerStatus
-        supersamplingMode = renderer.isSupersampling
+        self.sizePlan = sizePlan
+        supersamplingMode = Self.supersampling(renderer, plan: sizePlan, mode: renderer.upscalerSettings.mode)
     }
 
     var requested: Bool { settings.enabled }
@@ -112,8 +117,15 @@ final class RendererUpscaler: UpscalerControl {
     func refresh() {
         let now = renderer.upscalerStatus
         if now != status { status = now }
-        let supersampling = renderer.isSupersampling
+        let supersampling = Self.supersampling(renderer, plan: sizePlan, mode: settings.mode)
         if supersampling != supersamplingMode { supersamplingMode = supersampling }
+    }
+
+    /// Supersampling as the menu names it (`isSupersamplingMode`): the renderer supersamples now, or a scaling mode would,
+    /// because the stream already has the picture's size and a level fits. A 2× that does not fit draws without
+    /// supersampling, and the level row stays to choose the 1.33× that does.
+    private static func supersampling(_ renderer: any VideoRenderer, plan: UpscalerSizePlan?, mode: UpscalerMode) -> Bool {
+        renderer.isSupersampling || (mode.scales && plan?.supersamples(mode: mode) == true)
     }
 
     private func change(_ edit: (inout UpscalerSettings) -> Void) {
@@ -133,6 +145,7 @@ final class NoUpscaler: UpscalerControl {
     var status: UpscalerStatus { .off }
     var supersamplingMode: Bool { false }
     var supersamplingLevel: Int { 1 }
+    var sizePlan: UpscalerSizePlan? { nil }
     var mode: UpscalerMode { .spatial }
     var sharpness: Int { 50 }
     func setEnabled(_ on: Bool) {}

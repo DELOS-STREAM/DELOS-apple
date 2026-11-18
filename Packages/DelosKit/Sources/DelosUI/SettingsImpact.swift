@@ -30,11 +30,16 @@ struct ImpactContext: Equatable {
     var hdr: Bool
     /// The stored value of the frame pacing (`latency`, `balanced`, `cap-fps`, `smoothness`, `warp`, `warp2`).
     var pacing: String
-    /// The upscaler (`checkbox_sgsr`), its mode (`list_sgsr_quality`), sharpness and 2x supersampling.
+    /// The upscaler (`checkbox_sgsr`), its mode (`list_sgsr_quality`) and sharpness.
     var upscaler = false
     var mode = "standard"
     var sharpness = 50
+    /// The next stream is supersampled on this display, and at 2× (the planned sizes, ``UpscalerSizePlan``): the level
+    /// row does nothing otherwise.
+    var supersampling = false
     var twoTimes = false
+    /// The upscaler reconstructs more pixels than 2560 × 1440, the output of the 1.33× level from 1080p.
+    var largeOutput = false
     /// PyroWave's recommended bitrate in kbps for these settings, nil without PyroWave.
     var pyroKbps: Int?
 
@@ -124,6 +129,8 @@ func settingImpact(id: String, context c: ImpactContext) -> SettingImpact? {
     case SettingKey.upscalerSupersampling.rawValue:
         guard c.upscaler else { return .quiet }
         guard c.mode != "sharpen" else { return nil }
+        // A stream that is not at the display's size, or a level over the upscaler's limit, is not supersampled
+        guard c.supersampling else { return .quiet }
         return c.temporal ? temporalImpact(c) : SettingImpact(gpu: c.twoTimes ? .medium : .low, latency: .low, network: .none)
     default:
         return nil
@@ -148,10 +155,10 @@ private func upscalerMode(_ c: ImpactContext) -> SettingImpact {
 }
 
 /// MetalFX Temporal: the video's optical flow and the temporal scaler, unmeasured, so a qualitative Medium GPU cost, High
-/// at 2× supersampling or above 60 FPS (more pixels, or a shorter frame period); the GPU work sits in each frame's path
-/// (latency Medium).
+/// at 2× supersampling, for an output larger than 2560 × 1440 or above 60 FPS (more pixels, or a shorter frame period);
+/// the GPU work sits in each frame's path (latency Medium).
 private func temporalImpact(_ c: ImpactContext) -> SettingImpact {
-    SettingImpact(gpu: c.twoTimes || c.fps > 60 ? .high : .medium, latency: .medium, network: .none)
+    SettingImpact(gpu: c.twoTimes || c.largeOutput || c.fps > 60 ? .high : .medium, latency: .medium, network: .none)
 }
 
 extension StreamSettingsForm {
@@ -163,7 +170,10 @@ extension StreamSettingsForm {
         c.upscaler = settings.bool(.upscaler)
         c.mode = settings.text(.upscalerMode)
         c.sharpness = settings.int(.upscalerSharpness)
-        c.twoTimes = settings.text(.upscalerSupersampling) == "2"
+        let sizes = upscalerSizes
+        c.supersampling = sizes.isSupersampling
+        c.twoTimes = sizes.isSupersampling && settings.upscalerSettings.supersamplingLevel >= 2
+        c.largeOutput = sizes.internalWidth * sizes.internalHeight > 2560 * 1440
         c.pyroKbps = settings.pyroWaveRecommendedKbps(displayResolution: device.defaultResolution)
         return c
     }
