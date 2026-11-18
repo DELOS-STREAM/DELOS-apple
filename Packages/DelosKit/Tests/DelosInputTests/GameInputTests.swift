@@ -267,3 +267,56 @@ private final class Record {
         if case let .mouseMove(dx, dy) = sink.sent.first { #expect(dx > 0 && dy == 0) } else { Issue.record("no mouse move") }
     }
 }
+
+/// The Delos full keyboard's keys (``GameInput/sendVirtualKey(_:pressed:)``) and its hold on the controllers.
+@MainActor
+@Suite struct GameInputFullKeyboardTests {
+    private func snapshot(_ change: (inout GamepadSnapshot) -> Void) -> GamepadSnapshot {
+        var snapshot = GamepadSnapshot()
+        change(&snapshot)
+        return snapshot
+    }
+
+    @Test func aKeyboardModifierThatIsDownCarriesOverToEveryKeyAndBackToTheHardwareKeyboard() {
+        let sink = EventSink()
+        let input = GameInput(sink: sink) {}
+        input.sendVirtualKey(VirtualKey.leftShift, pressed: true)
+        input.sendVirtualKey(0x41, pressed: true)
+        input.sendVirtualKey(0x41, pressed: false)
+        // A key of the hardware keyboard while the on-screen Shift is latched
+        input.key(0x05, pressed: true)
+        input.sendVirtualKey(VirtualKey.leftShift, pressed: false)
+        input.sendVirtualKey(0x41, pressed: true)
+        #expect(sink.keys.map(\.modifiers) == [.shift, .shift, .shift, .shift, .shift, []])
+        #expect(sink.keys[4] == (KeyboardMapping.keyCode(VirtualKey.leftShift), false, KeyModifiers.shift))
+    }
+
+    @Test func whileCapturedTheControllerGoesToTheKeyboardAndThePCGetsANeutralState() {
+        let sink = EventSink()
+        let input = GameInput(sink: sink) {}
+        let pad = GCController.withExtendedGamepad()
+        input.attach(pad)
+        let id = ObjectIdentifier(pad)
+        input.send(snapshot { $0.a = true }, from: id)
+        sink.clear()
+        var seen: [(GamepadSnapshot, GamepadSnapshot)] = []
+        input.padCapture = { seen.append(($0, $1)) }
+        #expect(sink.states == [ControllerState()])
+        input.send(snapshot { $0.b = true }, from: id)
+        #expect(sink.states == [ControllerState()], "nothing more reached the PC")
+        #expect(seen.count == 1 && seen[0].0.a && seen[0].1.b)
+        input.padCapture = nil
+        #expect(sink.states == [ControllerState(), ControllerState()])
+        input.send(snapshot { $0.y = true }, from: id)
+        #expect(sink.states.last == ControllerState(buttons: [.y]))
+    }
+
+    @Test func aSuspendedMouseLetsGoOfItsButtonsAndSendsNothing() {
+        let sink = EventSink()
+        let input = GameInput(sink: sink) {}
+        input.mouseButton(.left, pressed: true)
+        input.mouseSuspended = true
+        input.mouseButton(.right, pressed: true)
+        #expect(sink.sent == [.mouseButton(.left, true), .mouseButton(.left, false)])
+    }
+}

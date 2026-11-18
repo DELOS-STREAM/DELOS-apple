@@ -71,6 +71,8 @@ public final class GameInput {
     private var keyOrder: [Int] = []
     /// The keys physically down, sent or not (the stream menu's recorded keys).
     private var keysDown: Set<Int> = []
+    /// The keys of the Delos full keyboard down at the PC (``sendVirtualKey(_:pressed:)``), in the order they went down.
+    private var virtualKeysDown: [UInt8] = []
     private var heldMouseButtons: Set<MouseButton> = []
     private var mouseRemainder = (x: 0.0, y: 0.0)
     private var scrollRemainder = (x: 0.0, y: 0.0)
@@ -206,6 +208,32 @@ public final class GameInput {
             releaseAll()
             deviceHaptics.stop()
             pads.values.forEach { $0.haptics.stop() }
+        }
+    }
+
+    /// While set (the Delos full keyboard is up) the controllers drive it instead of the PC (`setInputSuspended` of
+    /// DELOS for Android's `ControllerHandler`): every reading goes here as the controller's previous and new snapshot,
+    /// and the PC's controllers get a neutral state, so what was held comes up there. The stream menu's shortcut and a tap
+    /// of Home still open the menu (Android checks them before the keyboard); Guide, Start's hold and the mouse emulation
+    /// do nothing meanwhile. Setting it to nil gives the controllers back, again from a neutral state.
+    public var padCapture: (@MainActor (_ old: GamepadSnapshot, _ new: GamepadSnapshot) -> Void)? {
+        didSet {
+            guard (oldValue == nil) != (padCapture == nil) else { return }
+            pads.values.forEach { $0.forgetGestures() }
+            for pad in pads.values { pad.state = ControllerState() }
+            for number in Set(pads.values.map(\.number) + (onScreen == nil ? [] : [0])) {
+                try? sink.sendController(number: number, activeGamepadMask: activeMask, state: ControllerState())
+            }
+        }
+    }
+
+    /// While true the mouse is the system's pointer (it clicks the Delos full keyboard's keys) and none of it reaches the
+    /// PC; a button down at the PC comes up there.
+    public var mouseSuspended = false {
+        didSet {
+            guard mouseSuspended, !oldValue else { return }
+            for button in heldMouseButtons { try? sink.sendMouseButton(button, pressed: false) }
+            heldMouseButtons.removeAll()
         }
     }
 
@@ -533,12 +561,13 @@ public final class GameInput {
 
     func send(_ snapshot: GamepadSnapshot, from id: ObjectIdentifier) {
         guard let pad = pads[id] else { return }
+        let previous = pad.last
         pad.last = snapshot
         var state = GamepadMapping.state(snapshot, options: options)
         let (swallowed, open) = updateShortcut(pad: ShortcutButton.pressed(snapshot), from: id)
         ShortcutButton.remove(swallowed, from: &state, flippedFaceButtons: options.flipFaceButtons)
         home(snapshot.home && !swallowed.contains(.home), on: pad, id: id)
-        startButton(snapshot.menu && !swallowed.contains(.start), on: pad)
+        startButton(snapshot.menu && !swallowed.contains(.start) && padCapture == nil, on: pad)
         // Home reaches the PC only as Guide, once it was held
         state.buttons.remove(.special)
         if pad.guide.isGuideDown { state.buttons.insert(.special) }
@@ -546,6 +575,12 @@ public final class GameInput {
         pad.state = state
         if open { onMenu() }
         guard !paused else { return }
+        if let padCapture {
+            // The keyboard has the controller: the PC keeps the neutral state it got, the mouse emulation stands still
+            pad.state = ControllerState()
+            padCapture(previous, snapshot)
+            return
+        }
         if !pad.announced { announce(pad) }
         if pad.emulation != nil {
             emulateMouse(pad)
@@ -833,7 +868,7 @@ public final class GameInput {
         }
         try? sink.sendKey(
             code: KeyboardMapping.keyCode(vk), pressed: pressed,
-            modifiers: KeyboardMapping.modifiers(held: heldKeys, rightAltAsMeta: rightAltAsMeta), nonNormalized: false)
+            modifiers: KeyboardMapping.modifiers(held: heldKeys, rightAltAsMeta: rightAltAsMeta).union(virtualModifiers), nonNormalized: false)
     }
 
     /// Control + Alt + Shift + Z toggles the grab a moment later (Android's `toggleInputGrabLater`, 250 ms) and tells the
@@ -928,7 +963,7 @@ public final class GameInput {
     }
 
     private func mouseMoved(dx: Double, dy: Double) {
-        guard !paused, inputGrabbed else { return }
+        guard !paused, inputGrabbed, !mouseSuspended else { return }
         // GameController's y grows upwards, the host's downwards
         mouseRemainder.x += dx / Self.mouseSpeedDivisor
         mouseRemainder.y -= dy / Self.mouseSpeedDivisor
@@ -942,7 +977,7 @@ public final class GameInput {
 
     func mouseButton(_ button: MouseButton, pressed: Bool) {
         if pressed {
-            guard !paused, inputGrabbed else { return }
+            guard !paused, inputGrabbed, !mouseSuspended else { return }
             heldMouseButtons.insert(button)
         } else {
             guard heldMouseButtons.remove(button) != nil else { return }
@@ -951,7 +986,7 @@ public final class GameInput {
     }
 
     private func scrolled(x: Double, y: Double) {
-        guard !paused, inputGrabbed else { return }
+        guard !paused, inputGrabbed, !mouseSuspended else { return }
         scrollRemainder.x += x
         scrollRemainder.y += y
         let h = Int(scrollRemainder.x.rounded(.towardZero)), v = Int(scrollRemainder.y.rounded(.towardZero))
@@ -1006,6 +1041,23 @@ public final class GameInput {
     /// The on-screen keyboard's Backspace.
     public func backspace() {
         send(KeyCombo([VirtualKey.backspace]))
+    }
+
+    /// A key of the Delos full keyboard (a Windows virtual key) goes down or up at the PC. The modifiers it carries are the
+    /// keyboard's own that are down (latched or held), and the hardware keyboard's (`StreamKeyHandler`'s one modifier
+    /// state of DELOS for Android, which every key event updates).
+    public func sendVirtualKey(_ key: UInt8, pressed: Bool) {
+        if pressed, !virtualKeysDown.contains(key) { virtualKeysDown.append(key) }
+        // A modifier carries itself in its release too, like ``KeyCombo``
+        let modifiers = virtualModifiers.union(KeyCombo.modifier(of: key))
+            .union(KeyboardMapping.modifiers(held: heldKeys, rightAltAsMeta: options.rightAltAsMeta))
+        if !pressed { virtualKeysDown.removeAll { $0 == key } }
+        try? sink.sendKey(code: KeyboardMapping.keyCode(key), pressed: pressed, modifiers: modifiers, nonNormalized: false)
+    }
+
+    /// The modifiers of the Delos full keyboard that are down at the PC.
+    private var virtualModifiers: KeyModifiers {
+        virtualKeysDown.reduce(into: []) { $0.formUnion(KeyCombo.modifier(of: $1)) }
     }
 
     /// Runs the host's server command [index] (its position in the host's list).
