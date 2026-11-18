@@ -676,11 +676,34 @@ holding Escape for a second (`MenuKeyShortcut`, [the Mac app](#the-mac-app)).
 While it is open, `GameInput` sends nothing and releases every held button, key and mouse button at the PC.
 When the app goes to the background during a stream, iOS suspends it and the connection would break; the stream is
 closed at once instead (as Disconnect: the game keeps running on the PC), the loader shows, and on return the same game
-is resumed with a new connection (`StreamController.enteredBackground` / `returnedToForeground`).
+is resumed with a new connection (`StreamController.enteredBackground` / `returnedToForeground`), unless Picture in
+Picture keeps it ([below](#picture-in-picture)).
 Each attempt (the first, the return from the background, Try again) has an identity: what an ended attempt reports or
 returns afterwards (a launch that fails late, a connect that completes late, queued events) is ignored. A new attempt
 launches only once the previous one has stopped, since the core runs one connection at a time; leaving uses the steps
 of the attempt that ran.
+
+### Picture in Picture
+
+Settings → Appearance → Enable Picture-in-Picture observer mode (`checkbox_enable_pip`, Android's
+`StreamWindowController` PiP) on iPhone and iPad: when the app leaves during a stream, the stream keeps playing in the
+system's Picture in Picture window and nothing reaches the PC. The row is shown only where
+`AVPictureInPictureController.isPictureInPictureSupported()` (`DeviceHardware.pictureInPicture`); the Mac (a window behind
+the others keeps streaming) and Apple TV have no automatic start (`canStartPictureInPictureAutomaticallyFromInline` is
+iOS only), so they do not show it.
+
+| Part | What it does |
+|---|---|
+| `PictureInPictureVideo` (DelosMedia) | Made by `StreamScreen` only with the setting on: the stream's renderer plus the `AVSampleBufferDisplayLayer` AVKit shows (a sample buffer display layer is its only custom content source). With the Metal renderer the layer lies under the Metal layer in `VideoHostView` and shows every picture VideoToolbox decoded for Metal (`MetalRenderer.observeDecoded`, `DisplayLayerRenderer.show(decoded:)`: no second decode), so the system has a playing layer to take when the app leaves. From the window's start until it starts to stop, the compressed frames go to the layer instead, which decodes them with the system's decoder (Metal and VideoToolbox's hardware do not work in the background); then they go back to Metal. `PictureInPictureRoute` refuses frames until the new target's key frame, which `VideoOutput` turns into an IDR request, and the layer keeps its last picture meanwhile (`flushKeepingPicture`). With the display layer renderer its own layer is the content and nothing is rerouted. The presentation counters are the current target's |
+| `StreamPictureInPicture` (DelosUI, iOS) | `AVPictureInPictureController(contentSource: .init(sampleBufferDisplayLayer:playbackDelegate:))`: a live source (no seeking, never paused, an infinite time range, linear playback). `canStartPictureInPictureAutomaticallyFromInline` follows `StreamController.pictureInPictureMayStart` (the stream runs) on the device's own screen only (Android turns PiP off on an external display); turned off, a window that shows the stream closes. Back in the app, a window still up is closed. It reports `PictureInPictureEvent`: starting, failed, stopped (restored from its restore button or not) |
+| `StreamController.pictureInPicture(_:)` | Starting: the observer mode. The menu, the full keyboard and the system keyboard close, `GameInput` is paused (every held button, key and mouse button comes up at the PC, rumble stops), the on-screen controls and the touches are released, the brightness is the system's. `enteredBackground` then keeps the connection; while the window may still come it waits `pictureInPictureGrace` (2 s) before it closes the stream as usual. Closed from its own button while the app is away, or failed, the stream is closed as without it (the return connects again). Restored, or back in the app: the input (unless the menu or the launch scene has it) and the chosen brightness come back, on the same connection |
+
+The audio session is already `.playback`; `UIBackgroundModes` `audio` (Config/Info.plist) keeps the app, its audio and
+its connection running while the window shows the stream. Without the window the stream is closed when the app leaves,
+nothing plays, and the system suspends the app as before. Tests: `PictureInPictureRouteTests`,
+`PictureInPictureVideoTests` (the routing with real H.264 frames), `StreamPictureInPictureTests` (when it may start, the
+input off, the grace, the restore and the close). Not verified on a device: the automatic start with the layer under the
+Metal layer, the system's decoding in the background, the restore animation and the background audio.
 
 ### Live bitrate and clipboard
 

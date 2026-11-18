@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-Keys of the app's Info.plist that build settings cannot express: arrays (NSBonjourServices) and keys without an
+Keys of the app's Info.plist that build settings cannot express: arrays (NSBonjourServices, UIBackgroundModes) and keys without an
 INFOPLIST_KEY_* setting (CADisableMinimumFrameDurationOnPhone: ProMotion iPhones show more than 60 frames per second
 only with it; GCSupportsGameMode: the system's Game Mode, which lowers background activity and Bluetooth
 latency of controllers and headphones while DELOS is in front), and what DELOS opens from outside: art:// links
-(CFBundleURLTypes) and .art shortcut files (CFBundleDocumentTypes with their imported type, read in place). Xcode merges
+(CFBundleURLTypes) and .art shortcut files (CFBundleDocumentTypes with their imported type, read in place).
+UIBackgroundModes audio: while Picture in Picture shows a stream on iPhone and iPad, the app keeps running in the
+background with the stream's audio and its connection (StreamController.pictureInPicture); without the window the stream
+is closed when the app leaves, so nothing plays and the system suspends the app as before. Xcode merges
 this file with the keys it generates from the INFOPLIST_KEY_* settings in Shared.xcconfig (GENERATE_INFOPLIST_FILE = YES).
 -->
 <plist version="1.0">
@@ -21,6 +24,10 @@ this file with the keys it generates from the INFOPLIST_KEY_* settings in Shared
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_nvstream._tcp</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
 	</array>
 	<key>CFBundleURLTypes</key>
 	<array>

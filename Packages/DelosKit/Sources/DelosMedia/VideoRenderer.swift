@@ -85,6 +85,8 @@ public final class DisplayLayerRenderer: VideoRenderer {
     private let options: Mutex<VideoRenderOptions>
     private let frameTimes = Mutex(FrameTimes())
     private let vrr = Mutex(false)
+    /// The description of the decoded pictures ``show(decoded:)`` was given last.
+    private let decodedFormat = Mutex<CMVideoFormatDescription?>(nil)
 
     public var name: String { "AVSampleBufferDisplayLayer" }
 
@@ -183,6 +185,33 @@ public final class DisplayLayerRenderer: VideoRenderer {
     public func flush() {
         renderer.flush()
         pacer.withLock { $0.reset() }
+    }
+
+    /// Drops the frames waiting to be shown but keeps the picture on screen until the next one: Picture in Picture's
+    /// window does not go black while its source changes (``PictureInPictureVideo``).
+    public func flushKeepingPicture() {
+        renderer.flush(removingDisplayedImage: false, completionHandler: nil)
+        pacer.withLock { $0.reset() }
+    }
+
+    /// Shows a picture another renderer decoded (VideoToolbox's, from ``MetalRenderer``) at once, without decoding it again.
+    /// Called on the decoder's thread.
+    public func show(decoded pixelBuffer: CVPixelBuffer) {
+        let format = decodedFormat.withLock { format -> CMVideoFormatDescription? in
+            if let current = format, CMVideoFormatDescriptionMatchesImageBuffer(current, imageBuffer: pixelBuffer) { return current }
+            format = try? CMVideoFormatDescription(imageBuffer: pixelBuffer)
+            return format
+        }
+        let timing = CMSampleTimingInfo(duration: .invalid, presentationTimeStamp: CMClockGetTime(CMClockGetHostTimeClock()), decodeTimeStamp: .invalid)
+        guard let format, let sample = try? CMSampleBuffer(imageBuffer: pixelBuffer, formatDescription: format, sampleTiming: timing) else { return }
+        if let attachments = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: true), CFArrayGetCount(attachments) > 0 {
+            let first = unsafeBitCast(CFArrayGetValueAtIndex(attachments, 0), to: CFMutableDictionary.self)
+            CFDictionarySetValue(
+                first, Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(),
+                Unmanaged.passUnretained(kCFBooleanTrue).toOpaque())
+        }
+        if renderer.status == .failed { renderer.flush() }
+        renderer.enqueue(sample)
     }
 
     /// The system's own counters: frames it handled (shown and dropped), the dropped ones, and how late the shown ones

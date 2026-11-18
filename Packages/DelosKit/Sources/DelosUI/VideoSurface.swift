@@ -32,6 +32,10 @@ struct VideoSurface {
     var onBackspace: @MainActor () -> Void = {}
     /// The system took the keyboard away (its own hide button).
     var onKeyboardHidden: @MainActor () -> Void = {}
+    /// Picture in Picture may take the stream when the app leaves (iPhone and iPad, with a ``PictureInPictureVideo``
+    /// renderer), and what its window did.
+    var pictureInPicture = false
+    var onPictureInPicture: @MainActor (PictureInPictureEvent) -> Void = { _ in }
 }
 
 #if canImport(UIKit)
@@ -68,6 +72,7 @@ extension VideoSurface: UIViewRepresentable {
         view.setKeyboard(keyboard)
         #if os(iOS)
         view.capturesPointer = capturesPointer
+        view.setPictureInPicture(pictureInPicture, onEvent: onPictureInPicture)
         #endif
     }
 }
@@ -136,6 +141,9 @@ final class VideoHostView: UIView {
     /// Hides the pointer over the video when iPadOS refused the lock (``PointerLock/hidesPointer``).
     private lazy var pointerStyle = UIPointerInteraction(delegate: self)
     private var sceneObservers: [NSObjectProtocol] = []
+    /// Picture in Picture over the renderer's layer for it (``PictureInPictureVideo``); nil without one.
+    private var pictureInPicture: StreamPictureInPicture?
+    private var pictureInPictureWanted = false
     #endif
 
     init(renderer: any VideoRenderer) {
@@ -148,6 +156,11 @@ final class VideoHostView: UIView {
         KeyboardTileLog.observeSystem()
         // The pencil hovering above the screen, and the system pointer while the local pointer is shown
         addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hovered)))
+        // Picture in Picture's layer lies under the stream's own (the Metal layer) and shows the same pictures
+        if let video = renderer as? PictureInPictureVideo {
+            if !video.sharesLayer { layer.addSublayer(video.contentLayer) }
+            pictureInPicture = StreamPictureInPicture(video: video)
+        }
         #endif
         layer.addSublayer(renderer.hostLayer)
     }
@@ -267,6 +280,10 @@ final class VideoHostView: UIView {
         super.layoutSubviews()
         renderer.resize(to: bounds, scale: window?.windowScene?.screen.nativeScale ?? contentScaleFactor)
         applyZoom()
+        #if os(iOS)
+        // Fully External Display Mode moves the window to another scene, which lays the view out again
+        applyPictureInPicture()
+        #endif
         // Not inside the layout pass: the stream measures its touches against the new size
         let area = touchArea
         Task { @MainActor [onLayout] in onLayout(area) }
@@ -312,6 +329,7 @@ final class VideoHostView: UIView {
         // The keyboard was asked for before the view had a window
         if window != nil { raiseKeyboard(retries: Self.raiseRetries) }
         followScene()
+        applyPictureInPicture()
         #endif
         refreshLink?.invalidate()
         refreshLink = nil
@@ -425,6 +443,23 @@ extension VideoHostView: UIKeyInput, UITextInputTraits {
 
     func deleteBackward() {
         onBackspace()
+    }
+}
+
+// MARK: Picture in Picture (iPhone and iPad)
+
+extension VideoHostView {
+    /// [wanted]: the stream may be taken into Picture in Picture now (``StreamController/pictureInPictureMayStart``).
+    func setPictureInPicture(_ wanted: Bool, onEvent: @escaping @MainActor (PictureInPictureEvent) -> Void) {
+        pictureInPicture?.onEvent = onEvent
+        pictureInPictureWanted = wanted
+        applyPictureInPicture()
+    }
+
+    /// Only on this device's own screen: a stream shown on another display stays there (Android turns PiP off on an
+    /// external display).
+    private func applyPictureInPicture() {
+        pictureInPicture?.allowed = pictureInPictureWanted && window?.windowScene?.session.role == .windowApplication
     }
 }
 

@@ -27,7 +27,7 @@ LD_RUNPATH_SEARCH_PATHS[sdk=macosx*] = $(inherited) @executable_path/../Framewor
 CODE_SIGN_STYLE = Automatic
 
 GENERATE_INFOPLIST_FILE = YES
-// Arrays (NSBonjourServices) and keys without an INFOPLIST_KEY_* setting (CADisableMinimumFrameDurationOnPhone) cannot
+// Arrays (NSBonjourServices, UIBackgroundModes) and keys without an INFOPLIST_KEY_* setting (CADisableMinimumFrameDurationOnPhone) cannot
 // be written here; they are in this partial plist.
 INFOPLIST_FILE = Config/Info.plist
 INFOPLIST_KEY_NSLocalNetworkUsageDescription = DELOS uses the local network to find your gaming PC and stream from it.
