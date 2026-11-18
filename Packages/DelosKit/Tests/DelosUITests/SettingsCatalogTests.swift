@@ -41,25 +41,36 @@ import Testing
         "checkbox_ignore_synth_events", "pref_debug_info",
     ]
 
+    /// Android rows DELOS for Apple removed: no meaning on Apple (landscape only, no PyroWave 4:4:4, layout-independent
+    /// HID keys, no drag-and-drop haptics, MediaCodec-only decoder options), or the on-screen virtual keys that are not
+    /// ported yet.
+    static let removedOnApple: Set<String> = [
+        "pref_low_latency_frame_balance", "checkbox_ultra_low_latency",
+        "checkbox_auto_orientation", "checkbox_auto_invert_video_resolution", "list_pyrowave_chroma",
+        "checkbox_trackpad_drag_drop_vibration", "seekbar_trackpad_drag_drop_threshold", "checkbox_force_qwerty",
+        "checkbox_enable_keyboard", "keyboard_axi_list", "checkbox_enable_keyboard_square", "option_reset_osc",
+        "import_keyboard_file", "export_keyboard_file",
+    ]
+
     @Test func everyAndroidKeyIsInTheCatalogInAndroidsOrder() {
-        let expected = Self.androidXMLKeys.filter { !Self.notApplicable.contains($0) }
+        let expected = Self.androidXMLKeys.filter { !Self.notApplicable.contains($0) && !Self.removedOnApple.contains($0) }
         #expect(SettingsCatalog.all.map(\.id) == expected)
+        #expect(Self.removedOnApple.allSatisfy { SettingKey(rawValue: $0) == nil })
     }
 
     @Test func everyStoredKeyHasAndroidsDefault() {
         let defaults: [SettingKey: StoredSetting] = [
             .meteredBitrate: .int(0), .asyncDecode: .bool(false), .upscaler: .bool(false), .upscalerMode: .text("standard"),
-            .upscalerSharpness: .int(50), .upscalerSupersampling: .text("1"), .autoInvertVideoResolution: .bool(true),
+            .upscalerSharpness: .int(50), .upscalerSupersampling: .text("1"),
             .resolutionScaleFactor: .int(100), .videoScaleMode: .text("fit"), .vrr: .text("auto"),
             .customResolution: .text("1920x1080"), .customBitrate: .text("20"), .customRefreshRate: .text("59.94"),
             .audioConfiguration: .text("2"), .deadzone: .int(5), .multiController: .bool(true), .mouseEmulation: .bool(true),
             .analogScrolling: .text("right"), .gamepadMotionSensors: .bool(true), .gyroSmoothing: .int(0),
-            .gamepadEnableBatteryReport: .bool(true), .touchMode: .text("0"), .forceQwerty: .bool(true),
+            .gamepadEnableBatteryReport: .bool(true), .touchMode: .text("0"),
             .smartClipboardSyncToast: .bool(true), .hideClipboardContent: .bool(true), .keyboardOpacity: .int(90),
             .onscreenKeyboardHeight: .int(200), .onscreenKeyboardWidth: .int(1000), .onscreenKeyboardAlignMode: .text("center"),
-            .enableStickyModifierKeyVirtualKeyboard: .bool(true), .oscOpacity: .int(90), .keyLayout: .text("OSC_Keyboard"),
-            .pyrowaveChroma: .text("420"), .statsPosition: .text("TOP_LEFT"),
-            .trackpadDragDropThreshold: .int(250), .freeAnalogStickOpacity: .int(20),
+            .enableStickyModifierKeyVirtualKeyboard: .bool(true), .oscOpacity: .int(90),
+            .statsPosition: .text("TOP_LEFT"), .freeAnalogStickOpacity: .int(20),
         ]
         for (key, value) in defaults { #expect(key.defaultValue == value, "\(key.rawValue)") }
         #expect(SettingKey.deadzone.range == -20...20)
@@ -73,7 +84,7 @@ import Testing
         let display = SettingsCatalog.all.filter { $0.tab == .display }.map(\.id)
         #expect(display == [
             "checkbox_sgsr", "list_sgsr_quality", "seekbar_sgsr_sharpness", "list_sgsr_supersampling_level",
-            "checkbox_use_virtual_display", "checkbox_auto_orientation", "checkbox_auto_invert_video_resolution",
+            "checkbox_use_virtual_display",
             "checkbox_enable_view_top_center", "seekbar_resolution_scale_factor", "list_video_scale_mode", "list_vrr",
             "checkbox_enforce_display_mode", "checkbox_enable_hdr", "checkbox_enable_fullexdisplay",
             "checkbox_enable_perf_overlay", "checkbox_enable_perf_overlay_lite", "checkbox_reduce_refresh_rate", "checkbox_full_range",
@@ -108,9 +119,9 @@ import Testing
     }
 
     @Test func pyroWaveRecommendsVibepollosBitrate() {
-        #expect(PyroWaveBitrate.recommendedKbps(width: 1920, height: 1080, fps: 60, chroma444: false, hdr: false) == 225_000)
-        #expect(PyroWaveBitrate.recommendedKbps(width: 1280, height: 720, fps: 60, chroma444: false, hdr: false) == 140_000)
-        #expect(PyroWaveBitrate.recommendedKbps(width: 1920, height: 1080, fps: 60, chroma444: false, hdr: true) == 265_000)
+        #expect(PyroWaveBitrate.recommendedKbps(width: 1920, height: 1080, fps: 60, hdr: false) == 225_000)
+        #expect(PyroWaveBitrate.recommendedKbps(width: 1280, height: 720, fps: 60, hdr: false) == 140_000)
+        #expect(PyroWaveBitrate.recommendedKbps(width: 1920, height: 1080, fps: 60, hdr: true) == 265_000)
     }
 
     @Test func eachCodecKeepsItsBitrate() {
@@ -138,8 +149,8 @@ import Testing
         let form = StreamSettingsForm(settings: StreamSettings(), device: phone)
         #expect(form.rows(.stream).map(\.id) == [
             "list_resolution", "list_fps", "seekbar_bitrate_kbps", "seekbar_metered_bitrate_kbps", "frame_pacing",
-            "checkbox_async_decode", "pref_low_latency_frame_balance", "checkbox_ultra_low_latency", "edit_diy_w_h", "edit_diy_bitrate",
-            "custom_refresh_rate", "video_format", "list_pyrowave_chroma", "checkbox_unlock_fps", "checkbox_prevent_packet_loss",
+            "checkbox_async_decode", "edit_diy_w_h", "edit_diy_bitrate",
+            "custom_refresh_rate", "video_format", "checkbox_unlock_fps", "checkbox_prevent_packet_loss",
         ])
         #expect(form.rows(.stream).first { $0.id == "edit_diy_w_h" }?.value == .text("1920x1080"))
     }
@@ -168,12 +179,8 @@ import Testing
         #expect(enabled("list_sgsr_quality", settings) == true)
         settings.set(.upscalerMode, .text("sharpen"))
         #expect(enabled("list_sgsr_supersampling_level", settings) == false)
-        #expect(enabled("list_pyrowave_chroma", settings) == false)
         settings.set(.gamepadMotionSensors, .bool(false))
         #expect(enabled("seekbar_gyro_smoothing", settings) == false)
-        settings.framePacing = .fastVSync
-        #expect(enabled("pref_low_latency_frame_balance", settings) == false)
-        #expect(StreamSettingsForm(settings: settings, device: phone).catalogRow("frame_pacing")?.help.contains("Fast V-Sync overrides LFR.") == true)
     }
 
     @Test func theTextRowsCheckWhatIsTyped() {
@@ -192,21 +199,36 @@ import Testing
     @Test func unlockingTheFrameRateOffersEveryPreset() {
         let slow = StreamDevice(pixelWidth: 1920, pixelHeight: 1080, maxFramesPerSecond: 60, decodable: .h264)
         var form = StreamSettingsForm(settings: StreamSettings(), device: slow)
-        #expect(!form.frameRateOptions.map(\.value).contains(120))
+        #expect(!form.frameRateOptions.map(\.value.fps).contains(120))
         form.step("checkbox_unlock_fps", by: 1)
-        #expect(form.frameRateOptions.map(\.value).contains(120))
+        #expect(form.frameRateOptions.map(\.value.fps).contains(120))
     }
 
-    @Test func fastVSyncIsTheLastPacingAndNotWithPyroWave() {
+    @Test func theFramePacingIsAndroidsWithoutFastVSync() {
         var settings = StreamSettings()
         #expect(StreamSettingsForm(settings: settings, device: phone).framePacingOptions.map(\.value)
-            == [.warp2, .warp, .latency, .balanced, .capFPS, .smoothness, .fastVSync])
-        settings.codec = .pyroWave
-        var pyro = phone
-        pyro.pyroWave = true
-        #expect(!StreamSettingsForm(settings: settings, device: pyro).framePacingOptions.map(\.value).contains(.fastVSync))
+            == [.warp2, .warp, .latency, .balanced, .capFPS, .smoothness])
         // Without a PyroWave decoder the codec is not offered and a stored one goes back to Automatic
+        settings.codec = .pyroWave
         #expect(StreamSettingsForm(settings: settings, device: phone).settings.codec == .automatic)
+    }
+
+    @Test func aFractionalCustomRateIsItsOwnChoiceAndLaunchesExactly() throws {
+        var form = StreamSettingsForm(settings: StreamSettings(), device: phone)
+        #expect(form.setText("custom_refresh_rate", "59.94") == nil)
+        let labels = form.frameRateOptions.map(\.label)
+        let custom = try #require(labels.firstIndex(of: "Custom (59.94 FPS)"))
+        let preset = try #require(form.frameRateOptions.firstIndex { $0.value == .preset(60) })
+        form.pick("list_fps", option: custom)
+        #expect(form.settings.fps == 60 && form.settings.customFrameRateChosen)
+        #expect(form.catalogRow("list_fps")?.value == .choice(label: "Custom (59.94 FPS)", options: labels, selected: custom))
+        #expect(form.settings.launchFrameRate(refreshRate: 120) == 59.94)
+        form.pick("list_fps", option: preset)
+        #expect(form.settings.fps == 60 && !form.settings.customFrameRateChosen)
+        #expect(form.settings.launchFrameRate(refreshRate: 120) == 60)
+        // A whole custom rate is the preset it equals, not a second choice
+        #expect(form.setText("custom_refresh_rate", "60") == nil)
+        #expect(form.frameRateOptions.filter { $0.value.fps == 60 }.count == 1)
     }
 
     @Test func theNotchGivesFullscreenResolutions() {
@@ -226,13 +248,8 @@ import Testing
         #expect(form.settings.statsPosition == .topRight)
     }
 
-    @Test func chromaAndUpscalerRowsCarryImpactChips() {
-        var settings = StreamSettings()
-        settings.codec = .pyroWave
-        var pyro = phone
-        pyro.pyroWave = true
-        let form = StreamSettingsForm(settings: settings, device: pyro)
-        #expect(form.catalogRow("list_pyrowave_chroma")?.impact == SettingImpact(gpu: .medium, latency: .low, network: .high))
+    @Test func upscalerRowsCarryImpactChips() {
+        let form = StreamSettingsForm(settings: StreamSettings(), device: phone)
         #expect(form.catalogRow("checkbox_sgsr")?.impact == .quiet)
     }
 

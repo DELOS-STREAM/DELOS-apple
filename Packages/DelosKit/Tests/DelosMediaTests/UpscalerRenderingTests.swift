@@ -53,6 +53,17 @@ import Testing
         #expect(abs(fill.crop.x - (1 - 2000.0 / 2667.0) / 2) < 1e-6 && fill.crop.y == 0)
     }
 
+    @Test func topAlignmentPutsFitAtTheTopAndCutsFillAtTheBottom() {
+        let fit = PictureGeometry.make(video: (1920, 1080), target: (2000, 1500), mode: .fit, topAligned: true)
+        #expect(fit.viewport.originY == 0 && fit.viewport.height == 1125)
+        // A picture taller than the target: Fill shows its top
+        let fill = PictureGeometry.make(video: (1080, 1920), target: (2000, 1500), mode: .fill, topAligned: true)
+        #expect(fill.crop.y == 0 && fill.crop.w < 1)
+        #expect(PictureGeometry.make(video: (1080, 1920), target: (2000, 1500), mode: .fill).crop.y > 0)
+        let stretch = PictureGeometry.make(video: (1920, 1080), target: (2000, 1500), mode: .stretch, topAligned: true)
+        #expect(stretch.viewport.originY == 0 && stretch.viewport.height == 1500)
+    }
+
     @Test func theScaleModesDrawTheFixtureWhereTheyShould() throws {
         // The 64 × 64 fixture into a 128 × 64 target: Fit leaves black bars left and right, Stretch and Fill cover it
         for (mode, barred) in [(VideoScaleMode.fit, true), (.stretch, false), (.fill, false)] {

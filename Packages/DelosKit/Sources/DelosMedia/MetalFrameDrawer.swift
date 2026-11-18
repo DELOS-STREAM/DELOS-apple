@@ -13,14 +13,19 @@ struct PictureGeometry {
     var presentationWidth: Int
     var presentationHeight: Int
 
-    static func make(video: (width: Int, height: Int), target: (width: Int, height: Int), mode: VideoScaleMode) -> PictureGeometry {
+    /// [topAligned] (`checkbox_enable_view_top_center`): Fit puts the picture at the top of the target instead of the
+    /// middle, and Fill cuts off only its bottom; Stretch fills the target either way.
+    static func make(
+        video: (width: Int, height: Int), target: (width: Int, height: Int), mode: VideoScaleMode, topAligned: Bool = false
+    ) -> PictureGeometry {
         let whole = MTLViewport(originX: 0, originY: 0, width: Double(target.width), height: Double(target.height), znear: 0, zfar: 1)
         guard video.width > 0, video.height > 0, target.width > 0, target.height > 0 else {
             return PictureGeometry(viewport: whole, crop: MetalPipelineCache.wholePicture, presentationWidth: target.width, presentationHeight: target.height)
         }
         switch mode {
         case .fit:
-            let fitted = MetalFrameDrawer.fittedViewport(video: video, target: target)
+            var fitted = MetalFrameDrawer.fittedViewport(video: video, target: target)
+            if topAligned { fitted.originY = 0 }
             return PictureGeometry(
                 viewport: fitted, crop: MetalPipelineCache.wholePicture,
                 presentationWidth: Int(fitted.width), presentationHeight: Int(fitted.height))
@@ -33,7 +38,7 @@ struct PictureGeometry {
             let height = max(Double(target.height), (Double(video.height) * scale).rounded())
             let shown = SIMD2<Float>(Float(Double(target.width) / width), Float(Double(target.height) / height))
             return PictureGeometry(
-                viewport: whole, crop: SIMD4((1 - shown.x) / 2, (1 - shown.y) / 2, shown.x, shown.y),
+                viewport: whole, crop: SIMD4((1 - shown.x) / 2, topAligned ? 0 : (1 - shown.y) / 2, shown.x, shown.y),
                 presentationWidth: Int(width), presentationHeight: Int(height))
         }
     }
@@ -128,7 +133,8 @@ final class MetalFrameDrawer: @unchecked Sendable {
             width: width, height: height, znear: 0, zfar: 1)
     }
 
-    /// Encodes the drawing of `pixelBuffer` into `target` in `commandBuffer`, placed by `scaleMode`. With an `upscale`
+    /// Encodes the drawing of `pixelBuffer` into `target` in `commandBuffer`, placed by `scaleMode` (at the top when
+    /// `topAligned`, ``PictureGeometry/make(video:target:mode:topAligned:)``). With an `upscale`
     /// request the upscaler draws it (``lastReport`` says what it did). With an `arrival` pose the picture (converted, or
     /// upscaled) is first drawn into an RGB texture with mip levels (8-bit, or half floats for 10-bit pictures, which keep
     /// HDR's encoded values), and the arrival pass draws it posed. False when the buffer's format is not drawable or a
@@ -136,12 +142,13 @@ final class MetalFrameDrawer: @unchecked Sendable {
     func draw(
         _ pixelBuffer: CVPixelBuffer, conversion: ColorConversion, into target: any MTLTexture,
         commandBuffer: any MTLCommandBuffer, arrival: ArrivalPose? = nil, scaleMode: VideoScaleMode = .fit,
-        upscale: UpscaleRequest? = nil
+        topAligned: Bool = false, upscale: UpscaleRequest? = nil
     ) -> Bool {
         lastReport = nil
         let wide = conversion.bitDepth > 8
         let width = CVPixelBufferGetWidth(pixelBuffer), height = CVPixelBufferGetHeight(pixelBuffer)
-        let geometry = PictureGeometry.make(video: (width, height), target: (target.width, target.height), mode: scaleMode)
+        let geometry = PictureGeometry.make(
+            video: (width, height), target: (target.width, target.height), mode: scaleMode, topAligned: topAligned)
         let drew: Bool
         if let upscale {
             drew = drawUpscaled(

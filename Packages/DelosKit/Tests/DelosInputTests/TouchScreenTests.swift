@@ -290,6 +290,13 @@ private func finger(_ id: Int, _ x: Double, _ y: Double) -> TouchSample { TouchS
         let restored = PanZoom(scale: 2, x: -100, y: 0, surface: wide)
         #expect(restored.scale == 2 && restored.x == -100 && restored.y == 0)
         #expect(restored.transform(on: wide).tx == -100 - 400)
+        // At the top of a top-aligned surface, also after a zoom back to 1
+        let tall = TouchSurface(width: 2000, height: 1500, videoWidth: 1920, videoHeight: 1080, fit: .fit, topAligned: true)
+        #expect(tall.pictureY == 0 && tall.pictureHeight == 1125)
+        var top = PanZoom(surface: tall)
+        top.zoom(by: 2, focusX: 1000, focusY: 500, surface: tall)
+        top.zoom(by: 0.5, focusX: 1000, focusY: 500, surface: tall)
+        #expect(top.scale == 1 && top.y == 0)
 
         let (screen, _, _, _) = touchScreen(.multiTouch)
         screen.restoreZoom(scale: 3, x: -1920, y: -1080)

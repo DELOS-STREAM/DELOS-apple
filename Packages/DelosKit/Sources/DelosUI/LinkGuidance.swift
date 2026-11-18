@@ -31,16 +31,14 @@ struct LinkFormat: Equatable {
     /// "1080p", "1440p", "4K" from the height.
     static func resolutionLabel(height: Int) -> String { height >= 2160 ? "4K" : "\(height)p" }
 
-    /// The format for [width] x [height] at [fps]. PyroWave in HDR uses the 4:2:0 guide, as everywhere else in the app.
-    /// Nil for a size that makes no sense.
-    static func of(codec: LinkCodec, width: Int, height: Int, fps: Int, hdr: Bool, chroma444: Bool) -> LinkFormat? {
+    /// The format for [width] x [height] at [fps]. PyroWave is always 4:2:0 on Apple. Nil for a size that makes no sense.
+    static func of(codec: LinkCodec, width: Int, height: Int, fps: Int, hdr: Bool) -> LinkFormat? {
         guard width > 0, height > 0, fps > 0 else { return nil }
         let base = "\(resolutionLabel(height: height))\(fps)\(hdr ? " HDR" : "")"
         if codec == .pyroWave {
-            let full = chroma444 && !hdr
             return LinkFormat(
-                codec: codec, label: "\(base) PyroWave \(full ? "4:4:4" : "4:2:0")", fps: fps,
-                defaultKbps: PyroWaveBitrate.recommendedKbps(width: width, height: height, fps: fps, chroma444: full, hdr: hdr))
+                codec: codec, label: "\(base) PyroWave 4:2:0", fps: fps,
+                defaultKbps: PyroWaveBitrate.recommendedKbps(width: width, height: height, fps: fps, hdr: hdr))
         }
         return LinkFormat(
             codec: codec, label: codec == .automatic ? base : "\(base) \(codec.label)", fps: fps,
@@ -50,7 +48,7 @@ struct LinkFormat: Equatable {
     /// The format of [settings] at [resolution] (the chosen one, else the display's).
     static func of(_ settings: StreamSettings, resolution: StreamResolution) -> LinkFormat? {
         of(codec: LinkCodec(settings.codec), width: resolution.width, height: resolution.height, fps: settings.fps,
-           hdr: settings.hdr, chroma444: settings.text(.pyrowaveChroma) == "444")
+           hdr: settings.hdr)
     }
 }
 

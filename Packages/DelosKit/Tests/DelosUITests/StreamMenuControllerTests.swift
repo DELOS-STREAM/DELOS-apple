@@ -307,11 +307,20 @@ private func streaming(
 
     @Test func typedTextGoesAsTextAndReturnTabAndBackspaceAsKeys() async {
         let (controller, steps) = await streaming()
+        controller.keyboardOptions.commitText = true
         controller.typed("ab\ncd")
         #expect(steps.sink.typed == ["ab", "cd"])
         #expect(steps.sink.keys.count == 2, "Return pressed and released")
         controller.typedBackspace()
         #expect(steps.sink.keys.count == 4)
+    }
+
+    @Test func withoutCommitTextTypedCharactersArePressedAsKeys() async {
+        let (controller, steps) = await streaming()
+        controller.typed("aB é")
+        // a, Shift+B, space as key presses (2 + 4 + 2 events); é has no US key and goes as text
+        #expect(steps.sink.keys.count == 8)
+        #expect(steps.sink.typed == ["é"])
     }
 
     @Test func theKeyboardsGoAwayWhenTheStreamStopsRunning() async {

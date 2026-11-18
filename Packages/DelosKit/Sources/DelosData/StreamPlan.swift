@@ -15,9 +15,11 @@ public struct StreamPlan: Sendable {
     ///   - displaySupportsHDR: the display shows HDR (`HDRDisplay`); without it a stored `hdr = true` is ignored.
     ///   - virtualDisplayReady: the PC has a virtual display and its driver is ready (`vDisplaySupported &&
     ///     vDisplayDriverReady`); only then does `checkbox_use_virtual_display` ask for one (GameLauncher.kt:100-103).
+    ///   - metered: the network is metered (expensive or Low Data Mode); the stream then asks for the metered bitrate
+    ///     (`seekbar_metered_bitrate_kbps`), as DELOS for Android does when `isActiveNetworkMetered`.
     public init(
         app: HostApp, settings: StreamSettings, display: StreamResolution, decodable: VideoFormats, refreshRate: Int, displaySupportsHDR: Bool,
-        virtualDisplayReady: Bool = false, randomBytes: (Int) -> [UInt8] = StreamPlan.secureRandom
+        virtualDisplayReady: Bool = false, metered: Bool = false, randomBytes: (Int) -> [UInt8] = StreamPlan.secureRandom
     ) {
         let key = randomBytes(RemoteInputKey.length)
         let keyID = randomBytes(4).reduce(Int32(0)) { $0 << 8 | Int32($1) }
@@ -33,16 +35,23 @@ public struct StreamPlan: Sendable {
         request = LaunchRequest(
             appID: app.id, appUUID: app.uuid, width: size.width, height: size.height,
             // Optimize game settings is GeForce Experience's; DELOS for Android always sends it off
-            frameRate: Double(fps), resolutionScaleFactor: Self.resolutionScaleFactor(settings), optimizeGameSettings: false,
+            frameRate: settings.launchFrameRate(refreshRate: refreshRate), resolutionScaleFactor: Self.resolutionScaleFactor(settings), optimizeGameSettings: false,
             remoteInputKey: Data(key), remoteInputKeyID: keyID, hdr: hdr,
             virtualDisplay: settings.bool(.useVirtualDisplay) && virtualDisplayReady,
             playAudioOnHost: settings.playAudioOnHost, surroundAudioInfo: audio.surroundAudioInfo,
             gamepadMask: 1, persistGamepadsAfterDisconnect: false, coreParameters: CoreInfo.launchQueryParameters)
         configuration = StreamConfiguration(
-            width: size.width, height: size.height, fps: fps, bitrateKbps: settings.bitrate(at: size),
+            width: size.width, height: size.height, fps: fps, bitrateKbps: Self.bitrateKbps(settings, at: size, metered: metered),
             audio: audio, supportedVideoFormats: formats, clientRefreshRateX100: refreshRate * 100,
             colorRange: settings.bool(.fullRange) ? .full : .limited,
             encryption: .audio, remoteInputKey: RemoteInputKey(key: key, iv: iv)!)
+    }
+
+    /// The bitrate the stream asks for at [size] (DelosStreamActivity.java:660): the chosen or default one, and on a
+    /// metered network the metered bitrate (``StreamSettings/meteredBitrate(normal:)``, a quarter of it unless chosen).
+    public static func bitrateKbps(_ settings: StreamSettings, at size: StreamResolution, metered: Bool) -> Int {
+        let normal = settings.bitrate(at: size)
+        return metered ? settings.meteredBitrate(normal: normal) : normal
     }
 
     /// The speaker layout of `list_audio_config` (PreferenceConfiguration.java:811-820 of DELOS for Android): "71" is

@@ -14,14 +14,11 @@ public enum FramePacing: String, CaseIterable, Codable, Sendable {
     /// Lowest-latency presentation with twice/four times the configured host FPS.
     case warp
     case warp2
-    /// Fast V-Sync (`fast-vsync`): each frame at the first refresh after it is decoded, never faster than the display
-    /// refreshes; the display layer always waits for the refresh, so it needs no buffer of its own.
-    case fastVSync = "fast-vsync"
 
     /// The frames of buffer that absorb the network's jitter; 0 shows frames at once.
     var bufferFrames: Double {
         switch self {
-        case .latency, .warp, .warp2, .fastVSync: 0
+        case .latency, .warp, .warp2: 0
         case .balanced, .capFPS: 1
         case .smoothness: 2
         }
@@ -38,11 +35,16 @@ public enum FramePacing: String, CaseIterable, Codable, Sendable {
 public struct FramePacer: Sendable {
     public let pacing: FramePacing
     /// Seconds per frame of the stream.
-    public let interval: Double
+    public private(set) var interval: Double
     private var last: Double?
 
     public init(pacing: FramePacing, fps: Int) {
         self.pacing = pacing
+        interval = 1 / Double(max(fps, 1))
+    }
+
+    /// Paces at [fps] from now on: the rate the host was told once the display's refresh rate is known (Cap FPS).
+    public mutating func retime(fps: Int) {
         interval = 1 / Double(max(fps, 1))
     }
 

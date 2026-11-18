@@ -92,20 +92,8 @@ enum SettingsCatalog {
                 CatalogChoice(value: "2", label: L("sgsr_supersampling_level_2"), help: L("help_list_sgsr_supersampling_level_2")),
             ]), dependency: "checkbox_sgsr"),
             CatalogSpec(
-                id: "pref_low_latency_frame_balance", tab: .stream, category: "category_video_settings", section: L("category_video_settings"), icon: Symbols.frameBalance,
-                label: L("title_low_latency_frame_balance"), help: L("help_pref_low_latency_frame_balance"), kind: .toggle),
-            CatalogSpec(
-                id: "checkbox_ultra_low_latency", tab: .stream, category: "category_video_settings", section: L("category_video_settings"), icon: Symbols.timer,
-                label: L("title_checkbox_ultra_low_latency"), help: L("help_checkbox_ultra_low_latency"), kind: .toggle),
-            CatalogSpec(
                 id: "checkbox_use_virtual_display", tab: .display, category: "category_video_settings", section: L("category_video_settings"), icon: Symbols.screenShare,
                 label: L("title_checkbox_use_virtual_display"), help: L("help_checkbox_use_virtual_display"), kind: .toggle),
-            CatalogSpec(
-                id: "checkbox_auto_orientation", tab: .display, category: "category_video_settings", section: L("category_video_settings"), icon: Symbols.screenRotation,
-                label: L("title_auto_orientation"), help: L("help_checkbox_auto_orientation"), kind: .toggle),
-            CatalogSpec(
-                id: "checkbox_auto_invert_video_resolution", tab: .display, category: "category_video_settings", section: L("category_video_settings"), icon: Symbols.axisSwap,
-                label: L("title_checkbox_auto_invert_video_resolution"), help: L("help_checkbox_auto_invert_video_resolution"), kind: .toggle, dependency: "checkbox_auto_orientation"),
             CatalogSpec(
                 id: "checkbox_enable_view_top_center", tab: .display, category: "category_video_settings", section: L("category_video_settings"), icon: Symbols.displayTop,
                 label: L("title_top_center_display"), help: L("help_checkbox_enable_view_top_center"), kind: .toggle),
@@ -235,17 +223,8 @@ enum SettingsCatalog {
                 id: "seekbar_trackpad_sensitivity_y", tab: .controls, category: "category_input_settings", section: L("category_input_settings"), icon: Symbols.axisY,
                 label: L("title_trackpad_sensitivity_y"), help: L("help_seekbar_trackpad_sensitivity_y"), kind: .slider(range: -200...200, step: 10, divisor: 1, unit: "%"), phoneOnly: true),
             CatalogSpec(
-                id: "checkbox_trackpad_drag_drop_vibration", tab: .controls, category: "category_input_settings", section: L("category_input_settings"), icon: Symbols.dragDrop,
-                label: L("title_trackpad_drag_drop_vibration"), help: L("help_checkbox_trackpad_drag_drop_vibration"), kind: .toggle, phoneOnly: true),
-            CatalogSpec(
-                id: "seekbar_trackpad_drag_drop_threshold", tab: .controls, category: "category_input_settings", section: L("category_input_settings"), icon: Symbols.holdDuration,
-                label: L("title_trackpad_drag_drop_threshold"), help: L("help_seekbar_trackpad_drag_drop_threshold"), kind: .slider(range: 0...2000, step: 1, divisor: 1, unit: " ms"), phoneOnly: true),
-            CatalogSpec(
                 id: "checkbox_trackpad_swap_axis", tab: .controls, category: "category_input_settings", section: L("category_input_settings"), icon: Symbols.axisSwap,
                 label: L("title_trackpad_swap_axis"), help: L("help_checkbox_trackpad_swap_axis"), kind: .toggle, phoneOnly: true),
-            CatalogSpec(
-                id: "checkbox_force_qwerty", tab: .controls, category: "category_input_settings", section: L("category_input_settings"), icon: Symbols.forceQwerty,
-                label: L("title_checkbox_force_qwerty"), help: L("help_checkbox_force_qwerty"), kind: .toggle),
             CatalogSpec(
                 id: "checkbox_right_alt_as_meta", tab: .controls, category: "category_input_settings", section: L("category_input_settings"), icon: Symbols.keyboardCommandKey,
                 label: L("title_checkbox_right_alt_as_meta"), help: L("help_checkbox_right_alt_as_meta"), kind: .toggle),
@@ -323,35 +302,11 @@ enum SettingsCatalog {
                 id: "option_reset_osc_preference", tab: .controls, category: "category_onscreen_controls", section: L("category_on_screen_controls_settings"), icon: Symbols.reset,
                 label: L("title_reset_osc"), help: L("help_option_reset_osc_preference"), kind: .action(url: nil), phoneOnly: true),
             CatalogSpec(
-                id: "checkbox_enable_keyboard", tab: .controls, category: "category_special_key_layout", section: L("title_special_key_layout"), icon: Symbols.keyboard,
-                label: L("title_show_virtual_key"), help: L("help_checkbox_enable_keyboard"), kind: .toggle, phoneOnly: true),
-            CatalogSpec(
                 id: "checkbox_enable_clear_default_special_button", tab: .controls, category: "category_special_key_layout", section: L("title_special_key_layout"), icon: Symbols.clearDefaults,
                 label: L("title_clear_default_special_button"), help: L("help_checkbox_enable_clear_default_special_button"), kind: .toggle),
             CatalogSpec(
                 id: "checkbox_vibrate_keyboard", tab: .controls, category: "category_special_key_layout", section: L("title_special_key_layout"), icon: Symbols.keyboardHaptics,
                 label: L("title_checkbox_vibrate_osc"), help: L("help_checkbox_vibrate_keyboard"), kind: .toggle),
-            CatalogSpec(
-                id: "keyboard_axi_list", tab: .controls, category: "category_special_key_layout", section: L("title_special_key_layout"), icon: Symbols.keyLayout,
-                label: L("title_default_layout_scheme"), help: L("help_keyboard_axi_list"), kind: .choice([
-                CatalogChoice(value: "OSC_Keyboard", label: L("keyboard_layout_set_1")),
-                CatalogChoice(value: "OSC_Keyboard_2", label: L("keyboard_layout_set_1")),
-                CatalogChoice(value: "OSC_Keyboard_3", label: L("keyboard_layout_set_1")),
-                CatalogChoice(value: "OSC_Keyboard_4", label: L("keyboard_layout_set_1")),
-                CatalogChoice(value: "OSC_Keyboard_5", label: L("keyboard_layout_set_1")),
-            ]), dependency: "checkbox_enable_keyboard", phoneOnly: true),
-            CatalogSpec(
-                id: "checkbox_enable_keyboard_square", tab: .controls, category: "category_special_key_layout", section: L("title_special_key_layout"), icon: Symbols.squareButtons,
-                label: L("title_square_buttons"), help: L("help_checkbox_enable_keyboard_square"), kind: .toggle, dependency: "checkbox_enable_keyboard", phoneOnly: true),
-            CatalogSpec(
-                id: "option_reset_osc", tab: .controls, category: "category_special_key_layout", section: L("title_special_key_layout"), icon: Symbols.reset,
-                label: L("title_reset_keyboard_layout"), help: L("help_option_reset_osc"), kind: .action(url: nil), dependency: "checkbox_enable_keyboard", phoneOnly: true),
-            CatalogSpec(
-                id: "import_keyboard_file", tab: .controls, category: "category_special_key_layout", section: L("title_special_key_layout"), icon: Symbols.`import`,
-                label: L("title_import_keyboard_layout"), help: L("summary_import_keyboard_layout"), kind: .action(url: nil), phoneOnly: true),
-            CatalogSpec(
-                id: "export_keyboard_file", tab: .controls, category: "category_special_key_layout", section: L("title_special_key_layout"), icon: Symbols.export,
-                label: L("title_export_keyboard_layout"), help: L("help_export_keyboard_file"), kind: .action(url: nil), phoneOnly: true),
             CatalogSpec(
                 id: "checkbox_enable_touch_sensitivity", tab: .controls, category: "category_virtual_trackpad_settings", section: L("title_virtual_trackpad_settings"), icon: Symbols.touchSensitivity,
                 label: L("title_touch_sensitivity"), help: L("help_checkbox_enable_touch_sensitivity"), kind: .toggle, phoneOnly: true),
@@ -382,12 +337,6 @@ enum SettingsCatalog {
             CatalogSpec(
                 id: "video_format", tab: .stream, category: "category_advanced_settings", section: L("category_advanced_settings"), icon: Symbols.codec,
                 label: L("title_video_format"), help: L("help_video_format"), kind: .typed),
-            CatalogSpec(
-                id: "list_pyrowave_chroma", tab: .stream, category: "category_advanced_settings", section: L("category_advanced_settings"), icon: Symbols.chroma,
-                label: L("title_pyrowave_chroma"), help: L("help_list_pyrowave_chroma"), kind: .choice([
-                CatalogChoice(value: "420", label: L("pyrowave_chroma_420"), help: L("help_list_pyrowave_chroma_420")),
-                CatalogChoice(value: "444", label: L("pyrowave_chroma_444"), help: L("help_list_pyrowave_chroma_444")),
-            ])),
             CatalogSpec(
                 id: "checkbox_unlock_fps", tab: .stream, category: "category_advanced_settings", section: L("category_advanced_settings"), icon: Symbols.unlockFps,
                 label: L("title_unlock_fps"), help: L("help_checkbox_unlock_fps"), kind: .toggle),

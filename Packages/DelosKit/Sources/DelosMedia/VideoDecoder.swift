@@ -17,7 +17,8 @@ struct DecodedFrame: @unchecked Sendable {
 }
 
 /// Decodes the stream's frames with a `VTDecompressionSession`: hardware where the device has it, in the real-time
-/// mode, asynchronously, one frame at a time in the order they arrive (the host sends no B-frames). The session
+/// mode, one frame at a time in the order they arrive (the host sends no B-frames), asynchronously or not
+/// (`checkbox_async_decode`; VideoToolbox returns asynchronous frames in decode order, so they never reorder). The session
 /// outputs Metal-compatible, IOSurface-backed two-plane 4:2:0 buffers (``ColorConversion/pixelFormats``) that the
 /// renderer draws without a copy: 8-bit for an 8-bit stream and 10-bit (P010) for a 10-bit one, so HDR keeps its depth.
 /// A stream that changes its depth gets a new session.
@@ -29,10 +30,12 @@ final class VideoDecoder: @unchecked Sendable {
         case session(OSStatus)
     }
 
-    /// Called on VideoToolbox's thread for each decoded picture, in order.
+    /// Called on VideoToolbox's thread for each decoded picture, in order (on the decoding thread when not asynchronous).
     private let onFrame: @Sendable (DecodedFrame) -> Void
     /// Called when a frame could not be decoded or the session broke; the next key frame starts decoding again.
     private let onFailure: @Sendable (OSStatus) -> Void
+    /// `kVTDecodeFrame_EnableAsynchronousDecompression`: `decode` returns before the picture is ready.
+    private let asynchronous: Bool
 
     private struct Session {
         let session: VTDecompressionSession
@@ -43,7 +46,11 @@ final class VideoDecoder: @unchecked Sendable {
     private nonisolated(unsafe) var current: Session?
     private let lock = NSLock()
 
-    init(onFrame: @escaping @Sendable (DecodedFrame) -> Void, onFailure: @escaping @Sendable (OSStatus) -> Void) {
+    init(
+        asynchronous: Bool = true, onFrame: @escaping @Sendable (DecodedFrame) -> Void,
+        onFailure: @escaping @Sendable (OSStatus) -> Void
+    ) {
+        self.asynchronous = asynchronous
         self.onFrame = onFrame
         self.onFailure = onFailure
     }
@@ -70,7 +77,7 @@ final class VideoDecoder: @unchecked Sendable {
         let onFrame = onFrame, onFailure = onFailure
         var info = VTDecodeInfoFlags()
         let status = VTDecompressionSessionDecodeFrame(
-            session, sampleBuffer: sample, flags: [._EnableAsynchronousDecompression], infoFlagsOut: &info
+            session, sampleBuffer: sample, flags: asynchronous ? [._EnableAsynchronousDecompression] : [], infoFlagsOut: &info
         ) { status, flags, image, _, _ in
             guard status == noErr, let image, !flags.contains(.frameDropped) else {
                 onFailure(status == noErr ? OSStatus(kVTVideoDecoderBadDataErr) : status)
@@ -116,7 +123,10 @@ final class VideoDecoder: @unchecked Sendable {
         let old = current
         current = nil
         lock.unlock()
-        if let old { VTDecompressionSessionInvalidate(old.session) }
+        guard let old else { return }
+        // Frames still decoding come back first (or fail), so none arrives from a session that is gone
+        if asynchronous { VTDecompressionSessionWaitForAsynchronousFrames(old.session) }
+        VTDecompressionSessionInvalidate(old.session)
     }
 
     private func sessionLocked(for format: CMVideoFormatDescription) throws(Failure) -> VTDecompressionSession {

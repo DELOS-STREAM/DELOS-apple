@@ -89,7 +89,6 @@ public enum StreamSettingsSnapshot {
             ("Resolution", settings.resolution?.text ?? "default"),
             ("Frame rate", "\(settings.fps)"),
             ("Bitrate", settings.bitrateKbps.map { "\($0) kbps" } ?? "default"),
-            ("PyroWave chroma", settings.text(.pyrowaveChroma)),
             ("HDR", settings.hdr ? "on" : "off"),
             ("Frame pacing", settings.framePacing.rawValue),
             ("Variable refresh rate", settings.text(.vrr).isEmpty ? "default" : settings.text(.vrr)),

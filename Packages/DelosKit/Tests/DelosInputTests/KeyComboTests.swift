@@ -25,4 +25,15 @@ struct KeyComboTests {
         #expect(Set(SpecialKeys.all.map(\.label)).count == 14)
         #expect(SpecialKeys.taskManager.keys == [0xA2, 0xA0, 0x1B])
     }
+
+    @Test func typedCharactersArePressedAsUSKeys() {
+        #expect(TypedKeys.combo(for: "a")?.keys == [0x41])
+        #expect(TypedKeys.combo(for: "A")?.keys == [VirtualKey.leftShift, 0x41])
+        #expect(TypedKeys.combo(for: "7")?.keys == [0x37])
+        #expect(TypedKeys.combo(for: "&")?.keys == [VirtualKey.leftShift, 0x37])
+        #expect(TypedKeys.combo(for: " ")?.keys == [0x20])
+        #expect(TypedKeys.combo(for: "?")?.keys == [VirtualKey.leftShift, 0xBF])
+        #expect(TypedKeys.combo(for: "é") == nil)
+        #expect(TypedKeys.combo(for: "😀") == nil)
+    }
 }

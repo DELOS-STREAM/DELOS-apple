@@ -60,6 +60,11 @@ public struct FrameQueue<Frame> {
         entries.reserveCapacity(self.capacity + 1)
     }
 
+    /// Paces the frames at [fps] from now on (``FramePacer/retime(fps:)``).
+    public mutating func retime(fps: Int) {
+        pacer.retime(fps: fps)
+    }
+
     public var waiting: Int { entries.count }
 
     /// Adds a frame decoded at `arrival` (seconds). Returns when it is due.

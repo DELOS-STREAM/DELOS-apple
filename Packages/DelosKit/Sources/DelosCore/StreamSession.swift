@@ -30,6 +30,8 @@ public actor StreamSession {
     private var stopWaiters: [CheckedContinuation<Void, Never>] = []
     /// What the running connection encrypts; nil before it started.
     public private(set) var encryption: StreamEncryption?
+    /// The Wi-Fi keep-alive pings (``keepWiFiAwake()``); nil while off.
+    private var keepAlive: Task<Void, Never>?
 
     /// Sinks left out receive nothing; the core discards their data.
     public init(videoSink: (any VideoDecodeUnitSink)? = nil, audioSink: (any AudioSampleSink)? = nil) {
@@ -142,6 +144,25 @@ public actor StreamSession {
         return (.milliseconds(reading.rtt), .milliseconds(reading.variance))
     }
 
+    /// Keeps the device's Wi-Fi from dozing between video packets (`checkbox_prevent_packet_loss`, the background ping of
+    /// DELOS for Android): an empty payload to the host every 20 ms, from 1 s after the call until the stream stops.
+    /// Isolated to the session like the round-trip read, a ping cannot overlap `stop`.
+    public func keepWiFiAwake() {
+        guard case .running = state, keepAlive == nil else { return }
+        keepAlive = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            while !Task.isCancelled, await self?.sendEmptyPayload() == true {
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+        }
+    }
+
+    private func sendEmptyPayload() -> Bool {
+        guard case .running = state else { return false }
+        _ = LiSendEmptyPayload()
+        return true
+    }
+
     private static let coreRoundTrip: @Sendable () -> (rtt: UInt32, variance: UInt32)? = {
         var rtt: UInt32 = 0
         var variance: UInt32 = 0
@@ -150,6 +171,8 @@ public actor StreamSession {
 
     private func finish(_ context: CoreContext) {
         state = .stopped
+        keepAlive?.cancel()
+        keepAlive = nil
         CoreBridge.release(context)
         continuation.finish()
         let waiters = stopWaiters

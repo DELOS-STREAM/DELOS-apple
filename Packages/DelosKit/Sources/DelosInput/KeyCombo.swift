@@ -69,6 +69,33 @@ public enum VirtualKey {
     public static let v: UInt8 = 0x56
 }
 
+/// A typed character as the key presses of the US layout (`checkbox_enable_commit_text` off): the keys a game that reads
+/// single key presses expects. Nil for a character the US layout has no key for; it goes as text.
+public enum TypedKeys {
+    private static let unshifted: [Character: UInt8] = [
+        " ": 0x20, "-": 0xBD, "=": 0xBB, "[": 0xDB, "]": 0xDD, "\\": 0xDC, ";": 0xBA, "'": 0xDE, ",": 0xBC, ".": 0xBE,
+        "/": 0xBF, "`": 0xC0,
+    ]
+    private static let shifted: [Character: UInt8] = [
+        "!": 0x31, "@": 0x32, "#": 0x33, "$": 0x34, "%": 0x35, "^": 0x36, "&": 0x37, "*": 0x38, "(": 0x39, ")": 0x30,
+        "_": 0xBD, "+": 0xBB, "{": 0xDB, "}": 0xDD, "|": 0xDC, ":": 0xBA, "\"": 0xDE, "<": 0xBC, ">": 0xBE, "?": 0xBF,
+        "~": 0xC0,
+    ]
+
+    public static func combo(for character: Character) -> KeyCombo? {
+        guard character.isASCII, let ascii = character.asciiValue else { return nil }
+        switch ascii {
+        case 0x61...0x7A: return KeyCombo([ascii - 0x20])
+        case 0x41...0x5A: return KeyCombo([VirtualKey.leftShift, ascii])
+        case 0x30...0x39: return KeyCombo([ascii])
+        default: break
+        }
+        if let key = unshifted[character] { return KeyCombo([key]) }
+        if let key = shifted[character] { return KeyCombo([VirtualKey.leftShift, key]) }
+        return nil
+    }
+}
+
 /// The built-in key combinations of the stream menu's Send keys page, in the order of DELOS for Android's `GameMenu`. The
 /// names are the Android string names of their labels; the combinations are the same keys.
 public enum SpecialKeys {

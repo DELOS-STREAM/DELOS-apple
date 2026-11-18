@@ -28,15 +28,13 @@ struct ImpactContext: Equatable {
     /// The stored value of the codec (`auto`, `forceav1`, `forceh265`, `neverh265`, `pyrowave`).
     var codec: String
     var hdr: Bool
-    /// The stored value of the frame pacing (`latency`, `balanced`, `cap-fps`, `smoothness`, `warp`, `warp2`, `fast-vsync`).
+    /// The stored value of the frame pacing (`latency`, `balanced`, `cap-fps`, `smoothness`, `warp`, `warp2`).
     var pacing: String
     /// The upscaler (`checkbox_sgsr`), its mode (`list_sgsr_quality`), sharpness and 2x supersampling.
     var upscaler = false
     var mode = "standard"
     var sharpness = 50
     var twoTimes = false
-    /// PyroWave chroma 4:4:4 (`list_pyrowave_chroma`).
-    var chroma444 = false
     /// PyroWave's recommended bitrate in kbps for these settings, nil without PyroWave.
     var pyroKbps: Int?
 
@@ -111,9 +109,6 @@ func settingImpact(id: String, context c: ImpactContext) -> SettingImpact? {
         }
     case StreamSettingsForm.hdr:
         return c.hdr ? SettingImpact(gpu: .low, latency: .none, network: c.pyro ? .high : .low) : .quiet
-    case SettingKey.pyrowaveChroma.rawValue:
-        guard c.pyro else { return nil }
-        return SettingImpact(gpu: c.chroma444 && !c.hdr ? .high : .medium, latency: .low, network: .high)
     case StreamSettingsForm.framePacing:
         switch c.pacing {
         case "balanced", "cap-fps": return SettingImpact(gpu: .low, latency: .medium, network: .none)
@@ -169,7 +164,6 @@ extension StreamSettingsForm {
         c.mode = settings.text(.upscalerMode)
         c.sharpness = settings.int(.upscalerSharpness)
         c.twoTimes = settings.text(.upscalerSupersampling) == "2"
-        c.chroma444 = settings.text(.pyrowaveChroma) == "444"
         c.pyroKbps = settings.pyroWaveRecommendedKbps(displayResolution: device.defaultResolution)
         return c
     }

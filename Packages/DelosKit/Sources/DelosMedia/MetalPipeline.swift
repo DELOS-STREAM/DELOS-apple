@@ -126,6 +126,8 @@ final class MetalPipeline: @unchecked Sendable {
     let drawer: MetalFrameDrawer
     private let clock: Clock
     private let state: Mutex<State>
+    /// `checkbox_enable_view_top_center`: a picture that leaves room is drawn at the top.
+    private let topAligned: Bool
     private nonisolated(unsafe) var decoder: VideoDecoder!
     private let offscreen = Mutex<(any MTLTexture)?>(nil)
     /// The offscreen target's size when it is not the picture's (tests).
@@ -142,8 +144,10 @@ final class MetalPipeline: @unchecked Sendable {
         guard let drawer = MetalFrameDrawer(device: device, metalFX: metalFX) else { return nil }
         self.drawer = drawer
         self.clock = clock
+        topAligned = options.topAligned
         state = Mutex(State(queue: FrameQueue(pacing: pacing, fps: fps), scaleMode: options.scaleMode, upscaler: options.upscaler))
         decoder = VideoDecoder(
+            asynchronous: options.asyncDecode,
             onFrame: { [weak self] frame in self?.decoded(frame) },
             onFailure: { [weak self] _ in self?.state.withLock { $0.awaitingKeyFrame = true } })
     }
@@ -206,6 +210,10 @@ final class MetalPipeline: @unchecked Sendable {
 
     func setVRR(_ active: Bool) {
         state.withLock { $0.vrr = active }
+    }
+
+    func retime(fps: Int) {
+        state.withLock { $0.queue.retime(fps: fps) }
     }
 
     // MARK: Frames in
@@ -350,7 +358,7 @@ final class MetalPipeline: @unchecked Sendable {
         }
         let drawn = drawer.draw(
             pixelBuffer, conversion: conversion, into: target, commandBuffer: commandBuffer, arrival: work.pose,
-            scaleMode: work.scaleMode, upscale: work.upscale)
+            scaleMode: work.scaleMode, topAligned: topAligned, upscale: work.upscale)
         guard afterDrawing(drawn: drawn, upscaled: work.upscale != nil, report: drawer.lastReport, commandBuffer: commandBuffer, now: now)
         else { return }
         if let drawable = tick.drawable {

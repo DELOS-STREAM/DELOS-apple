@@ -404,7 +404,8 @@ struct StreamContent: View {
                             display = info
                             let size = settings.resolution(displayWidth: info.pixelWidth, displayHeight: info.pixelHeight)
                             controller.touchPicture = TouchPicture(
-                                width: size.width, height: size.height, fit: PictureFit(VideoScaleMode(value: settings.text(.videoScaleMode))))
+                                width: size.width, height: size.height, fit: PictureFit(VideoScaleMode(value: settings.text(.videoScaleMode))),
+                                topAligned: settings.bool(.enableViewTopCenter))
                             controller.start(display: info)
                         },
                         onTouches: { phase, samples, area, time in

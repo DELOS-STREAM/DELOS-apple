@@ -130,11 +130,17 @@ public struct VideoRenderOptions: Sendable, Equatable {
     public var frameRate: Int
     /// The stream asks the host for HDR (a 10-bit format and an HDR display).
     public var hdr: Bool
+    /// `checkbox_enable_view_top_center`: a picture that does not fill the view sits at its top, not in its middle.
+    public var topAligned: Bool
+    /// `checkbox_async_decode`: the Metal renderer's decoder runs VideoToolbox asynchronously
+    /// (`kVTDecodeFrame_EnableAsynchronousDecompression`), so the core's video thread hands the next frame on without
+    /// waiting for the picture; off, each frame is decoded before the next is taken.
+    public var asyncDecode: Bool
 
     public init(
         scaleMode: VideoScaleMode = .fit, upscaler: UpscalerSettings = UpscalerSettings(), vrr: VariableRefreshRate = .auto,
         reduceRefreshRate: Bool = false, enforceDisplayMode: Bool = false, streamWidth: Int = 0, streamHeight: Int = 0,
-        frameRate: Int = 0, hdr: Bool = false
+        frameRate: Int = 0, hdr: Bool = false, topAligned: Bool = false, asyncDecode: Bool = false
     ) {
         self.scaleMode = scaleMode
         self.upscaler = upscaler
@@ -145,6 +151,8 @@ public struct VideoRenderOptions: Sendable, Equatable {
         self.streamHeight = streamHeight
         self.frameRate = frameRate
         self.hdr = hdr
+        self.topAligned = topAligned
+        self.asyncDecode = asyncDecode
     }
 
     /// The refresh rate plan for `display`: `pacing` and `fps` are the renderer's (fps is used when no configured frame

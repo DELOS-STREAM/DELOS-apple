@@ -23,11 +23,7 @@ public enum SettingKey: String, CaseIterable, Codable, Sendable {
     case upscalerMode = "list_sgsr_quality"
     case upscalerSharpness = "seekbar_sgsr_sharpness"
     case upscalerSupersampling = "list_sgsr_supersampling_level"
-    case lowLatencyFrameBalance = "pref_low_latency_frame_balance"
-    case ultraLowLatency = "checkbox_ultra_low_latency"
     case useVirtualDisplay = "checkbox_use_virtual_display"
-    case autoOrientation = "checkbox_auto_orientation"
-    case autoInvertVideoResolution = "checkbox_auto_invert_video_resolution"
     case enableViewTopCenter = "checkbox_enable_view_top_center"
     case resolutionScaleFactor = "seekbar_resolution_scale_factor"
     case videoScaleMode = "list_video_scale_mode"
@@ -57,10 +53,7 @@ public enum SettingKey: String, CaseIterable, Codable, Sendable {
     case absoluteMouseMode = "checkbox_absolute_mouse_mode"
     case trackpadSensitivityX = "seekbar_trackpad_sensitivity_x"
     case trackpadSensitivityY = "seekbar_trackpad_sensitivity_y"
-    case trackpadDragDropVibration = "checkbox_trackpad_drag_drop_vibration"
-    case trackpadDragDropThreshold = "seekbar_trackpad_drag_drop_threshold"
     case trackpadSwapAxis = "checkbox_trackpad_swap_axis"
-    case forceQwerty = "checkbox_force_qwerty"
     case rightAltAsMeta = "checkbox_right_alt_as_meta"
     case enableCommitText = "checkbox_enable_commit_text"
     case smartClipboardSync = "checkbox_smart_clipboard_sync"
@@ -83,11 +76,8 @@ public enum SettingKey: String, CaseIterable, Codable, Sendable {
     case oscOpacity = "seekbar_osc_opacity"
     case freeAnalogStick = "checkbox_enable_analog_stick_new"
     case freeAnalogStickOpacity = "seekbar_osc_free_analog_stick_opacity"
-    case enableKeyboard = "checkbox_enable_keyboard"
     case enableClearDefaultSpecialButton = "checkbox_enable_clear_default_special_button"
     case vibrateKeyboard = "checkbox_vibrate_keyboard"
-    case keyLayout = "keyboard_axi_list"
-    case enableKeyboardSquare = "checkbox_enable_keyboard_square"
     case enableTouchSensitivity = "checkbox_enable_touch_sensitivity"
     case enableGlobalTouchSensitivity = "checkbox_enable_global_touch_sensitivity"
     case enableTouchSensitivityRotationAuto = "checkbox_enable_touch_sensitivity_rotation_auto"
@@ -95,7 +85,6 @@ public enum SettingKey: String, CaseIterable, Codable, Sendable {
     case touchSensitivityOpacityY = "seekbar_touch_sensitivity_opacity_y"
     case touchpadSensitivityOpacity = "seekbar_touchpad_sensitivity_opacity"
     case touchpadSensitivityYOpacity = "seekbar_touchpad_sensitivity_y_opacity"
-    case pyrowaveChroma = "list_pyrowave_chroma"
     case unlockFps = "checkbox_unlock_fps"
     case reduceRefreshRate = "checkbox_reduce_refresh_rate"
     case fullRange = "checkbox_full_range"
@@ -112,11 +101,7 @@ public enum SettingKey: String, CaseIterable, Codable, Sendable {
         case .upscalerMode: .text("standard")
         case .upscalerSharpness: .int(50)
         case .upscalerSupersampling: .text("1")
-        case .lowLatencyFrameBalance: .bool(false)
-        case .ultraLowLatency: .bool(false)
         case .useVirtualDisplay: .bool(false)
-        case .autoOrientation: .bool(false)
-        case .autoInvertVideoResolution: .bool(true)
         case .enableViewTopCenter: .bool(false)
         case .resolutionScaleFactor: .int(100)
         case .videoScaleMode: .text("fit")
@@ -146,10 +131,7 @@ public enum SettingKey: String, CaseIterable, Codable, Sendable {
         case .absoluteMouseMode: .bool(false)
         case .trackpadSensitivityX: .int(100)
         case .trackpadSensitivityY: .int(100)
-        case .trackpadDragDropVibration: .bool(false)
-        case .trackpadDragDropThreshold: .int(250)
         case .trackpadSwapAxis: .bool(false)
-        case .forceQwerty: .bool(true)
         case .rightAltAsMeta: .bool(false)
         case .enableCommitText: .bool(false)
         case .smartClipboardSync: .bool(false)
@@ -172,11 +154,8 @@ public enum SettingKey: String, CaseIterable, Codable, Sendable {
         case .oscOpacity: .int(90)
         case .freeAnalogStick: .bool(false)
         case .freeAnalogStickOpacity: .int(20)
-        case .enableKeyboard: .bool(false)
         case .enableClearDefaultSpecialButton: .bool(false)
         case .vibrateKeyboard: .bool(false)
-        case .keyLayout: .text("OSC_Keyboard")
-        case .enableKeyboardSquare: .bool(false)
         case .enableTouchSensitivity: .bool(false)
         case .enableGlobalTouchSensitivity: .bool(false)
         case .enableTouchSensitivityRotationAuto: .bool(true)
@@ -184,7 +163,6 @@ public enum SettingKey: String, CaseIterable, Codable, Sendable {
         case .touchSensitivityOpacityY: .int(100)
         case .touchpadSensitivityOpacity: .int(100)
         case .touchpadSensitivityYOpacity: .int(100)
-        case .pyrowaveChroma: .text("420")
         case .unlockFps: .bool(false)
         case .reduceRefreshRate: .bool(false)
         case .fullRange: .bool(false)
@@ -203,7 +181,6 @@ public enum SettingKey: String, CaseIterable, Codable, Sendable {
         case .gyroSmoothing: 0...100
         case .trackpadSensitivityX: -200...200
         case .trackpadSensitivityY: -200...200
-        case .trackpadDragDropThreshold: 0...2000
         case .keyboardOpacity: 0...100
         case .onscreenKeyboardHeight: 150...400
         case .onscreenKeyboardWidth: 150...1000
@@ -228,8 +205,6 @@ public enum SettingKey: String, CaseIterable, Codable, Sendable {
         case .analogScrolling: ["none", "right", "left"]
         case .touchMode: ["0", "1", "2", "3", "4", "5"]
         case .onscreenKeyboardAlignMode: ["left", "center", "right"]
-        case .keyLayout: ["OSC_Keyboard", "OSC_Keyboard_2", "OSC_Keyboard_3", "OSC_Keyboard_4", "OSC_Keyboard_5"]
-        case .pyrowaveChroma: ["420", "444"]
         case .statsPosition: ["TOP_LEFT", "TOP_RIGHT", "BOTTOM_LEFT", "BOTTOM_RIGHT"]
         default: nil
         }
