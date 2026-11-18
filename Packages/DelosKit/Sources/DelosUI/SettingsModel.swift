@@ -852,46 +852,6 @@ struct StreamSettingsForm: Equatable {
     }
 }
 
-/// Settings → Display → Second display (`SecondDisplayOverride` of DELOS for Android): the kind of a second screen of this
-/// device, kept for the device. Android's "Main screen" and the idle dimming of the second screen show only with a panel
-/// built into the device, which Apple devices do not have.
-enum DisplaySetting {
-    static let secondDisplayID = SecondDisplayRole.key
-
-    static func label(_ role: SecondDisplayRole) -> String {
-        switch role {
-        case .automatic: L("settings_native_second_display_automatic")
-        case .external: L("settings_native_second_display_external")
-        case .builtIn: L("settings_native_second_display_built_in")
-        }
-    }
-
-    private static func help(_ role: SecondDisplayRole) -> String {
-        switch role {
-        case .automatic: L("settings_native_help_second_display_automatic")
-        case .external: L("settings_native_help_second_display_external")
-        case .builtIn: L("settings_native_help_second_display_built_in")
-        }
-    }
-
-    static func rows(_ tab: SettingsTab, role: SecondDisplayRole) -> [SettingRow] {
-        guard tab == .display else { return [] }
-        let label = label(role)
-        return [SettingRow(
-            id: secondDisplayID, tab: .display, section: L("settings_native_section_displays"), icon: Symbols.externalDisplay,
-            label: L("settings_native_second_display_title"),
-            value: .choice(label: label, options: SecondDisplayRole.allCases.map(Self.label), selected: SecondDisplayRole.allCases.firstIndex(of: role)),
-            help: AppearanceForm.details(value: label, explanation: help(role), about: L("settings_native_second_display_description")))]
-    }
-
-    /// The role after a step of [direction], wrapping around.
-    static func step(_ role: SecondDisplayRole, by direction: Int) -> SecondDisplayRole {
-        let all = SecondDisplayRole.allCases
-        let index = all.firstIndex(of: role) ?? 0
-        return all[((index + direction) % all.count + all.count) % all.count]
-    }
-}
-
 /// Settings → Devices → Startup (`ui_default_pc`, `ui_skip_start`): the default PC among the paired ones (None first,
 /// then by name) and connecting to it straight away when DELOS starts. Without paired PCs the default cannot be chosen;
 /// without a default PC there is nothing to skip to.

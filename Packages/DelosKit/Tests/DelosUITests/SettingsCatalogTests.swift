@@ -263,17 +263,6 @@ import Testing
         #expect(rows[0].value == .info("1.2.0") && rows[0].help == "DELOS 1.2.0")
     }
 
-    @Test func secondDisplayIsKeptForTheDevice() {
-        let suite = "delos.tests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-        #expect(SecondDisplayRole.load(defaults) == .automatic)
-        SecondDisplayRole.save(.builtIn, defaults)
-        #expect(defaults.string(forKey: "display_second_role") == "built_in")
-        #expect(DisplaySetting.rows(.display, role: .builtIn)[0].value
-            == .choice(label: "Part of the device", options: ["Automatic", "External display", "Part of the device"], selected: 2))
-    }
-
     @Test func rowsAreGroupedBySection() {
         func row(_ id: String, _ section: String) -> SettingRow {
             SettingRow(id: id, tab: .stream, section: section, icon: "", label: id, value: .toggle(true), help: "")

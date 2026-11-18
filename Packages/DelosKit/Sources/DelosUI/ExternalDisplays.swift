@@ -64,8 +64,7 @@ public final class ExternalDisplays {
     }
 
     private func streamsOnSecond(secondConnected: Bool) -> Bool {
-        ExternalDisplayPlan.streamsOnSecond(
-            secondConnected: secondConnected, role: SecondDisplayRole.load(), fullExternal: fullExternal, streaming: stream != nil)
+        ExternalDisplayPlan.streamsOnSecond(secondConnected: secondConnected, fullExternal: fullExternal, streaming: stream != nil)
     }
 
     /// The monitor or TV the stream was on went away: the stream is left and the interface is back on the device's screen.
