@@ -19,7 +19,8 @@ import Testing
         let startup = StartupSetting(startup: Startup(), pcs: [])
         for tab in SettingsTab.availableCases {
             let stream = StreamSettingsForm(settings: StreamSettings(), device: device)
-            let all = (form.rows(tab) + stream.nativeRows(tab) + DisplaySetting.rows(tab, role: .automatic) + startup.rows(tab)
+            let all = (form.rows(tab) + stream.nativeRows(tab) + DisplaySetting.rows(tab, state: DisplaySetting.State(role: .automatic), paired: false)
+                + startup.rows(tab)
                 + DevicesSetting.rows(tab) + CoversForm(enabled: false, automatic: true, pcName: nil).rows(tab) + AboutSetting.rows(tab)
                 + stream.catalogRows(tab) + AppLanguageSetting.rows(tab)).groupedBySection()
             #expect(all.first?.id == SettingsScreen.firstRow(tab))
