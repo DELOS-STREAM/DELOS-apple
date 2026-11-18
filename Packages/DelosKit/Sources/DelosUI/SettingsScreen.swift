@@ -1,5 +1,6 @@
 import DelosCore
 import DelosData
+import DelosHost
 import DelosInput
 import DelosMedia
 import SwiftUI
@@ -98,11 +99,36 @@ struct SettingsScreen: View {
 
     private var rows: [SettingRow] { rows(for: tab) }
 
-    /// The rows of [tab] in Android's order (`nativeSettings` + the catalog), each section's rows together.
+    /// The rows of [tab] in Android's order (`nativeSettings` + the catalog), each section's rows together; the link
+    /// guidance's rows follow the bitrate row.
     private func rows(for tab: SettingsTab) -> [SettingRow] {
-        (appearanceForm.rows(tab) + form.nativeRows(tab) + DisplaySetting.rows(tab, role: secondDisplay) + startupSetting.rows(tab)
+        let catalog = LinkGuidanceRows.apply(
+            form.catalogRows(tab), guidance: linkGuidance, host: linkHost, form: form,
+            nowMs: Int64((Date().timeIntervalSince1970 * 1000).rounded()), transport: .current)
+        return (appearanceForm.rows(tab) + form.nativeRows(tab) + DisplaySetting.rows(tab, role: secondDisplay) + startupSetting.rows(tab)
             + DevicesSetting.rows(tab) + coversForm.rows(tab) + AboutSetting.rows(tab, diagnosticLogs: diagnosticLogs) + GameDataSetting.rows(tab)
-            + form.catalogRows(tab) + AppLanguageSetting.rows(tab) + DebugInfoSetting.rows(tab)).groupedBySection()
+            + catalog + AppLanguageSetting.rows(tab) + DebugInfoSetting.rows(tab)).groupedBySection()
+    }
+
+    /// The PC the link guidance talks about, and the guidance for it and the profile's stream.
+    private var linkHost: HostRecord? { LinkGuidanceRows.settingsHost(libraryHostID: actions.libraryHostID, hosts: actions.hosts) }
+    private var linkGuidance: LinkGuidance? { LinkGuidance.forSettings(host: linkHost, form: form) }
+
+    /// Test link: the portal of the test, or a toast when the PC is offline or cannot test.
+    private func testLink() {
+        guard let host = linkHost, let guidance = linkGuidance else { return }
+        switch LinkGuidanceRows.testPress(host: host, guidance: guidance) {
+        case .offline(let text): actions.toasts.show(text, icon: Symbols.wifiOff)
+        case .unavailable(let text): actions.toasts.show(text, icon: Symbols.info)
+        case .run: actions.connection.testLink(host.id, startKbps: form.effectiveBitrate)
+        }
+    }
+
+    /// Use recommended bitrate: the user's own press is the only thing that sets the recommendation.
+    private func useRecommendedBitrate() {
+        guard let kbps = linkGuidance?.recommendation.kbps else { return }
+        form.setBitrate(kbps)
+        actions.toasts.show(L("link_use_done_toast", linkMbps(kbps)), icon: Symbols.checkCircle)
     }
 
     /// The rows of every tab, which the search looks through.
@@ -313,6 +339,8 @@ struct SettingsScreen: View {
         case DebugInfoSetting.id: go { navigator.push(.debugInfo) }
         case AboutSetting.basedID, AboutSetting.versionID, CoversForm.choose: return
         case StreamSettingsForm.oscPreview: navigator.push(.oscPreview)
+        case LinkGuidanceRows.testID: testLink()
+        case LinkGuidanceRows.useID: useRecommendedBitrate()
         case "option_reset_osc_preference":
             // Every on-screen control of the profile back to its default size and place (`SettingsActions`)
             OnScreenControlsStore().reset(profile: profileID)

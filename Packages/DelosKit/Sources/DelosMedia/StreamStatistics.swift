@@ -27,6 +27,22 @@ public struct VideoPresentationCounters: Sendable, Equatable {
     public var peakWaiting: Int?
     /// Frames whose drawing the GPU finished after the time of the refresh they were drawn for.
     public var lateRefreshes: Int?
+    /// The readings below describe the time since the previous reading or right now, not a cumulative count.
+    /// The 1 % low frame rate of the recent shown frames (``FrameTimes``); nil while too few were shown.
+    public var onePercentLowFPS: Double?
+    /// Decoded picture to the display's presented time over the window (``StageWindow``); nil when the platform reported
+    /// no presented time (the display layer reports none).
+    public var renderLatency: StageSummary?
+    /// The upscaler's smoothed GPU time per frame; nil while it is not drawing.
+    public var upscalingMilliseconds: Double?
+    /// The upscaler's target in Android's words ("Upscaled to: 2560 × 1440"); nil while it is not drawing.
+    public var scaleDescription: String?
+    /// What Sharpen only cost over the window; nil in the other modes and without the upscaler.
+    public var sharpen: SharpenCost?
+    /// Frames held back for the upscaler's busy GPU and replaced before they were drawn, cumulative.
+    public var gpuBusySkipped: Int?
+    /// Variable refresh rate is active for this stream.
+    public var vrr = false
 
     public init(
         totalFrames: Int, droppedFrames: Int, accumulatedDelaySeconds: Double, decodedFrames: Int? = nil,
@@ -83,6 +99,20 @@ public struct StreamStatistics: Sendable, Equatable {
     public var repeatedRefreshesPerSecond: Double?
     /// Frames per second the GPU finished drawing after the time of their refresh.
     public var lateRefreshesPerSecond: Double?
+    /// The 1 % low frame rate of the recent shown frames.
+    public var onePercentLowFPS: Double?
+    /// Decoded picture to the display's presented time over the last window: average, 95th percentile, maximum.
+    public var renderLatency: StageSummary?
+    /// The upscaler's GPU time per frame (the Upscaling row).
+    public var upscalingMilliseconds: Double?
+    /// The upscaler's target, in Android's words.
+    public var scaleDescription: String?
+    /// Sharpen only's pass and preparation.
+    public var sharpen: SharpenCost?
+    /// Frames per second that waited for the upscaler's busy GPU and were replaced without being drawn.
+    public var gpuBusySkippedPerSecond: Double?
+    /// Variable refresh rate is active: the panel marks it next to the frame rate.
+    public var vrr = false
 }
 
 /// Scalar-only frame accounting on the core's video thread, sampled from a background actor.
@@ -180,7 +210,7 @@ public final class VideoStatistics: Sendable {
                 s.rendererSampledAt = now
             }
             let expected = s.received + s.lost
-            let result = StreamStatistics(
+            var result = StreamStatistics(
                 width: s.width, height: s.height, codec: s.codec, hdr: s.hdr,
                 incomingFPS: Double(s.frames) / seconds, renderingFPS: renderingFPS,
                 bandwidthKiBPerSecond: Double(s.bytes) / 1024 / seconds,
@@ -196,6 +226,15 @@ public final class VideoStatistics: Sendable {
                 droppedFramesPerSecond: extra.droppedFramesPerSecond, queueWaitingAverage: extra.queueWaitingAverage,
                 queueWaitingPeak: extra.queueWaitingPeak, repeatedRefreshesPerSecond: extra.repeatedRefreshesPerSecond,
                 lateRefreshesPerSecond: extra.lateRefreshesPerSecond)
+            if let renderer {
+                result.onePercentLowFPS = renderer.onePercentLowFPS
+                result.renderLatency = renderer.renderLatency
+                result.upscalingMilliseconds = renderer.upscalingMilliseconds
+                result.scaleDescription = renderer.scaleDescription
+                result.sharpen = renderer.sharpen
+                result.vrr = renderer.vrr
+                result.gpuBusySkippedPerSecond = extra.gpuBusySkippedPerSecond
+            }
             s.sampledAt = now
             s.frames = 0; s.bytes = 0; s.received = 0; s.lost = 0
             s.hostCount = 0; s.hostSum = 0; s.hostMinimum = .greatestFiniteMagnitude; s.hostMaximum = 0
@@ -218,6 +257,7 @@ struct RendererWindow {
     var queueWaitingPeak: Int?
     var repeatedRefreshesPerSecond: Double?
     var lateRefreshesPerSecond: Double?
+    var gpuBusySkippedPerSecond: Double?
 
     init() {}
 
@@ -244,6 +284,9 @@ struct RendererWindow {
         }
         if let late = now.lateRefreshes, let earlier = before.lateRefreshes, late >= earlier {
             lateRefreshesPerSecond = Double(late - earlier) / seconds
+        }
+        if let busy = now.gpuBusySkipped, busy >= (before.gpuBusySkipped ?? 0) {
+            gpuBusySkippedPerSecond = Double(busy - (before.gpuBusySkipped ?? 0)) / seconds
         }
     }
 }

@@ -244,12 +244,21 @@ final class VideoHostView: UIView {
         renderer.resize(to: bounds, scale: window?.windowScene?.screen.nativeScale ?? contentScaleFactor)
     }
 
-    /// Keeps the display at its highest refresh rate while the video is shown. ProMotion screens slow down to save power
-    /// when nothing asks for more, and the display layer alone does not ask: a 120 fps stream ran at 60 and stuttered
-    /// on the owner's iPad Pro (M5). Moonlight for iOS keeps a display link for the same reason.
+    /// Keeps the display at the refresh rate the renderer planned (``DisplayRefreshPlanner``, Android's `setFrameRate`) while
+    /// the video is shown. ProMotion screens slow down to save power when nothing asks for more, and the display layer
+    /// alone does not ask: a 120 fps stream ran at 60 and stuttered on the owner's iPad Pro (M5). Moonlight for iOS keeps a
+    /// display link for the same reason.
     private var refreshLink: CADisplayLink?
 
     @objc private func refreshTick(_ link: CADisplayLink) {}
+
+    #if os(tvOS)
+    override func willMove(toWindow newWindow: UIWindow?) {
+        super.willMove(toWindow: newWindow)
+        // The TV goes back to its own mode when the stream leaves
+        if newWindow == nil, let window { StreamDisplay.resetCriteria(of: window) }
+    }
+    #endif
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
@@ -264,16 +273,25 @@ final class VideoHostView: UIView {
             renderer.detached()
             return
         }
-        let fastest = Float(screen.maximumFramesPerSecond)
+        #if os(iOS)
+        let external = window?.windowScene?.session.role != .windowApplication
+        #else
+        let external = false
+        #endif
+        let display = StreamDisplay.describe(screen, external: external)
+        let plan = renderer.attached(to: display)
         let link = CADisplayLink(target: self, selector: #selector(refreshTick))
-        link.preferredFrameRateRange = CAFrameRateRange(minimum: fastest, maximum: fastest, preferred: fastest)
+        link.preferredFrameRateRange = plan.frameRateRange
         link.add(to: .main, forMode: .common)
         refreshLink = link
-        renderer.attached(maxFramesPerSecond: screen.maximumFramesPerSecond)
+        #if os(tvOS)
+        if let window { StreamDisplay.applyCriteria(plan, width: display.currentMode.width, height: display.currentMode.height, to: window) }
+        #endif
         // The window's scale is known now
         setNeedsLayout()
         let size = screen.nativeBounds.size
-        let info = DisplayInfo(pixelWidth: Int(size.width), pixelHeight: Int(size.height), maxFramesPerSecond: screen.maximumFramesPerSecond)
+        // The stream is told the refresh rate the display is expected to run (Cap FPS and the host use it)
+        let info = DisplayInfo(pixelWidth: Int(size.width), pixelHeight: Int(size.height), maxFramesPerSecond: Int(plan.displayRefreshRate.rounded()))
         // Not inside the view update that added this view
         Task { @MainActor [onDisplay] in onDisplay(info) }
     }
@@ -384,8 +402,8 @@ extension VideoSurface: NSViewRepresentable {
     }
 }
 
-/// The AppKit host of the video layer on the Mac. It reports the screen the window is on, keeps that screen at its
-/// highest refresh rate, and locks the system pointer to the stream while the stream wants the mouse (``PointerLock``).
+/// The AppKit host of the video layer on the Mac. It reports the screen the window is on, keeps that screen at the
+/// renderer's planned refresh rate, and locks the system pointer to the stream while the stream wants the mouse (``PointerLock``).
 final class VideoHostView: NSView {
     private let renderer: any VideoRenderer
     var onDisplay: @MainActor (DisplayInfo) -> Void = { _ in }
@@ -443,6 +461,7 @@ final class VideoHostView: NSView {
         guard let window, let screen = window.screen else {
             pointer.setEligible(false)
             renderer.detached()
+            StreamDisplay.restoreMode()
             return
         }
         // The pointer is the stream's only while the app is active and this window is the key window: another app, the
@@ -462,17 +481,18 @@ final class VideoHostView: NSView {
         })
         updateEligibility()
 
-        // Keeps the screen at its highest refresh rate: a ProMotion display slows down when nothing asks for more
-        let fastest = Float(screen.maximumFramesPerSecond)
+        // Keeps the screen at the planned refresh rate (``DisplayRefreshPlanner``): a ProMotion display slows down when
+        // nothing asks for more; a mode switch the plan asks for is made for this app only
+        let plan = renderer.attached(to: StreamDisplay.describe(screen))
+        StreamDisplay.applyMode(plan, on: screen)
         let link = displayLink(target: self, selector: #selector(refreshTick))
-        link.preferredFrameRateRange = CAFrameRateRange(minimum: fastest, maximum: fastest, preferred: fastest)
+        link.preferredFrameRateRange = plan.frameRateRange
         link.add(to: .main, forMode: .common)
         refreshLink = link
-        renderer.attached(maxFramesPerSecond: screen.maximumFramesPerSecond)
         needsLayout = true
 
         let size = screen.convertRectToBacking(screen.frame).size
-        let info = DisplayInfo(pixelWidth: Int(size.width), pixelHeight: Int(size.height), maxFramesPerSecond: screen.maximumFramesPerSecond)
+        let info = DisplayInfo(pixelWidth: Int(size.width), pixelHeight: Int(size.height), maxFramesPerSecond: Int(plan.displayRefreshRate.rounded()))
         // Not inside the view update that added this view
         Task { @MainActor [onDisplay] in onDisplay(info) }
     }

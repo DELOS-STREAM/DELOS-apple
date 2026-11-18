@@ -1,5 +1,7 @@
 # Diagnostics: logging, crash capture and problem reports
 
+## Purpose
+
 DELOS keeps a small log of what it did, on the device, so a problem can be reported with facts. **Nothing leaves the device
 unless the user starts it**: there is no analytics, no automatic upload, no account and no token. What the user can start is
 **Report** (the cleaned log goes to the report service and a GitHub draft opens), **Save the log instead**, **Share** or

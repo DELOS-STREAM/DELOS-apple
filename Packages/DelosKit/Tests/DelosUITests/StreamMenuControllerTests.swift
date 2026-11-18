@@ -79,7 +79,7 @@ private final class FakeBrightness: ScreenBrightness {
 }
 
 private let screen = DisplayInfo(pixelWidth: 2048, pixelHeight: 2732, maxFramesPerSecond: 120)
-private let phone = StreamMenuCapabilities(keyboard: true, brightness: true)
+private let phone = StreamMenuCapabilities(systemKeyboard: true, brightness: true)
 
 @MainActor
 private func streaming(
@@ -106,8 +106,9 @@ private func streaming(
         // Brightness is a tile only where there is a screen to set it on
         let (withoutScreen, _) = await streaming(brightness: nil)
         #expect(withoutScreen.capabilities.tiles == [.resume, .keyboard, .overlay, .more, .disconnect, .quit])
-        let (desktop, _) = await streaming(capabilities: StreamMenuCapabilities(keyboard: false, brightness: false))
-        #expect(desktop.capabilities.tiles == [.resume, .overlay, .more, .disconnect, .quit])
+        // The Keyboard tile is the Delos full keyboard: on every device
+        let (desktop, _) = await streaming(capabilities: StreamMenuCapabilities(systemKeyboard: false, brightness: false))
+        #expect(desktop.capabilities.tiles == [.resume, .keyboard, .overlay, .more, .disconnect, .quit])
     }
 
     @Test func aPageOpensFromItsTileAndItsOwnTileClosesIt() async {
@@ -220,22 +221,38 @@ private func streaming(
         #expect(brightness.percent == 62)
     }
 
-    @Test func theKeyboardTileClosesTheMenuAndTogglesTheKeyboard() async {
+    @Test func moresSystemKeyboardRowClosesTheMenuAndTogglesTheSystemKeyboard() async throws {
         let (controller, _) = await streaming()
         controller.openMenu()
-        controller.toggleKeyboard()
-        #expect(!controller.menuOpen && controller.keyboardShown)
+        guard case let .rows(rows) = controller.menuContent(.more) else { Issue.record("More has rows"); return }
+        let row = try #require(rows.first { $0.id == MenuRowID.systemKeyboard.rawValue })
+        #expect(row.label == L("stream_menu_row_system_keyboard") && row.help == L("stream_help_open_system_keyboard"))
+        row.activate()
+        #expect(!controller.menuOpen && controller.systemKeyboardShown && !controller.fullKeyboard.open)
         controller.openMenu()
-        controller.toggleKeyboard()
-        #expect(!controller.keyboardShown)
+        controller.toggleSystemKeyboard()
+        #expect(!controller.systemKeyboardShown)
         // The system hid it
         controller.openMenu()
-        controller.toggleKeyboard()
+        controller.toggleSystemKeyboard()
         controller.keyboardDismissed()
-        #expect(!controller.keyboardShown)
-        let (desktop, _) = await streaming(capabilities: StreamMenuCapabilities(keyboard: false, brightness: false))
-        desktop.toggleKeyboard()
-        #expect(!desktop.keyboardShown)
+        #expect(!controller.systemKeyboardShown)
+        // No system keyboard (the Mac, Apple TV): no row, nothing to raise
+        let (desktop, _) = await streaming(capabilities: StreamMenuCapabilities(systemKeyboard: false, brightness: false))
+        guard case let .rows(desktopRows) = desktop.menuContent(.more) else { Issue.record("More has rows"); return }
+        #expect(!desktopRows.contains { $0.id == MenuRowID.systemKeyboard.rawValue })
+        desktop.toggleSystemKeyboard()
+        #expect(!desktop.systemKeyboardShown)
+    }
+
+    @Test func theKeyboardTileClosesTheMenuAndTogglesTheFullKeyboardOnEveryDevice() async {
+        let (desktop, _) = await streaming(capabilities: StreamMenuCapabilities(systemKeyboard: false, brightness: false))
+        desktop.openMenu()
+        desktop.toggleFullKeyboard()
+        #expect(!desktop.menuOpen && desktop.fullKeyboard.open && desktop.fullKeyboard.present && !desktop.systemKeyboardShown)
+        desktop.openMenu()
+        desktop.toggleFullKeyboard()
+        #expect(!desktop.menuOpen && !desktop.fullKeyboard.open)
     }
 
     @Test func theOverlayTileGoesRoundOffFullCompactAndTellsTheProfile() async {
@@ -289,19 +306,20 @@ private func streaming(
         #expect(steps.sink.keys.count == 4)
     }
 
-    @Test func theKeyboardGoesAwayWhenTheStreamStopsRunning() async {
+    @Test func theKeyboardsGoAwayWhenTheStreamStopsRunning() async {
         let (controller, _) = await streaming()
-        controller.toggleKeyboard()
-        #expect(controller.keyboardShown)
+        controller.toggleSystemKeyboard()
+        controller.toggleFullKeyboard()
+        #expect(controller.systemKeyboardShown && controller.fullKeyboard.open)
         await controller.leave(quit: false)
-        #expect(!controller.keyboardShown, "not over the exit scene or the result")
+        #expect(!controller.systemKeyboardShown && !controller.fullKeyboard.open, "not over the exit scene or the result")
     }
 
     @Test func thePagesHaveTheContentOfTheMenusRows() async {
         let long = "A very long command name that goes on and on forever"
         let (controller, _) = await streaming(brightness: FakeBrightness(), commands: ["Steam", long])
         guard case let .rows(more) = controller.menuContent(.more) else { Issue.record("More has rows"); return }
-        #expect(more.map(\.id) == ["more-keys", "more-commands", "more-task-manager"])
+        #expect(more.map(\.id) == ["more-keys", "more-commands", "more-task-manager", "more-system-keyboard"])
         guard case let .pills(keys, _) = controller.menuContent(.keys) else { Issue.record("Keys has pills"); return }
         #expect(keys.count == 14 && keys.first?.label == L("game_menu_send_keys_esc"))
         #expect(keys.first?.help == L("stream_help_format_keys", L("game_menu_send_keys_esc")))

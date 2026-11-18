@@ -220,7 +220,7 @@ struct StreamMenu: View {
 
     /// The help of the tile that has the focus (the one that opened the page while the popover is open).
     private var caption: String {
-        StreamMenuText.caption(BarItem(id: focus.focused) ?? tiles.first ?? .resume)
+        StreamMenuText.caption(BarItem(id: focus.focused) ?? tiles.first ?? .resume, capabilities: controller.capabilities)
     }
 
     private func tilesRow(t: Double, exitT: Double, geometry: DockGeometry) -> some View {
@@ -284,7 +284,7 @@ struct StreamMenu: View {
         guard StreamMenuNavigation.tileWorks(opensPage: item.page != nil, popoverOpen: popOpen) else { return }
         switch item {
         case .resume: controller.closeMenu()
-        case .keyboard: controller.toggleKeyboard()
+        case .keyboard: controller.toggleFullKeyboard()
         case .overlay: controller.cycleStatistics()
         case .brightness, .more:
             if let page = item.page { controller.openMenuPage(page) }
@@ -296,8 +296,8 @@ struct StreamMenu: View {
     private func spec(_ item: BarItem) -> DockTile.Spec {
         switch item {
         case .resume: DockTile.Spec(icon: Symbols.resume, label: L("stream_menu_tile_resume"))
-        // The Delos keyboard of Android turns accent while it is up and has no On / Off pill
-        case .keyboard: DockTile.Spec(icon: Symbols.keyboard, label: L("stream_menu_tile_keyboard"), on: controller.keyboardShown, showState: false)
+        // The Delos keyboard turns accent while it is up and has no On / Off pill
+        case .keyboard: DockTile.Spec(icon: Symbols.keyboard, label: L("stream_menu_tile_keyboard"), on: controller.fullKeyboard.open, showState: false)
         // The pill says which overlay is up: Off, On (the full panel) or Compact
         case .overlay:
             DockTile.Spec(

@@ -100,8 +100,8 @@ struct SettingRow: Identifiable, Equatable {
     let label: String
     let value: SettingValue
     /// The description panel's text: the chosen value and what it means, then what the setting does
-    /// (`SettingsHelp.details`).
-    let help: String
+    /// (`SettingsHelp.details`); the bitrate row adds the link guidance (``LinkGuidanceRows``).
+    var help: String
     /// A color dot before a choice's value (`RowValue.Choice.swatch` of DELOS for Android: the palette's main hue).
     var swatch: RGBA? = nil
     /// False: the row is dimmed, its value cannot change and the panel says it is unavailable (`SettingsItem.enabled`).

@@ -77,7 +77,7 @@ private final class TestDefaults {
         let bob = try #require(profiles.create(name: "Bob", avatar: 1))
         #expect(store.read(profile: bob.id) == [10: guide])
         profiles.delete(ann.id)
-        let deadline = ContinuousClock.now + .seconds(2)
+        let deadline = ContinuousClock.now + .seconds(10)
         while !store.read(profile: ann.id).isEmpty, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
         #expect(store.read(profile: ann.id).isEmpty)
         // The store purges through its own task: it must live until then

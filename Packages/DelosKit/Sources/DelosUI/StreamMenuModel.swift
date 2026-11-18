@@ -5,8 +5,8 @@ import Foundation
 /// stage pixels.
 
 /// The tiles of the dock, in the order they appear. Android has nine; Bitrate and Upscaler are left out here because the
-/// streaming core cannot change the bitrate of a running stream and the renderer has no upscaler, Keyboard and
-/// Brightness exist only where the device has them (``StreamMenuCapabilities``).
+/// streaming core cannot change the bitrate of a running stream and the renderer has no upscaler, Brightness exists only
+/// where the device has it (``StreamMenuCapabilities``). Keyboard (the Delos full keyboard) is on every device.
 enum BarItem: Int, CaseIterable, Sendable {
     case resume, keyboard, overlay, brightness, more, disconnect, quit
 
@@ -40,16 +40,17 @@ enum BarItem: Int, CaseIterable, Sendable {
 
 /// What this device can do for the menu's tiles and pages.
 struct StreamMenuCapabilities: Equatable, Sendable {
-    /// The system keyboard can be raised over the stream (iPhone and iPad; the Mac has its keyboard, Apple TV none).
-    var keyboard: Bool
+    /// The system keyboard can be raised over the stream (iPhone and iPad; the Mac has its keyboard, Apple TV none): the More
+    /// page's Open system keyboard row (Android's Open Android keyboard).
+    var systemKeyboard: Bool
     /// The screen's brightness can be changed (iPhone and iPad).
     var brightness: Bool
 
     static let platform: StreamMenuCapabilities = {
         #if os(iOS)
-        StreamMenuCapabilities(keyboard: true, brightness: true)
+        StreamMenuCapabilities(systemKeyboard: true, brightness: true)
         #else
-        StreamMenuCapabilities(keyboard: false, brightness: false)
+        StreamMenuCapabilities(systemKeyboard: false, brightness: false)
         #endif
     }()
 
@@ -57,7 +58,6 @@ struct StreamMenuCapabilities: Equatable, Sendable {
     var tiles: [BarItem] {
         BarItem.allCases.filter { item in
             switch item {
-            case .keyboard: keyboard
             case .brightness: brightness
             default: true
             }
@@ -104,6 +104,7 @@ enum MenuRowID: String, Sendable {
     case taskManager = "more-task-manager"
     case onScreenControls = "more-onscreen-controls"
     case onScreenOpacity = "more-osc-opacity"
+    case systemKeyboard = "more-system-keyboard"
     case brightness = "brightness-screen"
 }
 
