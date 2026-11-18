@@ -130,7 +130,11 @@ public struct DelosRoot: View {
     #endif
     @Environment(\.scenePhase) private var scenePhase
 
-    public init() {
+    /// Links opened with DELOS (`art://`), from the app's `onOpenURL`.
+    private let links: ShellLinkInbox
+
+    public init(links: ShellLinkInbox = ShellLinkInbox()) {
+        self.links = links
         #if DEBUG
         // -DelosDemo: a separate suite, so the app's own profiles and PCs are never read or written
         let profiles = DemoHarness.on ? ProfileStore(suiteName: DemoHarness.suite) : ProfileStore()
@@ -337,6 +341,9 @@ public struct DelosRoot: View {
         .onAppear { device.start() }
         // "Skip the start screen": straight into the default PC, once, when DELOS opens
         .task { await actions.skipStartIfChosen() }
+        // Links from outside the app (`art://`), once there is a profile: the first launch keeps them until then
+        .onChange(of: links.pending, initial: true) { openLink() }
+        .onChange(of: profiles.isFirstRun) { openLink() }
         #if os(iOS)
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
@@ -576,56 +583,19 @@ public struct DelosRoot: View {
         return true
     }
 
+    /// The link waiting in the inbox, handled once a profile exists (`Shell.kt`'s link effect).
+    private func openLink() {
+        guard !profiles.isFirstRun, links.pending != nil, let link = links.take() else { return }
+        actions.openLink(link)
+    }
+
     /// "Enter address" on the pairing screen (`addByAddress` of DELOS for Android): a dialog for the address.
     private func addByAddress() {
         layers.openDialog(DialogSpec(
             title: L("devices_address_title"), note: L("devices_address_note"),
             fields: [DialogField(icon: Symbols.mapPin, placeholder: "192.168.1.20", maxLength: 64, address: true)],
             confirm: L("devices_address_action")
-        ) { addAndPair($0[0]) })
-    }
-
-    /// "Add PC" in the address dialog (`addAndPair` of DELOS for Android): asks the address who it is, then pairs with
-    /// it, or opens its library when it is paired already. What goes wrong is said in a toast; the dialog stays on a
-    /// wrong address.
-    private func addAndPair(_ text: String) -> Bool {
-        let address: HostAddress
-        switch AddressEntry(text) {
-        case .empty:
-            feedback?.play(.error)
-            toasts.show(L("devices_address_required"), icon: Symbols.error)
-            return false
-        case .invalid:
-            feedback?.play(.error)
-            toasts.show(L("devices_add_not_an_address", text.trimmingCharacters(in: .whitespacesAndNewlines)), icon: Symbols.error)
-            return false
-        case .address(let typed):
-            address = typed
-        }
-        toasts.show(L("devices_address_looking", address.description), icon: Symbols.search)
-        Task {
-            do {
-                let host = try await hosts.ask(address, typed: true)
-                let added = await PairStateWait.until(timeout: 5, clock: SystemConnectClock()) { hosts.host(host.id) != nil }
-                guard !Task.isCancelled else { return }
-                guard added else {
-                    feedback?.play(.error)
-                    toasts.show(L("devices_address_not_added", address.description), icon: Symbols.error)
-                    return
-                }
-                go {
-                    if host.pin != nil {
-                        actions.connect(host.id)
-                    } else {
-                        navigator.push(.pin(hostID: host.id), focus: "cancel")
-                    }
-                }
-            } catch {
-                feedback?.play(.error)
-                toasts.show(L("devices_add_no_answer", address.description), icon: Symbols.error)
-            }
-        }
-        return true
+        ) { [actions] in actions.addAndPair($0[0]) })
     }
 }
 

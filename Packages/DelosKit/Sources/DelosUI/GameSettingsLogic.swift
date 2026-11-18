@@ -18,16 +18,26 @@ final class GameSettingsModel {
     /// The profile's own settings (never written here).
     private(set) var profile: StreamSettings
     @ObservationIgnored private let store: GameSettingsStore
+    /// The PC of [hostID] as the app knows it now, for the link guidance.
+    @ObservationIgnored private let host: @MainActor (String) -> HostRecord?
 
     init(hostID: String, app: HostApp, profileID: String, device: StreamDevice, store: GameSettingsStore = GameSettingsStore(),
-         streams: StreamSettingsStore = StreamSettingsStore()) {
+         streams: StreamSettingsStore = StreamSettingsStore(), host: @escaping @MainActor (String) -> HostRecord? = { _ in nil }) {
         self.hostID = hostID
         self.app = app
         self.profileID = profileID
         self.device = device
         self.store = store
+        self.host = host
         overrides = store.load(profile: profileID, hostID: hostID, appID: app.id)
         profile = streams.load(profile: profileID)
+    }
+
+    /// The bitrate row's `Recommended` line: the same recommendation as Settings, for this app's PC; testing the link
+    /// is done in Settings (GameSettingsScreen.kt:108-110).
+    var bitrateHint: String? {
+        let form = form
+        return LinkGuidanceRows.bitrateHint(LinkGuidance.forSettings(host: host(hostID), form: form), form: form)
     }
 
     /// The rows over what a stream of the app uses; a codec change keeps the bitrate for the codec left only when the app
@@ -45,16 +55,19 @@ final class GameSettingsModel {
         GameSettingsOverride.Key.allCases.compactMap { form.catalogRow($0.rawValue) }
     }
 
-    /// The rows in the order of the screen: each says where its value comes from.
+    /// The rows in the order of the screen: each says where its value comes from, the bitrate row with its recommendation.
     var rows: [SettingRow] {
         let profileRows = Dictionary(Self.keyRows(profileForm).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let custom = overrides.keys
+        let hint = bitrateHint
         return Self.keyRows(form).map { row in
             var row = row
+            let rowHint = row.id == StreamSettingsForm.bitrate ? hint : nil
+            func joined(_ line: String) -> String { rowHint.map { L("settings_screen_dot_join", line, $0) } ?? line }
             if let key = GameSettingsOverride.Key(rawValue: row.id), custom.contains(key) {
-                row.customLine = L("settings_game_profile_line", profileRows[row.id].map(Self.valueLabel) ?? "")
+                row.customLine = joined(L("settings_game_profile_line", profileRows[row.id].map(Self.valueLabel) ?? ""))
             } else {
-                row.note = L("settings_game_from_profile")
+                row.note = joined(L("settings_game_from_profile"))
             }
             return row
         }

@@ -136,7 +136,6 @@ enum SettingsSearch {
 
     /// The extra words a row can be found by besides its own texts (`SearchAliases`): the English words (earlier names and the
     /// terms gamers search for in any language; data, not interface text) and the localized synonyms, which are never shown.
-    /// The link test rows' aliases come with those rows.
     static func aliases(_ id: String) -> String {
         switch id {
         case SettingKey.gamepadMotionSensors.rawValue:
@@ -152,6 +151,10 @@ enum SettingsSearch {
         case AppearanceForm.matchColors, AppearanceForm.heroBackground, AppearanceForm.heroBlur, AppearanceForm.heroOpacity,
              CoversForm.choose:
             "game " + L("settings_search_alias_game")
+        case LinkGuidanceRows.testID:
+            "bandwidth probe measure speed network wifi " + L("settings_search_alias_link_test")
+        case LinkGuidanceRows.useID:
+            "recommended bitrate link " + L("settings_search_alias_link_use")
         default: ""
         }
     }

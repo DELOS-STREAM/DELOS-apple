@@ -40,6 +40,12 @@ public final class CompanionDisplays {
         #endif
     }
 
+    /// Whether nothing is to be done at all: no second screen, and nothing moved or shown that would have to be undone.
+    /// The everyday case of a single screen: the app's window and scene are never touched.
+    nonisolated static func leavesAlone(second: ScreenSize?, movedOrShown: Bool) -> Bool {
+        second == nil && !movedOrShown
+    }
+
     /// The plan for the screens of this moment, nil when the second screen (if any) is not DELOS's.
     private func plan(device: ScreenSize, second: ScreenSize?) -> ScreenPlan? {
         let role = SecondDisplayRole.load()
@@ -55,6 +61,9 @@ public final class CompanionDisplays {
     /// The app's own window (the interface and the stream).
     private weak var mainWindow: UIWindow?
     private var companionWindow: UIWindow?
+
+    /// Whether [window] is the companion's (the app's scene delegate leaves it alone).
+    public func isCompanion(_ window: UIWindow) -> Bool { window === companionWindow }
 
     /// The app's scene has its window: it is the one that moves.
     public func mainWindowReady(_ window: UIWindow, in scene: UIWindowScene) {
@@ -87,7 +96,13 @@ public final class CompanionDisplays {
 
     func reconcile() {
         guard let deviceScene, let mainWindow else { return }
-        let plan = plan(device: Self.size(deviceScene), second: externalScene.map(Self.size))
+        let second = externalScene.map(Self.size)
+        let moved = mainWindow.windowScene !== deviceScene
+        if Self.leavesAlone(second: second, movedOrShown: moved || companionWindow != nil) {
+            hub.paired = false
+            return
+        }
+        let plan = plan(device: Self.size(deviceScene), second: second)
         guard let plan, let externalScene else {
             place(mainWindow, in: deviceScene)
             removeCompanion()
@@ -165,6 +180,10 @@ public final class CompanionDisplays {
     func reconcile() {
         guard let device = Self.deviceScreen, let mainWindow else { return }
         let second = NSScreen.screens.first { $0 !== device }
+        if Self.leavesAlone(second: second.map(Self.size), movedOrShown: moved != nil || companionWindow != nil) {
+            hub.paired = false
+            return
+        }
         let plan = plan(device: Self.size(device), second: second.map(Self.size))
         guard let plan, let second else {
             // The monitor or TV a stream filled went away: the stream is left (`listenForExternalDisplayRemoval`)

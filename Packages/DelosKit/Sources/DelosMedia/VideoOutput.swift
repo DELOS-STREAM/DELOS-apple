@@ -15,6 +15,8 @@ public final class VideoOutput: VideoDecodeUnitSink, @unchecked Sendable {
     /// Where the HDR metadata of the host comes from while its HDR mode is on: the core.
     private let hdrMetadata: @Sendable () -> HDRMetadata?
     private var hdrActive = false
+    /// The receive thread runs at the interactive quality of service from the stream's first frame on.
+    private var threadRaised = false
 
     public init(
         renderer: any VideoRenderer, supportedFormats: VideoFormats,
@@ -25,8 +27,16 @@ public final class VideoOutput: VideoDecodeUnitSink, @unchecked Sendable {
         self.hdrMetadata = hdrMetadata
     }
 
-    // The renderer shows each frame as it arrives; reference frame invalidation is not supported yet
+    /// Direct submit only. Reference frame invalidation (HEVC/AV1) stays off until it is verified against a real PC: with
+    /// it advertised, an AV1 stream to the owner's PC failed in the RTSP handshake (2026-11-18).
     public var capabilities: VideoDecoderCapabilities { [.directSubmit] }
+
+    /// Raises the calling thread (the core's receive thread, which submits the frames) to the user-interactive quality of
+    /// service: Android raises its stream threads (`latency_threads.c`, from the receive thread's first frame). Apple has no
+    /// core placement or performance hint session for apps; the quality of service is the scheduler's input.
+    static func raiseCurrentThread() {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0)
+    }
 
     /// The codec of a format the host chose.
     public static func codec(for format: VideoFormats) -> VideoCodec? {
@@ -39,6 +49,7 @@ public final class VideoOutput: VideoDecodeUnitSink, @unchecked Sendable {
     public func setup(format: VideoFormats, width: Int, height: Int, frameRate: Int) -> Bool {
         guard let codec = Self.codec(for: format) else { return false }
         samples = VideoSamples(codec: codec)
+        threadRaised = false
         let name: String
         switch codec {
         case .h264: name = "H.264"
@@ -70,6 +81,10 @@ public final class VideoOutput: VideoDecodeUnitSink, @unchecked Sendable {
 
     public func submit(_ unit: borrowing DecodeUnit) -> DecodeResult {
         guard samples != nil else { return .ok }
+        if !threadRaised {
+            Self.raiseCurrentThread()
+            threadRaised = true
+        }
         statistics.record(
             frameNumber: UInt32(truncatingIfNeeded: unit.frameNumber), bytes: unit.fullLength,
             hostLatencyTenths: unit.hostProcessingLatencyTenthsOfMs, hdr: unit.hdrActive)

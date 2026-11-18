@@ -126,9 +126,9 @@ struct HomeScreen: View {
         ZStack {
             Group {
                 switch content {
-                case .noPC: HomeMessage(icon: Symbols.devices, title: L("home_no_pc_title"), text: L("home_no_pc_note"))
+                case .noPC: HomeMessage(icon: Symbols.devices, title: L("home_no_pc_title"), text: L("home_no_pc_devices_note"))
                 case .loading: HomeMessage(icon: Symbols.loading, title: L("home_loading"), text: nil)
-                case .offline: HomeMessage(icon: Symbols.wifiOff, title: L("home_offline_title", name), text: L("home_offline_note"))
+                case .offline: HomeMessage(icon: Symbols.wifiOff, title: L("home_offline_title", name), text: L("home_offline_devices_note"))
                 case .empty: HomeMessage(icon: Symbols.sportsEsports, title: L("home_empty_title", name), text: L("home_empty_note"))
                 case .apps:
                     // Every game hidden: the library has nothing to show until the side menu's switch is on

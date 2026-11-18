@@ -1,3 +1,4 @@
+import DelosData
 import Foundation
 import SwiftUI
 import Testing
@@ -145,5 +146,24 @@ struct FakeMetrics: CompanionTextMetrics {
         #expect(hub.shellPage.key == "result" && hub.overlayPage?.key == "result")
         hub.publish(b, nil)
         #expect(hub.shellPage.key == "game" && hub.overlayPage == nil)
+    }
+
+    /// One screen (the everyday iPhone, iPad and Mac): no plan for any setting, and the display host touches nothing.
+    @Test func aSingleScreenIsLeftAlone() {
+        let device = ScreenSize(width: 2752, height: 2064)
+        for role in SecondDisplayRole.allCases {
+            for choice in MainScreenChoice.allCases {
+                for fullExternal in [false, true] {
+                    for streaming in [false, true] {
+                        #expect(ScreenPlanner.plan(
+                            device: device, second: nil, role: role, choice: choice, fullExternal: fullExternal, streaming: streaming) == nil)
+                    }
+                }
+            }
+        }
+        #expect(CompanionDisplays.leavesAlone(second: nil, movedOrShown: false))
+        // What was moved or shown for a screen that has gone is still undone
+        #expect(!CompanionDisplays.leavesAlone(second: nil, movedOrShown: true))
+        #expect(!CompanionDisplays.leavesAlone(second: device, movedOrShown: false))
     }
 }

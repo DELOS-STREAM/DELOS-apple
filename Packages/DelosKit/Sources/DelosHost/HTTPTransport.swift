@@ -23,6 +23,9 @@ struct HTTPRequest: Sendable {
     var maximumBodySize: Int
     /// Nil: a GET. Otherwise a POST of this plain text (the clipboard sent to the host, NvHTTP.java:1010-1011).
     var text: Data? = nil
+    /// Told the status and the headers (names lower-case) as soon as they arrive, before the body: the link test's host
+    /// announces its UDP port in a header, then waits for the client before it sends the rest.
+    var onHead: (@Sendable (Int, [String: String]) -> Void)? = nil
 
     var target: String { query.isEmpty ? path : path + "?" + query }
 
@@ -140,9 +143,14 @@ enum HTTPTransport {
         try await ready(connection)
         try await send(request.head, on: connection)
         var parser = HTTPResponseParser(maximumBodySize: request.maximumBodySize)
+        var announced = request.onHead == nil
         while true {
             let (data, complete) = try await receive(connection)
             if let data { try parser.append(data) }
+            if !announced, let head = try parser.parsedHead() {
+                announced = true
+                request.onHead?(head.status, head.headers)
+            }
             if let response = try parser.response(atEnd: complete) { return response }
             if complete { throw HostError.malformedResponse("the connection closed before the answer was complete") }
         }
@@ -221,8 +229,8 @@ struct HTTPResponseParser {
         if buffer.count > maximumBodySize + 64 * 1024 { throw HostError.responseTooLarge }
     }
 
-    /// The response once it is complete; nil while more bytes are needed.
-    mutating func response(atEnd: Bool) throws -> HTTPResponse? {
+    /// The status and headers once they have arrived; nil while more bytes are needed.
+    mutating func parsedHead() throws -> (status: Int, headers: [String: String])? {
         if head == nil {
             guard let end = buffer.range(of: Data("\r\n\r\n".utf8)) else {
                 if buffer.count > 64 * 1024 { throw HostError.responseTooLarge }
@@ -230,7 +238,12 @@ struct HTTPResponseParser {
             }
             head = try Self.parseHead(buffer[buffer.startIndex..<end.lowerBound], bodyStart: end.upperBound)
         }
-        guard let head else { return nil }
+        return head.map { ($0.status, $0.headers) }
+    }
+
+    /// The response once it is complete; nil while more bytes are needed.
+    mutating func response(atEnd: Bool) throws -> HTTPResponse? {
+        guard try parsedHead() != nil, let head else { return nil }
         if head.headers["transfer-encoding"]?.lowercased().contains("chunked") == true {
             guard try dechunk() else { return nil }
             return try finish(head, Data(decoded))

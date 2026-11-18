@@ -114,6 +114,8 @@ public struct ServerInfo: Equatable, Sendable {
     public var virtualDisplayDriverReady: Bool
     public var serverCommands: [String]
     public var gpuType: String?
+    /// What the host says about PyroWave link measurement (``PyroWaveHostInfo``); ``PyroWaveHostInfo/none`` when nothing.
+    public var pyroWave: PyroWaveHostInfo = .none
 
     /// GeForce Experience (code name MJOLNIR); no other server uses that name.
     public var isNvidiaServer: Bool { state.contains("MJOLNIR") }
@@ -175,7 +177,8 @@ public struct ServerInfo: Equatable, Sendable {
             virtualDisplayCapable: root.child("VirtualDisplayCapable") == "true",
             virtualDisplayDriverReady: root.child("VirtualDisplayDriverReady") == "true",
             serverCommands: root.children("ServerCommand").map(\.text),
-            gpuType: root.child("gputype"))
+            gpuType: root.child("gputype"),
+            pyroWave: PyroWaveHostInfo.parse(root))
     }
 }
 

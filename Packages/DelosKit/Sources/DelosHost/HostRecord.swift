@@ -31,6 +31,9 @@ public struct HostRecord: Equatable, Sendable, Codable {
     /// Whether the PC streams to a virtual display of its own (`vDisplaySupported` and `vDisplayDriverReady` of DELOS for
     /// Android, `VirtualDisplayCapable` and `VirtualDisplayDriverReady` of its answer); nil until a full answer came.
     public var virtualDisplay: VirtualDisplaySupport?
+    /// What the PC said of PyroWave link measurement in its last verified answer (`ComputerDetails.pyroWave` of DELOS for
+    /// Android); nil until one came.
+    public var pyroWave: PyroWaveHostInfo?
     /// The certificate pinned at pairing (DER); nil before pairing. Only `paired(with:)` sets it.
     public private(set) var pinnedCertificate: Data?
 
@@ -48,7 +51,7 @@ public struct HostRecord: Equatable, Sendable, Codable {
     private enum CodingKeys: String, CodingKey {
         case id, serverName = "name", customName, localAddress, remoteAddress, manualAddress, macAddress, httpsPort
         case externalPort, appVersion, gfeVersion, codecModeSupport, isNvidiaServer, hostReportsPaired, runningAppID
-        case pinnedCertificate, reachability, activeAddress, lastReplyVerified, virtualDisplay
+        case pinnedCertificate, reachability, activeAddress, lastReplyVerified, virtualDisplay, pyroWave
     }
 
     /// A record from the first answer of a host (discovery or a typed address); not paired.
@@ -140,6 +143,7 @@ public struct HostRecord: Equatable, Sendable, Codable {
         record.runningAppID = info.currentGame
         record.reachability = .online
         record.activeAddress = reply.address
+        record.pyroWave = info.pyroWave
         record.virtualDisplay = VirtualDisplaySupport(
             capable: info.virtualDisplayCapable, driverReady: info.virtualDisplayCapable && info.virtualDisplayDriverReady)
         record.lastReplyVerified = reply.source == .pinnedHTTPS

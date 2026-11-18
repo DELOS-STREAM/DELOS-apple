@@ -43,20 +43,17 @@ final class ExternalDisplayScene: NSObject, UIWindowSceneDelegate {
 /// controller inside ``OrientationLockedContainer``: since iPadOS 26 (and iOS 27 with its SDK) the system rotates a
 /// landscape-only app's scene and plays the rotation animation before it refuses portrait (owner's iPad and iPhone);
 /// the supported way to hold the orientation is a view controller that prefers it locked (TN3192), and SwiftUI's own
-/// hosting controller cannot be told so. That first window is the app's own, which ``CompanionDisplays`` may move to an
-/// external display; a later window of the scene (the companion's) is left alone.
+/// hosting controller cannot be told so. The app's own window is also handed to ``CompanionDisplays``, which moves it
+/// only while a second screen is DELOS's; a companion window the scene may hold then is left alone.
 final class LandscapeScene: NSObject, UIWindowSceneDelegate {
-    private var registered = false
-
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
         windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscape))
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
-        guard !registered, let windowScene = scene as? UIWindowScene, let window = windowScene.keyWindow, let root = window.rootViewController
-        else { return }
-        registered = true
+        guard let windowScene = scene as? UIWindowScene, let window = windowScene.keyWindow, let root = window.rootViewController,
+              !CompanionDisplays.shared.isCompanion(window) else { return }
         if !(root is OrientationLockedContainer) { window.rootViewController = OrientationLockedContainer(content: root) }
         CompanionDisplays.shared.mainWindowReady(window, in: windowScene)
     }
@@ -102,6 +99,9 @@ struct DELOSApp: App {
     @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var macDelegate
     #endif
 
+    /// `art://` links and `.art` files opened with DELOS, until the shell handles them.
+    @State private var links = ShellLinkInbox()
+
     init() {
         DelosFonts.register()
     }
@@ -113,15 +113,17 @@ struct DELOSApp: App {
         // The title bar is hidden, so the traffic lights lie over the corner of the stage; below 960 × 540 points
         // the status bar's first button would reach them.
         Window("DELOS", id: "main") {
-            DelosRoot()
+            DelosRoot(links: links)
                 .frame(minWidth: 960, minHeight: 540)
+                .onOpenURL { links.receive($0) }
         }
         .defaultSize(width: 1920, height: 1080)
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
         #else
         WindowGroup {
-            DelosRoot()
+            DelosRoot(links: links)
+                .onOpenURL { links.receive($0) }
         }
         #endif
     }
