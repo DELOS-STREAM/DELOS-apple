@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- The controller Home button notice: on iOS, iPadOS and macOS 27 the system keeps a controller's Home button unless
+  Settings → General → Game Controller leaves DELOS's Home action to the app. When a controller with a Home button
+  connects and the system keeps it, an information toast says so once per launch, names the other ways to the stream
+  menu (the swipe up from the bottom edge, Escape held, buttons recorded in Controls) and its action opens that
+  settings page; it goes away once the setting defers to DELOS. Nothing on older systems and Apple TV. Not verified on
+  a device.
 - Diagnostics (docs/DIAGNOSTICS.md): DELOS keeps a small rolling log on the device (Settings → About → Keep diagnostic
   logs), notices a crash, a hang or a failed stream of the last run and offers once, in a card on the start and home
   screens, to report it: the log, cleaned of addresses, PC and profile names, ids and keys, is uploaded to the report

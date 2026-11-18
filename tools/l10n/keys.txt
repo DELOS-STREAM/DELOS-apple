@@ -390,6 +390,10 @@ shell_welcome
 shell_profile_updated
 shell_default_profile_name
 common_cancel
+home_button_hint_swipe
+home_button_hint_keys
+home_button_hint_buttons
+home_button_hint_action
 
 # Links and shortcut files from outside the app (art://, .art)
 shell_link_pair_title

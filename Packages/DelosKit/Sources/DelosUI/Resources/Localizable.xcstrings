@@ -42515,6 +42515,266 @@
         }
       }
     },
+    "home_button_hint_action": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Změnit v Nastavení"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Einstellungen ändern"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change in Settings"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambiar en Ajustes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifier dans Réglages"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定で変更"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정에서 변경"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alterar em Ajustes"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Змінити в Параметрах"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在设置中更改"
+          }
+        }
+      }
+    },
+    "home_button_hint_buttons": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tlačítko Home ovladače patří systému. Menu streamu: nastavte jeho tlačítka v Ovládání."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Home-Taste des Controllers gehört dem System. Stream-Menü: Tasten dafür unter Steuerung festlegen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The controller's Home button goes to the system. Stream menu: set its buttons in Controls."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El botón Home del mando va al sistema. Menú del stream: elige sus botones en Controles."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le bouton Home de la manette va au système. Menu du stream : choisissez ses boutons dans Commandes."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コントローラのHomeボタンはシステムが使います。ストリームメニュー：「操作」でボタンを設定します。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "컨트롤러의 Home 버튼은 시스템이 사용해요. 스트림 메뉴: 컨트롤에서 버튼을 설정하세요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O botão Home do controle vai para o sistema. Menu do stream: escolha os botões em Controles."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Кнопка Home контролера належить системі. Меню стріму: задайте його кнопки в розділі «Керування»."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "手柄的 Home 键由系统使用。串流菜单：在“控制”中设置按键。"
+          }
+        }
+      }
+    },
+    "home_button_hint_keys": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tlačítko Home ovladače patří systému. Menu streamu: podržte Esc, nebo nastavte tlačítka v Ovládání."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Home-Taste des Controllers gehört dem System. Stream-Menü: Esc halten oder Tasten unter Steuerung festlegen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The controller's Home button goes to the system. Stream menu: hold Esc, or set buttons in Controls."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El botón Home del mando va al sistema. Menú del stream: mantén Esc o elige botones en Controles."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le bouton Home de la manette va au système. Menu du stream : maintenez Échap ou choisissez des boutons dans Commandes."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コントローラのHomeボタンはシステムが使います。ストリームメニュー：Escを長押しするか、「操作」でボタンを設定します。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "컨트롤러의 Home 버튼은 시스템이 사용해요. 스트림 메뉴: Esc를 길게 누르거나 컨트롤에서 버튼을 설정하세요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O botão Home do controle vai para o sistema. Menu do stream: segure Esc ou escolha botões em Controles."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Кнопка Home контролера належить системі. Меню стріму: утримуйте Esc або задайте кнопки в розділі «Керування»."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "手柄的 Home 键由系统使用。串流菜单：按住 Esc，或在“控制”中设置按键。"
+          }
+        }
+      }
+    },
+    "home_button_hint_swipe": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tlačítko Home ovladače patří systému. Menu streamu: přejeďte nahoru od spodního okraje, nebo nastavte tlačítka v Ovládání."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Home-Taste des Controllers gehört dem System. Stream-Menü: vom unteren Rand nach oben wischen oder Tasten unter Steuerung festlegen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The controller's Home button goes to the system. Stream menu: swipe up from the bottom edge, or set buttons in Controls."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El botón Home del mando va al sistema. Menú del stream: desliza hacia arriba desde el borde inferior o elige botones en Controles."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le bouton Home de la manette va au système. Menu du stream : glissez vers le haut depuis le bord inférieur ou choisissez des boutons dans Commandes."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コントローラのHomeボタンはシステムが使います。ストリームメニュー：下端から上にスワイプするか、「操作」でボタンを設定します。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "컨트롤러의 Home 버튼은 시스템이 사용해요. 스트림 메뉴: 아래쪽 가장자리에서 위로 스와이프하거나 컨트롤에서 버튼을 설정하세요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O botão Home do controle vai para o sistema. Menu do stream: deslize para cima a partir da borda inferior ou escolha botões em Controles."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Кнопка Home контролера належить системі. Меню стріму: свайп угору від нижнього краю або кнопки в розділі «Керування»."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "手柄的 Home 键由系统使用。串流菜单：从底部边缘向上滑动，或在“控制”中设置按键。"
+          }
+        }
+      }
+    },
     "home_chip_hltb": {
       "extractionState": "manual",
       "localizations": {

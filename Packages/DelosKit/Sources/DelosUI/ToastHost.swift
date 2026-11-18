@@ -18,6 +18,8 @@ struct Toast: Identifiable {
     let action: ToastAction?
     let durationMs: Double
     let kind: ToastKind
+    /// The most lines of text it shows before the ellipsis.
+    var maxLines = toastMaxLines
 }
 
 /// The toasts of the interface (the toast half of `ShellState`): the one that should show, and its action. A newer
@@ -30,9 +32,14 @@ final class Toasts {
     private(set) var actionPresses = 0
     @ObservationIgnored private var counter = 0
 
-    /// Shows a toast. One with an [action] stays for the Undo time unless a duration is given. Its kind is [kind], else
-    /// read from the [icon] (``ToastKind/of(explicit:icon:hasAction:)``).
-    func show(_ text: String, icon: String? = nil, action: ToastAction? = nil, durationMs: Double? = nil, kind: ToastKind? = nil) {
+    /// Shows a toast and returns its id. One with an [action] stays for the Undo time unless a duration is given. Its kind
+    /// is [kind], else read from the [icon] (``ToastKind/of(explicit:icon:hasAction:)``). A notice that tells more than a
+    /// message gives more [maxLines].
+    @discardableResult
+    func show(
+        _ text: String, icon: String? = nil, action: ToastAction? = nil, durationMs: Double? = nil, kind: ToastKind? = nil,
+        maxLines: Int = toastMaxLines
+    ) -> Int {
         counter += 1
         let shown = ToastKind.of(explicit: kind, icon: icon, hasAction: action != nil)
         // A toast that tells of a problem goes into the diagnostic log (`DiagLog.logToast`); the rest is not diagnostic
@@ -43,7 +50,8 @@ final class Toasts {
         }
         current = Toast(
             id: counter, text: text, icon: icon, action: action,
-            durationMs: durationMs ?? (action != nil ? ToastTiming.actionMs : ToastTiming.shellMs), kind: shown)
+            durationMs: durationMs ?? (action != nil ? ToastTiming.actionMs : ToastTiming.shellMs), kind: shown, maxLines: maxLines)
+        return counter
     }
 
     /// The toast [id]'s time is up.
@@ -246,7 +254,7 @@ private struct ToastCard: View {
                             // Line height 1.28 em; Figtree's own is 1.2 em
                             .lineSpacing(stage.tpx(25 * (1.28 - 1.2)))
                             .foregroundStyle(cardText.color)
-                            .lineLimit(toastMaxLines)
+                            .lineLimit(toast.maxLines)
                             .truncationMode(.tail)
                     }
                     .rising(age: age, delay: ToastTiming.rowAt + Motion.staggerRow, reduced: reduced, unit: stage.px(1))

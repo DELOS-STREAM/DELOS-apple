@@ -196,10 +196,11 @@ Android's `FilterSheetLayer` is part of its screen.
 
 Messages are Android's console toasts (`Toasts`, `ToastHost`; the pure rules in `ToastLogic`): one card at the top
 right, 112 px from the top and 44 from the right, in the color of its kind (`ToastKind`: information, success, warning,
-error, Undo; read from the icon unless the caller names it). A newer toast replaces the shown one, which leaves at once
+error, Undo; the caller's kind, else Undo for a toast with an action, else read from the icon). A newer toast replaces the shown one, which leaves at once
 while the new one enters 120 ms later (`ToastStageLogic`); there is never a queue. A toast stays 4.5 s, one with an
 action 10 s; the gold line along its bottom edge drains with the time left. Y or a tap runs the action (Undo after
-deleting a profile) and squeezes the chip first. The motion is a function of one clock that runs only while a toast
+deleting a profile, the Home button notice's settings page) and squeezes the chip first. Text ends in an ellipsis
+after two lines unless the toast asks for more (`Toast.maxLines`). The motion is a function of one clock that runs only while a toast
 is shown (`TimelineView`): the spring from the right, the icon's pop, the rising text, the halo, one light sweep; with
 reduced motion only the fades remain.
 
@@ -649,7 +650,14 @@ It opens with a tap of a controller's Home button: `GuideTapHold` decides each p
 menu and sends nothing to the PC, a press held for 500 ms becomes Guide on the PC at that moment, while the button is
 still down, and is released with it (`GameInput` runs the hold timer per controller; a press while the menu or the
 loader has the input belongs to no tap or hold). The Home button's system gestures (the games overlay) are off while the
-stream runs, so the press reaches the app. The Siri Remote's Back button opens the menu when no game controller is
+stream runs, so the press reaches the app, unless the system keeps the button: on iOS, iPadOS and macOS 27 the per-app
+Home action of Settings → General → Game Controller must defer to the app first. `HomeButtonHint` (DelosInput) reads
+it through `GCControllerHomeButtonSettingsManager` when a controller with a Home button connects (on the interface or
+during a stream) and, when the system keeps the button, `HomeButtonNotice` (DelosUI, started with the shell) shows an
+information toast once per launch: it names the other ways to the menu (the swipe up on a touch screen with the swipe
+on, Escape held with a keyboard, the buttons recorded in Controls; `StreamMenuWay`) and its action opens that settings
+page. A change of the settings to an action that lets Home reach the app takes the toast back. Older systems and tvOS,
+which has no such setting, never show it. The Siri Remote's Back button opens the menu when no game controller is
 connected; SwiftUI reports it only as the exit command, without its duration, so its hold cannot be Guide.
 Besides Home, the buttons and keys the profile recorded in Settings → Controls → Stream menu open it (`MenuShortcut`, one
 for every controller and the keyboard as Android's one `ButtonShortcut` takes every key event: held together in any

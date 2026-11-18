@@ -112,6 +112,8 @@ public struct DelosRoot: View {
     @State private var appearance: Appearance
     @State private var input: MenuInput?
     @State private var feedback: Feedback?
+    /// The notice that the controller's Home button stays with the system (iOS, iPadOS and macOS 27).
+    @State private var homeNotice: HomeButtonNotice?
     @State private var videoCoversBackdrop = false
     /// Who the controller's and keyboard's commands belong to, and the side menu they may open.
     @State private var router: ShellRouter
@@ -411,6 +413,12 @@ public struct DelosRoot: View {
         #endif
         input.start()
         self.input = input
+        // A controller whose Home button the system keeps: the notice, once per launch, on the interface or over a stream
+        let homeNotice = HomeButtonNotice(toasts: toasts) { [streamSettings, profiles] in
+            streamSettings.load(profile: profiles.current?.id ?? "").streamMenuSwipe
+        }
+        homeNotice.start()
+        self.homeNotice = homeNotice
         navigator.cancelRepeats = { [weak input] in input?.cancelRepeats() }
     }
 
