@@ -72,6 +72,8 @@ struct StreamScreen: View {
             if phase == .ended {
                 // The PC ended the session on its own (a stream that was leaving or failed is not "closed by the PC")
                 if old == .streaming || old == .connecting { toasts?.show(L("stream_result_host_closed"), icon: Symbols.info) }
+                // Disconnect or Quit from the menu: the exit scene bursts into the library with SELECT (`Shell.kt`'s exit arrival)
+                if case .leaving? = old, controller?.leavingScene == true { layers?.feedback?.play(.select) }
                 navigator.back()
             }
             // The result overlay shows: OPEN, and the hint bar says Select and Back to library while it is up
