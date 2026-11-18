@@ -4,7 +4,7 @@ import Foundation
 // Generated from DELOS for Android's res/xml/preferences.xml (1.2.0) and `SettingsCatalog.tabFor` / `settingIcon`: every
 // row of Android's preference catalog in its order, with its tab, section, icon, title, help, kind, choices and dependency.
 // Left out, with their reason in docs (N/A): checkbox_enable_audiofx, checkbox_usb_driver, checkbox_usb_bind_all,
-// checkbox_enable_joyconfix, checkbox_ignore_synth_events; pref_debug_info belongs to the diagnostics screen (issue #71).
+// checkbox_enable_joyconfix, checkbox_ignore_synth_events; pref_debug_info is built by `DebugInfoSetting` (after the language row).
 // A help text that names Android's own platform is replaced by the row's summary, as Android does for a row without help;
 // a row whose summary names it too has no help text of its own here. The rumble rows keep their place, icon and
 // dependency here; their titles and help come with the rumble settings, which build them.

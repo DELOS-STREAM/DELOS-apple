@@ -1,3 +1,4 @@
+import DelosCore
 import DelosData
 import DelosInput
 import DelosMedia
@@ -48,6 +49,8 @@ struct SettingsScreen: View {
     @State private var secondDisplay = SecondDisplayRole.load()
     /// The file picker of Import Custom Keys is open.
     @State private var importingSpecialKeys = false
+    /// "Keep diagnostic logs" (device-wide, ``DiagLog``).
+    @State private var diagnosticLogs = DiagLog.isEnabled
     private let store = StreamSettingsStore()
     private let appearances = AppearanceStore()
 
@@ -98,8 +101,8 @@ struct SettingsScreen: View {
     /// The rows of [tab] in Android's order (`nativeSettings` + the catalog), each section's rows together.
     private func rows(for tab: SettingsTab) -> [SettingRow] {
         (appearanceForm.rows(tab) + form.nativeRows(tab) + DisplaySetting.rows(tab, role: secondDisplay) + startupSetting.rows(tab)
-            + DevicesSetting.rows(tab) + coversForm.rows(tab) + AboutSetting.rows(tab) + GameDataSetting.rows(tab)
-            + form.catalogRows(tab) + AppLanguageSetting.rows(tab)).groupedBySection()
+            + DevicesSetting.rows(tab) + coversForm.rows(tab) + AboutSetting.rows(tab, diagnosticLogs: diagnosticLogs) + GameDataSetting.rows(tab)
+            + form.catalogRows(tab) + AppLanguageSetting.rows(tab) + DebugInfoSetting.rows(tab)).groupedBySection()
     }
 
     /// The rows of every tab, which the search looks through.
@@ -307,6 +310,7 @@ struct SettingsScreen: View {
         case DevicesSetting.manageID: navigator.openFromNavigation(.devices)
         case DevicesSetting.pairID: navigator.push(.pair)
         case AboutSetting.welcomeID: actions.replayWelcome()
+        case DebugInfoSetting.id: go { navigator.push(.debugInfo) }
         case AboutSetting.basedID, AboutSetting.versionID, CoversForm.choose: return
         case StreamSettingsForm.oscPreview: navigator.push(.oscPreview)
         case "option_reset_osc_preference":
@@ -414,6 +418,10 @@ struct SettingsScreen: View {
             return true
         case StartupSetting.skipStartID:
             actions.profiles.setSkipStart(!actions.profiles.startup.skipStart)
+            return true
+        case AboutSetting.diagLogsID:
+            diagnosticLogs.toggle()
+            DiagLog.setEnabled(diagnosticLogs)
             return true
         default:
             break

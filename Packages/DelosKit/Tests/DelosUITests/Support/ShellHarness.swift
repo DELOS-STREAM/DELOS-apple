@@ -137,6 +137,8 @@ struct HarnessRoot: View {
             }
         case .oscPreview:
             OnScreenControlsPreview(profileID: fx.profiles.current?.id ?? "", palette: .delos, onBack: { navigator.back() })
+        case .debugInfo:
+            DebugInfoScreen(profileID: fx.profiles.current?.id ?? "", focus: entry.focus, navigator: navigator, feedback: nil, actions: fx.actions)
         case .pin, .pairCode, .stream: Color.clear
         }
     }

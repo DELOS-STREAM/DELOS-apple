@@ -13,6 +13,8 @@ so the app could not load its own OpenSSL.framework and DELOS.debug.dylib. A bui
 	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
 	<key>com.apple.security.cs.disable-library-validation</key>
 	<true/>
 </dict>

@@ -41,6 +41,9 @@ INFOPLIST_KEY_UIStatusBarHidden[sdk=iphone*] = YES
 INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
 INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
 INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES
+// iPhone and iPad: the app's Documents folder shows in the Files app as DELOS, where a problem report saves its cleaned log
+INFOPLIST_KEY_UIFileSharingEnabled[sdk=iphone*] = YES
+INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace[sdk=iphone*] = YES
 
 // macOS: App Sandbox (network client and server for Bonjour and the stream, see Config/DELOS-macOS.entitlements) and
 // the hardened runtime. A build without a team is signed ad hoc (tools/mac.sh), which the data protection keychain
@@ -56,5 +59,9 @@ INFOPLIST_KEY_NSHumanReadableCopyright[sdk=macosx*] = DELOS for Apple is free so
 
 // Empty disables all game metadata requests. The optional local file overrides this value.
 DELOS_METADATA_URL =
+
+// The Delos report service (docs/DIAGNOSTICS.md, "The report service"). Empty: a report saves the cleaned log as a file and
+// nothing is uploaded. The optional local file overrides this value.
+DELOS_REPORTS_URL =
 
 #include? "Local.xcconfig"

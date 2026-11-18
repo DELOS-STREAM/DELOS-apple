@@ -7,3 +7,8 @@ DEVELOPMENT_TEAM = ABCDE12345
 // Never commit the real endpoint. In xcconfig URLs, write https:/$()/host/path: a literal // starts a comment.
 // DELOS_METADATA_URL = https:/$()/your-private-worker.example
 DELOS_METADATA_URL =
+
+// Optional Delos report service (the Worker of DELOS for Android's tools/report-worker). Empty: Report saves the cleaned
+// log as a file and uploads nothing.
+// DELOS_REPORTS_URL = https:/$()/your-report-worker.example
+DELOS_REPORTS_URL =

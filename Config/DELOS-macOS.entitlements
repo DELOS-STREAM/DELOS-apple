@@ -2,9 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
 Entitlements of the macOS build (Config/Shared.xcconfig, CODE_SIGN_ENTITLEMENTS[sdk=macosx*]).
-- App Sandbox: the app reads and writes only its own container.
-- Network client: HTTP(S) to the PC, the stream, SteamGridDB, the metadata Worker.
+- App Sandbox: the app reads and writes only its own container, and the Downloads folder.
+- Network client: HTTP(S) to the PC, the stream, SteamGridDB, the metadata Worker, the report service.
 - Network server: Bonjour discovery (NWBrowser) and the stream's UDP sockets receive datagrams.
+- Downloads read-write: a problem report saves its cleaned log there for the user to attach (docs/DIAGNOSTICS.md).
 -->
 <plist version="1.0">
 <dict>
@@ -13,6 +14,8 @@ Entitlements of the macOS build (Config/Shared.xcconfig, CODE_SIGN_ENTITLEMENTS[
 	<key>com.apple.security.network.client</key>
 	<true/>
 	<key>com.apple.security.network.server</key>
+	<true/>
+	<key>com.apple.security.files.downloads.read-write</key>
 	<true/>
 </dict>
 </plist>
