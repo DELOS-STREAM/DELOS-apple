@@ -488,18 +488,10 @@ final class MetalPipeline: @unchecked Sendable {
             if let report = s.upscaledOnScreen {
                 counters.gpuBusySkipped = s.gpuBusySkipped
                 counters.upscalingMilliseconds = s.upscalerMilliseconds
-                counters.scaleDescription = Self.scaleDescription(report)
+                counters.upscale = UpscalerSizes(report)
                 counters.sharpen = report.mode == .sharpen ? sharpen : nil
             }
             return counters
         }
-    }
-
-    /// The statistics panel's scale line ("Upscaled to: …", "Supersampled to: …", "Sharpen only: …").
-    static func scaleDescription(_ report: UpscaleReport) -> String {
-        let d = report.dimensions
-        if report.mode == .sharpen { return "Sharpen only: \(d.internalWidth) × \(d.internalHeight)" }
-        if d.isSupersampling { return "Supersampled to: \(d.internalWidth) × \(d.internalHeight)" }
-        return "Upscaled to: \(d.presentationWidth) × \(d.presentationHeight)"
     }
 }

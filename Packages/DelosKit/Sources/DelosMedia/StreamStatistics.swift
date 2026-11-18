@@ -35,8 +35,8 @@ public struct VideoPresentationCounters: Sendable, Equatable {
     public var renderLatency: StageSummary?
     /// The upscaler's smoothed GPU time per frame; nil while it is not drawing.
     public var upscalingMilliseconds: Double?
-    /// The upscaler's target in Android's words ("Upscaled to: 2560 × 1440"); nil while it is not drawing.
-    public var scaleDescription: String?
+    /// The upscaler's sizes; nil while it is not drawing.
+    public var upscale: UpscalerSizes?
     /// What Sharpen only cost over the window; nil in the other modes and without the upscaler.
     public var sharpen: SharpenCost?
     /// Frames held back for the upscaler's busy GPU and replaced before they were drawn, cumulative.
@@ -105,8 +105,8 @@ public struct StreamStatistics: Sendable, Equatable {
     public var renderLatency: StageSummary?
     /// The upscaler's GPU time per frame (the Upscaling row).
     public var upscalingMilliseconds: Double?
-    /// The upscaler's target, in Android's words.
-    public var scaleDescription: String?
+    /// The upscaler's sizes (the panel's scale line).
+    public var upscale: UpscalerSizes?
     /// Sharpen only's pass and preparation.
     public var sharpen: SharpenCost?
     /// Frames per second that waited for the upscaler's busy GPU and were replaced without being drawn.
@@ -239,7 +239,7 @@ public final class VideoStatistics: Sendable {
                 result.onePercentLowFPS = renderer.onePercentLowFPS
                 result.renderLatency = renderer.renderLatency
                 result.upscalingMilliseconds = renderer.upscalingMilliseconds
-                result.scaleDescription = renderer.scaleDescription
+                result.upscale = renderer.upscale
                 result.sharpen = renderer.sharpen
                 result.vrr = renderer.vrr
                 result.gpuBusySkippedPerSecond = extra.gpuBusySkippedPerSecond

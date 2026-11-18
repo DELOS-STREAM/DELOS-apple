@@ -86,14 +86,14 @@ import Testing
         counters.totalFrames = 60
         counters.onePercentLowFPS = 55
         counters.renderLatency = StageSummary(count: 60, averageMilliseconds: 10, p95Milliseconds: 12, maximumMilliseconds: 14)
-        counters.scaleDescription = "Upscaled to: 2560 × 1440"
+        counters.upscale = UpscalerSizes(mode: .spatial, internalWidth: 2560, internalHeight: 1440, presentationWidth: 2560, presentationHeight: 1440)
         counters.upscalingMilliseconds = 2
         counters.gpuBusySkipped = 6
         counters.vrr = true
         let stats = video.sample(renderer: counters, roundTrip: nil, now: 2_000_000_000)
         #expect(stats?.onePercentLowFPS == 55)
         #expect(stats?.renderLatency?.p95Milliseconds == 12)
-        #expect(stats?.scaleDescription == "Upscaled to: 2560 × 1440")
+        #expect(stats?.upscale?.internalWidth == 2560)
         #expect(stats?.upscalingMilliseconds == 2)
         #expect(stats?.gpuBusySkippedPerSecond == 6)
         #expect(stats?.vrr == true)

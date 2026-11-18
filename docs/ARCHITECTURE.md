@@ -391,12 +391,23 @@ and is sampled into it by `casFragment` directly. The scalers and their textures
 sizes or the bit depth change. A drawing of the same frame again (a resize, the arrival) presents the upscaled picture
 again and never feeds the history twice; during the arrival the upscaled picture is what the arrival poses.
 
+The sizes the user sees come from the same rule before a frame is drawn: `UpscalerSizes.plan` composes `PictureGeometry`,
+`UpscalerDimensions.plan` and `MetalUpscaler.scalerOutput` for a stream on a display, and the drawing reports
+`UpscalerSizes` in the counters. `UpscalerSizePlan` (DelosUI) holds the stream, the display's panel in landscape, the scale
+mode and `MetalFXSupport`; `UpscalerSizeText` words it. Settings adds a note to the resolution, upscaler and mode rows
+("Upscaler: 1440 × 1080 → 2752 × 2064 on this display.", supersampled, or not enlarged), names each supersampling level
+with the size it renders a display-sized stream at ("1.33× · 3226 × 2224"; the bare factor where the size is over the
+limit) and says when the stream is not at the display's size. The impact chips of the supersampling row dim while it does
+nothing, and MetalFX Temporal counts High above 2560 × 1440 internal pixels. The stream menu's Enabled row carries the same
+note and its level row the same names; it keeps the level row while the stream has the picture's size and a level fits
+(Android's `isSupersamplingMode`), so a 2× that does not fit can go back to 1.33×. On a 13" iPad Pro (2752 × 2064) the
+display's own resolution fits neither level (4/3 is 3668 × 2752), on an 11" iPad Pro (2420 × 1668) only 1.33×.
+
 Availability (`MetalFXSupport`): MetalFX is part of iOS, iPadOS and macOS, where `supportsDevice` decides per GPU, and of
 tvOS only from 27.1 (the scalers' API is `tvos(27.1)` in the SDK; the app targets tvOS 18). The simulators' SDKs have no
 MetalFX framework, so the code is compiled out there
 (`canImport(MetalFX)`). Where a mode's scaler is missing the drawer runs Sharpen only instead, `upscalerStatus` reports
-unavailable and the statistics line says "Sharpen only"; Settings adds a note to the mode row (`StreamDevice.metalFXSpatial`,
-`metalFXTemporal`).
+unavailable and the statistics line says "Sharpen only"; Settings adds a note to the mode row (`StreamDevice.metalFX`).
 
 The load: at most two frames of the upscaler's GPU work in flight (`GPUInFlight`; a frame that waits is replaced by a
 newer one and counted as "GPU busy", and 250 ms of waiting clears the count), its GPU time per frame from the command
@@ -430,8 +441,10 @@ plan reports the peak rate and asks the display link for the stream's own rate; 
 The statistics gain Android's 1 % low (`FrameTimes`, both renderers: the Metal renderer stamps the refresh a frame is shown
 at, the display layer the time it hands a frame over), the Render latency (decoded picture to the drawable's
 `presentedTime`, average / nearest-rank 95th percentile / maximum per window, `StageWindow`; the display layer reports no
-presented time), the Upscaling time, the scale line ("Upscaled to: …", "Supersampled to: …", "Sharpen
-only: …"), the Sharpen pass (pass and conversion in command buffers of their own) and the GPU busy drops.
+presented time), the Upscaling time, the scale line (`UpscalerSizeText.statistics`: "Upscaled: 1440 × 1080 → 2752 × 2064",
+"Supersampled: 1920 × 1080 → 2560 × 1440 → 1920 × 1080", "Not upscaled: …", "Sharpen only: …"; the picture's size follows
+when it differs from MetalFX's output), the Sharpen pass (pass and conversion in command buffers of their own) and the GPU
+busy drops.
 
 ### What was measured without a stream
 
@@ -937,14 +950,20 @@ keeps one per profile the same way (key `stream.<profile id>`), lenient and clam
 
 | Field | Android key | Default | Values |
 |---|---|---|---|
-| `resolution` | `list_resolution` | nil: the display's resolution capped at 1080p (`StreamResolution.forDisplay`) | the six presets (360p to 4K) and the display's own, portrait too on a squarish display (`StreamChoices.resolutions`) |
+| `resolution` | `list_resolution` | nil: the display's resolution capped at 1080p (`StreamResolution.forDisplay`) | the six presets (360p to 4K), on a display that is not 16:9 the 720, 1080, 1440 and 2160-line presets in its aspect ratio, and the display's own, portrait too on a squarish display (`StreamChoices.resolutions`) |
 | `fps` | `list_fps` | 60 | 30, 60, 90, 120 up to the display's highest rate (`maximumFramesPerSecond`, at least 60, 2 Hz to spare), and that rate when it is none of them (`StreamChoices.frameRates`) |
 | `bitrateKbps` | `seekbar_bitrate_kbps` | nil: `StreamPlan.defaultBitrateKbps` of the resolution and frame rate, so it follows them until the slider moves | 1 to 1000 Mbps in steps of 1 Mbps |
 | `codec` | `video_format` (same stored values) | Automatic | Automatic (H.264, HEVC), AV1, HEVC, H.264, each only when the device decodes it (`VideoCodec.choices`); `formats(decodable:)` is what the stream offers, Android's decoder choice |
 | `playAudioOnHost` | `checkbox_host_audio` | off | |
 
 Android caps the presets by the display and the decoder; VideoToolbox decodes 4K on every device of the minimum systems,
-so all six are offered. A stored value the device does not offer is replaced when Settings opens (`StreamChoices.normalized`,
+so all six are offered. Android has only the 16:9 presets, which letterbox on an iPad's 4:3 panel; here a display more than
+2 % away from 16:9 also gets `StreamChoices.aspectPresets`: the 720, 1080, 1440 and 2160 lines at the display's landscape
+aspect, widths rounded to even, none beyond 3840 × 2160 (13" iPad Pro: 960x720, 1440x1080, 1920x1440, 2880x2160; iPhone
+14 Pro Max: 1560x720, 2340x1080, 3122x1440), labelled "1080p · 1440x1080"; one that equals the display's own resolution
+keeps its Native name. Only an iPhone gives the native resolutions a safe area (a notch or the Dynamic Island, Android's
+display cutout); an iPad's status bar and home indicator insets are none, so its Native is the whole panel
+(`StreamDevice.current`). A stored value the device does not offer is replaced when Settings opens (`StreamChoices.normalized`,
 Android's `normalize`): the last preset, 60 fps, Automatic. Android has no "Automatic" resolution: here it is the first
 choice and reads "Automatic · 1920x884" (`videoformat_auto` and the display's resolution, joined by
 `settings_screen_dot_join`). Optimize game settings (GeForce Experience's `sops`) is no setting: DELOS for Android always

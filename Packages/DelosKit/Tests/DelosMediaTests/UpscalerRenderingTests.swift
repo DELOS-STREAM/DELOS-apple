@@ -100,7 +100,7 @@ import Testing
         #expect(pipeline.upscalerStatus == .on(.spatial))
         #expect(!pipeline.isSupersampling)
         var counters = pipeline.counters()
-        #expect(counters.scaleDescription == "Upscaled to: 128 × 128")
+        #expect(counters.upscale == UpscalerSizes(mode: .spatial, internalWidth: 128, internalHeight: 128, presentationWidth: 128, presentationHeight: 128))
         #expect(counters.upscalingMilliseconds != nil)
 
         // Sharpen only keeps the stream's size; the picture is drawn again at the next refresh without a new frame
@@ -116,7 +116,7 @@ import Testing
         // The GPU times arrive in the command buffers' completion handlers
         Thread.sleep(forTimeInterval: 0.3)
         counters = pipeline.counters()
-        #expect(counters.scaleDescription == "Sharpen only: 64 × 64")
+        #expect(counters.upscale == UpscalerSizes(mode: .sharpen, internalWidth: 64, internalHeight: 64, presentationWidth: 128, presentationHeight: 128))
         #expect(counters.sharpen?.prepareName == "conversion")
         #expect(counters.sharpen?.gpuTimed == true)
 
@@ -125,7 +125,7 @@ import Testing
         // Switching off redraws the last picture plainly
         pipeline.tick(RefreshTick(presentation: 1.08, refresh: 1.0 / 60, drawable: nil))
         #expect(pipeline.upscalerStatus == .off)
-        #expect(pipeline.counters().scaleDescription == nil)
+        #expect(pipeline.counters().upscale == nil)
     }
 
     @Test(.enabled(if: MetalFXSupport.system.temporal)) func aStreamThatMatchesTheViewIsSupersampled() throws {
@@ -142,7 +142,8 @@ import Testing
         }
         #expect(pipeline.upscalerStatus == .on(.temporal))
         #expect(pipeline.isSupersampling)
-        #expect(pipeline.counters().scaleDescription == "Supersampled to: 128 × 128")
+        #expect(pipeline.counters().upscale?.isSupersampling == true)
+        #expect(pipeline.counters().upscale?.internalWidth == 128)
     }
 
     @Test func withoutMetalFXEveryModeRunsAsSharpenOnlyAndReportsUnavailable() throws {
@@ -159,7 +160,7 @@ import Testing
             pipeline.tick(RefreshTick(presentation: 1.02, refresh: 1.0 / 60, drawable: nil))
             #expect(pipeline.upscalerStatus == .unavailable)
             #expect(!pipeline.isSupersampling)
-            #expect(pipeline.counters().scaleDescription == "Sharpen only: 64 × 64")
+            #expect(pipeline.counters().upscale == UpscalerSizes(mode: .sharpen, internalWidth: 64, internalHeight: 64, presentationWidth: 128, presentationHeight: 128))
             // Sharpen only itself is no fallback
             pipeline.setUpscaler(UpscalerSettings(enabled: true, mode: .sharpen))
             clock.set(1.05)
