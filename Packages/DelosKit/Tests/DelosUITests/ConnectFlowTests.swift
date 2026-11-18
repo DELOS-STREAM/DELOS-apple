@@ -1,4 +1,5 @@
 import DelosData
+import DelosHost
 import Foundation
 import Testing
 @testable import DelosUI
@@ -86,6 +87,120 @@ final class FakeConnectEnvironment: ConnectEnvironment {
     func play(_ cue: Cue) { cues.append(cue) }
     func toast(_ text: String, icon: String, kind: ToastKind) { toasts.append((text, icon, kind)) }
     func arrive(_ id: String) { arrived.append(id) }
+
+    var transport = LinkTransport.wifi
+    private(set) var linkTests: [(id: String, startKbps: Int)] = []
+    private(set) var stored: [(id: String, test: LinkTest)] = []
+    /// What the link test does: it hears its steps and ends with a result.
+    var linkBody: @MainActor (@escaping @MainActor (LinkStep) -> Void) async -> LinkTestRun = { _ in .cancelled }
+    func testLink(_ id: String, startKbps: Int, transport: LinkTransport, onStep: @escaping @MainActor (LinkStep) -> Void) async -> LinkTestRun {
+        linkTests.append((id, startKbps))
+        return await linkBody(onStep)
+    }
+    func storeLinkTest(_ id: String, _ test: LinkTest) { stored.append((id, test)) }
+}
+
+/// The link test's portal (`ShellDeviceActions.testLink`, DeviceFlows.kt:148-192).
+@MainActor
+@Suite struct LinkTestFlowTests {
+    private let clock = FakeConnectClock()
+    private let environment = FakeConnectEnvironment()
+    private let flow: ConnectFlow
+    private let test = LinkTest(wireKbps: 225_000, testedAtMs: 1, transport: .wifi, criticalFECPercent: 50, packetSize: 1392)
+
+    init() {
+        environment.online = ["A"]
+        flow = ConnectFlow(environment: environment, clock: clock)
+    }
+
+    @Test func thePortalSaysWhatIsTestedStepByStepAndTheResultIsKept() async {
+        let clock = clock, test = test
+        environment.linkBody = { onStep in
+            try? await clock.sleep(seconds: 1)
+            onStep(LinkStep(kbps: 150_000, confirming: false, probe: 1))
+            try? await clock.sleep(seconds: 1)
+            onStep(LinkStep(kbps: 225_000, confirming: true, probe: 2))
+            try? await clock.sleep(seconds: 1)
+            return .done(test, jitter: false)
+        }
+        flow.testLink("A", startKbps: 150_000)
+        await clock.settle()
+        #expect(environment.linkTests.map(\.startKbps) == [150_000])
+        #expect(flow.phase == .testingLink && flow.isActive)
+        #expect(flow.portal?.icon == Symbols.linkTest)
+        #expect(flow.portal?.label == "Testing the link to Desk")
+        #expect(flow.portal?.sub == "Stay on Wi-Fi · B cancels")
+        #expect(flow.portal?.cancellable == true)
+        await clock.advance(by: 1)
+        #expect(flow.portal?.sub == "Testing 150 Mbps · stay on Wi-Fi · B cancels")
+        await clock.advance(by: 1)
+        #expect(flow.portal?.sub == "Confirming 225 Mbps · stay on Wi-Fi · B cancels")
+        await clock.advance(by: 1)
+        #expect(flow.portal == nil && flow.phase == .idle && !flow.isActive)
+        #expect(environment.stored.map(\.id) == ["A"] && environment.stored.first?.test == test)
+        #expect(environment.cues == [.open, .select])
+        #expect(environment.toasts.map(\.text) == ["Wi-Fi carries 225 Mbps"])
+        #expect(environment.toasts.first?.icon == Symbols.checkCircle && environment.toasts.first?.kind == .success)
+        #expect(environment.arrived.isEmpty && environment.wakes.isEmpty)
+    }
+
+    @Test func aLittleJitterIsSaid() async {
+        let test = test
+        environment.linkBody = { _ in .done(test, jitter: true) }
+        flow.testLink("A", startKbps: 150_000)
+        await clock.settle()
+        #expect(environment.toasts.map(\.text) == ["Wi-Fi carries 225 Mbps (a little jitter)"])
+    }
+
+    @Test func aFailureIsSaidAndNothingIsKept() async {
+        environment.linkBody = { _ in .failed(.udpBlocked) }
+        flow.testLink("A", startKbps: 150_000)
+        await clock.settle()
+        #expect(environment.stored.isEmpty)
+        #expect(environment.cues == [.open, .error])
+        #expect(environment.toasts.map(\.text) == ["No test data arrived. UDP may be blocked on this network."])
+        #expect(environment.toasts.first?.icon == Symbols.error && environment.toasts.first?.kind == .error)
+        #expect(flow.portal == nil)
+    }
+
+    @Test func noRateSaysTheLastProbesReason() async {
+        environment.linkBody = { _ in .noRate(last: nil, bestPassKbps: 0) }
+        flow.testLink("A", startKbps: 150_000)
+        await clock.settle()
+        #expect(environment.toasts.map(\.text) == ["No rate could be tested."])
+    }
+
+    @Test func backStopsTheTest() async {
+        let clock = clock
+        environment.linkBody = { _ in
+            do { try await clock.sleep(seconds: 60) } catch { return .cancelled }
+            return .failed(.network)
+        }
+        flow.testLink("A", startKbps: 150_000)
+        await clock.settle()
+        flow.cancel()
+        await clock.settle()
+        #expect(flow.portal == nil && flow.phase == .idle)
+        #expect(environment.cues == [.open, .back])
+        #expect(environment.toasts.map(\.text) == ["Link test stopped"])
+        #expect(environment.toasts.first?.icon == Symbols.info)
+        #expect(environment.stored.isEmpty)
+    }
+
+    @Test func nothingStartsWhileAPortalIsUp() async {
+        let clock = clock
+        environment.linkBody = { _ in
+            try? await clock.sleep(seconds: 60)
+            return .cancelled
+        }
+        flow.testLink("A", startKbps: 150_000)
+        await clock.settle()
+        flow.testLink("A", startKbps: 150_000)
+        flow.connect("A")
+        await clock.settle()
+        #expect(environment.linkTests.count == 1)
+        #expect(environment.libraryLoads == 0)
+    }
 }
 
 @MainActor
