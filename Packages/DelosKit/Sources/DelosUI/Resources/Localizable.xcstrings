@@ -13112,25 +13112,25 @@
                   "few": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ řádky záznamu"
+                      "value": "%2$@, %3$@ řádky záznamu"
                     }
                   },
                   "many": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ řádku záznamu"
+                      "value": "%2$@, %3$@ řádku záznamu"
                     }
                   },
                   "one": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ řádek záznamu"
+                      "value": "%2$@, %3$@ řádek záznamu"
                     }
                   },
                   "other": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ řádků záznamu"
+                      "value": "%2$@, %3$@ řádků záznamu"
                     }
                   }
                 }
@@ -13152,13 +13152,13 @@
                   "one": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ Protokollzeile"
+                      "value": "%2$@, %3$@ Protokollzeile"
                     }
                   },
                   "other": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ Protokollzeilen"
+                      "value": "%2$@, %3$@ Protokollzeilen"
                     }
                   }
                 }
@@ -13180,13 +13180,13 @@
                   "one": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ log line"
+                      "value": "%2$@, %3$@ log line"
                     }
                   },
                   "other": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ log lines"
+                      "value": "%2$@, %3$@ log lines"
                     }
                   }
                 }
@@ -13208,19 +13208,19 @@
                   "many": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ líneas de registro"
+                      "value": "%2$@, %3$@ líneas de registro"
                     }
                   },
                   "one": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ línea de registro"
+                      "value": "%2$@, %3$@ línea de registro"
                     }
                   },
                   "other": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ líneas de registro"
+                      "value": "%2$@, %3$@ líneas de registro"
                     }
                   }
                 }
@@ -13242,19 +13242,19 @@
                   "many": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ de lignes de journal"
+                      "value": "%2$@, %3$@ de lignes de journal"
                     }
                   },
                   "one": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ ligne de journal"
+                      "value": "%2$@, %3$@ ligne de journal"
                     }
                   },
                   "other": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ lignes de journal"
+                      "value": "%2$@, %3$@ lignes de journal"
                     }
                   }
                 }
@@ -13276,7 +13276,7 @@
                   "other": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@、ログ%2$@行"
+                      "value": "%2$@、ログ%3$@行"
                     }
                   }
                 }
@@ -13298,7 +13298,7 @@
                   "other": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, 로그 %2$@줄"
+                      "value": "%2$@, 로그 %3$@줄"
                     }
                   }
                 }
@@ -13320,19 +13320,19 @@
                   "many": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ linhas de log"
+                      "value": "%2$@, %3$@ linhas de log"
                     }
                   },
                   "one": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ linha de log"
+                      "value": "%2$@, %3$@ linha de log"
                     }
                   },
                   "other": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ linhas de log"
+                      "value": "%2$@, %3$@ linhas de log"
                     }
                   }
                 }
@@ -13354,25 +13354,25 @@
                   "few": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ рядки журналу"
+                      "value": "%2$@, %3$@ рядки журналу"
                     }
                   },
                   "many": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ рядків журналу"
+                      "value": "%2$@, %3$@ рядків журналу"
                     }
                   },
                   "one": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ рядок журналу"
+                      "value": "%2$@, %3$@ рядок журналу"
                     }
                   },
                   "other": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@, %2$@ рядка журналу"
+                      "value": "%2$@, %3$@ рядка журналу"
                     }
                   }
                 }
@@ -13394,7 +13394,7 @@
                   "other": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "%2$@，%2$@ 行日志"
+                      "value": "%2$@，%3$@ 行日志"
                     }
                   }
                 }

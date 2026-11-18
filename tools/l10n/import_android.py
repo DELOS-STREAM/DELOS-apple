@@ -107,6 +107,7 @@ def read_resources(android: Path) -> dict[str, dict[str, object]]:
 # by the first argument, so their first two placeholders swap numbers and Swift passes the quantity first.
 QUANTITY_SECOND = ("artwork_count_of_", "artwork_filtered_has_", "filters_result_active", "shell_home_apps_filtered")
 SWAP = re.compile(r"%([12])\$")
+SHIFT = re.compile(r"%(\d+)\$")
 
 
 def swap_quantity(forms: dict[str, str]) -> dict[str, str]:
@@ -120,12 +121,12 @@ def unit(text: str) -> dict:
 def plural(forms: dict[str, str]) -> dict:
     """A plural as a variation by plural category. Apple requires a plural variation to show its number; forms without
     one ("hour" / "hours", Android's getQuantityString for a unit beside a number) become a substitution that picks
-    the form from the first argument and shows only the form. A form that shows a text ("%1$s Hours", the quantity an
-    Android count apart from its text) takes the text as the second argument, after the count."""
+    the form from the first argument and shows only the form. A form that shows texts ("%1$s Hours", the quantity an
+    Android count apart from its text; "%1$s, %2$s log lines") takes them as the following arguments, after the count."""
     variations = {"plural": {q: unit(t) for q, t in forms.items()}}
     if any(PLACEHOLDER.search(t) for t in forms.values()):
         return {"variations": variations}
-    variations = {"plural": {q: unit(t.replace("%1$@", "%2$@")) for q, t in forms.items()}}
+    variations = {"plural": {q: unit(SHIFT.sub(lambda m: f"%{int(m.group(1)) + 1}$", t)) for q, t in forms.items()}}
     return {"stringUnit": {"state": "translated", "value": "%#@count@"},
             "substitutions": {"count": {"argNum": 1, "formatSpecifier": "d", "variations": variations}}}
 
