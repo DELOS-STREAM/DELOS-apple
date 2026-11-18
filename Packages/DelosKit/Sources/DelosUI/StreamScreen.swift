@@ -24,6 +24,8 @@ struct StreamScreen: View {
     let keepStatisticsOverlay: @MainActor (StatisticsOverlay) -> Void
     /// Keeps the on-screen controls' opacity the stream menu chose (the profile's).
     let keepOnScreenOpacity: @MainActor (Int) -> Void
+    /// Keeps a touch mode the stream menu chose when the profile remembers it (`checkbox_remember_mouse_mode`).
+    let keepTouchMode: @MainActor (TouchMode) -> Void
     /// The profile's palette: the on-screen controls' pressed colour (``OscStyle``).
     let palette: Palette
     @Environment(HostStore.self) private var hosts
@@ -43,7 +45,8 @@ struct StreamScreen: View {
     init(
         hostID: String, appID: Int, profileID: String? = nil, settings: StreamSettings, palette: Palette = .delos,
         keepStatisticsOverlay: @escaping @MainActor (StatisticsOverlay) -> Void = { _ in },
-        keepOnScreenOpacity: @escaping @MainActor (Int) -> Void = { _ in }
+        keepOnScreenOpacity: @escaping @MainActor (Int) -> Void = { _ in },
+        keepTouchMode: @escaping @MainActor (TouchMode) -> Void = { _ in }
     ) {
         self.hostID = hostID
         self.appID = appID
@@ -52,6 +55,7 @@ struct StreamScreen: View {
         self.palette = palette
         self.keepStatisticsOverlay = keepStatisticsOverlay
         self.keepOnScreenOpacity = keepOnScreenOpacity
+        self.keepTouchMode = keepTouchMode
     }
 
     var body: some View {
@@ -150,6 +154,15 @@ struct StreamScreen: View {
         // The Siri Remote is the controller of Apple TV: the keyboard opens with its focus and hints
         controller.fullKeyboard.hasController = { true }
         #endif
+        controller.touchOptions = TouchOptions(settings: settings)
+        controller.zoomStore = ZoomPanStore()
+        controller.touchModeChosen = keepTouchMode
+        // A four-finger tap toggles the Delos full keyboard (`checkbox_multi_touch_gestures`)
+        controller.fullKeyboardToggle = { [weak controller] in controller?.toggleFullKeyboard() }
+        controller.zoomNotice = { [toasts] on in
+            // DelosToast.SHORT of a stream
+            toasts?.show(L(on ? "pan_zoom_mode_enabled" : "pan_zoom_mode_disabled"), icon: Symbols.info, durationMs: ToastTiming.streamShortMs)
+        }
         controller.leavingHold = .seconds(ExitLook.handoff(reduced: reducedMotion))
         controller.warningsDisabled = settings.bool(.disableWarnings)
         // The Bitrate page's recommendation: the last link test of this PC on this kind of network (StreamMenu.kt:420-436)
@@ -386,11 +399,21 @@ struct StreamContent: View {
                         renderer: renderer,
                         onDisplay: { info in
                             display = info
+                            let size = settings.resolution(displayWidth: info.pixelWidth, displayHeight: info.pixelHeight)
+                            controller.touchPicture = TouchPicture(
+                                width: size.width, height: size.height, fit: PictureFit(VideoScaleMode(value: settings.text(.videoScaleMode))))
                             controller.start(display: info)
                         },
-                        onTouch: { id, phase, point, area, time in
-                            controller.touch(id, phase, at: point, area: area, time: time)
+                        onTouches: { phase, samples, area, time in
+                            controller.touches(phase, samples, area: area, time: time)
                         },
+                        onPenHover: { point, distance, azimuth, altitude, area, time in
+                            controller.penHover(at: point, distance: distance, azimuth: azimuth, altitude: altitude, area: area, time: time)
+                        },
+                        onPointer: { point, area in controller.pointerMoved(to: point, area: area) },
+                        onScroll: { dx, dy, precise in controller.scrollWheel(dx: dx, dy: dy, precise: precise) },
+                        onLayout: { controller.surfaceLaidOut($0) },
+                        zoom: controller.videoZoom,
                         ignoresPointer: { controller.hasMouse },
                         capturesPointer: capturesPointer,
                         keyboard: controller.systemKeyboardShown && !controller.menuOpen,

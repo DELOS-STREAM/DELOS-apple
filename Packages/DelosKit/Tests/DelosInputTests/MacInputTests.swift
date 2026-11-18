@@ -153,6 +153,14 @@ private final class RecordingSink: StreamInputSink, @unchecked Sendable {
     ) throws(InputError) {}
     func sendScroll(clicks: Int8) throws(InputError) {}
     func sendHorizontalScroll(clicks: Int8) throws(InputError) {}
+    func sendMousePosition(x: Int16, y: Int16, referenceWidth: Int16, referenceHeight: Int16) throws(InputError) {}
+    func sendMouseMoveAsMousePosition(deltaX: Int16, deltaY: Int16, referenceWidth: Int16, referenceHeight: Int16) throws(InputError) {}
+    func sendTouch(
+        _ type: TouchEventType, pointerID: UInt32, x: Float, y: Float, pressureOrDistance: Float,
+        contactAreaMajor: Float, contactAreaMinor: Float, rotation: UInt16?) throws(InputError) {}
+    func sendPen(
+        _ type: TouchEventType, tool: PenTool, buttons: PenButtons, x: Float, y: Float, pressureOrDistance: Float,
+        contactAreaMajor: Float, contactAreaMinor: Float, rotation: UInt16?, tilt: UInt8?) throws(InputError) {}
 }
 
 @MainActor

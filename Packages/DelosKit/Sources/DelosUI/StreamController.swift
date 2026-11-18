@@ -163,7 +163,26 @@ final class StreamController {
     var rumbleConfiguration = RumbleConfiguration() {
         didSet { input?.rumbleConfiguration = rumbleConfiguration }
     }
-    @ObservationIgnored private var trackpad = TouchTrackpad()
+    /// The touch screen, the pencil and the local pointer while the input runs (StreamController+Touch.swift).
+    @ObservationIgnored var touchScreen: TouchScreen?
+    /// The profile's touch and pointer settings; the picture the touches are measured against; where the surface was laid
+    /// out; whether the stream is on another screen than the touches (only the trackpad modes work then).
+    @ObservationIgnored var touchOptions = TouchOptions()
+    @ObservationIgnored var touchPicture: TouchPicture?
+    @ObservationIgnored var touchArea: TouchArea?
+    @ObservationIgnored var touchOnExternalDisplay = false
+    /// Where the zoom and pan are kept between streams (nil: nowhere).
+    @ObservationIgnored var zoomStore: ZoomPanStore?
+    /// Called with a touch mode the menu chose when the profile remembers it; with the zoom mode turned on or off (the
+    /// screen's notice); and by a four-finger tap, which toggles the full keyboard.
+    @ObservationIgnored var touchModeChosen: (@MainActor (TouchMode) -> Void)?
+    @ObservationIgnored var zoomNotice: (@MainActor (Bool) -> Void)?
+    @ObservationIgnored var fullKeyboardToggle: (@MainActor () -> Void)?
+    /// What the menu's touch rows show, and how the picture is zoomed.
+    var touchMode = TouchMode.multiTouch
+    var zoomOn = false
+    var touchSensitivityOn = false
+    var videoZoom = VideoZoom()
     @ObservationIgnored private var swipe = MenuSwipe()
     /// How the stream menu opens besides a tap of Home (the profile's `ui_stream_menu_buttons` and `ui_stream_menu_swipe`).
     @ObservationIgnored private let menuButtons: Set<ShortcutButton>
@@ -416,6 +435,7 @@ final class StreamController {
             input.paused = true
             self.input = input
             syncOnScreen()
+            startTouch(sink: sink, input: input)
         }
         startStatistics()
         startPlaytime()
@@ -434,10 +454,24 @@ final class StreamController {
             inputGrabbed = input?.inputGrabbed ?? true
         case .keyCombo(.toggleLocalCursor):
             inputGrabbed = input?.inputGrabbed ?? true
-            localCursorVisible.toggle()
+            setLocalCursor(!localCursorVisible)
         case .mouseEmulation, .controllerTypeChanged:
             inputNotice?(event)
         }
+    }
+
+    /// The Mouse page's Local mouse cursor (`toggleMouseLocalCursor`): the input is grabbed again, and the local pointer shows
+    /// or hides, as Control + Alt + Shift + C does.
+    func toggleLocalCursor() {
+        input?.grabInput()
+        inputGrabbed = input?.inputGrabbed ?? true
+        setLocalCursor(!localCursorVisible)
+    }
+
+    /// Shown, the system pointer over the picture is the PC's pointer and the mouse's own motion is not sent.
+    func setLocalCursor(_ visible: Bool) {
+        localCursorVisible = visible
+        input?.localCursor = visible
     }
 
     /// The window lost the keyboard (another app or window): the keys down at the PC are released there
@@ -480,6 +514,7 @@ final class StreamController {
     }
 
     private func stopInput() {
+        stopTouch()
         input?.stop()
         input = nil
     }
@@ -508,6 +543,8 @@ final class StreamController {
         input?.paused = true
         onScreen?.releaseAll()
         fullKeyboard.releaseInput()
+        // What the fingers and the pencil hold comes up at the PC
+        touchScreen?.cancelAll(time: Self.milliseconds(ProcessInfo.processInfo.systemUptime))
     }
 
     func closeMenu() {
@@ -1234,46 +1271,61 @@ final class StreamController {
         if phase == .streaming, !menuOpen { input?.paused = false }
     }
 
-    /// A touch on the stream, in pixels of [area]: the on-screen controls take the touches that land on them, the swipe up from
-    /// the band above the bottom edge opens the menu (unless the profile turned it off), the other touches are the PC's
-    /// trackpad. While the controls are moved or resized, the stream gets no touch.
+    /// One touch on the stream (``touches(_:_:area:time:)``).
     func touch(_ id: Int, _ touchPhase: TouchPhase, at point: CGPoint, area: TouchArea, time: TimeInterval) {
+        touches(touchPhase, [TouchSample(id: id, x: point.x, y: point.y)], area: area, time: time)
+    }
+
+    /// Touches on the stream that changed together, in pixels of [area]: the on-screen controls take the touches that land on
+    /// them, the swipe up from the band above the bottom edge opens the menu (unless the profile turned it off), the other
+    /// touches go to the touch screen in its mode (``TouchScreen``). While the controls are moved or resized, the stream
+    /// gets no touch.
+    func touches(_ touchPhase: TouchPhase, _ samples: [TouchSample], area: TouchArea, time: TimeInterval) {
+        let screenPhase: TouchScreen.Phase = switch touchPhase {
+        case .began: .began
+        case .moved: .moved
+        case .ended: .ended
+        case .cancelled: .cancelled
+        }
         // A touch that ends after the menu opened (its own swipe opened it) is forgotten all the same
         if touchPhase == .ended || touchPhase == .cancelled, phase != .streaming || menuOpen || loader.cancellable {
-            _ = swipe.ended(id)
-            trackpad.cancelled(id)
+            for sample in samples { _ = swipe.ended(sample.id) }
+            touchScreen?.touches(.cancelled, samples, time: Self.milliseconds(time))
             return
         }
         guard phase == .streaming, !menuOpen, !loader.cancellable else { return }
         // A tap while the menu plays its exit is still the menu's: it never reaches the game (StreamMenuLayout.kt:133-140)
         if touchPhase == .began, menuClosing() { return }
-        if let onScreen, area.width > 0, area.height > 0 {
-            let x = Float(point.x / area.width) * Float(onScreen.panel.width), y = Float(point.y / area.height) * Float(onScreen.panel.height)
-            let oscPhase: OnScreenControls.Phase = switch touchPhase {
-            case .began: .began
-            case .moved: .moved
-            case .ended: .ended
-            case .cancelled: .cancelled
+        if area != touchArea { surfaceLaidOut(area) }
+        var rest: [TouchSample] = []
+        for sample in samples {
+            let id = sample.id, point = CGPoint(x: sample.x, y: sample.y)
+            if let onScreen, area.width > 0, area.height > 0 {
+                let x = Float(point.x / area.width) * Float(onScreen.panel.width), y = Float(point.y / area.height) * Float(onScreen.panel.height)
+                let oscPhase: OnScreenControls.Phase = switch touchPhase {
+                case .began: .began
+                case .moved: .moved
+                case .ended: .ended
+                case .cancelled: .cancelled
+                }
+                if onScreen.touch(id, oscPhase, x: x, y: y, time: time * 1000) { continue }
+                if touchPhase == .began, onScreen.mode == .move || onScreen.mode == .resize { continue }
             }
-            if onScreen.touch(id, oscPhase, x: x, y: y, time: time * 1000) { return }
-            if touchPhase == .began, onScreen.mode == .move || onScreen.mode == .resize { return }
+            switch touchPhase {
+            case .began:
+                if sample.tool == .finger, menuSwipe, swipe.began(id, at: point, zone: area.swipeZone) { continue }
+            case .moved:
+                let (owned, open) = swipe.moved(id, to: point, height: area.height)
+                if open { openMenu() }
+                if owned { continue }
+            case .ended, .cancelled:
+                if swipe.ended(id) { continue }
+            }
+            rest.append(sample)
         }
-        switch touchPhase {
-        case .began:
-            if menuSwipe, swipe.began(id, at: point, zone: area.swipeZone) { return }
-            trackpad.began(id, at: point, time: time)
-        case .moved:
-            let (owned, open) = swipe.moved(id, to: point, height: area.height)
-            if open { openMenu() }
-            if owned { return }
-            trackpad.moved(id, to: point).forEach { input?.send($0) }
-        case .ended:
-            if swipe.ended(id) { return }
-            trackpad.ended(id, time: time).forEach { input?.send($0) }
-        case .cancelled:
-            if swipe.ended(id) { return }
-            trackpad.cancelled(id)
-        }
+        guard !rest.isEmpty else { return }
+        // The swipe opened the menu: the other touches are over for the PC
+        touchScreen?.touches(menuOpen ? .cancelled : screenPhase, rest, time: Self.milliseconds(time))
     }
 
     /// Whether a mouse is connected, whose pointer touches are already the PC's mouse.

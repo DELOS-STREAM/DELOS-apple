@@ -9,8 +9,7 @@ struct TouchModeOption: Equatable, Sendable {
 
 /// What the stream menu reads from and does to the stream's touch and pointer handling (the mouse part of `StreamMenuHost`,
 /// StreamMenuHost.kt:84-90,127-134): the Zoom and Touch sensitivity switches of More, and the Mouse page's touchscreen mode and
-/// local cursor. The stream's touch modes implement it on ``StreamController``; the defaults below stand in until they do: no
-/// mode change (the Mouse mode row is hidden, as on Android when the mode cannot change), and switches that stay off.
+/// local cursor. ``StreamController`` implements it with its touch modes (StreamController+Touch.swift).
 @MainActor
 protocol StreamTouchModes: AnyObject {
     /// The touchscreen mode may change during this stream (`allowChangeMouseMode`): More shows the Mouse mode row.
@@ -32,17 +31,9 @@ protocol StreamTouchModes: AnyObject {
     func toggleTouchSensitivity()
 }
 
-extension StreamTouchModes {
-    var allowsTouchModeChange: Bool { false }
-    var touchModeOptions: [TouchModeOption] { [] }
-    var selectedTouchMode: Int { 0 }
-    var rememberMouseMode: Bool { false }
-    func setTouchMode(_ value: Int) {}
-    func toggleLocalCursor() {}
-    var zoomOn: Bool { false }
-    func toggleZoom() {}
-    var touchSensitivityOn: Bool { false }
-    func toggleTouchSensitivity() {}
+extension StreamController: StreamTouchModes {
+    /// The Mouse page's choices in the words of the catalog.
+    var touchModeOptions: [TouchModeOption] {
+        touchModeOptionValues.map { TouchModeOption(value: $0.value, label: L($0.labelKey), help: L($0.helpKey)) }
+    }
 }
-
-extension StreamController: StreamTouchModes {}

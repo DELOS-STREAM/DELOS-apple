@@ -22,6 +22,15 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   keyboard size, width, alignment, opacity and vibration apply. While it is up the controllers type instead of
   playing, and everything held comes up at the PC when it closes. The system keyboard of iPhone and iPad moved to
   More → Open system keyboard.
+- The six touch modes of DELOS for Android on iPhone and iPad: Multi touch (the fingers are the PC's touch screen,
+  the mouse where the PC takes no touch), Mouse and Mouse with swapped buttons (tap, long press for the other
+  button, a second finger scrolls), Trackpad natural (acceleration, flicks, double tap to drag, two-finger scroll)
+  and Trackpad gaming (long press to drag, its own X/Y speed, absolute mouse mode), and touch off. Taps of three,
+  four and five fingers open the keyboard, the full keyboard and the stream menu. The stream menu can switch the
+  mode (kept when Remember mouse mode is on), pan and zoom the picture (kept when Remember zoom & pan is on) and
+  turn the touch sensitivity on. The Apple Pencil is the PC's pen with its pressure, tilt and hover, or its mouse.
+  The local pointer shows the system pointer and moves the PC's to where it is; the Mac scrolls from AppKit with the
+  trackpad's speed and swapped axes. Not verified on a device or against a real PC.
 - On-screen controls on iPhone and iPad, as on DELOS for Android: the D-pad, A/B/X/Y, bumpers, triggers, Back,
   Guide, Start, L3/R3, the trackpad button and fixed or free sticks in the DELOS style, any number of fingers at
   once, sent to the PC as controller 0. The default layout is computed for every screen shape; the gear edits it

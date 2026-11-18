@@ -37,6 +37,14 @@ private final class RecordingSink: StreamInputSink, @unchecked Sendable {
     ) throws(InputError) {}
     func sendScroll(clicks: Int8) throws(InputError) {}
     func sendHorizontalScroll(clicks: Int8) throws(InputError) {}
+    func sendMousePosition(x: Int16, y: Int16, referenceWidth: Int16, referenceHeight: Int16) throws(InputError) {}
+    func sendMouseMoveAsMousePosition(deltaX: Int16, deltaY: Int16, referenceWidth: Int16, referenceHeight: Int16) throws(InputError) {}
+    func sendTouch(
+        _ type: TouchEventType, pointerID: UInt32, x: Float, y: Float, pressureOrDistance: Float,
+        contactAreaMajor: Float, contactAreaMinor: Float, rotation: UInt16?) throws(InputError) {}
+    func sendPen(
+        _ type: TouchEventType, tool: PenTool, buttons: PenButtons, x: Float, y: Float, pressureOrDistance: Float,
+        contactAreaMajor: Float, contactAreaMinor: Float, rotation: UInt16?, tilt: UInt8?) throws(InputError) {}
 }
 
 /// A stream that is up at once.
@@ -321,8 +329,8 @@ private func streaming(
         guard case let .rows(more) = controller.menuContent(.more) else { Issue.record("More has rows"); return }
         // Android's order (StreamMenuRoot.kt:484-501); no touchscreen here: no Zoom, Touch sensitivity or on-screen controls
         #expect(more.map(\.id) == [
-            "more-keys", "more-send-clipboard", "more-get-clipboard", "more-commands", "more-task-manager", "more-system-keyboard",
-            "more-rumble", "more-gyro-smoothing",
+            "more-keys", "more-send-clipboard", "more-get-clipboard", "more-commands", "more-task-manager", "more-mouse-mode",
+            "more-system-keyboard", "more-rumble", "more-gyro-smoothing",
         ])
         guard case let .pills(keys, _) = controller.menuContent(.keys) else { Issue.record("Keys has pills"); return }
         #expect(keys.count == 14 && keys.first?.label == L("game_menu_send_keys_esc"))

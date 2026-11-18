@@ -350,54 +350,6 @@ import Testing
 }
 
 @Suite struct TouchMouseTests {
-    @Test func aShortTapClicksLeftAndTwoFingersClickRight() {
-        var pad = TouchTrackpad()
-        pad.began(1, at: CGPoint(x: 100, y: 100), time: 0)
-        let small = pad.moved(1, to: CGPoint(x: 110, y: 104))
-        let tap = pad.ended(1, time: 0.1)
-        #expect(small == [])
-        #expect(tap == [.click(.left)])
-
-        pad.began(1, at: CGPoint(x: 100, y: 100), time: 1)
-        pad.began(2, at: CGPoint(x: 300, y: 100), time: 1.02)
-        let first = pad.ended(1, time: 1.1)
-        let second = pad.ended(2, time: 1.12)
-        #expect(first == [])
-        #expect(second == [.click(.right)])
-    }
-
-    @Test func aLongTouchIsNoTap() {
-        var pad = TouchTrackpad()
-        pad.began(1, at: .zero, time: 0)
-        let actions = pad.ended(1, time: 0.5)
-        #expect(actions == [])
-    }
-
-    @Test func oneFingerMovesThePointerOnceItLeftTheTapRadius() {
-        var pad = TouchTrackpad()
-        pad.began(1, at: CGPoint(x: 0, y: 0), time: 0)
-        let points = [CGPoint(x: 20, y: 0), CGPoint(x: 40, y: -5), CGPoint(x: 40.5, y: -5), CGPoint(x: 41, y: -5)]
-        let moves = points.map { pad.moved(1, to: $0) }
-        // Inside the tap radius nothing moves; then the motion, with fractions carried to the next report
-        #expect(moves == [[], [.move(dx: 20, dy: -5)], [], [.move(dx: 1, dy: 0)]])
-        let end = pad.ended(1, time: 0.1)
-        #expect(end == [])
-    }
-
-    @Test func twoFingersScrollWithTheContent() {
-        var pad = TouchTrackpad()
-        pad.began(1, at: CGPoint(x: 0, y: 0), time: 0)
-        pad.began(2, at: CGPoint(x: 100, y: 0), time: 0)
-        _ = pad.moved(1, to: CGPoint(x: 0, y: 40))
-        // Fingers down by 10 pixels each: the content follows, the wheel turns up (positive) by 3 per pixel
-        let one = pad.moved(1, to: CGPoint(x: 0, y: 50))
-        let two = pad.moved(2, to: CGPoint(x: 100, y: 10))
-        let ends = pad.ended(1, time: 0.1) + pad.ended(2, time: 0.1)
-        #expect(one == [.scroll(15)])
-        #expect(two == [.scroll(15)])
-        #expect(ends == [])
-    }
-
     // `StreamMenuSwipeTest` of DELOS for Android
 
     @Test func zoneBoundsFor1080() {
