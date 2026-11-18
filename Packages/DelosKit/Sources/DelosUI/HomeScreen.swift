@@ -516,6 +516,10 @@ struct GameLibrary: View {
         .onDisappear { wrap?.cancel() }
         // The focused game's information is looked up (the store decides from its cache whether it is due)
         .task(id: focused.id) { metadata.ensure(focused) }
+        // The focused game's card on the companion screen
+        .companionGame(
+            hostID: hostID, app: focused, running: running.flatMap { id in hosts.apps[hostID]?.first { $0.id == id } }, actions: actions, art: art,
+            metadata: metadata)
         // The game background follows the focus with a short delay, so it does not flicker while scrolling fast
         .task(id: "\(GameArt.key(hostID, focused.id))#\(art.artwork.version)") {
             let (image, animation) = await heroImage(focused)

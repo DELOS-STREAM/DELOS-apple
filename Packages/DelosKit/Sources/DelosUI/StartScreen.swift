@@ -328,6 +328,10 @@ public struct DelosRoot: View {
             feedback?.soundsEnabled = now.sounds
             feedback?.hapticsEnabled = now.haptics
         }
+        // The companion screen follows the shell: its look, the battery and the context of its fallback card
+        .onChange(of: companionLook, initial: true) { _, look in CompanionHub.shared.look = look }
+        .onChange(of: device.battery, initial: true) { _, battery in CompanionHub.shared.battery = battery }
+        .onChange(of: companionContext, initial: true) { _, context in CompanionHub.shared.context = context }
         .onAppear { device.start() }
         // "Skip the start screen": straight into the default PC, once, when DELOS opens
         .task { await actions.skipStartIfChosen() }
@@ -536,6 +540,19 @@ public struct DelosRoot: View {
 
     private var connectedPC: (name: String, online: Bool)? {
         connectedHost.map { ($0.name, $0.reachability == .online) }
+    }
+
+    /// How the companion window looks: this profile's colors, motion, interface scale and clock.
+    private var companionLook: CompanionLook {
+        CompanionLook(
+            colors: colors, reducedMotion: systemReduceMotion || appearance.reducedMotion, textScale: Double(appearance.uiScale) / 100,
+            clock: appearance.clock)
+    }
+
+    /// The context of the companion's fallback card, while a companion window is shown.
+    private var companionContext: ShellContext? {
+        guard CompanionHub.shared.shown else { return nil }
+        return CompanionContentKind.context(screen: navigator.current, hints: hints, host: connectedHost, hosts: hosts)
     }
 
     /// The side menu header's PC: its name and live state.

@@ -94,6 +94,8 @@ struct PortalOverlay: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(portal.label)
         .accessibilityValue(portal.sub)
+        // The companion screen shows the same wait; its Cancel is this tap
+        .companionPortal(portal, onCancel: onCancel)
     }
 
     /// radial-gradient(bg 25 % at the center → bg 70 % at 75 %)

@@ -193,7 +193,7 @@ final class ShellActions {
             // The menu is the confirmation: only its first row quits the running game, and it opens on the other one
             items = [
                 MenuItem(icon: Symbols.swapGame, label: L("home_menu_quit_and_start", running.title), danger: true) { [self] in
-                    quit(hostID: hostID, app: running) { start(app) }
+                    quitAndStart(hostID: hostID, running: running, app: app)
                 },
                 MenuItem(icon: Symbols.resume, label: L("home_menu_resume_other", running.title)) { start(running) },
             ]
@@ -254,6 +254,12 @@ final class ShellActions {
         let apps = libraryHostID.flatMap { hosts.apps[$0] } ?? []
         let hidden = libraryHostID.map { hiding.ids(profile: profiles.current?.id, hostID: $0) } ?? []
         return LibraryHiding.sideRow(count: LibraryHiding.count(apps, hidden: hidden), showing: hiding.showHidden, pcName: pcName)
+    }
+
+    /// Quits [running] on the PC and starts [app] once it has quit: the menu's "Quit X and start Y", and the companion's
+    /// Quit and start (`GameActions.quitAndStart`).
+    func quitAndStart(hostID: String, running: HostApp, app: HostApp) {
+        quit(hostID: hostID, app: running) { [self] in play(hostID: hostID, app: app) }
     }
 
     /// Quits [app] on the PC; [then] runs once it has quit (the other game of "Quit X and start Y" starts). A PC DELOS has
