@@ -20,11 +20,10 @@ struct RefreshTick: @unchecked Sendable {
 /// through the upscaler when it is on) and presents the drawable. `MetalRenderer` connects it to a `CAMetalLayer` and a
 /// `CAMetalDisplayLink`; the replay tests connect it to a virtual clock and virtual refreshes.
 ///
-/// The upscaler runs as Android's SGSR output stage does (`SgsrRenderer.java`): at most two frames of its GPU work in flight
-/// (a newer frame replaces one held back for the busy GPU), its load measured in one-second windows that lighten SGSR 2
-/// (``FlowGovernor``) and report an overload once per stream and mode (``OverloadDetector``; nothing is changed
-/// automatically, as on Android), and a streak of 60 failed drawings switches it off for the stream (Android's fallback
-/// to direct output).
+/// The upscaler's output stage: at most two frames of its GPU work in flight (a newer frame replaces one held back for the
+/// busy GPU), its load measured in one-second windows that lighten MetalFX Temporal's optical flow (``FlowGovernor``) and
+/// report an overload once per stream and mode (``OverloadDetector``; nothing is changed automatically), and a streak of
+/// 60 failed drawings switches it off for the stream (the picture is then drawn directly).
 ///
 /// Three threads meet here: the core's video thread (`enqueue`), VideoToolbox's (decoded pictures) and the display link's
 /// (`tick`); the queue and the counters are behind one lock that is held for a few assignments only.
@@ -97,7 +96,7 @@ final class MetalPipeline: @unchecked Sendable {
 
         var upscalerActive: Bool { upscaler.enabled && !upscalerFailed }
 
-        /// One finished load window: lighten SGSR 2 or report an overload. Returns the mode to report, if any.
+        /// One finished load window: lighten MetalFX Temporal's flow or report an overload. Returns the mode to report, if any.
         mutating func onWindow(_ window: UpscalerWindow?) -> (UpscalerMode, Bool)? {
             guard let window else { return nil }
             _ = flow.onWindow(window)
@@ -137,9 +136,10 @@ final class MetalPipeline: @unchecked Sendable {
 
     init?(
         pacing: FramePacing, fps: Int, options: VideoRenderOptions = VideoRenderOptions(),
-        clock: @escaping Clock = { CACurrentMediaTime() }, device: (any MTLDevice)? = MTLCreateSystemDefaultDevice()
+        clock: @escaping Clock = { CACurrentMediaTime() }, device: (any MTLDevice)? = MTLCreateSystemDefaultDevice(),
+        metalFX: MetalFXSupport? = nil
     ) {
-        guard let drawer = MetalFrameDrawer(device: device) else { return nil }
+        guard let drawer = MetalFrameDrawer(device: device, metalFX: metalFX) else { return nil }
         self.drawer = drawer
         self.clock = clock
         state = Mutex(State(queue: FrameQueue(pacing: pacing, fps: fps), scaleMode: options.scaleMode, upscaler: options.upscaler))
@@ -191,7 +191,7 @@ final class MetalPipeline: @unchecked Sendable {
             switch (s.upscaler.enabled, s.upscaledOnScreen) {
             case (true, nil): return .starting
             case (false, .some): return .stopping
-            case (true, .some(let report)): return .on(report.mode)
+            case (true, .some(let report)): return report.fellBack ? .unavailable : .on(report.mode)
             case (false, nil): return .off
             }
         }
@@ -479,7 +479,7 @@ final class MetalPipeline: @unchecked Sendable {
         }
     }
 
-    /// The statistics panel's scale line, in Android's words (`SgsrRenderer.getScaleDescription`).
+    /// The statistics panel's scale line ("Upscaled to: …", "Supersampled to: …", "Sharpen only: …").
     static func scaleDescription(_ report: UpscaleReport) -> String {
         let d = report.dimensions
         if report.mode == .sharpen { return "Sharpen only: \(d.internalWidth) × \(d.internalHeight)" }

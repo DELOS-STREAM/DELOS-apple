@@ -5,15 +5,16 @@ import Synchronization
 import Testing
 @testable import DelosMedia
 
-/// The upscaler's shaders against their CPU references, its geometry, and the pipeline's upscaler states.
+/// The upscaler's CAS pass against its CPU reference, its geometry, and the pipeline's upscaler states. MetalFX itself:
+/// MetalFXUpscalerTests.
 @Suite struct UpscalerRenderingTests {
     let picture = ReferenceImage.pattern(width: 48, height: 32)
 
-    @Test func sharpenOnlyIsAndroidsCASOnTheFiveSampleCross() throws {
+    @Test func sharpenOnlyIsCASOnTheFiveSampleCross() throws {
         for sharpness: Float in [0, 0.5, 1] {
             let gpu = try UpscalerGPU.run(
-                "sharpenOnlyFragment", source: picture, width: picture.width, height: picture.height,
-                uniforms: UpscaleUniforms(sampled: (48, 32), stream: (48, 32), strength: sharpness, enabled: true))
+                "casFragment", source: picture, width: picture.width, height: picture.height,
+                uniforms: CASUniforms(sampled: (48, 32), strength: sharpness))
             #expect(UpscalerGPU.difference(gpu, UpscalerReference.sharpenOnly(picture, sharpness: sharpness)) < 2e-3)
         }
     }
@@ -21,93 +22,16 @@ import Testing
     @Test func sharpenOnlyLeavesFlatAreasAlone() throws {
         let flat = ReferenceImage.uniform(SIMD4(0.4, 0.5, 0.6, 1), width: 16, height: 16)
         let gpu = try UpscalerGPU.run(
-            "sharpenOnlyFragment", source: flat, width: 16, height: 16,
-            uniforms: UpscaleUniforms(sampled: (16, 16), stream: (16, 16), strength: 1, enabled: true))
+            "casFragment", source: flat, width: 16, height: 16, uniforms: CASUniforms(sampled: (16, 16), strength: 1))
         #expect(UpscalerGPU.difference(gpu, flat) < 1e-3)
     }
 
-    @Test func theSpatialPresentationSharpensWithinItsBound() throws {
-        for strength: Float in [0, 0.5, 1] {
-            let gpu = try UpscalerGPU.run(
-                "supersamplePresentFragment", source: picture, width: picture.width, height: picture.height,
-                uniforms: UpscaleUniforms(sampled: (48, 32), stream: (48, 32), strength: strength, enabled: true))
-            #expect(UpscalerGPU.difference(gpu, UpscalerReference.supersamplePresent(picture, strength: strength)) < 2e-3)
-        }
-    }
-
-    @Test func sgsr1StandardMatchesTheReferenceAtTwiceTheSize() throws {
+    @Test func thePresentationWithoutSharpnessIsThePlainPicture() throws {
+        // Twice the size: CAS at 0 is a bilinear sample of the scaler's output
         let gpu = try UpscalerGPU.run(
-            "sgsr1Fragment", source: picture, width: 96, height: 64,
-            uniforms: UpscaleUniforms(sampled: (48, 32), stream: (48, 32), strength: 0, enabled: true))
-        let reference = UpscalerReference.sgsr1(picture, width: 96, height: 64)
-        // The GPU's float rounding may tip a pixel across the edge threshold: at most one in a thousand, and never by more
-        // than the shader's clamp of 23/255
-        #expect(UpscalerGPU.mismatches(gpu, reference, above: 5e-3) <= gpu.pixels.count / 1000)
-        #expect(UpscalerGPU.difference(gpu, reference) <= 23.0 / 255.0 + 1e-3)
-        // The reconstruction does something: it is not the plain bilinear picture
+            "casFragment", source: picture, width: 96, height: 64, uniforms: CASUniforms(sampled: (48, 32), strength: 0))
         let bilinear = ReferenceImage(width: 96, height: 64) { x, y in picture.sample((Float(x) + 0.5) / 96, (Float(y) + 0.5) / 64) }
-        #expect(UpscalerGPU.difference(gpu, bilinear) > 0.02)
-    }
-
-    @Test func sgsr1HighKeepsAFlatPictureAndStaysInRange() throws {
-        let flat = ReferenceImage.uniform(SIMD4(0.3, 0.6, 0.2, 1), width: 24, height: 16)
-        let flatOut = try UpscalerGPU.run(
-            "sgsr1HighFragment", source: flat, width: 48, height: 32,
-            uniforms: UpscaleUniforms(sampled: (24, 16), stream: (24, 16), strength: 0, enabled: true))
-        #expect(UpscalerGPU.difference(flatOut, ReferenceImage.uniform(SIMD4(0.3, 0.6, 0.2, 1), width: 48, height: 32)) < 1e-3)
-        let out = try UpscalerGPU.run(
-            "sgsr1HighFragment", source: picture, width: 96, height: 64,
-            uniforms: UpscaleUniforms(sampled: (48, 32), stream: (48, 32), strength: 0, enabled: true))
-        #expect(out.pixels.allSatisfy { p in (0..<3).allSatisfy { p[$0] >= 0 && p[$0] <= 1 && !p[$0].isNaN } })
-    }
-
-    @Test func sgsr2StartsItsHistoryWithTheClampedLanczosUpsample() throws {
-        let drawer = try UpscalerGPU.drawer()
-        let source = try picture.texture(drawer.device)
-        let temporal = try #require(TemporalReconstruction(cache: drawer.cache, width: 48, height: 32))
-        var outputs: [ReferenceImage] = []
-        for frame in 0..<3 {
-            let command = try #require(drawer.queue.makeCommandBuffer())
-            let history = try #require(temporal.render(
-                source: source, output: (96, 64), timestamp: Double(frame) / 60, hdr: false, quality: frame == 2, reuseFlow: false,
-                commandBuffer: command))
-            let readable = try UpscalerGPU.target(drawer.device, width: 96, height: 64)
-            // The history is half floats: copied through a plain presentation into a readable target
-            #expect(drawer.cache.draw(
-                "supersamplePresentFragment", into: readable, textures: [history],
-                uniforms: UpscaleUniforms(sampled: (96, 64), stream: (48, 32), strength: 0, enabled: true), commandBuffer: command))
-            command.commit()
-            command.waitUntilCompleted()
-            outputs.append(UpscalerGPU.read(readable))
-        }
-        #expect(UpscalerGPU.difference(outputs[0], UpscalerReference.temporalReset(picture, width: 96, height: 64)) < 3e-3)
-        // A still picture stays nearly still: the history clipped to the neighbourhood's box blends back in, in both modes
-        #expect(UpscalerGPU.meanDifference(outputs[1], outputs[0]) < 1e-2)
-        #expect(UpscalerGPU.meanDifference(outputs[2], outputs[0]) < 1e-2)
-        #expect(outputs.allSatisfy { $0.pixels.allSatisfy { p in (0..<3).allSatisfy { p[$0] >= 0 && p[$0] <= 1 } } })
-    }
-
-    @Test func aGapLongerThanFiftyMillisecondsStartsTheHistoryAgain() throws {
-        let drawer = try UpscalerGPU.drawer()
-        let bright = try ReferenceImage.uniform(SIMD4(0.9, 0.9, 0.9, 1), width: 16, height: 16).texture(drawer.device)
-        let dark = try ReferenceImage.uniform(SIMD4(0.1, 0.1, 0.1, 1), width: 16, height: 16).texture(drawer.device)
-        let temporal = try #require(TemporalReconstruction(cache: drawer.cache, width: 16, height: 16))
-        func render(_ source: any MTLTexture, at time: Double) throws -> ReferenceImage {
-            let command = try #require(drawer.queue.makeCommandBuffer())
-            let history = try #require(temporal.render(
-                source: source, output: (32, 32), timestamp: time, hdr: false, quality: false, reuseFlow: false, commandBuffer: command))
-            let readable = try UpscalerGPU.target(drawer.device, width: 32, height: 32)
-            _ = drawer.cache.draw(
-                "supersamplePresentFragment", into: readable, textures: [history],
-                uniforms: UpscaleUniforms(sampled: (32, 32), stream: (16, 16), strength: 0, enabled: true), commandBuffer: command)
-            command.commit()
-            command.waitUntilCompleted()
-            return UpscalerGPU.read(readable)
-        }
-        _ = try render(bright, at: 1)
-        // After a gap the old picture is not blended in at all
-        let after = try render(dark, at: 1.2)
-        #expect(UpscalerGPU.difference(after, ReferenceImage.uniform(SIMD4(0.1, 0.1, 0.1, 1), width: 32, height: 32)) < 2e-3)
+        #expect(UpscalerGPU.difference(gpu, bilinear) < 3e-3)
     }
 
     // MARK: Geometry
@@ -150,9 +74,9 @@ import Testing
 
     // MARK: The pipeline's upscaler
 
-    @Test func theUpscalerStartsRunsAndStops() throws {
+    @Test(.enabled(if: MetalFXSupport.system.spatial)) func theUpscalerStartsRunsAndStops() throws {
         let clock = VirtualClock()
-        let options = VideoRenderOptions(upscaler: UpscalerSettings(enabled: true, mode: .standard))
+        let options = VideoRenderOptions(upscaler: UpscalerSettings(enabled: true, mode: .spatial))
         let pipeline = try #require(MetalPipeline(pacing: .latency, fps: 60, options: options, clock: clock.reading))
         defer { pipeline.invalidate() }
         pipeline.useOffscreenSize(width: 128, height: 128)
@@ -162,7 +86,7 @@ import Testing
         #expect(pipeline.enqueue(try stream.sample(0)))
         pipeline.waitForDecodes()
         pipeline.tick(RefreshTick(presentation: 1.02, refresh: 1.0 / 60, drawable: nil))
-        #expect(pipeline.upscalerStatus == .on(.standard))
+        #expect(pipeline.upscalerStatus == .on(.spatial))
         #expect(!pipeline.isSupersampling)
         var counters = pipeline.counters()
         #expect(counters.scaleDescription == "Upscaled to: 128 × 128")
@@ -172,7 +96,7 @@ import Testing
         pipeline.setUpscaler(UpscalerSettings(enabled: true, mode: .sharpen, sharpness: 80))
         clock.set(1.03)
         pipeline.tick(RefreshTick(presentation: 1.04, refresh: 1.0 / 60, drawable: nil))
-        #expect(pipeline.upscalerStatus == .on(.standard))
+        #expect(pipeline.upscalerStatus == .on(.spatial))
         clock.set(1.05)
         #expect(pipeline.enqueue(try stream.sample(1)))
         pipeline.waitForDecodes()
@@ -193,7 +117,7 @@ import Testing
         #expect(pipeline.counters().scaleDescription == nil)
     }
 
-    @Test func aStreamThatMatchesTheViewIsSupersampled() throws {
+    @Test(.enabled(if: MetalFXSupport.system.temporal)) func aStreamThatMatchesTheViewIsSupersampled() throws {
         let clock = VirtualClock()
         let options = VideoRenderOptions(upscaler: UpscalerSettings(enabled: true, mode: .temporal, supersamplingLevel: 2))
         let pipeline = try #require(MetalPipeline(pacing: .latency, fps: 60, options: options, clock: clock.reading))
@@ -208,6 +132,31 @@ import Testing
         #expect(pipeline.upscalerStatus == .on(.temporal))
         #expect(pipeline.isSupersampling)
         #expect(pipeline.counters().scaleDescription == "Supersampled to: 128 × 128")
+    }
+
+    @Test func withoutMetalFXEveryModeRunsAsSharpenOnlyAndReportsUnavailable() throws {
+        for mode in [UpscalerMode.spatial, .temporal] {
+            let clock = VirtualClock()
+            let options = VideoRenderOptions(upscaler: UpscalerSettings(enabled: true, mode: mode, supersamplingLevel: 2))
+            let pipeline = try #require(MetalPipeline(pacing: .latency, fps: 60, options: options, clock: clock.reading, metalFX: MetalFXSupport.none))
+            defer { pipeline.invalidate() }
+            pipeline.useOffscreenSize(width: 128, height: 128)
+            var stream = try ReplayStream(fixture: "frames.h264", codec: .h264)
+            clock.set(1)
+            #expect(pipeline.enqueue(try stream.sample(0)))
+            pipeline.waitForDecodes()
+            pipeline.tick(RefreshTick(presentation: 1.02, refresh: 1.0 / 60, drawable: nil))
+            #expect(pipeline.upscalerStatus == .unavailable)
+            #expect(!pipeline.isSupersampling)
+            #expect(pipeline.counters().scaleDescription == "Sharpen only: 64 × 64")
+            // Sharpen only itself is no fallback
+            pipeline.setUpscaler(UpscalerSettings(enabled: true, mode: .sharpen))
+            clock.set(1.05)
+            #expect(pipeline.enqueue(try stream.sample(1)))
+            pipeline.waitForDecodes()
+            pipeline.tick(RefreshTick(presentation: 1.06, refresh: 1.0 / 60, drawable: nil))
+            #expect(pipeline.upscalerStatus == .on(.sharpen))
+        }
     }
 
     @Test func theDisplayLayerReportsARequestedUpscalerAsUnavailable() async {

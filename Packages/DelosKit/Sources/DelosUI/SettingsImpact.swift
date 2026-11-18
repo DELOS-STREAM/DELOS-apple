@@ -51,14 +51,12 @@ struct ImpactContext: Equatable {
 
     var pyro: Bool { codec == VideoCodec.pyroWave.rawValue }
     var periodMs: Double { 1000 / fps }
-    var temporal: Bool { mode == "temporal" || mode == "temporal-quality" }
-    var temporalMs: Double { twoTimes ? ImpactTiming.sgsr2For4K : ImpactTiming.sgsr2For1440 }
+    var temporal: Bool { mode == "temporal" }
 
-    /// The upscaler pass in ms for the current mode, nil where Android's docs have no measurement.
+    /// The upscaler pass in ms for the current mode, nil where there is no measurement (the MetalFX scalers).
     var upscalerMs: Double? {
-        guard upscaler else { return nil }
-        if mode == "sharpen" { return ImpactTiming.sharpen }
-        return temporal ? temporalMs : nil
+        guard upscaler, mode == "sharpen" else { return nil }
+        return ImpactTiming.sharpen
     }
 
     /// The Mbps the host would be asked for with this codec, resolution and frame rate, if the table knows it: PyroWave's
@@ -78,12 +76,10 @@ struct ImpactContext: Equatable {
     }
 }
 
-/// The upscaler passes Android measured (docs/SGSR2_VIDEO.md of DELOS for Android, Adreno 740): SGSR2 to 1440p and to 4K,
-/// and the sharpen pass. Used as the same budget estimate here.
+/// The measured cost of the sharpen (CAS) pass at 1080p on a phone GPU, used as a budget estimate. The MetalFX scalers have
+/// no measurement yet: their chips are qualitative (``temporalImpact(_:)``).
 enum ImpactTiming {
     static let sharpen = 0.31
-    static let sgsr2For1440 = 6.85
-    static let sgsr2For4K = 10.23
 }
 
 /// The impact of the stream setting [id] for the settings in effect, or nil for a setting without chips (`impact` of DELOS for
@@ -152,17 +148,15 @@ private func gpuLevel(_ ms: Double, _ periodMs: Double) -> ImpactLevel {
 private func upscalerMode(_ c: ImpactContext) -> SettingImpact {
     switch c.mode {
     case "sharpen", "standard": SettingImpact(gpu: .low, latency: .low, network: .none)
-    case "high": SettingImpact(gpu: .medium, latency: .low, network: .none)
     default: temporalImpact(c)
     }
 }
 
-/// SGSR2: its pass over the frame period; a pass longer than the period queues frames (latency High). Quality costs one
-/// level more GPU than Normal.
+/// MetalFX Temporal: the video's optical flow and the temporal scaler, unmeasured, so a qualitative Medium GPU cost, High
+/// at 2× supersampling or above 60 FPS (more pixels, or a shorter frame period); the GPU work sits in each frame's path
+/// (latency Medium).
 private func temporalImpact(_ c: ImpactContext) -> SettingImpact {
-    let level = gpuLevel(c.temporalMs, c.periodMs)
-    let gpu = c.mode == "temporal-quality" && level != .high ? ImpactLevel(rawValue: level.rawValue + 1) ?? .high : level
-    return SettingImpact(gpu: gpu, latency: c.temporalMs > c.periodMs ? .high : .medium, network: .none)
+    SettingImpact(gpu: c.twoTimes || c.fps > 60 ? .high : .medium, latency: .medium, network: .none)
 }
 
 extension StreamSettingsForm {

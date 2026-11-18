@@ -155,8 +155,21 @@ struct StreamDevice: Equatable, Sendable {
     var pictureInPicture = false
     /// A GPU upscaler for the stream (Metal on every supported device).
     var upscaler = true
+    /// MetalFX's spatial and temporal scalers on this GPU (``DelosMedia/MetalFXSupport``); a mode without its scaler runs
+    /// as Sharpen only.
+    var metalFXSpatial = true
+    var metalFXTemporal = true
     /// A PyroWave decoder.
     var pyroWave = false
+
+    /// Whether the MetalFX scaler of the stored upscaler mode `value` runs here (Sharpen only needs none).
+    func metalFXRuns(_ value: String) -> Bool {
+        switch value {
+        case "standard": metalFXSpatial
+        case "temporal": metalFXTemporal
+        default: true
+        }
+    }
 
     /// HDR streaming needs a hardware HEVC Main10 decoder and an HDR display, both as on Android
     /// (`SettingsCapabilities`: no HDR10 display or no Main10 hides the row).
@@ -666,7 +679,8 @@ struct StreamSettingsForm: Equatable {
             return pyro ? L("help_note_not_with_pyrowave") : nil
         case SettingKey.pyrowaveChroma.rawValue where !pyro: return L("help_note_needs_pyrowave")
         case SettingKey.pyrowaveChroma.rawValue where settings.hdr: return L("help_note_hdr_420")
-        case SettingKey.upscalerMode.rawValue where pyro: return L("help_note_pyrowave_modes")
+        case SettingKey.upscalerMode.rawValue where !device.metalFXRuns(settings.text(.upscalerMode)):
+            return L("help_note_metalfx_unavailable")
         case SettingKey.upscalerSupersampling.rawValue where settings.text(.upscalerMode) == "sharpen": return L("help_note_sharpen_only")
         default: return nil
         }

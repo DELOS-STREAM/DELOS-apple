@@ -124,7 +124,7 @@ public final class DisplayLayerRenderer: VideoRenderer {
         DispatchQueue.main.async { [self] in layer.videoGravity = Self.gravity(mode) }
     }
 
-    /// The display layer draws no shader: a requested upscaler is unavailable here (Android's state when SGSR cannot run).
+    /// The display layer draws no shader: a requested upscaler is unavailable here.
     public func setUpscaler(_ settings: UpscalerSettings) {
         options.withLock { $0.upscaler = settings }
     }

@@ -38485,71 +38485,6 @@
         }
       }
     },
-    "help_list_sgsr_quality_high": {
-      "extractionState": "manual",
-      "localizations": {
-        "cs": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Silnější prostorový filtr na aktuálním snímku."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ein stärkerer räumlicher Filter auf dem aktuellen Frame."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A stronger spatial filter on the current frame."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Un filtro espacial más potente sobre el fotograma actual."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Un filtre spatial plus fort sur l’image courante."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "現在のフレームに、より強い空間フィルターを適用します。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "현재 프레임에 더 강한 공간 필터를 적용해요."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Um filtro espacial mais forte no quadro atual."
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Сильніший просторовий фільтр на поточному кадрі."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "对当前帧使用更强的空间滤波。"
-          }
-        }
-      }
-    },
     "help_list_sgsr_quality_sharpen": {
       "extractionState": "manual",
       "localizations": {
@@ -38611,201 +38546,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "不缩放；在串流分辨率下锐化。GPU 开销很小。"
-          }
-        }
-      }
-    },
-    "help_list_sgsr_quality_standard": {
-      "extractionState": "manual",
-      "localizations": {
-        "cs": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rekonstrukce hran z aktuálního snímku. Nejlevnější."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kantenrekonstruktion aus dem aktuellen Frame. Am günstigsten."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Edge reconstruction from the current frame. Cheapest."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reconstrucción de bordes a partir del fotograma actual. El más económico."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reconstruction des contours à partir de l’image courante. Le moins coûteux."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "現在のフレームからエッジを再構築します。最も負荷が低いです。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "현재 프레임에서 가장자리를 복원해요. 가장 가벼워요."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reconstrução de bordas a partir do quadro atual. Mais econômico."
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Відновлення країв із поточного кадру. Найдешевше."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "基于当前帧重建边缘。开销最低。"
-          }
-        }
-      }
-    },
-    "help_list_sgsr_quality_temporal": {
-      "extractionState": "manual",
-      "localizations": {
-        "cs": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 2 od Delos pro video: pohyb z optického toku."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delos-SGSR 2 für Video: Bewegung per Optical Flow."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delos SGSR 2 for video: motion from optical flow."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 2 de Delos para vídeo: movimiento por flujo óptico."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 2 de Delos pour la vidéo : mouvement par flux optique."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ビデオ向けの Delos版SGSR 2です。オプティカルフローで動きを検出します。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "비디오용 Delos SGSR 2예요. 옵티컬 플로로 움직임을 찾아요."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 2 do Delos para vídeo: movimento por fluxo óptico."
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delos SGSR 2 для відео: рух з оптичного потоку."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delos 的视频版 SGSR 2：通过光流获取运动信息。"
-          }
-        }
-      }
-    },
-    "help_list_sgsr_quality_temporal_quality": {
-      "extractionState": "manual",
-      "localizations": {
-        "cs": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV plus maska, která odmítá zastaralé detaily. Nejvíc GPU."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV plus eine Maske, die veraltete Details verwirft. Meiste GPU-Last."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV plus a mask that rejects stale detail. Most GPU."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV más una máscara que rechaza detalle obsoleto. El que más GPU usa."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV plus un masque qui rejette les détails périmés. Le plus de GPU."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DVに、古いディテールを除外するマスクを加えます。GPU負荷が最大です。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV에 오래된 디테일을 걸러내는 마스크를 더했어요. GPU를 가장 많이 써요."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV mais uma máscara que rejeita detalhes antigos. Maior uso de GPU."
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV плюс маска, що відкидає застарілі деталі. Найбільше навантаження на GPU."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV 加上用于剔除过时细节的蒙版。GPU 占用最高。"
           }
         }
       }
@@ -40110,6 +39850,71 @@
         }
       }
     },
+    "help_note_metalfx_unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX na tomto zařízení není k dispozici: místo něj běží Jen zostření."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX ist auf diesem Gerät nicht verfügbar: Stattdessen läuft „Nur schärfen“."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX is not available on this device: Sharpen only runs instead."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX no está disponible en este dispositivo: se usa Solo nitidez en su lugar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX n’est pas disponible sur cet appareil : Netteté seule est utilisé à la place."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイスではMetalFXを使用できません。代わりに「シャープのみ」が動作します。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 기기에서는 MetalFX를 쓸 수 없어요. 대신 선명화만 모드가 동작해요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX não está disponível neste dispositivo: Apenas nitidez é usado no lugar."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX недоступний на цьому пристрої: замість нього працює «Лише різкість»."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此设备不支持 MetalFX：将改用仅锐化。"
+          }
+        }
+      }
+    },
     "help_note_needs_pyrowave": {
       "extractionState": "manual",
       "localizations": {
@@ -40236,71 +40041,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "PyroWave 下不使用。"
-          }
-        }
-      }
-    },
-    "help_note_pyrowave_modes": {
-      "extractionState": "manual",
-      "localizations": {
-        "cs": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PyroWave nabízí všech pět režimů"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PyroWave bietet alle fünf Modi"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PyroWave offers all five modes"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PyroWave ofrece los cinco modos"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PyroWave propose les cinq modes"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PyroWaveでは5つのモードすべてを選べます"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PyroWave는 다섯 가지 모드를 모두 제공해요"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O PyroWave oferece os cinco modos"
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PyroWave пропонує всі п’ять режимів"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PyroWave 提供全部五种模式"
           }
         }
       }
@@ -41540,71 +41280,6 @@
         }
       }
     },
-    "help_seekbar_sgsr_sharpness": {
-      "extractionState": "manual",
-      "localizations": {
-        "cs": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Závěrečné zostření. 0 ho vypne, ne však rekonstrukci SGSR 1. V režimu Jen zostření je to celý efekt. Změny z menu platí jednu relaci."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Abschließende Schärfung. 0 deaktiviert sie, nicht die SGSR-1-Rekonstruktion. Bei „Nur schärfen“ ist sie der gesamte Effekt. Änderungen im Menü gelten eine Sitzung lang."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Final sharpening. 0 disables it, not SGSR 1 reconstruction. In Sharpen only it is the whole effect. Menu changes last one session."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nitidez final. 0 la desactiva, pero no la reconstrucción de SGSR 1. En Solo nitidez es todo el efecto. Los cambios desde el menú duran una sesión."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Accentuation finale. 0 la désactive, pas la reconstruction SGSR 1. Avec Netteté seule, c’est tout l’effet. Les changements du menu durent une session."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最終のシャープ化です。0で無効になりますが、SGSR 1の再構築は無効になりません。「シャープのみ」では、これが効果のすべてです。メニューでの変更は1セッションのみ有効です。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "마지막 선명화 단계예요. 0이면 끄는 것이며 SGSR 1 복원은 끄지 않아요. 선명화만 모드에서는 이것이 효과 전부예요. 메뉴에서 바꾼 내용은 한 세션 동안만 유지돼요."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nitidez final. 0 a desativa, mas não a reconstrução do SGSR 1. Em Só nitidez, é o efeito inteiro. Mudanças pelo menu valem por uma sessão."
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Фінальне підвищення різкості. 0 вимикає його, а не відновлення SGSR 1. У режимі «Лише різкість» це весь ефект. Зміни з меню діють одну сесію."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最终锐化。0 表示关闭锐化，但不会关闭 SGSR 1 重建。在仅锐化模式下，它就是全部效果。在菜单中的更改仅在本次会话内有效。"
-          }
-        }
-      }
-    },
     "help_seekbar_touch_sensitivity_opacity_x": {
       "extractionState": "manual",
       "localizations": {
@@ -42121,6 +41796,201 @@
           "stringUnit": {
             "state": "translated",
             "value": "本设备模拟游戏震动的强度。需要支持振幅控制。不影响界面触感反馈。"
+          }
+        }
+      }
+    },
+    "help_upscaler_mode_metalfx_spatial": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prostorové zvětšení aktuálního snímku. Málo zatěžuje GPU."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Räumliche Hochskalierung des aktuellen Frames. Wenig GPU-Last."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spatial upscaling of the current frame. Light on the GPU."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escalado espacial del fotograma actual. Consume poca GPU."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mise à l’échelle spatiale de l’image courante. Coûte peu de GPU."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のフレームを空間的にアップスケールします。GPU負荷は小さいです。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "현재 프레임을 공간적으로 업스케일해요. GPU를 적게 써요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaling espacial do quadro atual. Custa pouca GPU."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Просторове масштабування поточного кадру. Мало навантажує GPU."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对当前帧进行空间超分。GPU 开销小。"
+          }
+        }
+      }
+    },
+    "help_upscaler_mode_metalfx_temporal": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Časové zvětšení s pohybem z optického toku videa. Nejvíc GPU."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeitliche Hochskalierung mit Bewegung per Optical Flow des Videos. Meiste GPU-Last."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temporal upscaling with motion from the video's optical flow. Most GPU."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escalado temporal con movimiento por flujo óptico del vídeo. El que más GPU usa."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mise à l’échelle temporelle avec le mouvement du flux optique de la vidéo. Le plus de GPU."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ビデオのオプティカルフローから得た動きで時間的にアップスケールします。GPU負荷が最大です。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "비디오의 옵티컬 플로로 찾은 움직임으로 시간적 업스케일을 해요. GPU를 가장 많이 써요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaling temporal com movimento por fluxo óptico do vídeo. Maior uso de GPU."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Часове масштабування з рухом з оптичного потоку відео. Найбільше навантаження на GPU."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "利用视频光流获取的运动信息进行时间超分。GPU 占用最高。"
+          }
+        }
+      }
+    },
+    "help_upscaler_sharpness": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontrastně adaptivní zostření po zvětšení. 0 ho vypne. V režimu Jen zostření je to celý efekt. Změny z menu platí jednu relaci."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontrastadaptive Schärfung nach dem Hochskalieren. 0 deaktiviert sie. Bei „Nur schärfen“ ist sie der gesamte Effekt. Änderungen im Menü gelten eine Sitzung lang."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contrast-adaptive sharpening after upscaling. 0 disables it. In Sharpen only it is the whole effect. Menu changes last one session."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nitidez adaptativa al contraste tras el escalado. 0 la desactiva. En Solo nitidez es todo el efecto. Los cambios desde el menú duran una sesión."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accentuation adaptative au contraste après la mise à l’échelle. 0 la désactive. Avec Netteté seule, c’est tout l’effet. Les changements du menu durent une session."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アップスケール後のコントラスト適応シャープ化です。0で無効になります。「シャープのみ」では、これが効果のすべてです。メニューでの変更は1セッションのみ有効です。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "업스케일 후 대비 적응형 선명화예요. 0이면 꺼져요. 선명화만 모드에서는 이것이 효과 전부예요. 메뉴에서 바꾼 내용은 한 세션 동안만 유지돼요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nitidez adaptativa ao contraste após o upscaling. 0 a desativa. Em Apenas nitidez, é o efeito inteiro. Mudanças pelo menu valem por uma sessão."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Контрастно-адаптивне підвищення різкості після масштабування. 0 вимикає його. У режимі «Лише різкість» це весь ефект. Зміни з меню діють одну сесію."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "超分之后的对比度自适应锐化。0 表示关闭。在仅锐化模式下，它就是全部效果。在菜单中的更改仅在本次会话内有效。"
           }
         }
       }
@@ -78009,71 +77879,6 @@
         }
       }
     },
-    "sgsr_quality_high": {
-      "extractionState": "manual",
-      "localizations": {
-        "cs": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1 (Kvalita)"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1 (Qualität)"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1 (Quality)"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1 (Calidad)"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1 (Qualité)"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1（高品質）"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1 (품질)"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1 (Qualidade)"
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1 (Якість)"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1（画质）"
-          }
-        }
-      }
-    },
     "sgsr_quality_sharpen": {
       "extractionState": "manual",
       "localizations": {
@@ -78135,201 +77940,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "仅锐化"
-          }
-        }
-      }
-    },
-    "sgsr_quality_standard": {
-      "extractionState": "manual",
-      "localizations": {
-        "cs": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1 (Normální)"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1 (Normal)"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1 (Normal)"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1 (Normal)"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1 (Normal)"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1（標準）"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1 (일반)"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1 (Normal)"
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1 (Звичайний)"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR 1（标准）"
-          }
-        }
-      }
-    },
-    "sgsr_quality_temporal": {
-      "extractionState": "manual",
-      "localizations": {
-        "cs": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV (Normální)"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV (Normal)"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV (Normal)"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV (Normal)"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV (Normal)"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV（標準）"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV (일반)"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV (Normal)"
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV (Звичайний)"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV（标准）"
-          }
-        }
-      }
-    },
-    "sgsr_quality_temporal_quality": {
-      "extractionState": "manual",
-      "localizations": {
-        "cs": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV (Kvalita)"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV (Qualität)"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV (Quality)"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV (Calidad)"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV (Qualité)"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV（高品質）"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV (품질)"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV (Qualidade)"
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV (Якість)"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SGSR2-DV（画质）"
           }
         }
       }
@@ -105597,71 +105207,6 @@
         }
       }
     },
-    "title_sgsr": {
-      "extractionState": "manual",
-      "localizations": {
-        "cs": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Snapdragon Game Super Resolution"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Snapdragon Game Super Resolution"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Snapdragon Game Super Resolution"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Snapdragon Game Super Resolution"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Snapdragon Game Super Resolution"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Snapdragon Game Super Resolution"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Snapdragon Game Super Resolution"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Snapdragon Game Super Resolution"
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Snapdragon Game Super Resolution"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "骁龙游戏超分辨率"
-          }
-        }
-      }
-    },
     "title_sgsr_quality": {
       "extractionState": "manual",
       "localizations": {
@@ -107157,6 +106702,71 @@
         }
       }
     },
+    "title_upscaler": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escalador"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アップスケーラー"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "업스케일러"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaler"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Апскейлер"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "超分"
+          }
+        }
+      }
+    },
     "title_video_format": {
       "extractionState": "manual",
       "localizations": {
@@ -107933,6 +107543,136 @@
           "stringUnit": {
             "state": "translated",
             "value": "警告"
+          }
+        }
+      }
+    },
+    "upscaler_mode_metalfx_spatial": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Spatial"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Spatial"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Spatial"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Spatial"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Spatial"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Spatial"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Spatial"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Spatial"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Spatial"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Spatial"
+          }
+        }
+      }
+    },
+    "upscaler_mode_metalfx_temporal": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Temporal"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Temporal"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Temporal"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Temporal"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Temporal"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Temporal"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Temporal"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Temporal"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Temporal"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalFX Temporal"
           }
         }
       }
