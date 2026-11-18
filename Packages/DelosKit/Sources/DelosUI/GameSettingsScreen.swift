@@ -542,7 +542,9 @@ private struct GameBanner: View {
             // wider picture overflows the banner evenly on both sides (Android's `requiredSize`) instead of widening it, and the
             // whole screen with it, the moment the art arrives
             Color.clear.overlay(alignment: .top) {
-                if let lens {
+                // The dashboard's render of the same art is usually in memory already: it shows from the first frame, without a
+                // fade (Android's `HeroBitmaps.cached`), so the banner never starts on the placeholder and swaps in the art later
+                if let lens = lens ?? cachedLens(area: area) {
                     Image(decorative: lens, scale: 1)
                         .resizable()
                         .interpolation(.low)
@@ -573,8 +575,21 @@ private struct GameBanner: View {
             guard !Task.isCancelled, let image else { return }
             let result = await art.background(GameArt(hostID: hostID, app: app, image: image), blur: blur, area: area)
             guard !Task.isCancelled else { return }
+            if result === lens || result === cachedLens(area: area) { lens = result; return }
             withAnimation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000)) { lens = result }
         }
+    }
+
+    /// The banner's render if it is in memory already, from the same picks as ``bannerImage()`` in the same order.
+    private func cachedLens(area: HeroArea) -> CGImage? {
+        var sources: [CGImage?] = []
+        if art.artwork.enabled {
+            sources.append(art.cachedImage(hostID: hostID, appID: app.id, kind: .hero))
+            sources.append(art.cachedImage(hostID: hostID, appID: app.id, kind: .cover))
+        }
+        sources.append(art.cachedBoxArt(hostID: hostID, appID: app.id))
+        guard let image = sources.lazy.compactMap({ $0 }).first else { return nil }
+        return art.cachedBackground(GameArt(hostID: hostID, app: app, image: image), blur: blur, area: area)
     }
 
     /// The hero as the dashboard picks it (the SteamGridDB hero, else its cover, else the PC's artwork).
