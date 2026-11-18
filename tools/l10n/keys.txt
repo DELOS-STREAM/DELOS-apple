@@ -755,6 +755,8 @@ stream_result_unpaired_details
 stream_mouse_emulation_on
 stream_mouse_emulation_off
 toast_controller_type_changed
+pan_zoom_mode_enabled
+pan_zoom_mode_disabled
 
 # Hint bar (button hints, shown with the connected controller's glyphs) and the library note
 shell_hint_select

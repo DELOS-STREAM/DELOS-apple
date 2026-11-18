@@ -442,7 +442,8 @@ public struct DelosRoot: View {
             StreamScreen(
                 hostID: hostID, appID: appID, profileID: profiles.current?.id, settings: actions.streamSettings(hostID: hostID, appID: appID),
                 palette: Palette(rawValue: appearance.palette.rawValue) ?? .delos,
-                keepStatisticsOverlay: { actions.keepStatisticsOverlay($0) }, keepOnScreenOpacity: { actions.keepOnScreenOpacity($0) })
+                keepStatisticsOverlay: { actions.keepStatisticsOverlay($0) }, keepOnScreenOpacity: { actions.keepOnScreenOpacity($0) },
+                keepTouchMode: { actions.keepTouchMode($0) })
         case .settings:
             SettingsScreen(
                 profileID: profiles.current?.id ?? "", appearance: $appearance, focus: entry.focus, navigator: navigator,

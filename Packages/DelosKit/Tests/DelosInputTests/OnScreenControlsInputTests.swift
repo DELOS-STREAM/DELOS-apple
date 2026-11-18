@@ -36,6 +36,14 @@ private final class ControllerSink: StreamInputSink, @unchecked Sendable {
     func sendServerCommand(_ id: UInt8) throws(InputError) {}
     func sendHighResolutionScroll(amount: Int16) throws(InputError) {}
     func sendHighResolutionHorizontalScroll(amount: Int16) throws(InputError) {}
+    func sendMousePosition(x: Int16, y: Int16, referenceWidth: Int16, referenceHeight: Int16) throws(InputError) {}
+    func sendMouseMoveAsMousePosition(deltaX: Int16, deltaY: Int16, referenceWidth: Int16, referenceHeight: Int16) throws(InputError) {}
+    func sendTouch(
+        _ type: TouchEventType, pointerID: UInt32, x: Float, y: Float, pressureOrDistance: Float,
+        contactAreaMajor: Float, contactAreaMinor: Float, rotation: UInt16?) throws(InputError) {}
+    func sendPen(
+        _ type: TouchEventType, tool: PenTool, buttons: PenButtons, x: Float, y: Float, pressureOrDistance: Float,
+        contactAreaMajor: Float, contactAreaMinor: Float, rotation: UInt16?, tilt: UInt8?) throws(InputError) {}
 }
 
 /// The on-screen controls as controller 0 (`defaultContext` of DELOS for Android's `ControllerHandler`).
