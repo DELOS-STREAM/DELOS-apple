@@ -275,8 +275,8 @@ so `VideoOutput` and `VideoSamples` are unchanged:
 |---|---|
 | `VideoDecoder` | A `VTDecompressionSession`: hardware decoding where the device has it (not required, so the simulator falls back to software), `RealTime`, asynchronous, one frame at a time in arrival order (no B-frames). It outputs Metal-compatible, IOSurface-backed two-plane 4:2:0 buffers, 8 or 10 bits, video or full range, and measures the time from submit to output. A new format description (new parameter sets, another resolution) builds a new session; an error or an invalidated session (the app was in the background) makes the renderer refuse non-key frames until the next key frame, which `VideoOutput` turns into an IDR request |
 | `FrameQueue` | The decoded pictures wait here (at most four; a newer one pushes the oldest out). Each gets the time `FramePacer` gives it, the same three modes as the display layer. At each refresh the queue hands out the oldest frame that is due (a frame is due within half a refresh before its time, so it is shown at the refresh nearest to it); when more than one frame would stay due behind it, it skips ahead and the skipped frames count as dropped. In Lowest latency no frame may stay behind, so the newest due frame wins. A struct that takes times as arguments: a fake clock tests it |
-| `CAMetalDisplayLink` | Calls back once per refresh with the drawable and the time its picture appears (`targetPresentationTimestamp`), from a thread of its own (the main thread is busy with the interface), at the screen's highest refresh rate. It exists on iOS and tvOS 17 and on macOS 14, so the Mac needs no `CADisplayLink` variant. A refresh without a frame draws nothing and the layer keeps the last picture; the last picture is drawn again when the layer's size changed, at every refresh while the launch arrival moves it, and once more when the arrival ends |
-| `MetalFrameDrawer` | The pixel buffer's planes become textures through a `CVMetalTextureCache` (no copy), `VideoShaders.metal` converts Y'CbCr to RGB and the picture is fitted into the drawable on black. `ColorConversion` reads range and bit depth from the pixel format and the matrix and transfer function from the buffer's attachments; BT.601, BT.709 and BT.2020 matrices, limited and full range, 8 and 10 bits. The transfer function stays as encoded and the layer is tagged with the matching colour space (BT.709, BT.2020, PQ, HLG): tone mapping and linearising for HDR start in the shader, where `VideoUniforms.transfer` is already passed |
+| `CAMetalDisplayLink` | Calls back once per refresh with the drawable and the time its picture appears (`targetPresentationTimestamp`), from a thread of its own (the main thread is busy with the interface), at the refresh rate of the plan (`DisplayRefreshPlanner`, below). It exists on iOS and tvOS 17 and on macOS 14, so the Mac needs no `CADisplayLink` variant. A refresh without a frame draws nothing and the layer keeps the last picture; the last picture is drawn again when the layer's size changed, when the upscaler was switched on or off, at every refresh while the launch arrival moves it, and once more when the arrival ends |
+| `MetalFrameDrawer` | The pixel buffer's planes become textures through a `CVMetalTextureCache` (no copy), `VideoShaders.metal` converts Y'CbCr to RGB and the picture is placed on the drawable on black by the scale mode (`PictureGeometry`: Fit, Fill with the edges cut off through the vertex shader's crop, Stretch). `ColorConversion` reads range and bit depth from the pixel format and the matrix and transfer function from the buffer's attachments; BT.601, BT.709 and BT.2020 matrices, limited and full range, 8 and 10 bits. The transfer function stays as encoded and the layer is tagged with the matching colour space (BT.709, BT.2020, PQ, HLG): tone mapping and linearising for HDR start in the shader, where `VideoUniforms.transfer` is already passed. With the upscaler on, the picture is converted at its own size first and `MetalUpscaler` draws it |
 | Arrival | The launch scene's arrival on the live picture (`LaunchArrival`, `arrivalFragment` in `VideoShaders.metal`). `startArrival(duration:)` starts it on the renderer's own clock; at each refresh the pose is computed for that refresh's presentation time from the exit's opening (0…1 over 2.2 s). From 55 % of the opening until its end the picture is converted into an RGB texture of its own size (8-bit, or half floats for 10-bit pictures, so HDR's encoded values pass unchanged), its mip levels are generated, and the pass draws it into the fitted rectangle: zoom (118 % with a blur of 20 source pixels, read from the mip levels, until 68 %), then a spring that settles to 100 % with a squash, a skew of at most 0.55°, a wave and an RGB split of up to 9 source pixels. At the end, or at `cancelArrival()` when the scene goes away early, the picture is drawn through the plain path again, byte for byte the picture without the arrival. `ArrivalRenderingTests` compares the pass with a CPU reference of the shader (0.012 per channel) and checks the blur, the identity and a 10-bit PQ picture in a half-float target; `ArrivalPipelineTests` drives it with a virtual clock |
 | `MetalPipeline` | The three of them without the layer and the display link: the core's thread enqueues, VideoToolbox's delivers pictures, the display link's thread draws, behind one short lock. The replay tests drive it with a virtual clock and virtual refreshes |
 
@@ -321,6 +321,63 @@ What a stuck-renderer watchdog can sample from either renderer is `VideoRenderer
 (`VideoPresentationCounters`: `totalFrames` shown plus dropped, `droppedFrames`, `accumulatedDelaySeconds`). For
 `MetalRenderer` the total grows only while the display link runs (the view is in a window and the app is active), so a
 watchdog compares it with the frames it submitted over a window of a second or more.
+
+### Upscalers, scale modes and the refresh rate
+
+Android's upscaler (Settings → Display: `checkbox_sgsr`, `list_sgsr_quality`, `seekbar_sgsr_sharpness`,
+`list_sgsr_supersampling_level`) is ported shader by shader from its GLSL (`app/src/main/assets/sgsr`) to
+`UpscalerShaders.metal`, not replaced by MetalFX: MetalFX's spatial scaler has no sharpness or mode inputs that map to
+Android's, and its temporal scaler needs engine depth and motion that a decoded stream does not have. Every pass works in
+texel index space, as the GLSL does, so the textures' top-left origin gives the same pixels as GL's bottom-left one.
+
+| Mode (`UpscalerMode`) | Passes (Android source) |
+|---|---|
+| Standard | `sgsr1Fragment` (Qualcomm SGSR 1, `sgsr1.frag`) from the stream's RGB picture to the internal size, then `supersamplePresentFragment` (`supersample_present.frag`: the bounded sharpen at 0.375 × sharpness) into the picture's place |
+| High | `sgsr1HighFragment` (`sgsr1_high.frag`, SGSR 1's high-quality target), then the same presentation |
+| Temporal, Temporal quality | `TemporalReconstruction` (`SgsrTemporal.java`): a luma pyramid of four levels for this and the previous frame, Lucas-Kanade backward and forward flow on an 8-pixel grid (`sgsrFlow`, `video_flow.comp`), a whole-frame cut detector (`sgsrSceneChange`), for the quality mode the reactive mask (`sgsrActivate`, `video_activate.comp`), and `sgsr2VideoFragment` (`sgsr2_video.frag`) into a half-float history at the internal size; `temporalPresentFragment` sharpens only the presented picture (0.75 × sharpness). The history starts again after a gap of more than 50 ms between two frames' decode times (Android: SurfaceTexture time), after an HDR change and with a new mode |
+| Sharpen only | No scaling: `sharpenOnlyFragment` (FidelityFX CAS on the five-sample cross, `sharpen_only.frag`) at the stream's size, then a plain bilinear presentation, as Android's compositor scales its stream-sized output |
+
+`UpscalerDimensions` is `SgsrDimensions.java`: the presentation size is the picture's rectangle (even), and a stream that
+already has that size (within 2 pixels) is reconstructed at 4/3 of it at supersampling level 1 ("1.33×") and twice it at
+level 2, within 3840 × 3840, 3840 × 2160 pixels and the GPU's texture limit. 10-bit streams keep HDR's encoded PQ/HLG
+values through the passes in half-float textures, as Android's P010 output does. A drawing of the same frame again (a resize,
+the arrival) presents the upscaled picture again and never feeds the history twice; during the arrival the upscaled
+picture is what the arrival poses.
+
+The load follows `SgsrRenderer.java`: at most two frames of the upscaler's GPU work in flight (`GPUInFlight`; a frame that
+waits is replaced by a newer one and counted as "GPU busy", and 250 ms of waiting clears the count), its GPU time per frame
+from the command buffers' `gpuStartTime`/`gpuEndTime`, one-second windows (`UpscalerWindowMeter`) that let `FlowGovernor`
+reuse SGSR 2's flow every second frame above 70 % of the frame period (back below 45 %) and let `OverloadDetector` report an
+overload after two windows above 90 % or with more than 20 % busy drops. As on Android the overload only tells (a warning
+toast with Android's English text, once per stream and mode); nothing is switched off. Sixty failed drawings in a row
+switch the upscaler off for the stream (`upscalerStatus` = unavailable), Android's fallback to direct output. The display
+layer draws no shader: a requested upscaler is unavailable there. `VideoRenderer.setUpscaler`, `upscalerSettings`,
+`upscalerStatus` (off, starting, stopping, on with the mode, unavailable), `isSupersampling` and `setScaleMode` are what
+the stream menu's Upscaler page uses.
+
+The scale mode (`list_video_scale_mode`) places the picture in both renderers: the display layer's `videoGravity`
+(`resizeAspect`, `resizeAspectFill`, `resize`) and the Metal drawer's `PictureGeometry`.
+
+`DisplayRefreshPlanner` is `StreamDisplayPlanner.java` line by line, with its tests' vectors. The view describes the display
+(`StreamDisplay`): an iPhone or iPad panel as its highest rate and the whole fractions of it down to 24 Hz (the rates its
+display link can ask for; Low Power Mode or a serious thermal state hold ProMotion at 60 Hz, Android's battery saver
+ceiling); the Mac as its `CGDisplayMode`s of the screen's own pixel size; Apple TV as a television. The plan's
+`surfaceFrameRate` (Android's `Surface.setFrameRate`) becomes the `preferredFrameRateRange` of both the view's display link
+and the renderer's `CAMetalDisplayLink`: the highest refresh rate the stream divides, the stream's own rate where the
+refresh rate may be reduced (Cap FPS, Smoothest, Balanced with `checkbox_reduce_refresh_rate`) or with VRR. Its
+`displayRefreshRate` is the refresh rate the stream is told (Cap FPS and the host use it). A mode switch exists on the Mac
+(`CGConfigureDisplayWithDisplayMode` for this app only, given back when the stream ends) when the plan asks for one, which
+for a refresh-rate-only change needs `checkbox_enforce_display_mode`, as on Android; Apple TV gets display criteria with
+the stream's frame rate and dynamic range (`AVDisplayManager.preferredDisplayCriteria`, which tvOS applies when Match
+Content is on). `list_vrr` Auto follows the display's report: a Mac screen whose refresh interval has a range (adaptive
+sync); iPhone and iPad report none (iOS has no Adaptive-Sync presentation), so there VRR is only On by hand. With VRR the
+plan reports the peak rate and asks the display link for the stream's own rate; the statistics mark it.
+
+The statistics gain Android's 1 % low (`FrameTimes`, both renderers: the Metal renderer stamps the refresh a frame is shown
+at, the display layer the time it hands a frame over), the Render latency (decoded picture to the drawable's
+`presentedTime`, average / nearest-rank 95th percentile / maximum per window, `StageWindow`; the display layer reports no
+presented time), the Upscaling time, the scale line in Android's words ("Upscaled to: …", "Supersampled to: …", "Sharpen
+only: …"), the Sharpen pass (pass and conversion in command buffers of their own) and the GPU busy drops.
 
 ### What was measured without a stream
 
@@ -396,7 +453,7 @@ that talk to the PC and the core are behind the `StreamSteps` protocol, so the t
 
 | Step | What happens |
 |---|---|
-| Display | `VideoSurface` (a thin `UIView` host of the renderer's layer: the `AVSampleBufferDisplayLayer` or the `CAMetalLayer`, full screen, aspect fit, black) reports the screen's pixel size and highest refresh rate once it is in a window; the stream starts then. While it is shown, a display link asks for the screen's highest refresh rate (ProMotion screens otherwise slow down to 60 Hz), and the animated background is not drawn behind the video |
+| Display | `VideoSurface` (a thin `UIView` host of the renderer's layer: the `AVSampleBufferDisplayLayer` or the `CAMetalLayer`, full screen, black; the picture placed by the scale mode) reports the screen's pixel size and the refresh rate the renderer's plan expects (`DisplayRefreshPlanner`) once it is in a window; the stream starts then. While it is shown, a display link asks for the plan's frame rate (ProMotion screens otherwise slow down to 60 Hz; Apple TV also gets display criteria), and the animated background is not drawn behind the video |
 | Launch | `HostStore.refresh` asks the PC again over its pinned connection: offline and "not paired" end here. The app is found in the loaded app list (else it is loaded). `StreamPlan` with the current profile's `StreamSettings` and the formats VideoToolbox decodes in hardware (`DecoderSupport`: H.264 always, HEVC and AV1 8-bit where supported, the Main10 profiles where `HardwareProbe` finds a hardware session), of which the chosen codec offers some. The app is resumed when the PC runs it, another running app is quit first, else it is launched (`NvConnection.startApp` of DELOS for Android) |
 | Connect | `StreamSession.start` with `VideoOutput(DisplayLayerRenderer)` and `AudioOutput`, the server information of the launch's session URL. Each `stageStarting` event tells a line of the stage (Android's `stream_loader_lines_*`) and adds 8 % to the progress, up to 92 % (the launch scene starts at 30 % and does the same, below) |
 | Stream | `connectionStarted`: the video shows, `GameInput` starts; rumble events go to the controllers. A termination shows the result overlay (`StreamText.termination`, Android's `describeStreamFailure`); a graceful end goes back (without Android's toast "The PC ended the stream" yet) |
@@ -457,8 +514,8 @@ top of the stage; a compact stage breaks it only after a separator, `StatisticsL
 panel glass role with `glassOverMedia`, keep clear of the stage's safe area and do not intercept touches. Their labels and
 the pill's words come from the Android String Catalog. The compact line is the frame rate, the bandwidth and the parts of
 Android's `stream_stats_compact_tail` whose reading the stream has (Network, Decode, Lost; the parts are told apart by
-their placeholder, so a language may reorder them); the Total part and the 1 % low are left out because neither renderer
-reports them. The choice is kept in the profile's `StreamSettings.statisticsOverlay` like Android keeps it in the
+their placeholder, so a language may reorder them); the Total part and the 1 % low are left out of the line (both
+renderers report the 1 % low, `StreamStatistics.onePercentLowFPS`). The choice is kept in the profile's `StreamSettings.statisticsOverlay` like Android keeps it in the
 profile's preferences, so the next streams of the profile start with it (it is not an app setting); a profile starts
 with the overlay off.
 
@@ -518,7 +575,7 @@ the menu (`StreamController.tapOutside`), never quits and never sends a click to
 `StreamMenuModel.swift` (tiles, pages, popover geometry), the state `StreamMenuState.swift` and `StreamController`.
 
 Left out of Android's menu, because the platform has no such action: Bitrate (the core cannot change the bitrate of a
-running stream), Upscaler and Supersampling (the renderer has none), Send and Get clipboard, Zoom, Mouse mode and Local
+running stream), Upscaler and Supersampling (the renderer's controls exist, `VideoRenderer.setUpscaler` and `upscalerStatus`; the tiles do not yet), Send and Get clipboard, Zoom, Mouse mode and Local
 mouse cursor (touch is the trackpad only), On-screen controls, Open Android keyboard, Touch sensitivity, Rumble feel, Gyro
 smoothing. The captions of Overlay, Keyboard and More are empty: Android's texts describe its own statistics, keyboard and
 rows, and no Android string fits. The recorded buttons only open the menu (the input is paused while the menu is open, so
@@ -570,7 +627,8 @@ handlers), so both work; `commandCapture` decides who uses the commands.
 
 `CADisableMinimumFrameDurationOnPhone` is in `Config/Info.plist` (no `INFOPLIST_KEY_*` setting exists for it), so a
 ProMotion iPhone reports and can show 120 Hz; the stream asks the host for the profile's frame rate (60 fps by default,
-as DELOS for Android) with the display's refresh rate as the client refresh rate.
+as DELOS for Android) with the refresh rate the display is expected to run (`DisplayRefreshPlanner.Plan.displayRefreshRate`)
+as the client refresh rate.
 
 ## The Mac app
 
@@ -583,7 +641,7 @@ Mac parts are behind `#if os(macOS)` in `App/` and in the package.
 |---|---|
 | Window | One `Window` scene (a second window would be a second interface over the one streaming core), hidden title bar, opens at 1920 × 1080 points (the system keeps it on the screen), resizes to any shape from 960 × 540 (the Stage adapts; the traffic lights lie over its corner, and 960 × 540 keeps the first status bar button below them) and goes full screen. Closing it ends the app |
 | Quitting | `MacAppDelegate` answers Command-Q, the menu's Quit and the window's close with `.terminateLater`, has `StreamShutdown` leave every registered stream (Disconnect: the game keeps running on the PC; `StreamController.leave` joins a leaving that is already running) and quits when they are closed or after 5 s |
-| Video | `VideoSurface`'s AppKit host (`NSViewRepresentable`) holds the `AVSampleBufferDisplayLayer` on black, aspect fit. In a window it reports the screen's pixel size (`convertRectToBacking`) and `NSScreen.maximumFramesPerSecond`, and a display link (`NSView.displayLink`) asks the screen for its highest refresh rate, as on iPhone and iPad |
+| Video | `VideoSurface`'s AppKit host (`NSViewRepresentable`) holds the renderer's layer on black, placed by the scale mode. In a window it reports the screen's pixel size (`convertRectToBacking`) and the planned refresh rate, a display link (`NSView.displayLink`) asks the screen for the plan's frame rate, as on iPhone and iPad, and a display mode switch the plan asks for is made for this app only |
 | Display and Settings | `StreamDevice.current` reads `NSScreen.main` the same way. The audio session code is iOS-only (`AVAudioSession` does not exist on the Mac) |
 | Keyboard and mouse | `GameInput` (`GCKeyboard`, `GCMouse`) as on iPad; `GCMouse` gives relative motion without the system pointer. The Mac has no touch input |
 | Pointer lock | While the stream runs and neither its menu, the loader nor the result overlay is shown, `PointerLock` (DelosInput) asks the AppKit backend to warp the pointer to the middle of the video, detach it from the mouse (`CGAssociateMouseAndMouseCursorPosition`) and hide it. It lets go when the menu, the loader or the result overlay shows, the stream ends, the app is no longer the active app, the window is no longer key, or the window closes |

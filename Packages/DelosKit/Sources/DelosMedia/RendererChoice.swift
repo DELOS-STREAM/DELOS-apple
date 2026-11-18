@@ -33,8 +33,8 @@ public enum RendererChoice: String, Sendable, CaseIterable {
 
     /// A renderer of this choice. The Metal renderer falls back to the display layer where Metal is not available.
     @MainActor
-    public func makeRenderer(pacing: FramePacing, fps: Int) -> any VideoRenderer {
-        if self == .metal, let metal = MetalRenderer(pacing: pacing, fps: fps) { return metal }
-        return DisplayLayerRenderer(pacing: pacing, fps: fps)
+    public func makeRenderer(pacing: FramePacing, fps: Int, options: VideoRenderOptions = VideoRenderOptions()) -> any VideoRenderer {
+        if self == .metal, let metal = MetalRenderer(pacing: pacing, fps: fps, options: options) { return metal }
+        return DisplayLayerRenderer(pacing: pacing, fps: fps, options: options)
     }
 }
