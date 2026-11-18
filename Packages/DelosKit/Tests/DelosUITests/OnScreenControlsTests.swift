@@ -528,6 +528,8 @@ private final class OscSink: StreamInputSink, @unchecked Sendable {
     var controllers: [(number: UInt8, mask: UInt16, state: ControllerState)] { lock.withLock { states } }
     private var buttons = 0
     var mouseButtons: Int { lock.withLock { buttons } }
+    private var touchEvents = 0
+    var touches: Int { lock.withLock { touchEvents } }
 
     func sendControllerArrival(
         number: UInt8, activeGamepadMask: UInt16, type: ControllerType, supportedButtons: ControllerButtons,
@@ -549,6 +551,15 @@ private final class OscSink: StreamInputSink, @unchecked Sendable {
     func sendServerCommand(_ id: UInt8) throws(InputError) {}
     func sendHighResolutionScroll(amount: Int16) throws(InputError) {}
     func sendHighResolutionHorizontalScroll(amount: Int16) throws(InputError) {}
+    func sendMousePosition(x: Int16, y: Int16, referenceWidth: Int16, referenceHeight: Int16) throws(InputError) {}
+    func sendMouseMoveAsMousePosition(deltaX: Int16, deltaY: Int16, referenceWidth: Int16, referenceHeight: Int16) throws(InputError) {}
+    func sendTouch(
+        _ type: TouchEventType, pointerID: UInt32, x: Float, y: Float, pressureOrDistance: Float,
+        contactAreaMajor: Float, contactAreaMinor: Float, rotation: UInt16?
+    ) throws(InputError) { lock.withLock { touchEvents += 1 } }
+    func sendPen(
+        _ type: TouchEventType, tool: PenTool, buttons: PenButtons, x: Float, y: Float, pressureOrDistance: Float,
+        contactAreaMajor: Float, contactAreaMinor: Float, rotation: UInt16?, tilt: UInt8?) throws(InputError) {}
 }
 
 /// The controls in a stream: the touches of the video surface, controller 0 at the PC, the More page's rows.
@@ -586,7 +597,7 @@ private final class OscSink: StreamInputSink, @unchecked Sendable {
         let toggle = try #require(rows.first { $0.id == MenuRowID.onScreenControls.rawValue })
         guard case .toggle(true) = toggle.value else { Issue.record("on"); return }
         let opacity = try #require(rows.first { $0.id == MenuRowID.onScreenOpacity.rawValue })
-        guard case .slider(90, 0...100, 5, " %") = opacity.value else { Issue.record("90 % in steps of 5"); return }
+        guard case .slider(90, 0...100, 5, " %", 1, nil) = opacity.value else { Issue.record("90 % in steps of 5"); return }
         opacity.set?(45)
         #expect(controls.options.opacity == 45 && kept == [45])
         toggle.activate()
@@ -609,15 +620,15 @@ private final class OscSink: StreamInputSink, @unchecked Sendable {
         controls.cycleMode()
         #expect(controls.mode == .move)
         let count = steps.sink.controllers.count
-        // A tap away from the controls: the trackpad's click, but not while they are moved
+        // A tap away from the controls: the PC's touch screen gets it (Multi touch), but not while they are moved
         controller.touch(5, .began, at: CGPoint(x: 960, y: 300), area: .init(width: 1920, height: 1080), time: 0)
         controller.touch(5, .ended, at: CGPoint(x: 960, y: 300), area: .init(width: 1920, height: 1080), time: 0.05)
-        #expect(steps.sink.controllers.count == count && steps.sink.mouseButtons == 0)
+        #expect(steps.sink.controllers.count == count && steps.sink.touches == 0 && steps.sink.mouseButtons == 0)
         controls.cycleMode()
         controls.cycleMode()
         #expect(controls.mode == .active)
         controller.touch(6, .began, at: CGPoint(x: 960, y: 300), area: .init(width: 1920, height: 1080), time: 1)
         controller.touch(6, .ended, at: CGPoint(x: 960, y: 300), area: .init(width: 1920, height: 1080), time: 1.05)
-        #expect(steps.sink.mouseButtons == 2, "back in play the tap clicks")
+        #expect(steps.sink.touches == 2, "back in play the tap goes down and up")
     }
 }

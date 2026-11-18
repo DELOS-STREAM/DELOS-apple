@@ -7,10 +7,10 @@ struct StreamMenuModelTests {
 
     @Test func theTilesFollowAndroidsOrderAndTheDevice() {
         let phone = StreamMenuCapabilities(systemKeyboard: true, brightness: true)
-        #expect(phone.tiles == [.resume, .keyboard, .overlay, .brightness, .more, .disconnect, .quit])
+        #expect(phone.tiles == [.resume, .keyboard, .overlay, .brightness, .bitrate, .upscaler, .more, .disconnect, .quit])
         // The Delos full keyboard is on every device; only the system keyboard's More row needs one
         let desktop = StreamMenuCapabilities(systemKeyboard: false, brightness: false)
-        #expect(desktop.tiles == [.resume, .keyboard, .overlay, .more, .disconnect, .quit])
+        #expect(desktop.tiles == [.resume, .keyboard, .overlay, .bitrate, .upscaler, .more, .disconnect, .quit])
         #expect(Set(BarItem.allCases.map(\.id)).count == BarItem.allCases.count)
         #expect(BarItem(id: AnyHashable("stream-more")) == .more)
         #expect(BarItem(id: AnyHashable("elsewhere")) == nil)

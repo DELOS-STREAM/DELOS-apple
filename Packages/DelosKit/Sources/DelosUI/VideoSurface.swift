@@ -3,11 +3,22 @@ import DelosMedia
 import SwiftUI
 
 /// The video of a stream: hosts the renderer's layer (the display layer or the Metal layer) full size, aspect fit on
-/// black. Reports the display it is shown on (once it is in a window) and, on iPhone and iPad, the touches on it in pixels.
+/// black, zoomed and panned by ``zoom`` (iPhone and iPad). Reports the display it is shown on (once it is in a window), its
+/// size, on iPhone and iPad the touches, the pencil's hover and the system pointer on it in pixels, on the Mac the pointer
+/// and the scrolling over it.
 struct VideoSurface {
     let renderer: any VideoRenderer
     let onDisplay: @MainActor (DisplayInfo) -> Void
-    var onTouch: @MainActor (_ id: Int, _ phase: StreamController.TouchPhase, _ point: CGPoint, _ area: StreamController.TouchArea, _ time: TimeInterval) -> Void = { _, _, _, _, _ in }
+    var onTouches: @MainActor (_ phase: StreamController.TouchPhase, _ samples: [TouchSample], _ area: StreamController.TouchArea, _ time: TimeInterval) -> Void = { _, _, _, _ in }
+    /// The pencil hovers at a point (nil: it left), its distance 0…1, azimuth and altitude (radians).
+    var onPenHover: @MainActor (_ point: CGPoint?, _ distance: Double, _ azimuth: Double?, _ altitude: Double?, _ area: StreamController.TouchArea, _ time: TimeInterval) -> Void = { _, _, _, _, _, _ in }
+    /// The system pointer (a mouse or trackpad) is at a point of the surface.
+    var onPointer: @MainActor (_ point: CGPoint, _ area: StreamController.TouchArea) -> Void = { _, _ in }
+    /// The Mac's scrolling: AppKit's deltas, in pixels when `precise` (a trackpad), else in lines.
+    var onScroll: @MainActor (_ dx: Double, _ dy: Double, _ precise: Bool) -> Void = { _, _, _ in }
+    /// The surface was laid out at a size.
+    var onLayout: @MainActor (StreamController.TouchArea) -> Void = { _ in }
+    var zoom = VideoZoom()
     /// Whether a touch of the system pointer (a mouse or trackpad) is ignored: the mouse's own input already moves the
     /// PC's pointer.
     var ignoresPointer: @MainActor () -> Bool = { false }
@@ -45,7 +56,11 @@ extension VideoSurface: UIViewRepresentable {
 
     @MainActor private func update(_ view: VideoHostView) {
         view.onDisplay = onDisplay
-        view.onTouch = onTouch
+        view.onTouches = onTouches
+        view.onPenHover = onPenHover
+        view.onPointer = onPointer
+        view.onLayout = onLayout
+        view.zoom = zoom
         view.ignoresPointer = ignoresPointer
         view.onText = onText
         view.onBackspace = onBackspace
@@ -98,7 +113,14 @@ private final class ScenePointerBackend: PointerLockBackend {
 final class VideoHostView: UIView {
     private let renderer: any VideoRenderer
     var onDisplay: @MainActor (DisplayInfo) -> Void = { _ in }
-    var onTouch: @MainActor (Int, StreamController.TouchPhase, CGPoint, StreamController.TouchArea, TimeInterval) -> Void = { _, _, _, _, _ in }
+    var onTouches: @MainActor (StreamController.TouchPhase, [TouchSample], StreamController.TouchArea, TimeInterval) -> Void = { _, _, _, _ in }
+    var onPenHover: @MainActor (CGPoint?, Double, Double?, Double?, StreamController.TouchArea, TimeInterval) -> Void = { _, _, _, _, _, _ in }
+    var onPointer: @MainActor (CGPoint, StreamController.TouchArea) -> Void = { _, _ in }
+    var onLayout: @MainActor (StreamController.TouchArea) -> Void = { _ in }
+    /// The picture's zoom and pan, in pixels (``VideoZoom``): the renderer's layer is drawn through it.
+    var zoom = VideoZoom() {
+        didSet { if zoom != oldValue { applyZoom() } }
+    }
     var ignoresPointer: @MainActor () -> Bool = { false }
     var onText: @MainActor (String) -> Void = { _ in }
     var onBackspace: @MainActor () -> Void = {}
@@ -124,6 +146,8 @@ final class VideoHostView: UIView {
         isMultipleTouchEnabled = true
         addInteraction(pointerStyle)
         KeyboardTileLog.observeSystem()
+        // The pencil hovering above the screen, and the system pointer while the local pointer is shown
+        addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hovered)))
         #endif
         layer.addSublayer(renderer.hostLayer)
     }
@@ -242,6 +266,28 @@ final class VideoHostView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         renderer.resize(to: bounds, scale: window?.windowScene?.screen.nativeScale ?? contentScaleFactor)
+        applyZoom()
+        // Not inside the layout pass: the stream measures its touches against the new size
+        let area = touchArea
+        Task { @MainActor [onLayout] in onLayout(area) }
+    }
+
+    private var pixelScale: CGFloat { window?.windowScene?.screen.nativeScale ?? contentScaleFactor }
+
+    private var touchArea: StreamController.TouchArea {
+        let scale = pixelScale
+        return StreamController.TouchArea(
+            width: bounds.width * scale, height: bounds.height * scale, gestureInset: gestureInset * scale, scale: scale)
+    }
+
+    /// Draws the renderer's layer through ``zoom``. The sublayer transform works about the middle of the view, so the zoom's
+    /// offset (about the top left corner) moves by what scaling about the middle adds.
+    private func applyZoom() {
+        let scale = pixelScale
+        let offsetX = zoom.tx / scale + (zoom.scale - 1) * bounds.midX
+        let offsetY = zoom.ty / scale + (zoom.scale - 1) * bounds.midY
+        layer.sublayerTransform = CATransform3DMakeAffineTransform(
+            CGAffineTransform(a: zoom.scale, b: 0, c: 0, d: zoom.scale, tx: offsetX, ty: offsetY))
     }
 
     /// Keeps the display at the refresh rate the renderer planned (``DisplayRefreshPlanner``, Android's `setFrameRate`) while
@@ -304,14 +350,35 @@ final class VideoHostView: UIView {
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) { report(touches, .cancelled) }
 
     private func report(_ touches: Set<UITouch>, _ phase: StreamController.TouchPhase) {
-        let scale = window?.windowScene?.screen.nativeScale ?? contentScaleFactor
-        let area = StreamController.TouchArea(
-            width: bounds.width * scale, height: bounds.height * scale, gestureInset: gestureInset * scale, scale: scale)
+        let scale = pixelScale
+        let area = touchArea
+        var samples: [TouchSample] = []
         for touch in touches {
-            if touch.type == .indirectPointer, ignoresPointer() { continue }
             let point = touch.location(in: self)
-            onTouch(ObjectIdentifier(touch).hashValue, phase, CGPoint(x: point.x * scale, y: point.y * scale), area, touch.timestamp)
+            let pixel = CGPoint(x: point.x * scale, y: point.y * scale)
+            if touch.type == .indirectPointer, ignoresPointer() {
+                // The mouse's own input clicks; its position is the local pointer's
+                if phase == .began || phase == .moved { onPointer(pixel, area) }
+                continue
+            }
+            samples.append(sample(touch, at: pixel, scale: scale))
         }
+        guard !samples.isEmpty else { return }
+        onTouches(phase, samples, area, touches.map(\.timestamp).max() ?? 0)
+    }
+
+    /// A touch as the touch screen takes it: a finger's force where the screen measures it, the pencil's force and angles.
+    private func sample(_ touch: UITouch, at pixel: CGPoint, scale: CGFloat) -> TouchSample {
+        let id = ObjectIdentifier(touch).hashValue
+        let force = touch.maximumPossibleForce > 0 ? Double(min(touch.force / touch.maximumPossibleForce, 1)) : 1
+        #if os(iOS)
+        if touch.type == .pencil {
+            return TouchSample(
+                id: id, x: pixel.x, y: pixel.y, tool: .pencil, pressure: force, diameter: touch.majorRadius * 2 * scale,
+                azimuth: touch.azimuthAngle(in: self), altitude: touch.altitudeAngle)
+        }
+        #endif
+        return TouchSample(id: id, x: pixel.x, y: pixel.y, pressure: force, diameter: touch.majorRadius * 2 * scale)
     }
 
     /// The points at the bottom of this view that the system keeps for its home gesture (the home indicator's safe area).
@@ -320,6 +387,31 @@ final class VideoHostView: UIView {
         let bottom = convert(bounds, to: window).maxY
         return max(0, bottom - (window.bounds.height - window.safeAreaInsets.bottom))
     }
+
+    #if os(iOS)
+    /// A pencil hovers (its last hover had a height above the screen).
+    private var penHovering = false
+
+    /// The hover over the video: a pencil above the screen (iPadOS reports its height, `zOffset` above 0), else the system
+    /// pointer.
+    @objc private func hovered(_ hover: UIHoverGestureRecognizer) {
+        let scale = pixelScale
+        let area = touchArea
+        let point = hover.location(in: self)
+        let pixel = CGPoint(x: point.x * scale, y: point.y * scale)
+        let time = ProcessInfo.processInfo.systemUptime
+        let ended = hover.state == .ended || hover.state == .cancelled || hover.state == .failed
+        if hover.zOffset > 0, !ended {
+            penHovering = true
+            onPenHover(pixel, Double(hover.zOffset), Double(hover.azimuthAngle(in: self)), Double(hover.altitudeAngle), area, time)
+        } else if penHovering {
+            penHovering = false
+            onPenHover(nil, 0, nil, nil, area, time)
+        } else if !ended {
+            onPointer(pixel, area)
+        }
+    }
+    #endif
 }
 
 #if os(iOS)
@@ -398,6 +490,9 @@ extension VideoSurface: NSViewRepresentable {
 
     @MainActor private func update(_ view: VideoHostView) {
         view.onDisplay = onDisplay
+        view.onPointer = onPointer
+        view.onScroll = onScroll
+        view.onLayout = onLayout
         view.capturesPointer = capturesPointer
     }
 }
@@ -407,6 +502,9 @@ extension VideoSurface: NSViewRepresentable {
 final class VideoHostView: NSView {
     private let renderer: any VideoRenderer
     var onDisplay: @MainActor (DisplayInfo) -> Void = { _ in }
+    var onPointer: @MainActor (CGPoint, StreamController.TouchArea) -> Void = { _, _ in }
+    var onScroll: @MainActor (Double, Double, Bool) -> Void = { _, _, _ in }
+    var onLayout: @MainActor (StreamController.TouchArea) -> Void = { _ in }
     /// A stream wants the mouse: it runs and its menu is closed.
     var capturesPointer = false {
         didSet { pointer.setWanted(capturesPointer) }
@@ -421,6 +519,8 @@ final class VideoHostView: NSView {
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
         layer?.addSublayer(renderer.hostLayer)
+        // The pointer over the video while the local pointer shows
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self))
     }
 
     @available(*, unavailable)
@@ -429,6 +529,33 @@ final class VideoHostView: NSView {
     override func layout() {
         super.layout()
         renderer.resize(to: bounds, scale: window?.backingScaleFactor ?? 2)
+        let area = touchArea
+        Task { @MainActor [onLayout] in onLayout(area) }
+    }
+
+    /// The view in pixels, as the stream measures the pointer.
+    private var touchArea: StreamController.TouchArea {
+        let scale = window?.backingScaleFactor ?? 2
+        return StreamController.TouchArea(width: bounds.width * scale, height: bounds.height * scale, scale: scale)
+    }
+
+    /// Where the pointer of [event] is, in pixels from the view's top left corner.
+    private func pixel(_ event: NSEvent) -> CGPoint {
+        let scale = window?.backingScaleFactor ?? 2
+        let point = convert(event.locationInWindow, from: nil)
+        return CGPoint(x: point.x * scale, y: (isFlipped ? point.y : bounds.height - point.y) * scale)
+    }
+
+    override func mouseMoved(with event: NSEvent) { onPointer(pixel(event), touchArea) }
+    override func mouseDragged(with event: NSEvent) { onPointer(pixel(event), touchArea) }
+    override func rightMouseDragged(with event: NSEvent) { onPointer(pixel(event), touchArea) }
+    override func otherMouseDragged(with event: NSEvent) { onPointer(pixel(event), touchArea) }
+
+    /// AppKit's scrolling (GameController's misses steps on the Mac): a trackpad's precise deltas in pixels, a wheel's in
+    /// lines; the momentum after a trackpad flick goes along.
+    override func scrollWheel(with event: NSEvent) {
+        let scale = event.hasPreciseScrollingDeltas ? (window?.backingScaleFactor ?? 2) : 1
+        onScroll(event.scrollingDeltaX * scale, event.scrollingDeltaY * scale, event.hasPreciseScrollingDeltas)
     }
 
     override func viewDidChangeBackingProperties() {

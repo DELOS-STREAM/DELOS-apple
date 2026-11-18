@@ -197,3 +197,14 @@ import Testing
         #expect(AudioOutput.outputFormat(hardware: unnamed, speakers: Array(repeating: kAudioChannelLabel_Unknown, count: 6)) == nil)
     }
 }
+
+struct TotalLatencyTests {
+    @Test func totalLatencySumsWhatIsMeasured() {
+        var s = StreamStatistics(width: 1, height: 1, codec: "H.264", hdr: false, incomingFPS: 60, bandwidthKiBPerSecond: 0, videoPackets: 0, fecPackets: 0)
+        #expect(s.totalMilliseconds == nil)
+        s.networkMilliseconds = 5
+        s.hostAverageMilliseconds = 3
+        s.decodeMilliseconds = 2
+        #expect(s.totalMilliseconds == 10)
+    }
+}

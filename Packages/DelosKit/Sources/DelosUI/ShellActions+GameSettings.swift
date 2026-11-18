@@ -1,5 +1,6 @@
 import DelosData
 import DelosHost
+import DelosInput
 
 /// App settings: the stream settings one app overrides in the current profile (`GameSettingsStore` of DELOS for Android,
 /// docs/PER_APP_SETTINGS.md).
@@ -37,6 +38,15 @@ extension ShellActions {
         guard let profile = profiles.current?.id else { return }
         var settings = streams.load(profile: profile)
         settings.set(.oscOpacity, .int(percent))
+        streams.save(settings, profile: profile)
+    }
+
+    /// Keeps the touch mode the stream menu's Mouse page chose in the current profile (`setStreamMouseMode` writes
+    /// `mouse_mode_list` when Remember mouse mode is on).
+    func keepTouchMode(_ mode: TouchMode) {
+        guard let profile = profiles.current?.id else { return }
+        var settings = streams.load(profile: profile)
+        settings.set(.touchMode, .text(String(mode.rawValue)))
         streams.save(settings, profile: profile)
     }
 }

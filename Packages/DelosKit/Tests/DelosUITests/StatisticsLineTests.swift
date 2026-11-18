@@ -1,3 +1,5 @@
+import DelosCore
+import SwiftUI
 import Foundation
 import Testing
 @testable import DelosMedia
@@ -19,23 +21,37 @@ import Testing
 
     @Test func theLineHasTheFramesTheBandwidthAndTheTailOfAndroidsPanel() {
         let line = StatisticsLine.text(statistics(), tail: tail)
-        #expect(line == "60 FPS  ·  2.3 MB/s · 19.7 Mb/s  ·  Network 11 ms  ·  Decode 2.1 ms  ·  Lost 0.0 %")
+        #expect(line == "60 FPS  ·  2.3 MB/s · 19.7 Mb/s  ·  Network 11 ms  ·  Decode 2.1 ms  ·  Total 13.5 ms  ·  Lost 0.0 %")
     }
 
     @Test func aPartWithoutItsReadingIsLeftOutWithItsLabel() {
         let line = StatisticsLine.text(statistics(shown: nil, network: nil, decode: nil, loss: nil, kib: 800), tail: tail)
         #expect(line == "— FPS  ·  800 KB/s · 6.6 Mb/s")
         let noDecode = StatisticsLine.tailText(statistics(decode: nil), template: tail)
-        #expect(noDecode == "Network 11 ms  ·  Lost 0.0 %")
+        #expect(noDecode == "Network 11 ms  ·  Total 11.4 ms  ·  Lost 0.0 %")
     }
 
-    @Test func theTotalIsNeverShownBecauseNeitherRendererReportsIt() {
-        #expect(!StatisticsLine.text(statistics(), tail: tail).contains("Total"))
+    @Test func theFrameRateCarriesVRRAndTheOnePercentLowFollowsIt() {
+        var reading = statistics()
+        reading.vrr = true
+        reading.onePercentLowFPS = 52.8
+        #expect(StatisticsLine.head(reading) == "60 FPS VRR")
+        #expect(StatisticsLine.text(reading, tail: tail, low: "1%% low %1$d").hasPrefix("60 FPS VRR  ·  1% low 52  ·  2.3 MB/s"))
     }
 
     @Test func aLanguageThatReordersThePartsKeepsItsOrder() {
         let reordered = "Ztraceno %4$@ %%  ·  Celkem %3$@ ms  ·  Síť %1$d ms  ·  Dekódování %2$@ ms"
-        #expect(StatisticsLine.tailText(statistics(), template: reordered) == "Ztraceno 0.0 %  ·  Síť 11 ms  ·  Dekódování 2.1 ms")
+        #expect(StatisticsLine.tailText(statistics(), template: reordered) == "Ztraceno 0.0 %  ·  Celkem 13.5 ms  ·  Síť 11 ms  ·  Dekódování 2.1 ms")
+    }
+
+    @Test func theFullPanelSitsInTheProfilesCorner() {
+        #expect(StreamStatsOverlay.alignment(.topLeft) == .topLeading)
+        #expect(StreamStatsOverlay.alignment(.bottomRight) == .bottomTrailing)
+    }
+
+    @Test func theEncryptionRowSaysEachStream() {
+        let text = StreamStatsOverlay.encryptionText(StreamEncryption(video: true, audio: false, control: true))
+        #expect(text == L("stream_encryption_value", L("common_on"), L("common_off"), L("common_on")))
     }
 
     @Test func theCatalogsTailHasFourPartsSeparatedLikeAndroids() {

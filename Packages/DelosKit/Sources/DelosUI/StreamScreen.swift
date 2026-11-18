@@ -24,6 +24,8 @@ struct StreamScreen: View {
     let keepStatisticsOverlay: @MainActor (StatisticsOverlay) -> Void
     /// Keeps the on-screen controls' opacity the stream menu chose (the profile's).
     let keepOnScreenOpacity: @MainActor (Int) -> Void
+    /// Keeps a touch mode the stream menu chose when the profile remembers it (`checkbox_remember_mouse_mode`).
+    let keepTouchMode: @MainActor (TouchMode) -> Void
     /// The profile's palette: the on-screen controls' pressed colour (``OscStyle``).
     let palette: Palette
     @Environment(HostStore.self) private var hosts
@@ -43,7 +45,8 @@ struct StreamScreen: View {
     init(
         hostID: String, appID: Int, profileID: String? = nil, settings: StreamSettings, palette: Palette = .delos,
         keepStatisticsOverlay: @escaping @MainActor (StatisticsOverlay) -> Void = { _ in },
-        keepOnScreenOpacity: @escaping @MainActor (Int) -> Void = { _ in }
+        keepOnScreenOpacity: @escaping @MainActor (Int) -> Void = { _ in },
+        keepTouchMode: @escaping @MainActor (TouchMode) -> Void = { _ in }
     ) {
         self.hostID = hostID
         self.appID = appID
@@ -52,6 +55,7 @@ struct StreamScreen: View {
         self.palette = palette
         self.keepStatisticsOverlay = keepStatisticsOverlay
         self.keepOnScreenOpacity = keepOnScreenOpacity
+        self.keepTouchMode = keepTouchMode
     }
 
     var body: some View {
@@ -133,7 +137,7 @@ struct StreamScreen: View {
         let controller = StreamController(
             brightness: Self.deviceBrightness, statisticsOverlay: settings.statisticsOverlay, playtime: playtime,
             menuButtons: ShortcutButton.parse(settings.streamMenuButtons), menuSwipe: settings.streamMenuSwipe,
-            onScreenControls: makeOnScreenControls()
+            onScreenControls: makeOnScreenControls(), upscaler: RendererUpscaler(renderer: renderer)
         ) { [hosts, hostID, appID, settings, toasts] in
             LiveStream(hosts: hosts, hostID: hostID, appID: appID, settings: settings, renderer: renderer) { text, kind in
                 toasts?.show(text, durationMs: ToastTiming.streamShortMs, kind: kind)
@@ -150,7 +154,42 @@ struct StreamScreen: View {
         // The Siri Remote is the controller of Apple TV: the keyboard opens with its focus and hints
         controller.fullKeyboard.hasController = { true }
         #endif
+        controller.touchOptions = TouchOptions(settings: settings)
+        controller.zoomStore = ZoomPanStore()
+        controller.touchModeChosen = keepTouchMode
+        // A four-finger tap toggles the Delos full keyboard (`checkbox_multi_touch_gestures`)
+        controller.fullKeyboardToggle = { [weak controller] in controller?.toggleFullKeyboard() }
+        controller.zoomNotice = { [toasts] on in
+            // DelosToast.SHORT of a stream
+            toasts?.show(L(on ? "pan_zoom_mode_enabled" : "pan_zoom_mode_disabled"), icon: Symbols.info, durationMs: ToastTiming.streamShortMs)
+        }
         controller.leavingHold = .seconds(ExitLook.handoff(reduced: reducedMotion))
+        controller.warningsDisabled = settings.bool(.disableWarnings)
+        // The Bitrate page's recommendation: the last link test of this PC on this kind of network (StreamMenu.kt:420-436)
+        controller.bitrateRecommendation = { [hostID, settings] in
+            let device = StreamDevice.current
+            guard let guidance = LinkGuidance.forStream(
+                hostID: hostID, settings: settings, resolution: settings.resolution(displayWidth: device.pixelWidth, displayHeight: device.pixelHeight))
+            else { return nil }
+            return BitrateRecommendation(line: guidance.line, kbps: guidance.recommendation.kbps, help: guidance.streamHelp())
+        }
+        controller.menuExitDuration = StreamDockLayout.closeTotal(count: controller.capabilities.tiles.count) / 1000
+        // The menu's upscaler and gyro smoothing are kept for this game (MenuAutoSave, StreamMenu.kt:345-380), never the profile
+        if let profileID {
+            controller.saveForGame = { [hostID, appID] values in
+                let store = GameSettingsStore()
+                var game = store.load(profile: profileID, hostID: hostID, appID: appID)
+                for (key, value) in values { game.values[key.rawValue] = value }
+                store.save(game, profile: profileID, hostID: hostID, appID: appID)
+            }
+            // The Rumble feel page's preset is the profile's (`RumblePreferences.applyPreset`)
+            controller.rumblePresetChosen = { preset in
+                let store = StreamSettingsStore()
+                var saved = store.load(profile: profileID)
+                saved.rumble.profile = preset
+                store.save(saved, profile: profileID)
+            }
+        }
         controller.menuOpened = { [navigator] in navigator.cancelRepeats?() }
         controller.statisticsChosen = keepStatisticsOverlay
         controller.onScreenOpacityChosen = keepOnScreenOpacity
@@ -158,17 +197,27 @@ struct StreamScreen: View {
             switch event {
             // DelosToast.SHORT and LONG of a stream (`ToastTiming.STREAM_SHORT_MS`, `STREAM_LONG_MS`)
             case .mouseEmulation(let on):
-                toasts?.show(on ? L("stream_mouse_emulation_on") : L("stream_mouse_emulation_off"), icon: Symbols.info, durationMs: 4000)
+                toasts?.show(on ? L("stream_mouse_emulation_on") : L("stream_mouse_emulation_off"), icon: Symbols.info, durationMs: ToastTiming.streamShortMs)
             case .controllerTypeChanged:
-                toasts?.show(L("toast_controller_type_changed"), icon: Symbols.info, durationMs: 6500)
+                toasts?.show(L("toast_controller_type_changed"), icon: Symbols.info, durationMs: ToastTiming.streamLongMs)
             case .keyCombo:
                 break
             }
         }
+        controller.toast = { [toasts] text, kind, duration in toasts?.show(text, durationMs: duration, kind: kind) }
+        let keys = StreamSpecialKeys.options(
+            clearDefaults: settings.bool(.enableClearDefaultSpecialButton), custom: profileID.flatMap { CustomSpecialKeys().load(profile: $0) })
+        controller.specialKeys = keys.options
+        controller.specialKeysFailed = keys.failed
         self.renderer = renderer
         self.controller = controller
         navigator.takeInput(controller) { [navigator] command in
-            Self.capture(command, controller: controller, focus: navigator.focus, fromRemote: navigator.commandFromRemote, feedback: layers?.feedback,
+            // A row's popup takes the commands first; B closes it before the page goes back (StreamMenuRoot.kt:250-253)
+            if controller.menuOpen, let picker = controller.picker {
+                picker.capture(command, navigator: navigator, feedback: layers?.feedback, close: { controller.closePicker() })
+                return true
+            }
+            return Self.capture(command, controller: controller, focus: navigator.focus, fromRemote: navigator.commandFromRemote, feedback: layers?.feedback,
                 repeatCount: navigator.commandRepeat)
         }
         IdleTimer.disabled = true
@@ -350,11 +399,21 @@ struct StreamContent: View {
                         renderer: renderer,
                         onDisplay: { info in
                             display = info
+                            let size = settings.resolution(displayWidth: info.pixelWidth, displayHeight: info.pixelHeight)
+                            controller.touchPicture = TouchPicture(
+                                width: size.width, height: size.height, fit: PictureFit(VideoScaleMode(value: settings.text(.videoScaleMode))))
                             controller.start(display: info)
                         },
-                        onTouch: { id, phase, point, area, time in
-                            controller.touch(id, phase, at: point, area: area, time: time)
+                        onTouches: { phase, samples, area, time in
+                            controller.touches(phase, samples, area: area, time: time)
                         },
+                        onPenHover: { point, distance, azimuth, altitude, area, time in
+                            controller.penHover(at: point, distance: distance, azimuth: azimuth, altitude: altitude, area: area, time: time)
+                        },
+                        onPointer: { point, area in controller.pointerMoved(to: point, area: area) },
+                        onScroll: { dx, dy, precise in controller.scrollWheel(dx: dx, dy: dy, precise: precise) },
+                        onLayout: { controller.surfaceLaidOut($0) },
+                        zoom: controller.videoZoom,
                         ignoresPointer: { controller.hasMouse },
                         capturesPointer: capturesPointer,
                         keyboard: controller.systemKeyboardShown && !controller.menuOpen,
@@ -365,7 +424,9 @@ struct StreamContent: View {
                     .ignoresSafeArea()
                     .opacity(pictureOpacity(cover))
                     // The stream behind the menu is blurred (it follows the gradient behind the tiles)
-                    .blur(radius: controller.menuOpen ? stage.px(StreamDockLayout.videoBlur) : 0)
+                    // Sharp while the Upscaler page is open, so its changes can be judged (StreamMenuRoot.kt:167-170,298-300)
+                    .blur(radius: controller.menuOpen && controller.menu.page != .upscaler ? stage.px(StreamDockLayout.videoBlur) : 0)
+                    .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: StreamDockLayout.gradientIn / 1000), value: controller.menu.page == .upscaler)
                     .animation(
                         .timingCurve(0.25, 0.1, 0.25, 1, duration: (controller.menuOpen ? StreamDockLayout.gradientIn : StreamDockLayout.gradientOut) / 1000),
                         value: controller.menuOpen)
@@ -377,7 +438,7 @@ struct StreamContent: View {
             if let onScreen = controller.onScreen, controller.phase == .streaming {
                 OnScreenControlsCanvas(controls: onScreen, palette: palette)
                     .ignoresSafeArea()
-                    .blur(radius: controller.menuOpen ? stage.px(StreamDockLayout.videoBlur) : 0)
+                    .blur(radius: controller.menuOpen && controller.menu.page != .upscaler ? stage.px(StreamDockLayout.videoBlur) : 0)
             }
             #endif
             // The Delos full keyboard over the picture and the on-screen controls, under the launch scene and the menu
@@ -396,12 +457,16 @@ struct StreamContent: View {
             case .connecting:
                 EmptyView()
             case .streaming:
-                if controller.statisticsOverlay.isShown, let statistics = controller.statistics {
-                    StreamStatsOverlay(statistics: statistics, overlay: controller.statisticsOverlay)
-                }
                 if dockShown {
                     StreamMenu(focus: focus, controller: controller, open: controller.menuOpen)
                         .environment(\.glassOverMedia, true)
+                }
+                // Over the menu's backdrop, sharp (Android moves it into the menu's window, DelosStreamActivity.java:2046)
+                if controller.statisticsOverlay.isShown, let statistics = controller.statistics {
+                    StreamStatsOverlay(statistics: statistics, overlay: controller.statisticsOverlay, position: settings.statsPosition)
+                }
+                if let notice = controller.connectionNotice {
+                    StreamConnectionNotice(text: notice)
                 }
             case .leaving, .ended:
                 if exitScene, let exitPortal, let leavingSince {

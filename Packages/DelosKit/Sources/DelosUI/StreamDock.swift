@@ -133,11 +133,30 @@ struct StreamMenu: View {
                 controller: controller, anchorX: anchorX, bottom: stage.height - M.popoverBottom - M.caretHeight - lift,
                 maxHeight: M.maxHeight(stageHeight: stage.height, lift: lift, top: stage.safe.top))
                 .disabled(!open)
+            // The popup of a choice or slider row (touch, issue #92), over the dock and the card
+            if open, let picker = controller.picker, let row = pickerRow(picker.id) {
+                RowPopover(
+                    row: row, kind: picker.kind, focus: picker.focus, anchor: controller.menu.rowFrames[picker.id] ?? .zero,
+                    slider: picker.slider,
+                    onPick: { index in
+                        controller.setRow(picker.id, index)
+                        controller.closePicker()
+                    },
+                    onClose: { controller.closePicker() })
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .coordinateSpace(name: Self.space)
-        .environment(\.modalFocus, popOpen ? controller.menu.focus : nil)
+        .environment(\.modalFocus, controller.picker?.focus ?? (popOpen ? controller.menu.focus : nil))
         .onAppear { focus.focus(Self.resumeID) }
+        // The renderer's upscaler status and supersampling, read again every 250 ms while the menu is up (StreamMenuRoot.kt:286-296)
+        .task(id: open) {
+            guard open, let upscaler = controller.upscaler as? RendererUpscaler else { return }
+            while !Task.isCancelled {
+                upscaler.refresh()
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+        }
         .task {
             try? await Task.sleep(for: .milliseconds(Int(D.enterTotal(count: count)) + 50))
             if open { animating = false }
@@ -166,6 +185,12 @@ struct StreamMenu: View {
     private var anchorX: Double {
         guard let item = controller.menu.shownPage.barItem else { return stage.width / 2 }
         return tileCenters[item] ?? stage.width / 2
+    }
+
+    /// The row [id] of the open page as a settings row, for its popup.
+    private func pickerRow(_ id: String) -> SettingRow? {
+        guard case let .rows(rows) = controller.menuContent(controller.menu.page) else { return nil }
+        return rows.first { $0.id == id }?.settingRow
     }
 
     // MARK: Backdrop
@@ -207,7 +232,7 @@ struct StreamMenu: View {
         let sink = popOpen ? M.dockShift : 0
         return ZStack(alignment: .topLeading) {
             tilesRow(t: t, exitT: exitT, geometry: geometry)
-            DockHead(title: controller.appName, t: t, exitT: exitT)
+            DockHead(title: controller.appName, t: t, exitT: exitT, hidden: headHidden(geometry))
                 .offset(x: stage.px(geometry.tilesLeft))
             DockCaption(text: caption, popOpen: popOpen, t: t, exitT: exitT)
                 .frame(width: stage.px(M.captionWidth), height: stage.px(M.captionHeight(textScale: stage.textScale)), alignment: .top)
@@ -218,9 +243,20 @@ struct StreamMenu: View {
         .animation(reducedMotion ? nil : Motion.out(M.dockSink), value: popOpen)
     }
 
+    /// A compact stage's open card lies over the game's name and the hints: they fade out while it does (StreamMenuRoot.kt:344-345).
+    private func headHidden(_ geometry: DockGeometry) -> Bool {
+        guard stage.compact, popOpen else { return false }
+        let margin = M.popoverMargin + max(stage.safe.leading, stage.safe.trailing)
+        let width = M.popoverWidth(controller.menu.shownPage, stageWidth: stage.width, margin: margin)
+        let left = M.popoverLeft(anchorX: anchorX, width: width, stageWidth: stage.width, margin: margin)
+        // The head is at most the title's width (the hints are narrower)
+        let headRight = geometry.tilesLeft + min(M.titleMaxWidth, stage.width - 2 * DockGeometry.scrollSide)
+        return StreamMenuLayout.headCovered(cardLeft: left, cardRight: left + width, headLeft: geometry.tilesLeft, headRight: headRight)
+    }
+
     /// The help of the tile that has the focus (the one that opened the page while the popover is open).
     private var caption: String {
-        StreamMenuText.caption(BarItem(id: focus.focused) ?? tiles.first ?? .resume, capabilities: controller.capabilities)
+        StreamMenuText.caption(BarItem(id: focus.focused) ?? tiles.first ?? .resume, upscaler: controller.upscaler, capabilities: controller.capabilities)
     }
 
     private func tilesRow(t: Double, exitT: Double, geometry: DockGeometry) -> some View {
@@ -275,7 +311,7 @@ struct StreamMenu: View {
     private func cue(_ item: BarItem) -> Cue {
         switch item {
         case .resume: .back
-        case .brightness, .more: .open
+        case .brightness, .bitrate, .upscaler, .more: .open
         default: .select
         }
     }
@@ -286,7 +322,7 @@ struct StreamMenu: View {
         case .resume: controller.closeMenu()
         case .keyboard: controller.toggleFullKeyboard()
         case .overlay: controller.cycleStatistics()
-        case .brightness, .more:
+        case .brightness, .bitrate, .upscaler, .more:
             if let page = item.page { controller.openMenuPage(page) }
         case .disconnect: Task { await controller.leave(quit: false, scene: true) }
         case .quit: Task { await controller.leave(quit: true, scene: true) }
@@ -304,6 +340,12 @@ struct StreamMenu: View {
                 icon: Symbols.overlay, label: L("stream_menu_tile_overlay"), on: controller.statisticsOverlay.isShown,
                 state: StreamMenuText.overlayState(controller.statisticsOverlay))
         case .brightness: DockTile.Spec(icon: Symbols.brightnessMedium, label: L("stream_menu_tile_brightness"))
+        case .bitrate: DockTile.Spec(icon: Symbols.networkCheck, label: L("stream_menu_tile_bitrate"))
+        // Supersampling while the stream already matches the display; the pill is the upscaler's status in one word
+        case .upscaler:
+            DockTile.Spec(
+                icon: Symbols.upscaler, label: L(controller.upscaler.supersamplingMode ? "stream_menu_tile_supersampling" : "stream_menu_tile_upscaler"),
+                on: controller.upscaler.requested, state: controller.upscaler.status.pill)
         case .more: DockTile.Spec(icon: Symbols.moreHoriz, label: L("stream_menu_tile_more"))
         case .disconnect: DockTile.Spec(icon: Symbols.logout, label: L("stream_menu_tile_disconnect"))
         case .quit: DockTile.Spec(icon: Symbols.powerSettingsNew, label: L("stream_menu_tile_quit"))
@@ -335,6 +377,8 @@ private struct DockHead: View {
     let title: String
     let t: Double
     let exitT: Double
+    /// The popover lies over it (a compact stage): it fades out.
+    var hidden = false
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reducedMotion
@@ -368,7 +412,8 @@ private struct DockHead: View {
         Color.clear
             .frame(width: 0, height: 0)
             .overlay(alignment: .bottomLeading) { block.fixedSize().offset(y: -stage.px(M.headBottom)) }
-            .opacity(min(max(p, 0), 1) * (1 - leaving))
+            .opacity(min(max(p, 0), 1) * (1 - leaving) * (hidden ? 0 : 1))
+            .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: hidden)
             .offset(y: reducedMotion ? 0 : stage.px(24 * (1 - p)))
     }
 

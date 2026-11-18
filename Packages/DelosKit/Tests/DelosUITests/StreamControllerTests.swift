@@ -299,7 +299,9 @@ private let iPhone = DisplayInfo(pixelWidth: 1290, pixelHeight: 2796, maxFramesP
             if ended {
                 #expect(controller.phase == .ended)
             } else {
-                #expect(controller.phase == .failed(StreamText.termination(termination)!))
+                // The lost video ports are listed; the fake's test cannot tell whether they are blocked
+                let ports = PortTest.describe(PortTest.ports(termination: termination))
+                #expect(controller.phase == .failed(StreamText.termination(termination, ports: ports)!))
             }
         }
     }
