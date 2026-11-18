@@ -108,13 +108,10 @@ import Testing
 
 /// Reference frame invalidation and the receive thread's quality of service (Android MediaCodecHelper, latency_threads.c).
 @Suite struct VideoOutputCapabilityTests {
-    @Test func hevcAndAV1AskForReferenceFrameInvalidationLikeAndroid() async {
+    @Test func referenceFrameInvalidationStaysOffUntilVerified() async {
         let renderer = await DisplayLayerRenderer()
         let output = VideoOutput(renderer: renderer, supportedFormats: .h264)
-        #expect(output.capabilities.contains(.directSubmit))
-        #expect(output.capabilities.contains(.referenceFrameInvalidationHEVC))
-        #expect(output.capabilities.contains(.referenceFrameInvalidationAV1))
-        #expect(!output.capabilities.contains(.referenceFrameInvalidationAVC))
+        #expect(output.capabilities == [.directSubmit])
     }
 
     @Test func theReceiveThreadRunsUserInteractive() {

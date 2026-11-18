@@ -27,14 +27,9 @@ public final class VideoOutput: VideoDecodeUnitSink, @unchecked Sendable {
         self.hdrMetadata = hdrMetadata
     }
 
-    /// Direct submit, and reference frame invalidation for HEVC and AV1 as DELOS for Android and Moonlight for iOS
-    /// advertise it (`MediaCodecHelper.decoderSupportsRefFrameInvalidationHevc/Av1`: decoders that do not buffer frames).
-    /// After a loss the host then sends a frame that refers to an older, intact one instead of a key frame; VideoToolbox
-    /// decodes it like any other frame, in its real-time mode (``VideoDecoder``), and a failure still asks for a key frame.
-    /// H.264 stays without it, as on Android outside its short list of decoders.
-    public var capabilities: VideoDecoderCapabilities {
-        [.directSubmit, .referenceFrameInvalidationHEVC, .referenceFrameInvalidationAV1]
-    }
+    /// Direct submit only. Reference frame invalidation (HEVC/AV1) stays off until it is verified against a real PC: with
+    /// it advertised, an AV1 stream to the owner's PC failed in the RTSP handshake (2026-11-18).
+    public var capabilities: VideoDecoderCapabilities { [.directSubmit] }
 
     /// Raises the calling thread (the core's receive thread, which submits the frames) to the user-interactive quality of
     /// service: Android raises its stream threads (`latency_threads.c`, from the receive thread's first frame). Apple has no
