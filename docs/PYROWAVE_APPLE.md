@@ -33,7 +33,7 @@ GPU stages:
 Android's default arithmetic is `PYROWAVE_PRECISION=1`: 16-bit storage (fp16 for the two finest levels, fp32 below),
 32-bit arithmetic, and 16-bit threadgroup memory when the device has `shaderFloat16`. A second path, `idwt.frag`, does
 the transform in render passes; Granite picks it only for Qualcomm and Arm GPUs (`device_prefers_fragment_path`).
-The Android renderer (`pyrowave_renderer.cpp`, 4154 lines) is mostly not decoding: swapchain, SGSR, P010 output,
+The Android renderer (`pyrowave_renderer.cpp`, 4154 lines) is mostly not decoding: swapchain, upscaler, P010 output,
 launch arrival. An Apple client needs only the decoder, whose C API (`pyrowave.h`) is about 2000 lines of Granite glue.
 
 ## What the decoder needs

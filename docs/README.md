@@ -9,4 +9,5 @@
 ## Living specifications
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): modules, dependencies, stage, focus, backgrounds
+- [DIAGNOSTICS.md](DIAGNOSTICS.md): the diagnostic log, the scrubber, crash capture, the problem card, Debug info and problem reports (issue #71)
 - [PYROWAVE_APPLE.md](PYROWAVE_APPLE.md): PyroWave on Apple (issue #13): the Android decoder, MoltenVK against a Metal port, measurements, recommendation

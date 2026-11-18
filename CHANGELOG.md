@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Diagnostics (docs/DIAGNOSTICS.md): DELOS keeps a small rolling log on the device (Settings → About → Keep diagnostic
+  logs), notices a crash, a hang or a failed stream of the last run and offers once, in a card on the start and home
+  screens, to report it: the log, cleaned of addresses, PC and profile names, ids and keys, is uploaded to the report
+  service when the build has one, or saved to Files (DELOS folder) on iPhone and iPad and to Downloads on the Mac, and
+  a prefilled GitHub draft opens. Nothing is sent without the user. Settings → About → Debug info shows the device, its
+  displays and controllers, previews, shares, copies and clears the log, and has the vibration test and the rumble
+  laboratory, whose edits become a Custom rumble feel. Apple TV cannot save, share or copy the log or open the draft.
+  Not verified on a device.
 - The link test: Settings → Stream has Test link and Use recommended bitrate under the bitrate. Test link measures
   what the network carries from the PC with Vibepollo's UDP probe (a portal shows each step, B stops it) and keeps
   the result per PC and kind of network with its date; the bitrate row then says the recommendation and why, and its
@@ -22,6 +30,15 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   keyboard size, width, alignment, opacity and vibration apply. While it is up the controllers type instead of
   playing, and everything held comes up at the PC when it closes. The system keyboard of iPhone and iPad moved to
   More → Open system keyboard.
+- The six touch modes of DELOS for Android on iPhone and iPad: Multi touch (the fingers are the PC's touch screen,
+  the mouse where the PC takes no touch), Mouse and Mouse with swapped buttons (tap, long press for the other
+  button, a second finger scrolls), Trackpad natural (acceleration, flicks, double tap to drag, two-finger scroll)
+  and Trackpad gaming (long press to drag, its own X/Y speed, absolute mouse mode), and touch off. Taps of three,
+  four and five fingers open the keyboard, the full keyboard and the stream menu. The stream menu can switch the
+  mode (kept when Remember mouse mode is on), pan and zoom the picture (kept when Remember zoom & pan is on) and
+  turn the touch sensitivity on. The Apple Pencil is the PC's pen with its pressure, tilt and hover, or its mouse.
+  The local pointer shows the system pointer and moves the PC's to where it is; the Mac scrolls from AppKit with the
+  trackpad's speed and swapped axes. Not verified on a device or against a real PC.
 - On-screen controls on iPhone and iPad, as on DELOS for Android: the D-pad, A/B/X/Y, bumpers, triggers, Back,
   Guide, Start, L3/R3, the trackpad button and fixed or free sticks in the DELOS style, any number of fingers at
   once, sent to the PC as controller 0. The default layout is computed for every screen shape; the gear edits it
@@ -66,16 +83,19 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   library saying why; the hint bar over the result shows Select and Back to library.
 - While artwork downloads or game info is looked up, a glass pill above the button hints shows what runs, "x of N" and
   a bar. Strings Android does not translate have their English text in every language of the catalog.
-- The Metal renderer upscales the stream as DELOS for Android does: SGSR 1 Standard and High, SGSR 2 Temporal and
-  Temporal quality (optical flow and history), and Sharpen only (contrast-adaptive sharpening), ported from Android's
-  shaders with its sharpness and its 1.33× / 2× supersampling of streams that already match the view. Two frames of
-  GPU work at most, a lighter optical flow under load, and a warning when the upscaler cannot keep up with the frame
-  rate. The video fills the view as chosen (fit, fill, stretch), the display runs the refresh rate Android's planner
-  picks (reduce refresh rate, enforce display mode on the Mac, display criteria on Apple TV, variable refresh rate),
-  HEVC and AV1 streams recover from loss with reference frame invalidation, and the receive thread runs at the
-  interactive quality of service. The statistics know the 1 % low, the render latency (average, 95th percentile,
-  maximum), the upscaling time, the Sharpen pass and the upscaler's target. The look on a device, the GPU cost and
-  real streams are not verified.
+- The Metal renderer upscales the stream with MetalFX: MetalFX Spatial, MetalFX Temporal (motion vectors and a reactive
+  mask computed from the video's own optical flow, a constant depth plane, no jitter, the history dropped on cuts and
+  gaps), and Sharpen only (contrast-adaptive sharpening at the stream's size). The sharpness applies as a
+  contrast-adaptive sharpen after the MetalFX scalers, and streams that already match the view are supersampled at
+  1.33× or 2×. Where the device has no MetalFX (the simulators, Apple TV before tvOS 27.1, a GPU without it) the
+  MetalFX modes run as Sharpen only, the upscaler reports itself unavailable and Settings says so. Stored modes of
+  earlier builds map to the MetalFX modes. Two frames of GPU work at most, a lighter optical flow under load, and a
+  warning when the upscaler cannot keep up with the frame rate. The video fills the view as chosen (fit, fill,
+  stretch), the display runs the refresh rate the planner picks (reduce refresh rate, enforce display mode on the
+  Mac, display criteria on Apple TV, variable refresh rate), HEVC and AV1 streams recover from loss with reference
+  frame invalidation, and the receive thread runs at the interactive quality of service. The statistics know the
+  1 % low, the render latency (average, 95th percentile, maximum), the upscaling time, the Sharpen pass and the
+  upscaler's target. The look on a device, the GPU cost and real streams are not verified.
 
 - Pairing waits for the trusted paired state instead of a fixed delay, and manual-address entry reports a PC
   that was not added. The start screen retargets its initial PC focus as discovery changes. On compact stages,

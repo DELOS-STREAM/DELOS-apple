@@ -28,6 +28,8 @@ public actor StreamSession {
     private var state = State.idle
     /// `stop` calls that wait for a start or a stop in progress to end.
     private var stopWaiters: [CheckedContinuation<Void, Never>] = []
+    /// What the running connection encrypts; nil before it started.
+    public private(set) var encryption: StreamEncryption?
 
     /// Sinks left out receive nothing; the core discards their data.
     public init(videoSink: (any VideoDecodeUnitSink)? = nil, audioSink: (any AudioSampleSink)? = nil) {
@@ -84,15 +86,28 @@ public actor StreamSession {
                 await stop()
                 throw .cancelled
             }
+            let encryption = StreamEncryption.read(serverAppVersion: server.appVersion)
+            self.encryption = encryption
+            DiagLog.i("Stream", "Stream started")
+            if let video = context.negotiatedVideo.withLock({ $0 }) {
+                DiagLog.i("Stream", StreamLogLines.negotiated(
+                    format: video.format, width: video.width, height: video.height, fps: video.frameRate, bitrateKbps: configuration.bitrateKbps))
+            }
+            DiagLog.i("Stream", encryption.logLine)
             return
         }
 
         // A failed LiStartConnection has already undone its stages.
         finish(context)
-        guard let code, !cancelled else { throw .cancelled }
+        guard let code, !cancelled else {
+            DiagLog.i("Stream", "Stream start cancelled")
+            throw .cancelled
+        }
         if let failure = context.failedStage.withLock({ $0 }) {
+            DiagLog.e("Stream", "Stream start failed at stage \(failure.stage) with error \(failure.errorCode)")
             throw .stageFailed(failure.stage, errorCode: failure.errorCode)
         }
+        DiagLog.e("Stream", "Stream start rejected by the core (\(code))")
         throw .rejected(code: code)
     }
 
@@ -110,6 +125,7 @@ public actor StreamSession {
             state = .stopping
             await runOnCoreThread("DELOS core stop") { LiStopConnection() }
             finish(context)
+            DiagLog.i("Stream", "Stream stopped")
         case .stopping:
             await withCheckedContinuation { stopWaiters.append($0) }
         case .stopped:

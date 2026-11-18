@@ -1,9 +1,9 @@
 import Testing
 @testable import DelosMedia
 
-/// Android's SgsrDimensionsTest, OverloadDetectorTest, FlowGovernorTest and GpuInFlight rules, with the same vectors.
+/// The upscaler's sizes, overload detector, flow governor and GPU work in flight, and its modes and settings.
 @Suite struct UpscalerLoadTests {
-    // MARK: Sizes (SgsrDimensionsTest)
+    // MARK: Sizes
 
     @Test func native1080pSupersamplesTo1440pAtLevelOneAnd4KAtLevelTwo() {
         let one = UpscalerDimensions.plan(source: (1920, 1080), presentation: (1920, 1080), maxTextureSize: 8192, supersamplingLevel: 1)
@@ -127,17 +127,24 @@ import Testing
         #expect(window.map { abs($0.gpuAverageMilliseconds - 4) < 1e-9 } == true)
     }
 
-    @Test func theSettingsClampAsAndroidDoes() {
+    @Test func theSettingsClamp() {
         var settings = UpscalerSettings(sharpness: 140, supersamplingLevel: 7)
         #expect(settings.sharpness == 100 && settings.supersamplingLevel == 2)
         settings.sharpness = -3
         settings.supersamplingLevel = 0
         #expect(settings.sharpness == 0 && settings.supersamplingLevel == 1)
-        #expect(UpscalerMode(value: "temporal-quality") == .temporalQuality)
-        #expect(UpscalerMode(value: "newer") == .standard)
-        #expect(UpscalerMode(index: 9) == .sharpen && UpscalerMode.sharpen.index == 4)
-        #expect(!UpscalerMode.sharpen.scales && UpscalerMode.temporal.isTemporal)
         #expect(VideoScaleMode(value: "stretch") == .stretch && VideoScaleMode(value: "?") == .fit)
-        #expect(UpscalerStatus.starting.isChanging && !UpscalerStatus.on(.high).isChanging)
+        #expect(UpscalerStatus.starting.isChanging && !UpscalerStatus.on(.spatial).isChanging)
+    }
+
+    @Test func theModesMapTheStoredValues() {
+        // The stored values stay; the retired modes map to their MetalFX successors, anything unknown is Spatial
+        #expect(UpscalerMode(value: "standard") == .spatial && UpscalerMode.spatial.rawValue == "standard")
+        #expect(UpscalerMode(value: "high") == .spatial)
+        #expect(UpscalerMode(value: "temporal") == .temporal && UpscalerMode(value: "temporal-quality") == .temporal)
+        #expect(UpscalerMode(value: "sharpen") == .sharpen && UpscalerMode(value: "newer") == .spatial)
+        #expect(UpscalerMode.allCases == [.spatial, .temporal, .sharpen])
+        #expect(UpscalerMode(index: 9) == .sharpen && UpscalerMode.sharpen.index == 2 && UpscalerMode(index: -1) == .spatial)
+        #expect(!UpscalerMode.sharpen.scales && UpscalerMode.temporal.isTemporal && !UpscalerMode.spatial.isTemporal)
     }
 }

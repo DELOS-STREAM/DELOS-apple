@@ -4,7 +4,7 @@ import Foundation
 // Generated from DELOS for Android's res/xml/preferences.xml (1.2.0) and `SettingsCatalog.tabFor` / `settingIcon`: every
 // row of Android's preference catalog in its order, with its tab, section, icon, title, help, kind, choices and dependency.
 // Left out, with their reason in docs (N/A): checkbox_enable_audiofx, checkbox_usb_driver, checkbox_usb_bind_all,
-// checkbox_enable_joyconfix, checkbox_ignore_synth_events; pref_debug_info belongs to the diagnostics screen (issue #71).
+// checkbox_enable_joyconfix, checkbox_ignore_synth_events; pref_debug_info is built by `DebugInfoSetting` (after the language row).
 // A help text that names Android's own platform is replaced by the row's summary, as Android does for a row without help;
 // a row whose summary names it too has no help text of its own here. The rumble rows keep their place, icon and
 // dependency here; their titles and help come with the rumble settings, which build them.
@@ -74,19 +74,17 @@ enum SettingsCatalog {
                 label: L("title_async_decode"), help: L("help_checkbox_async_decode"), kind: .toggle),
             CatalogSpec(
                 id: "checkbox_sgsr", tab: .display, category: "category_video_settings", section: L("category_video_settings"), icon: Symbols.upscaler,
-                label: L("title_sgsr"), help: L("help_checkbox_sgsr"), kind: .toggle),
+                label: L("title_upscaler"), help: L("help_checkbox_sgsr"), kind: .toggle),
             CatalogSpec(
                 id: "list_sgsr_quality", tab: .display, category: "category_video_settings", section: L("category_video_settings"), icon: Symbols.upscalerMode,
                 label: L("title_sgsr_quality"), help: L("help_list_sgsr_quality"), kind: .choice([
-                CatalogChoice(value: "standard", label: L("sgsr_quality_standard"), help: L("help_list_sgsr_quality_standard")),
-                CatalogChoice(value: "high", label: L("sgsr_quality_high"), help: L("help_list_sgsr_quality_high")),
-                CatalogChoice(value: "temporal", label: L("sgsr_quality_temporal"), help: L("help_list_sgsr_quality_temporal")),
-                CatalogChoice(value: "temporal-quality", label: L("sgsr_quality_temporal_quality"), help: L("help_list_sgsr_quality_temporal_quality")),
+                CatalogChoice(value: "standard", label: L("upscaler_mode_metalfx_spatial"), help: L("help_upscaler_mode_metalfx_spatial")),
+                CatalogChoice(value: "temporal", label: L("upscaler_mode_metalfx_temporal"), help: L("help_upscaler_mode_metalfx_temporal")),
                 CatalogChoice(value: "sharpen", label: L("sgsr_quality_sharpen"), help: L("help_list_sgsr_quality_sharpen")),
             ]), dependency: "checkbox_sgsr"),
             CatalogSpec(
                 id: "seekbar_sgsr_sharpness", tab: .display, category: "category_video_settings", section: L("category_video_settings"), icon: Symbols.sharpness,
-                label: L("title_sgsr_sharpness"), help: L("help_seekbar_sgsr_sharpness"), kind: .slider(range: 0...100, step: 5, divisor: 1, unit: " %"), dependency: "checkbox_sgsr"),
+                label: L("title_sgsr_sharpness"), help: L("help_upscaler_sharpness"), kind: .slider(range: 0...100, step: 5, divisor: 1, unit: " %"), dependency: "checkbox_sgsr"),
             CatalogSpec(
                 id: "list_sgsr_supersampling_level", tab: .display, category: "category_video_settings", section: L("category_video_settings"), icon: Symbols.highQuality,
                 label: L("title_sgsr_supersampling_level"), help: L("help_list_sgsr_supersampling_level"), kind: .choice([

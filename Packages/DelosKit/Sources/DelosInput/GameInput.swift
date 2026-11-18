@@ -22,6 +22,15 @@ public protocol StreamInputSink: Sendable {
     func sendHorizontalScroll(clicks: Int8) throws(InputError)
     func sendHighResolutionScroll(amount: Int16) throws(InputError)
     func sendHighResolutionHorizontalScroll(amount: Int16) throws(InputError)
+    // The touch modes, the Apple Pencil and the local cursor (``TouchScreen``)
+    func sendMousePosition(x: Int16, y: Int16, referenceWidth: Int16, referenceHeight: Int16) throws(InputError)
+    func sendMouseMoveAsMousePosition(deltaX: Int16, deltaY: Int16, referenceWidth: Int16, referenceHeight: Int16) throws(InputError)
+    func sendTouch(
+        _ type: TouchEventType, pointerID: UInt32, x: Float, y: Float, pressureOrDistance: Float,
+        contactAreaMajor: Float, contactAreaMinor: Float, rotation: UInt16?) throws(InputError)
+    func sendPen(
+        _ type: TouchEventType, tool: PenTool, buttons: PenButtons, x: Float, y: Float, pressureOrDistance: Float,
+        contactAreaMajor: Float, contactAreaMinor: Float, rotation: UInt16?, tilt: UInt8?) throws(InputError)
 }
 
 extension StreamSession: StreamInputSink {}
@@ -76,6 +85,7 @@ public final class GameInput {
     private var heldMouseButtons: Set<MouseButton> = []
     private var mouseRemainder = (x: 0.0, y: 0.0)
     private var scrollRemainder = (x: 0.0, y: 0.0)
+    private var wheelRemainder = (x: 0.0, y: 0.0)
     private var shortcut: MenuShortcut
     private var keyCombos = ClientKeyCombos()
     private let deviceHaptics = ControllerHaptics()
@@ -95,6 +105,16 @@ public final class GameInput {
     /// Whether the keyboard and the mouse reach the PC (Control + Alt + Shift + Z toggles it, ``ClientKeyCombos``).
     /// Released, a key or button that is down at the PC still gets its release.
     public private(set) var inputGrabbed = true
+    /// The mouse's motion goes to the PC as absolute positions within an area of this size, the picture's
+    /// (`checkbox_absolute_mouse_mode`, `sendMouseMoveAsMousePosition`); nil: as relative motion.
+    public var absoluteMouseArea: TouchViewSize?
+    /// The local pointer shows (`toggleMouseLocalCursor`): where the system pointer is over the picture is the PC's
+    /// pointer (``TouchScreen/pointerMoved(x:y:)``), so the mouse's relative motion is not sent.
+    public var localCursor = false
+    /// A trackpad's scrolling (the Mac's, ``scrollWheel(dx:dy:precise:)``): its axes swapped and its speed in percent
+    /// (`checkbox_trackpad_swap_axis`, `seekbar_trackpad_sensitivity_x`, `_y`).
+    public var trackpadSwapAxis = false
+    public var trackpadSensitivity = (x: 100, y: 100)
     private var running = false
     /// The on-screen controls' state while they are on (controller 0, `defaultContext` of Android's `ControllerHandler`):
     /// fused with the physical controllers of number 0, if any, and counted in the mask. Nil: off.
@@ -441,6 +461,14 @@ public final class GameInput {
         for element in controller.physicalInputProfile.allElements {
             element.preferredSystemGestureState = .disabled
         }
+        if let home = gamepad.buttonHome {
+            Self.logger.info("""
+                home button of \(controller.vendorName ?? "?", privacy: .public): bound to a system gesture \
+                \(home.isBoundToSystemGesture), preferred state \(home.preferredSystemGestureState.rawValue)
+                """)
+        } else {
+            Self.logger.info("\(controller.vendorName ?? "?", privacy: .public) reports no home button")
+        }
         controller.playerIndex = GCControllerPlayerIndex(rawValue: Int(number)) ?? .indexUnset
         announce(pad)
         gamepad.valueChangedHandler = { [weak self] gamepad, _ in
@@ -618,6 +646,7 @@ public final class GameInput {
     private func home(_ down: Bool, on pad: Pad, id: ObjectIdentifier) {
         guard down != pad.homeDown else { return }
         pad.homeDown = down
+        Self.logger.info("home \(down ? "down" : "up", privacy: .public)")
         if down {
             guard !paused, pad.guide.onDown(clock()) else { return }
             pad.guideTimer = Task { [weak self] in
@@ -900,6 +929,11 @@ public final class GameInput {
         }
     }
 
+    /// The stream menu's Local mouse cursor grabs the input first, as Control + Alt + Shift + C does.
+    public func grabInput() {
+        setInputGrabbed(true)
+    }
+
     /// The window lost the focus (another app or window took the keyboard): a key released meanwhile never reaches the
     /// app, so every key down at the PC is released there now, the last pressed first (`releaseHeldKeys` of DELOS for
     /// Android), and the modifiers start from nothing.
@@ -933,9 +967,13 @@ public final class GameInput {
                 MainActor.assumeIsolated { self?.mouseButton(mouseButton, pressed: pressed) }
             }
         }
+        // GameController's scroll of a Mac misses repeated wheel steps and halves trackpad scrolling (it reports a pad that
+        // springs back to zero), so the Mac scrolls from AppKit's events (``scrollWheel(dx:dy:precise:)``)
+        #if !os(macOS)
         input.scroll.valueChangedHandler = { [weak self] _, x, y in
             MainActor.assumeIsolated { self?.scrolled(x: Double(x), y: Double(y)) }
         }
+        #endif
     }
 
     private func detach(_ mouse: GCMouse) {
@@ -963,7 +1001,7 @@ public final class GameInput {
     }
 
     private func mouseMoved(dx: Double, dy: Double) {
-        guard !paused, inputGrabbed, !mouseSuspended else { return }
+        guard !paused, inputGrabbed, !mouseSuspended, !localCursor else { return }
         // GameController's y grows upwards, the host's downwards
         mouseRemainder.x += dx / Self.mouseSpeedDivisor
         mouseRemainder.y -= dy / Self.mouseSpeedDivisor
@@ -972,7 +1010,12 @@ public final class GameInput {
         guard x != 0 || y != 0 else { return }
         mouseRemainder.x -= Double(x)
         mouseRemainder.y -= Double(y)
-        try? sink.sendMouseMove(deltaX: x, deltaY: y)
+        if let area = absoluteMouseArea {
+            try? sink.sendMouseMoveAsMousePosition(
+                deltaX: x, deltaY: y, referenceWidth: Int16(clamping: area.width), referenceHeight: Int16(clamping: area.height))
+        } else {
+            try? sink.sendMouseMove(deltaX: x, deltaY: y)
+        }
     }
 
     func mouseButton(_ button: MouseButton, pressed: Bool) {
@@ -997,18 +1040,28 @@ public final class GameInput {
         if h != 0 { try? sink.sendHighResolutionHorizontalScroll(amount: Int16(clamping: -h * Int(Self.scrollUnit))) }
     }
 
-    /// Touch on the screen as the PC's mouse (``TouchTrackpad``).
-    public func send(_ action: PointerAction) {
-        guard !paused else { return }
-        switch action {
-        case let .move(dx, dy):
-            try? sink.sendMouseMove(deltaX: dx, deltaY: dy)
-        case let .click(button):
-            try? sink.sendMouseButton(button, pressed: true)
-            try? sink.sendMouseButton(button, pressed: false)
-        case let .scroll(amount):
-            try? sink.sendHighResolutionScroll(amount: amount)
+    /// Wheel steps per line of a mouse wheel (Android's `AXIS_VSCROLL` × 120), and a trackpad's wheel units per pixel of
+    /// finger motion (`TrackpadContext`'s `SCROLL_SPEED_FACTOR_X` and `_Y`).
+    nonisolated static let wheelUnitsPerLine = 120.0
+    nonisolated static let trackpadScrollFactor = (x: 2.0, y: 3.0)
+
+    /// AppKit's scrolling of the Mac (`scrollingDeltaX`/`Y`, positive up and left in the user's scroll direction): a
+    /// trackpad ([precise], pixels) through the trackpad settings, a wheel (lines) by notches.
+    public func scrollWheel(dx: Double, dy: Double, precise: Bool) {
+        guard !paused, inputGrabbed else { return }
+        if precise {
+            let (x, y) = trackpadSwapAxis ? (dy, dx) : (dx, dy)
+            wheelRemainder.x -= x * Self.trackpadScrollFactor.x * Double(trackpadSensitivity.x) / 100
+            wheelRemainder.y += y * Self.trackpadScrollFactor.y * Double(trackpadSensitivity.y) / 100
+        } else {
+            wheelRemainder.x -= dx * Self.wheelUnitsPerLine
+            wheelRemainder.y += dy * Self.wheelUnitsPerLine
         }
+        let h = Int(wheelRemainder.x.rounded(.towardZero)), v = Int(wheelRemainder.y.rounded(.towardZero))
+        wheelRemainder.x -= Double(h)
+        wheelRemainder.y -= Double(v)
+        if v != 0 { try? sink.sendHighResolutionScroll(amount: Int16(clamping: v)) }
+        if h != 0 { try? sink.sendHighResolutionHorizontalScroll(amount: Int16(clamping: h)) }
     }
 
     // MARK: Sent by the stream menu and the on-screen keyboard

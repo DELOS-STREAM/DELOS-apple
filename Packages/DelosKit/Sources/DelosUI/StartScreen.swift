@@ -1,3 +1,4 @@
+import DelosCore
 import DelosData
 import DelosHost
 import DelosInput
@@ -271,6 +272,15 @@ public struct DelosRoot: View {
                     #endif
                 }
                 LayerHost(layers: layers, navigator: navigator)
+                // A problem of the last run or a failed stream: the offer to report it, on the start and home screens
+                ProblemOfferCard(
+                    offers: ProblemOffers.shared, shown: offerShown,
+                    onReport: { mode in
+                        ProblemOffers.shared.report(
+                            mode, export: DiagnosticsExport(hosts: hosts, profiles: profiles, artwork: homeArt.artwork), toasts: toasts,
+                            feedback: feedback)
+                    },
+                    onDismiss: { ProblemOffers.shared.dismiss() })
                 // Downloading artwork or looking up metadata: above the button hints on every screen (`ArtworkProgressBar`)
                 ShellProgressPill(shown: ShellProgress.shown(
                     artwork: actions.artwork.progress.map { ShellProgress(done: $0.done, total: $0.total) }, metadata: metadata.progress))
@@ -332,7 +342,11 @@ public struct DelosRoot: View {
             feedback?.soundsEnabled = now.sounds
             feedback?.hapticsEnabled = now.haptics
         }
-        .onAppear { device.start() }
+        .onAppear {
+            device.start()
+            // A crash, hang or unclean exit of the last run: one card offers the report, once per problem
+            ProblemOffers.shared.detect()
+        }
         // "Skip the start screen": straight into the default PC, once, when DELOS opens
         .task { await actions.skipStartIfChosen() }
         // Links from outside the app (`art://`), once there is a profile: the first launch keeps them until then
@@ -366,7 +380,11 @@ public struct DelosRoot: View {
         // A touch or the pointer changes the kind of input the hints and the back arrow are drawn for
         .tracksInputKind()
         // An "up" of a key may never come after the app lost the keyboard
-        .onChange(of: scenePhase) { _, now in if now != .active { input?.forgetDown() } }
+        .onChange(of: scenePhase, initial: true) { _, now in
+            if now != .active { input?.forgetDown() }
+            // A process the system ends while the app is in front is an unclean exit (Apple TV's only signal of one)
+            CrashReporter.setForeground(now == .active)
+        }
     }
 
     /// The sounds, and the controllers' and keyboards' commands (on tvOS only the ones the system has no event for).
@@ -380,6 +398,12 @@ public struct DelosRoot: View {
         layers.feedback = feedback
         router.feedback = feedback
         router.stepQuickSetting = { id, direction in quickStep(id, by: direction) }
+        router.problemCard = { [navigator, layers, actions, weak router] in
+            ProblemOffers.shared.shown(
+                screen: navigator.current, layerOpen: layers.isOpen, sideMenu: router?.sideMenu != nil, portal: actions.connection.portal != nil)
+                ? ProblemOffers.shared.focus : nil
+        }
+        router.dismissProblem = { ProblemOffers.shared.dismiss() }
         #if os(tvOS)
         let input = MenuInput(only: MenuInput.tvCommands) { command, repeatCount in router.route(command, repeatCount: repeatCount) }
         #else
@@ -449,7 +473,8 @@ public struct DelosRoot: View {
             StreamScreen(
                 hostID: hostID, appID: appID, profileID: profiles.current?.id, settings: actions.streamSettings(hostID: hostID, appID: appID),
                 palette: Palette(rawValue: appearance.palette.rawValue) ?? .delos,
-                keepStatisticsOverlay: { actions.keepStatisticsOverlay($0) }, keepOnScreenOpacity: { actions.keepOnScreenOpacity($0) })
+                keepStatisticsOverlay: { actions.keepStatisticsOverlay($0) }, keepOnScreenOpacity: { actions.keepOnScreenOpacity($0) },
+                keepTouchMode: { actions.keepTouchMode($0) })
         case .settings:
             SettingsScreen(
                 profileID: profiles.current?.id ?? "", appearance: $appearance, focus: entry.focus, navigator: navigator,
@@ -458,6 +483,9 @@ public struct DelosRoot: View {
             OnScreenControlsPreview(
                 profileID: profiles.current?.id ?? "", palette: Palette(rawValue: appearance.palette.rawValue) ?? .delos,
                 onBack: { feedback?.play(.back); go { navigator.back() } })
+        case .debugInfo:
+            DebugInfoScreen(
+                profileID: profiles.current?.id ?? "", focus: entry.focus, navigator: navigator, feedback: feedback, actions: actions)
         }
     }
 
@@ -475,6 +503,11 @@ public struct DelosRoot: View {
                 go { _ = navigator.back() }
             }
             )
+    }
+
+    /// The problem card shows (`offerShown`): on the start and home screens with nothing over them.
+    private var offerShown: Bool {
+        ProblemOffers.shared.shown(screen: navigator.current, layerOpen: layers.isOpen, sideMenu: sideMenu != nil, portal: actions.connection.portal != nil)
     }
 
     /// The library's game background shows behind the library only (``Screen/showsGameBackground``).

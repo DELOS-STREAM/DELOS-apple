@@ -46,6 +46,14 @@ struct BitrateFailure: Equatable, Sendable {
     var text: String { detail.map { L(name, $0) } ?? L(name) }
 }
 
+/// The link test's recommended bitrate for the running stream (`LinkGuidance` of DELOS for Android, StreamMenuRoot.kt:585-594):
+/// the Bitrate page shows [line] with a Fill that puts [kbps] on the slider, and [help] when it is focused.
+struct BitrateRecommendation: Equatable, Sendable {
+    let line: String
+    let kbps: Int
+    let help: String
+}
+
 /// The live bitrate of the running stream: the Apply of the stream menu's Bitrate page (`applyBitrate`,
 /// StreamMenu.kt:308-331) asks the host for a bitrate through Vibepollo's paired HTTPS command, never the streaming core
 /// (``HostClient/setRuntimeBitrate(_:pin:)``). One change runs at a time.

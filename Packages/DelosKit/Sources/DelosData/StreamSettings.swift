@@ -164,9 +164,10 @@ public struct StreamSettings: Codable, Equatable, Sendable {
     /// is offered as a choice only once it was typed.
     public func isSet(_ key: SettingKey) -> Bool { values[key.rawValue] != nil }
 
-    /// Stores [value] for [key] when the key accepts it (type, range, choices); a slider's value is clamped first.
+    /// Stores [value] for [key] when the key accepts it (type, range, choices); a slider's value is clamped first, and a
+    /// value of an earlier build is read in this build's terms (``SettingKey/migrated(_:)``).
     public mutating func set(_ key: SettingKey, _ value: StoredSetting) {
-        var value = value
+        var value = key.migrated(value)
         if case .int(let v) = value, let range = key.range { value = .int(min(max(v, range.lowerBound), range.upperBound)) }
         guard key.accepts(value) else { return }
         values[key.rawValue] = value

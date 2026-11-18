@@ -85,6 +85,8 @@ struct DELOSApp: App {
     @State private var links = ShellLinkInbox()
 
     init() {
+        // The diagnostic log and the crash capture first, so the rest of the start is in the log (docs/DIAGNOSTICS.md)
+        Diagnostics.start()
         DelosFonts.register()
     }
 

@@ -1,8 +1,9 @@
 import Foundation
 
-/// The upscaler's sizes (Android `SgsrDimensions.java`): the presentation size is the picture's rectangle on the view
-/// (even), and the internal size the one the upscaler reconstructs at, larger than the presentation when the stream already
-/// has the view's size (supersampling: 4/3 at level 1, 2 at level 2) and that size fits the limits.
+/// The upscaler's sizes: the presentation size is the picture's rectangle on the view (even), and the internal size the one
+/// the upscaler reconstructs at, larger than the presentation when the stream already has the view's size (supersampling:
+/// 4/3 at level 1, 2 at level 2) and that size fits the limits. MetalFX writes the stream enlarged by one factor on both
+/// axes up to it (``MetalUpscaler/scalerOutput(input:target:scales:)``).
 struct UpscalerDimensions: Equatable {
     static let maxInternalWidth = 3840
     static let maxInternalHeight = 3840
@@ -129,8 +130,8 @@ struct OverloadDetector {
     }
 }
 
-/// Lightens SGSR 2 while its GPU time takes most of the frame period (Android `FlowGovernor.java`): above 70 % every second
-/// frame reuses the previous frame's optical flow, below 45 % it is computed for every frame again.
+/// Lightens MetalFX Temporal's motion estimation while the upscaler's GPU time takes most of the frame period: above 70 %
+/// every second frame reuses the previous frame's optical flow, below 45 % it is computed for every frame again.
 struct FlowGovernor {
     static let enterShare = 0.70
     static let leaveShare = 0.45
@@ -197,7 +198,7 @@ struct GPUInFlight {
     }
 }
 
-/// Android `SgsrPacing.smooth`: an exponential moving average whose first sample is taken as it is.
+/// An exponential moving average whose first sample is taken as it is.
 func smoothedMilliseconds(_ previous: Double, _ sample: Double) -> Double {
     previous <= 0 ? sample : previous * 0.8 + sample * 0.2
 }

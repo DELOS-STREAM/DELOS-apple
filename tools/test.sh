@@ -2,18 +2,21 @@
 # Every check that runs without a device: the package tests on the Mac, the app build for the iOS and tvOS
 # simulators and for the Mac, the repository tools. Exit code 0 when all pass.
 #   sh tools/test.sh
+# DELOS_DERIVED_DATA sets the simulator builds' derived data folder (default /tmp/delos-dd), so parallel worktrees
+# do not lock each other's build database.
 set -eu
 cd "$(dirname "$0")/.."
+dd="${DELOS_DERIVED_DATA:-/tmp/delos-dd}"
 
 echo "== package tests (swift test)"
 (cd Packages/DelosKit && swift test --quiet)
 
 echo "== app build: iOS Simulator"
 xcodebuild -quiet -project DELOS.xcodeproj -scheme DELOS -configuration Debug \
-    -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/delos-dd build
+    -destination 'generic/platform=iOS Simulator' -derivedDataPath "$dd" build
 echo "== app build: tvOS Simulator"
 xcodebuild -quiet -project DELOS.xcodeproj -scheme DELOS -configuration Debug \
-    -destination 'generic/platform=tvOS Simulator' -derivedDataPath /tmp/delos-dd build
+    -destination 'generic/platform=tvOS Simulator' -derivedDataPath "$dd" build
 
 echo "== app build: macOS (ad hoc signed)"
 sh tools/mac.sh build

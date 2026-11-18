@@ -19,6 +19,8 @@ private final class EventSink: StreamInputSink, @unchecked Sendable {
         case horizontalScroll(Int8)
         case highResolutionScroll(Int16)
         case highResolutionHorizontalScroll(Int16)
+        case mousePosition(Int16, Int16, Int16, Int16)
+        case mouseMoveAsPosition(Int16, Int16, Int16, Int16)
     }
 
     private let lock = NSLock()
@@ -68,6 +70,18 @@ private final class EventSink: StreamInputSink, @unchecked Sendable {
     func sendHorizontalScroll(clicks: Int8) throws(InputError) { add(.horizontalScroll(clicks)) }
     func sendHighResolutionScroll(amount: Int16) throws(InputError) { add(.highResolutionScroll(amount)) }
     func sendHighResolutionHorizontalScroll(amount: Int16) throws(InputError) { add(.highResolutionHorizontalScroll(amount)) }
+    func sendMousePosition(x: Int16, y: Int16, referenceWidth: Int16, referenceHeight: Int16) throws(InputError) {
+        add(.mousePosition(x, y, referenceWidth, referenceHeight))
+    }
+    func sendMouseMoveAsMousePosition(deltaX: Int16, deltaY: Int16, referenceWidth: Int16, referenceHeight: Int16) throws(InputError) {
+        add(.mouseMoveAsPosition(deltaX, deltaY, referenceWidth, referenceHeight))
+    }
+    func sendTouch(
+        _ type: TouchEventType, pointerID: UInt32, x: Float, y: Float, pressureOrDistance: Float,
+        contactAreaMajor: Float, contactAreaMinor: Float, rotation: UInt16?) throws(InputError) {}
+    func sendPen(
+        _ type: TouchEventType, tool: PenTool, buttons: PenButtons, x: Float, y: Float, pressureOrDistance: Float,
+        contactAreaMajor: Float, contactAreaMinor: Float, rotation: UInt16?, tilt: UInt8?) throws(InputError) {}
 }
 
 private func vk(_ usage: Int) -> Int16 { KeyboardMapping.keyCode(KeyboardMapping.virtualKey(hidUsage: usage)!) }
@@ -318,5 +332,32 @@ private final class Record {
         input.mouseSuspended = true
         input.mouseButton(.right, pressed: true)
         #expect(sink.sent == [.mouseButton(.left, true), .mouseButton(.left, false)])
+    }
+}
+
+@MainActor
+@Suite struct GameInputScrollTests {
+    @Test func aWheelScrollsByNotchesAndATrackpadThroughItsSettings() {
+        let sink = EventSink()
+        let input = GameInput(sink: sink) {}
+        // A notch up and one to the left (AppKit: positive x is left)
+        input.scrollWheel(dx: 1, dy: 1, precise: false)
+        #expect(sink.sent == [.highResolutionScroll(120), .highResolutionHorizontalScroll(-120)])
+        sink.clear()
+        // A trackpad: 3 wheel units per pixel up, 2 across, fractions carried
+        input.scrollWheel(dx: 0, dy: 10.5, precise: true)
+        input.scrollWheel(dx: 0, dy: 0.5, precise: true)
+        #expect(sink.sent == [.highResolutionScroll(31), .highResolutionScroll(2)])
+        sink.clear()
+        // Swapped axes at half and double speed
+        input.trackpadSwapAxis = true
+        input.trackpadSensitivity = (x: 50, y: 200)
+        input.scrollWheel(dx: 10, dy: 4, precise: true)
+        #expect(sink.sent == [.highResolutionScroll(60), .highResolutionHorizontalScroll(-4)])
+        // Nothing while the menu is open
+        sink.clear()
+        input.paused = true
+        input.scrollWheel(dx: 0, dy: 3, precise: false)
+        #expect(sink.sent.isEmpty)
     }
 }

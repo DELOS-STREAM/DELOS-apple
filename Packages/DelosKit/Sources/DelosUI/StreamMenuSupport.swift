@@ -1,4 +1,5 @@
 import DelosData
+import DelosInput
 import Foundation
 #if os(iOS)
 import UIKit
@@ -73,18 +74,44 @@ enum StreamMenuText {
         }
     }
 
-    /// The help (caption) of a tile: the complete text of Android's menu. Overlay and More have none, because Android's texts
-    /// describe its own compact statistics and rows; Keyboard's names the system keyboard only where More has its row.
-    static func caption(_ item: BarItem, capabilities: StreamMenuCapabilities = .platform) -> String {
+    /// The help (caption) of a tile (`circleHelpKey` and `streamMenuHelp`, StreamMenuLayout.kt:556-591): the upscaler's starts
+    /// with its status and is Supersampling's while the stream is supersampled; Keyboard's names the system keyboard only where
+    /// More has its row.
+    @MainActor static func caption(_ item: BarItem, upscaler: any UpscalerControl = NoUpscaler(), capabilities: StreamMenuCapabilities = .platform) -> String {
         switch item {
         case .resume: L("stream_help_resume")
         case .keyboard:
             L(capabilities.systemKeyboard ? "stream_help_delos_keyboard_system" : "stream_help_delos_keyboard",
               StreamMenuButtonsText.name(.a), StreamMenuButtonsText.name(.b))
+        // The text carries a literal percent sign (`1%% low`): formatted so it reads once
+        case .overlay: String(format: L("stream_help_overlay"))
         case .brightness: L("stream_help_brightness")
+        case .bitrate: L("stream_help_bitrate")
+        case .upscaler:
+            helpLine(upscaler.status.text + "\n\n" + L(upscaler.supersamplingMode ? "stream_help_supersampling" : "stream_help_upscaler"))
+        case .more: L("stream_help_more")
         case .disconnect: L("stream_help_disconnect")
         case .quit: L("stream_help_quit_game")
-        case .overlay, .more: ""
         }
+    }
+
+    /// A help's paragraphs as one flowing text, each joined to the next with a space after a full stop, else a middle dot
+    /// (`helpLineText`, StreamMenuLayout.kt:663-673).
+    static func helpLine(_ text: String) -> String {
+        let paragraphs = text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        return paragraphs.reduce("") { line, next in
+            guard let last = line.last else { return next }
+            return ".!?".contains(last) ? "\(line) \(next)" : "\(line) \u{00B7} \(next)"
+        }
+    }
+}
+
+/// The Send keys page's combinations for a profile (`GameMenu.specialKeyOptions` of DELOS for Android, GameMenu.java:63-149):
+/// Android's built-in ones unless `checkbox_enable_clear_default_special_button` clears them, then the profile's imported
+/// custom keys. [failed]: the custom file could not be read past some combination (`wrong_import_format`).
+enum StreamSpecialKeys {
+    static func options(clearDefaults: Bool, custom: String?) -> (options: [SpecialKeys.Option], failed: Bool) {
+        let parsed = CustomKeyCombos.parse(custom ?? "")
+        return ((clearDefaults ? [] : SpecialKeys.all) + parsed.options, parsed.failed)
     }
 }

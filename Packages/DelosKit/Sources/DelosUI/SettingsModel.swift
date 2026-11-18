@@ -155,8 +155,21 @@ struct StreamDevice: Equatable, Sendable {
     var pictureInPicture = false
     /// A GPU upscaler for the stream (Metal on every supported device).
     var upscaler = true
+    /// MetalFX's spatial and temporal scalers on this GPU (``DelosMedia/MetalFXSupport``); a mode without its scaler runs
+    /// as Sharpen only.
+    var metalFXSpatial = true
+    var metalFXTemporal = true
     /// A PyroWave decoder.
     var pyroWave = false
+
+    /// Whether the MetalFX scaler of the stored upscaler mode `value` runs here (Sharpen only needs none).
+    func metalFXRuns(_ value: String) -> Bool {
+        switch value {
+        case "standard": metalFXSpatial
+        case "temporal": metalFXTemporal
+        default: true
+        }
+    }
 
     /// HDR streaming needs a hardware HEVC Main10 decoder and an HDR display, both as on Android
     /// (`SettingsCapabilities`: no HDR10 display or no Main10 hides the row).
@@ -666,7 +679,8 @@ struct StreamSettingsForm: Equatable {
             return pyro ? L("help_note_not_with_pyrowave") : nil
         case SettingKey.pyrowaveChroma.rawValue where !pyro: return L("help_note_needs_pyrowave")
         case SettingKey.pyrowaveChroma.rawValue where settings.hdr: return L("help_note_hdr_420")
-        case SettingKey.upscalerMode.rawValue where pyro: return L("help_note_pyrowave_modes")
+        case SettingKey.upscalerMode.rawValue where !device.metalFXRuns(settings.text(.upscalerMode)):
+            return L("help_note_metalfx_unavailable")
         case SettingKey.upscalerSupersampling.rawValue where settings.text(.upscalerMode) == "sharpen": return L("help_note_sharpen_only")
         default: return nil
         }
@@ -734,7 +748,7 @@ struct StreamSettingsForm: Equatable {
         case Self.framePacing: if framePacingOptions.indices.contains(index) { settings.framePacing = framePacingOptions[index].value }
         case Self.statsPosition: if StatsPosition.allCases.indices.contains(index) { settings.set(.statsPosition, .text(StatsPosition.allCases[index].rawValue)) }
         case Self.rumbleFeel where settings.rumble.enabled:
-            if RumblePreset.allCases.indices.contains(index) { settings.rumble.profile = RumblePreset.allCases[index] }
+            if RumblePreset.allCases.indices.contains(index) { settings.rumble.applyPreset(RumblePreset.allCases[index]) }
         // "Not set"; "Record buttons" is the screen's (it opens the recording)
         case Self.menuButtons: if index == 0 { settings.streamMenuButtons = [] }
         default:
@@ -948,19 +962,20 @@ enum DevicesSetting {
 }
 
 /// Android's About → Delos rows: the version, what DELOS is based on, and replaying the welcome (the boot screen again;
-/// profiles and paired PCs are kept). Android's update rows are left out: an App Store app does not update itself
-/// (App Review guideline 2.5.2). The diagnostics belong to issue #71.
+/// profiles and paired PCs are kept), then About → Diagnostics: Keep diagnostic logs (device-wide, docs/DIAGNOSTICS.md).
+/// Android's update rows are left out: an App Store app does not update itself (App Review guideline 2.5.2).
 enum AboutSetting {
     static let versionID = "about_version"
     static let basedID = "about_based"
     static let welcomeID = "about_welcome"
+    static let diagLogsID = "about_diag_logs"
 
     static var firstID: String { versionID }
 
     /// The app's version as the App Store shows it (`CFBundleShortVersionString`).
     static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "" }
 
-    static func rows(_ tab: SettingsTab, version: String = version) -> [SettingRow] {
+    static func rows(_ tab: SettingsTab, version: String = version, diagnosticLogs: Bool = DiagLog.isEnabled) -> [SettingRow] {
         guard tab == .about else { return [] }
         // A product name: Android does not translate the section either
         let section = "Delos"
@@ -975,7 +990,23 @@ enum AboutSetting {
             SettingRow(
                 id: welcomeID, tab: .about, section: section, icon: Symbols.replay, label: L("settings_native_welcome_title"),
                 value: .action(label: nil), help: L("settings_native_welcome_description")),
+            SettingRow(
+                id: diagLogsID, tab: .about, section: L("settings_native_section_diagnostics"), icon: Symbols.diagnosticLogs,
+                label: L("settings_native_diag_logs_title"), value: .toggle(diagnosticLogs),
+                help: L("settings_native_diag_logs_description") + "\n\n" + L("help_about_diag_logs")),
         ]
+    }
+}
+
+/// Android's About → MISC → Debug info (`pref_debug_info`, the last row of its preference catalog): it opens ``DebugInfoScreen``.
+enum DebugInfoSetting {
+    static let id = "pref_debug_info"
+
+    static func rows(_ tab: SettingsTab) -> [SettingRow] {
+        guard tab == .about else { return [] }
+        return [SettingRow(
+            id: id, tab: .about, section: L("title_settings_misc"), icon: Symbols.debug, label: L("title_debug_info"),
+            value: .action(label: nil), help: L("help_pref_debug_info"))]
     }
 }
 

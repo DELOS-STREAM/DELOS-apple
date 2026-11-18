@@ -220,7 +220,7 @@ public enum SettingKey: String, CaseIterable, Codable, Sendable {
     /// The stored values a choice may have (`android:entryValues`); nil for a setting that is not a list.
     public var choices: [String]? {
         switch self {
-        case .upscalerMode: ["standard", "high", "temporal", "temporal-quality", "sharpen"]
+        case .upscalerMode: ["standard", "temporal", "sharpen"]
         case .upscalerSupersampling: ["1", "2"]
         case .videoScaleMode: ["fit", "fill", "stretch"]
         case .vrr: ["auto", "on", "off"]
@@ -245,6 +245,17 @@ public enum SettingKey: String, CaseIterable, Codable, Sendable {
             guard let choices else { return true }
             return choices.contains(v)
         default: return false
+        }
+    }
+
+    /// A value of an earlier build in this build's terms: the upscaler's two retired modes become their successors
+    /// (`high` MetalFX Spatial's `standard`, `temporal-quality` MetalFX Temporal's `temporal`).
+    public func migrated(_ value: StoredSetting) -> StoredSetting {
+        guard self == .upscalerMode, case .text(let text) = value else { return value }
+        switch text {
+        case "high": return .text("standard")
+        case "temporal-quality": return .text("temporal")
+        default: return value
         }
     }
 }

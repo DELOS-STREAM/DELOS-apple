@@ -9,7 +9,7 @@ import Testing
         let options = StreamSettings().videoRenderOptions(
             displayWidth: 2796, displayHeight: 1290, decodable: [.h264, .hevc], displaySupportsHDR: false)
         #expect(options.scaleMode == .fit)
-        #expect(options.upscaler == UpscalerSettings(enabled: false, mode: .standard, sharpness: 50, supersamplingLevel: 1))
+        #expect(options.upscaler == UpscalerSettings(enabled: false, mode: .spatial, sharpness: 50, supersamplingLevel: 1))
         #expect(options.vrr == .auto && !options.reduceRefreshRate && !options.enforceDisplayMode && !options.hdr)
         #expect(options.frameRate == 60)
     }
@@ -18,7 +18,9 @@ import Testing
         var settings = StreamSettings(resolution: StreamResolution(width: 1920, height: 1080), fps: 120)
         settings.set(.videoScaleMode, .text("fill"))
         settings.set(.upscaler, .bool(true))
+        // A retired mode of an earlier build is stored as its successor
         settings.set(.upscalerMode, .text("temporal-quality"))
+        #expect(settings.text(.upscalerMode) == "temporal")
         settings.set(.upscalerSharpness, .int(80))
         settings.set(.upscalerSupersampling, .text("2"))
         settings.set(.vrr, .text("on"))
@@ -26,7 +28,7 @@ import Testing
         settings.set(.enforceDisplayMode, .bool(true))
         let options = settings.videoRenderOptions(displayWidth: 2796, displayHeight: 1290, decodable: [.h264], displaySupportsHDR: true)
         #expect(options.scaleMode == .fill)
-        #expect(options.upscaler == UpscalerSettings(enabled: true, mode: .temporalQuality, sharpness: 80, supersamplingLevel: 2))
+        #expect(options.upscaler == UpscalerSettings(enabled: true, mode: .temporal, sharpness: 80, supersamplingLevel: 2))
         #expect(options.vrr == .on && options.reduceRefreshRate && options.enforceDisplayMode)
         #expect(options.streamWidth == 1920 && options.streamHeight == 1080 && options.frameRate == 120)
     }

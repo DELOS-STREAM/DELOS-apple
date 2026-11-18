@@ -113,6 +113,15 @@ public struct StreamStatistics: Sendable, Equatable {
     public var gpuBusySkippedPerSecond: Double?
     /// Variable refresh rate is active: the panel marks it next to the frame rate.
     public var vrr = false
+    /// What the connection encrypts (diag/StreamEncryption.kt); nil before it reported.
+    public var encryption: StreamEncryption?
+
+    /// The delay summed up (`StreamStats.totalMs`): the network round trip, the PC's processing when it reports it, the
+    /// decoding and the upscaler's pass. Nil without the network reading.
+    public var totalMilliseconds: Double? {
+        guard let network = networkMilliseconds else { return nil }
+        return network + max(hostAverageMilliseconds ?? 0, 0) + (decodeMilliseconds ?? 0) + (upscalingMilliseconds ?? 0)
+    }
 }
 
 /// Scalar-only frame accounting on the core's video thread, sampled from a background actor.
@@ -313,7 +322,9 @@ public actor StreamStatisticsSource {
         let packets = session.videoStatistics()
         // Nil once the session stops; the session orders this read before the core's teardown.
         let roundTrip = await session.estimatedRoundTrip()
-        return video.sample(
+        var reading = video.sample(
             renderer: presentation, roundTrip: roundTrip, videoPackets: packets.packets, fecPackets: packets.fecPackets)
+        reading?.encryption = await session.encryption
+        return reading
     }
 }

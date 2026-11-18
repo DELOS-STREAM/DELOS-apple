@@ -55,12 +55,21 @@ final class ShellRouter {
         if actions.connection.isActive { return portalFocus }
         if let sideMenu { return sideMenu }
         if layers.isOpen { return layers.focus }
+        if let card = problemCard() { return card }
         return navigator.screenModal
     }
 
+    /// The problem card's focus while it shows (``ProblemOffers``); the root keeps it. It has the commands then, and B is Dismiss.
+    @ObservationIgnored var problemCard: () -> FocusModel? = { nil }
+    /// Dismiss of the problem card (B wherever the focus is while it shows).
+    @ObservationIgnored var dismissProblem: () -> Void = {}
+
     /// Whether Menu is ours: something is open, or there is a screen to go back to. At the first screen it is the system's
     /// (tvOS: Home).
-    var handlesExit: Bool { sideMenu != nil || layers.isOpen || navigator.screenModal != nil || navigator.canGoBack || actions.connection.isActive }
+    var handlesExit: Bool {
+        sideMenu != nil || layers.isOpen || navigator.screenModal != nil || navigator.canGoBack || actions.connection.isActive
+            || problemCard() != nil
+    }
 
     private func activate(_ cue: Cue?, _ run: () -> Bool) {
         if let feedback { feedback.activate(cue, run) } else { _ = run() }
@@ -198,6 +207,20 @@ final class ShellRouter {
                 toasts.runAction()
             } else if command != .accept || !navigator.swallowsAccept() {
                 layers.handle(command)
+            }
+            return
+        }
+        if let card = problemCard() {
+            // The report card has the commands while it shows; the menu button still opens the side menu
+            switch command {
+            case .back:
+                feedback?.play(.back)
+                dismissProblem()
+            case .accept: activate(card.acceptCue) { card.handle(.accept) }
+            case .up, .down, .left, .right: if card.handle(command) { feedback?.play(.move) }
+            case .menu where navigator.current.hasSideMenu: openSideMenu()
+            case .toastAction: toasts.runAction()
+            case .menu, .options, .previousTab, .nextTab: break
             }
             return
         }

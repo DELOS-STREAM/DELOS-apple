@@ -25,6 +25,9 @@ enum LaunchFailure: Error, Equatable, Sendable {
     /// Another app than the one asked for runs on the PC: it is not quit without the player's choice.
     case otherAppRunning
     case launchFailed(detail: String)
+    /// The PC's server did not answer the launch even after the waits for an unlocking PC (NvConnection.java:436-457): a
+    /// time-out (-408) or a network that blocks its [ports] ([blocked]).
+    case unreachable(errorCode: Int32, ports: String, blocked: Bool)
 }
 
 /// What the player reads when a stream failed (`describeStreamFailure` and the launch messages of DELOS for Android).
@@ -50,11 +53,15 @@ enum StreamText {
             return ResultText(title: title, sentence: L("scut_other_game_running"), details: nil)
         case .launchFailed(let detail):
             return ResultText(title: title, sentence: L("conn_launch_failed"), details: detail)
+        case let .unreachable(errorCode, ports, blocked):
+            return stageFailure(stage: appName, errorCode: errorCode, ports: ports, blocked: blocked)
         }
     }
 
-    /// A connection stage that failed with the core's error code (an errno, a host status, or -408 for a time-out).
-    static func stageFailure(stage: String, errorCode: Int32) -> ResultText {
+    /// A connection stage that failed with the core's error code (an errno, a host status, or -408 for a time-out)
+    /// (`describeStreamFailure`, StreamResult.kt:114-175). [ports] are the ports to check (nil: none), [blocked] says the connection
+    /// test found this network blocking them, [decoderFailed] that the video decoder could not start.
+    static func stageFailure(stage: String, errorCode: Int32, ports: String? = nil, blocked: Bool = false, decoderFailed: Bool = false) -> ResultText {
         var details = L("stream_result_failed_stage", stage, errorCode)
         let sentence: String
         switch errorCode {
@@ -65,18 +72,34 @@ enum StreamText {
             sentence = L("stream_result_timeout")
             details += "\n\n" + L("stream_result_timeout_details")
         default:
-            sentence = L("stream_result_connecting")
+            if blocked {
+                sentence = L("stream_result_blocked")
+            } else if decoderFailed {
+                sentence = L("stream_result_decoder")
+                details += "\n\n" + L("stream_result_decoder_details")
+            } else {
+                sentence = L("stream_result_connecting")
+            }
         }
-        return ResultText(title: L("stream_result_start_title"), sentence: sentence, details: details)
+        if blocked { details += "\n\n" + L("stream_result_blocked_hint") }
+        return ResultText(title: L("stream_result_start_title"), sentence: sentence, details: details + portsHint(ports))
     }
 
-    /// A failed `StreamSession.start`; nil when it was cancelled (the player left).
-    static func startFailure(_ error: StreamError) -> ResultText? {
+    /// The ports to check under the details, one per line (`stream_result_ports_hint`); nothing without ports.
+    private static func portsHint(_ ports: String?) -> String {
+        guard let ports, !ports.isEmpty else { return "" }
+        return "\n\n" + L("stream_result_ports_hint") + "\n" + ports
+    }
+
+    /// A failed `StreamSession.start`; nil when it was cancelled (the player left). A failed video stage is the decoder's
+    /// (Android blames it when its surface was still valid, DelosStreamActivity.java:1676; the stream's surface always is here).
+    static func startFailure(_ error: StreamError, ports: String? = nil, blocked: Bool = false) -> ResultText? {
         switch error {
         case .cancelled:
             return nil
         case let .stageFailed(stage, errorCode):
-            return stageFailure(stage: stage.name, errorCode: errorCode)
+            let video = stage == .videoStreamInit || stage == .videoStreamStart
+            return stageFailure(stage: stage.name, errorCode: errorCode, ports: ports, blocked: blocked, decoderFailed: video)
         case let .rejected(code):
             return stageFailure(stage: StreamStage.platformInit.name, errorCode: code)
         case .anotherSessionActive, .alreadyStarted:
@@ -84,23 +107,28 @@ enum StreamText {
         }
     }
 
-    /// A running stream that ended without the player; nil for a normal end (the PC closed the game or the stream).
-    static func termination(_ termination: StreamTermination) -> ResultText? {
+    /// A running stream that ended without the player; nil for a normal end (the PC closed the game or the stream). A network
+    /// the connection test found [blocked] supersedes any other explanation (StreamResult.kt:136-140).
+    static func termination(_ termination: StreamTermination, ports: String? = nil, blocked: Bool = false) -> ResultText? {
         let lost = L("stream_result_lost_title"), closed = L("stream_result_closed_title")
+        let text: ResultText
         switch termination {
         case .graceful:
             return nil
+        case _ where blocked:
+            text = ResultText(title: lost, sentence: L("stream_result_blocked"), details: L("stream_result_blocked_hint"))
         case .noVideoTraffic:
-            return ResultText(title: lost, sentence: L("stream_result_no_video"), details: L("stream_result_no_video_details"))
+            text = ResultText(title: lost, sentence: L("stream_result_no_video"), details: L("stream_result_no_video_details"))
         case .noVideoFrame:
-            return ResultText(title: lost, sentence: L("stream_result_slow"), details: L("stream_result_slow_details"))
+            text = ResultText(title: lost, sentence: L("stream_result_slow"), details: L("stream_result_slow_details"))
         case .unexpectedEarlyTermination, .protectedContent:
-            return ResultText(title: closed, sentence: L("stream_result_host_error"), details: L("stream_result_host_error_details"))
+            text = ResultText(title: closed, sentence: L("stream_result_host_error"), details: L("stream_result_host_error_details"))
         case .frameConversion:
-            return ResultText(title: closed, sentence: L("stream_result_encoding"), details: L("stream_result_encoding_details"))
+            text = ResultText(title: closed, sentence: L("stream_result_encoding"), details: L("stream_result_encoding_details"))
         case .error(let code):
-            return ResultText(title: lost, sentence: L("stream_result_ended"), details: L("stream_result_terminated_details", errorCode(code)))
+            text = ResultText(title: lost, sentence: L("stream_result_ended"), details: L("stream_result_terminated_details", errorCode(code)))
         }
+        return ResultText(title: text.title, sentence: text.sentence, details: (text.details ?? "") + portsHint(ports))
     }
 
     /// Android shows large codes in hexadecimal (`Integer.toHexString`: the 32-bit two's complement).
@@ -112,6 +140,16 @@ enum StreamText {
     static func quitFailure(appName: String) -> ResultText {
         ResultText(title: L("stream_quit_failed", appName), sentence: "", details: nil)
     }
+
+    /// The exit scene's label of Quit game (StreamExit.kt:79-83): the game's name, or "Quitting the app" without one.
+    static func quitting(appName: String) -> String {
+        appName.isEmpty ? L("stream_exit_quitting_game") : L("stream_exit_quitting", appName)
+    }
+
+    /// The PC quit the game (`applist_quit_success` and the name, DelosStreamActivity.java:1644).
+    static func quitSuccess(appName: String) -> String {
+        appName.isEmpty ? L("applist_quit_success") : L("applist_quit_success") + " " + appName
+    }
 }
 
 /// The status lines told while a stream connects (`StreamLoader` of DELOS for Android): for each connection stage one
@@ -120,6 +158,8 @@ enum StreamText {
 enum StageLines {
     enum Group: CaseIterable {
         case platform, nameResolution, rtsp, controlStream, videoStream, audioStream, inputStream
+        /// The PC did not answer the launch yet and is asked again (`unlocking_or_starting`, DelosStreamActivity.java:1663).
+        case unlocking
     }
 
     private static var told: [Group: Int] = [:]
@@ -157,6 +197,8 @@ enum StageLines {
         case .inputStream:
             [L("stream_loader_lines_input_stream_0", pc), L("stream_loader_lines_input_stream_1", pc),
              L("stream_loader_lines_input_stream_2", pc)]
+        case .unlocking:
+            [L("stream_loader_lines_unlocking_0", pc), L("stream_loader_lines_unlocking_1", pc)]
         }
     }
 

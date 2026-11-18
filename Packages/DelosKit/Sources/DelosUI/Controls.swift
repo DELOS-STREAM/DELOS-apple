@@ -1,13 +1,15 @@
+import DelosInput
 import SwiftUI
 
 /// `.btn` and `.btn.primary` of the prototype (`PillButton` in DELOS for Android): a 76 px pill with an icon and a label.
 /// The focused button grows by 8 %, gets a 4 px ring 4 px outside it and a glow; a [primary] one also gets a sweep of
-/// light across it.
+/// light across it. [glyph]: the controller button that runs it, before the icon (the problem card's A and B).
 struct PillButton: View {
     let label: String
     var icon: String?
     var primary = false
     let focused: Bool
+    var glyph: GlyphRole? = nil
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
@@ -15,13 +17,14 @@ struct PillButton: View {
     var body: some View {
         let content = primary ? colors.onAccent : colors.text
         HStack(spacing: stage.px(14)) {
+            if let glyph { GlyphButton(glyph, size: 34, disc: content, ink: primary ? colors.accent : colors.bg) }
             if let icon { SymbolView(symbol: icon, size: 32, color: content, filled: focused) }
             Text(label)
                 .font(DelosFonts.figtree(stage.tpx(26), .semibold))
                 .foregroundStyle(content.color)
                 .lineLimit(1)
         }
-        .padding(.horizontal, stage.px(40))
+        .padding(.horizontal, stage.px(glyph == nil ? 40 : 28))
         .frame(height: stage.px(76))
         .background {
             if primary {
