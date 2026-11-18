@@ -373,6 +373,7 @@ settings_game_saved_note
 settings_game_summary
 settings_tab_display
 row_reset_to_profile
+row_badge_custom
 row_reset
 row_slider_decrease
 row_slider_increase
@@ -952,7 +953,7 @@ help_analog_scrolling_left
 help_analog_scrolling_none
 help_analog_scrolling_right
 help_checkbox_absolute_mouse_mode
-help_checkbox_async_decode
+help_async_decode_frames
 help_checkbox_disable_warnings
 help_checkbox_enable_analog_stick_new
 help_checkbox_enable_clear_default_special_button
@@ -1049,7 +1050,7 @@ help_seekbar_trackpad_sensitivity_y
 help_upscaler_mode_metalfx_spatial
 help_upscaler_mode_metalfx_temporal
 help_upscaler_sharpness
-help_video_format_pyrowave
+help_video_format_pyrowave_gpu
 mouse_mode_absolute_touch
 mouse_mode_absolute_touch_swapped
 mouse_mode_disabled
@@ -1534,7 +1535,7 @@ stream_help_mouse_mode
 stream_help_overlay
 stream_help_rumble_feel
 stream_help_send_clipboard
-stream_help_sharpness
+stream_help_upscaler_sharpness
 stream_help_supersampling
 stream_help_supersampling_on
 stream_help_supersampling_quality

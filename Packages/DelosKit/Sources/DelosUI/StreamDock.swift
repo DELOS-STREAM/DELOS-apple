@@ -556,6 +556,11 @@ private struct DockTile: View {
                 .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: dimmed)
         }
         .frame(width: stage.px(D.tile), height: stage.px(D.tile))
+        // The label also when a low stage fades it out; a toggle's state as its value
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spec.label)
+        .accessibilityValue(spec.on.map { spec.state ?? L($0 ? "common_on" : "common_off") } ?? "")
+        .accessibilityAddTraits(spec.on == nil ? [] : .isToggle)
     }
 
     private func tile(shape: RoundedRectangle, on: Bool) -> some View {

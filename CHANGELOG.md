@@ -293,6 +293,16 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- VoiceOver: icons are no longer read as stray characters; every focusable item is one button with its texts (icon-only
+  ones, the covers and the artwork tiles carry a label), double tap does what A does, a context menu is the Menu action,
+  settings and stream menu rows read their value (switches On or Off) and choices and sliders adjust with a swipe up or
+  down; selected avatars, PCs, tabs and chips say so, open menus and dialogs keep VoiceOver inside and the escape
+  gesture goes back; a poor-connection notice is announced like a toast. Nothing looks different. Not verified with
+  VoiceOver on a device.
+- Texts: the local network prompt and the Mac's copyright line are translated into all ten languages; the CUSTOM badge
+  of a per-app row is translated; the help of asynchronous decoding, of PyroWave and of the stream menu's sharpness no
+  longer names MediaCodec, Vulkan or SGSR. `tools/l10n/check_usage.py` now also fails on a catalog entry without every
+  language and on a text that names Android's platform.
 - Every Settings row now does something on Apple. The metered bitrate applies when the network is expensive or in Low
   Data Mode at the stream's start (a quarter of the bitrate unless set). Wi-Fi keep-alive sends an empty packet to the
   PC every 20 ms during a stream. Asynchronous decoding switches VideoToolbox's asynchronous decompression in the Metal

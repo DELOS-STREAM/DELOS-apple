@@ -370,7 +370,10 @@ public struct DelosRoot: View {
         .task {
             for step in DemoHarness.script {
                 try? await Task.sleep(for: .seconds(step.wait))
-                if step.command == "toast-undo" { toasts.show("Profile deleted", icon: Symbols.delete, action: ToastAction(label: "Undo") {}); continue }
+                if step.command == "toast-undo" {
+                    toasts.show(L("profile_deleted", "Player"), icon: Symbols.delete, action: ToastAction(label: L("profile_undo")) {})
+                    continue
+                }
                 if DemoHarness.input(step.command) { continue }
                 if await DemoHarness.sideDrag(step.command, router: router) { continue }
                 if let command = DemoHarness.command(step.command) { router.route(command, repeatCount: 0) }

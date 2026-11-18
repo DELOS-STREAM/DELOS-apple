@@ -280,5 +280,6 @@ struct LibraryFilterChip: View {
             }
         }
         .modifier(ChipFocus(focused: focused))
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

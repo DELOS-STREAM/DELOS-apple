@@ -757,7 +757,7 @@ final class StreamController {
         rows.append(StreamMenuRow(
             id: MenuRowID.sharpness.rawValue, icon: Symbols.sharpness, label: L("stream_menu_row_sharpness"),
             value: .slider(value: upscaler.sharpness, range: 0...100, step: 5, unit: " %"), enabled: available,
-            help: L("stream_help_sharpness"), activate: {}, set: { [self] in upscaler.setSharpness($0); upscalerChanged() }))
+            help: L("stream_help_upscaler_sharpness"), activate: {}, set: { [self] in upscaler.setSharpness($0); upscalerChanged() }))
         return rows
     }
 

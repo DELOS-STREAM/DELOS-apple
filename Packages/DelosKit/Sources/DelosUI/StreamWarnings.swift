@@ -1,3 +1,4 @@
+import Accessibility
 import DelosCore
 import DelosData
 import DelosHost
@@ -22,6 +23,8 @@ struct StreamConnectionNotice: View {
             .padding(.trailing, stage.px(22 + stage.safe.trailing))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             .allowsHitTesting(false)
+            // VoiceOver says it when it appears or changes, as it says a toast
+            .onChange(of: text, initial: true) { _, now in AccessibilityNotification.Announcement(now).post() }
     }
 }
 

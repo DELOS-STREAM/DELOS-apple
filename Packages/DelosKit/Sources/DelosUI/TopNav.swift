@@ -169,7 +169,9 @@ struct TopNav: View {
             }
         }
         .zIndex(focused ? 1 : 0)
+        .accessibilityElement()
         .accessibilityLabel(button.label)
+        .accessibilityAddTraits(button.current ? .isSelected : [])
     }
 
     private static func tipFade(_ ms: Double) -> AnyTransition {

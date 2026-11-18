@@ -980,6 +980,16 @@ struct ArtworkTileView: View, Equatable {
         .focusLook(focused, scale: ArtworkGrid.focusScale, ring: 4, glowBlur: 50, glowY: 18, corner: 20)
         .onScrollVisibilityChange(threshold: 0.01) { visible = $0 }
         .task(id: "\(visible)#\(art.artwork.version)") { await load() }
+        // The picture says nothing to VoiceOver: the tile reads as the info strip's title and its badges
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText)
+        .accessibilityAddTraits(.isImage)
+    }
+
+    private var accessibilityText: String {
+        let title = image.map { ArtworkFact.title($0, fallback: tab.label) } ?? L(tab == .logo ? "artwork_first_name_only" : "artwork_first_from_pc")
+        return [title, image?.animated == true ? L("artwork_animated") : nil, inUse ? L("artwork_in_use") : nil]
+            .compactMap { $0 }.joined(separator: ", ")
     }
 
     @ViewBuilder private var content: some View {
