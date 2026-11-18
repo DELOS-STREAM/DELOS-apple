@@ -15,6 +15,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   menu (the swipe up from the bottom edge, Escape held, buttons recorded in Controls) and its action opens that
   settings page; it goes away once the setting defers to DELOS. Nothing on older systems and Apple TV. Not verified on
   a device.
+- Fully External Display Mode (Settings → Display) works: a stream goes to a monitor or TV attached to the iPhone or
+  iPad (USB-C, HDMI adapter, AirPlay screen) or to the Mac's other screen, with its menu, and comes back when it ends;
+  the device's screen turns black and takes touches for the stream. Unplugging the screen leaves the stream. Not
+  verified on a real external display.
 - Diagnostics (docs/DIAGNOSTICS.md): DELOS keeps a small rolling log on the device (Settings → About → Keep diagnostic
   logs), notices a crash, a hang or a failed stream of the last run and offers once, in a card on the start and home
   screens, to report it: the log, cleaned of addresses, PC and profile names, ids and keys, is uploaded to the report
@@ -321,6 +325,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - The Moonlight for iOS/tvOS reference app it was forked from (Objective-C, storyboards, Core Data), its prebuilt
   FFmpeg, SDL2 and Opus libraries (71 MB without recorded sources) and the X1Kit and moonlight-common-c submodules.
 - The inherited Moonlight workflow that ran on every push and pull request, and the Moonlight bot configurations.
+- Settings → Display → Second display (Automatic, External display, Part of the device): an Apple device has no second
+  panel built in, so every second screen is an external display and the choice changed nothing.
 
 ### Fixed
 

@@ -209,6 +209,8 @@ struct StreamScreen: View {
             clearDefaults: settings.bool(.enableClearDefaultSpecialButton), custom: profileID.flatMap { CustomSpecialKeys().load(profile: $0) })
         controller.specialKeys = keys.options
         controller.specialKeysFailed = keys.failed
+        // Fully External Display Mode: the window goes to a monitor or TV before the video surface is laid out
+        ExternalDisplays.shared.streamBegan(controller, fullExternal: settings.bool(.externalDisplayFullscreen))
         self.renderer = renderer
         self.controller = controller
         navigator.takeInput(controller) { [navigator] command in
@@ -228,6 +230,7 @@ struct StreamScreen: View {
     private func end() {
         if let controller { navigator.releaseInput(controller) }
         controller?.restoreBrightness()
+        if let controller { ExternalDisplays.shared.streamEnded(controller) }
         IdleTimer.disabled = false
         if let shutdownID { StreamShutdown.shared.unregister(shutdownID) }
         shutdownID = nil

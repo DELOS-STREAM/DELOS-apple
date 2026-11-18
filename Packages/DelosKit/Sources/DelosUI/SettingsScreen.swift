@@ -46,8 +46,6 @@ struct SettingsScreen: View {
     /// The focus of the search while it is open, and what it looks for.
     @State private var searchFocus: FocusModel?
     @State private var query = ""
-    /// The kind of a second screen (device-wide, `display_second_role`).
-    @State private var secondDisplay = SecondDisplayRole.load()
     /// The file picker of Import Custom Keys is open.
     @State private var importingSpecialKeys = false
     /// "Keep diagnostic logs" (device-wide, ``DiagLog``).
@@ -105,7 +103,7 @@ struct SettingsScreen: View {
         let catalog = LinkGuidanceRows.apply(
             form.catalogRows(tab), guidance: linkGuidance, host: linkHost, form: form,
             nowMs: Int64((Date().timeIntervalSince1970 * 1000).rounded()), transport: .current)
-        return (appearanceForm.rows(tab) + form.nativeRows(tab) + DisplaySetting.rows(tab, role: secondDisplay) + startupSetting.rows(tab)
+        return (appearanceForm.rows(tab) + form.nativeRows(tab) + startupSetting.rows(tab)
             + DevicesSetting.rows(tab) + coversForm.rows(tab) + AboutSetting.rows(tab, diagnosticLogs: diagnosticLogs) + GameDataSetting.rows(tab)
             + catalog + AppLanguageSetting.rows(tab) + DebugInfoSetting.rows(tab)).groupedBySection()
     }
@@ -427,17 +425,12 @@ struct SettingsScreen: View {
     }
     #endif
 
-    /// Steps row [id] of the stream settings, of the appearance (which changes live), of Covers, of the second display
-    /// or of the startup.
+    /// Steps row [id] of the stream settings, of the appearance (which changes live), of Covers or of the startup.
     @discardableResult
     private func step(_ id: String, by direction: Int) -> Bool {
         switch id {
         case CoversForm.automaticID:
             actions.artwork.automatic.toggle()
-            return true
-        case DisplaySetting.secondDisplayID:
-            secondDisplay = DisplaySetting.step(secondDisplay, by: direction)
-            SecondDisplayRole.save(secondDisplay)
             return true
         case StartupSetting.defaultPCID:
             let next = startupSetting.steppedDefault(by: direction)
@@ -522,11 +515,6 @@ struct SettingsScreen: View {
             closePopup()
             recordMenuButtons()
             return
-        } else if id == DisplaySetting.secondDisplayID {
-            if SecondDisplayRole.allCases.indices.contains(index) {
-                secondDisplay = SecondDisplayRole.allCases[index]
-                SecondDisplayRole.save(secondDisplay)
-            }
         } else if id == StartupSetting.defaultPCID {
             let choices = startupSetting.choices
             if choices.indices.contains(index) { setDefaultPC(choices[index].id) }
