@@ -722,6 +722,25 @@ ProMotion iPhone reports and can show 120 Hz; the stream asks the host for the p
 as DELOS for Android) with the refresh rate the display is expected to run (`DisplayRefreshPlanner.Plan.displayRefreshRate`)
 as the client refresh rate.
 
+### On an external display
+
+Fully External Display Mode (`checkbox_enable_fullexdisplay`, per profile; the external-display mode of DELOS for
+Android) sends a stream to a monitor or TV: on iPhone and iPad the scene the system offers with the role
+`windowExternalDisplayNonInteractive` (USB-C, HDMI adapter, AirPlay screen), on the Mac another `NSScreen` than the
+built-in one (else the one with the menu bar). Settings → Display → Second display set to Part of the device makes it
+never a stream target. `ExternalDisplayPlan` (DelosData) is that decision as a pure function; `ExternalDisplays`
+(DelosUI) carries it out when the stream screen begins and ends and when a screen comes or goes:
+
+- iPhone and iPad: the app's own window moves into the external scene (`UIWindow.windowScene`, so the interface keeps its
+  whole state) before the video surface is laid out, so the stream takes that screen's size and refresh rate. The
+  device's screen gets a black window whose touches go to `StreamController.touches` like the video surface's (the touch
+  mode, the on-screen controls, the swipe up that opens the menu); the menu itself is on the monitor or TV and works with
+  a controller. Afterwards the window comes back and the external scene keeps none, so the system mirrors again.
+- Mac: the app's window moves to the other screen in full screen and back to its frame afterwards.
+- The screen goes away during the stream: the stream is left, as Android finishes it.
+
+There is no companion screen: Android's dual-screen pages, Main screen and idle dimming are not ported.
+
 ## The Mac app
 
 The `DELOS` target is one multiplatform target: `SUPPORTED_PLATFORMS` of `Config/Shared.xcconfig` lists `macosx`, and

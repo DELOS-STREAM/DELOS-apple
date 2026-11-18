@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Fully External Display Mode (Settings → Display) works: a stream goes to a monitor or TV attached to the iPhone or
+  iPad (USB-C, HDMI adapter, AirPlay screen) or to the Mac's other screen, with its menu, and comes back when it ends;
+  the device's screen turns black and takes touches for the stream. Unplugging the screen leaves the stream. Not
+  verified on a real external display.
 - Diagnostics (docs/DIAGNOSTICS.md): DELOS keeps a small rolling log on the device (Settings → About → Keep diagnostic
   logs), notices a crash, a hang or a failed stream of the last run and offers once, in a card on the start and home
   screens, to report it: the log, cleaned of addresses, PC and profile names, ids and keys, is uploaded to the report

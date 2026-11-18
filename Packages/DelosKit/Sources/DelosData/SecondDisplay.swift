@@ -22,6 +22,16 @@ public enum SecondDisplayRole: String, CaseIterable, Codable, Sendable {
     }
 }
 
+/// Where a stream goes (the external-display mode of DELOS for Android, `utils/ServerHelper.java:64-71`), a pure function
+/// of the screens and the settings: to a connected second screen only while the profile's Fully External Display Mode is
+/// on and Settings → Display → Second display does not call it part of the device. Otherwise the second screen (if any) is
+/// left to the system: mirrored on iPhone and iPad, a free monitor on the Mac.
+public enum ExternalDisplayPlan {
+    public static func streamsOnSecond(secondConnected: Bool, role: SecondDisplayRole, fullExternal: Bool, streaming: Bool) -> Bool {
+        secondConnected && role != .builtIn && fullExternal && streaming
+    }
+}
+
 /// The corner of the full statistics panel while streaming (`StatsPosition` of DELOS for Android, `ui_stats_position`,
 /// kept with the profile's settings as ``SettingKey/statsPosition``); the compact line is always at the top center.
 public enum StatsPosition: String, CaseIterable, Sendable {
