@@ -99,6 +99,13 @@ public struct ClientIdentityStore: Sendable {
         return identity
     }
 
+    /// The client id of the stored identity, without making one (the diagnostic report removes it from its text); nil when there
+    /// is none or the store cannot be read.
+    public func storedUniqueID() -> String? {
+        guard let data = try? storage.read(account: Self.account) else { return nil }
+        return (try? PropertyListDecoder().decode(Stored.self, from: data))?.uniqueID
+    }
+
     /// Forgets the identity; every host has to be paired again.
     public func reset() throws {
         try storage.delete(account: Self.account)
