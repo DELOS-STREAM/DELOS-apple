@@ -174,16 +174,10 @@ struct StreamScreen: View {
         IdleTimer.disabled = true
         // Quitting the app (the Mac: Command-Q, closing the window) leaves the stream first
         shutdownID = StreamShutdown.shared.register { await controller.leave(quit: false) }
-        // The companion screen serves this stream (`CompanionHost.forStream`, `bindStream`): its tiles and keys go through
-        // this controller; Fully External Display Mode sends the stream to a monitor or TV
-        CompanionHub.shared.stream = CompanionStream(
-            controller: controller, pcName: hosts.host(hostID)?.name ?? "", gameName: hosts.apps[hostID]?.first { $0.id == appID }?.title ?? "",
-            pcID: hostID, fullExternal: settings.bool(.externalDisplayFullscreen))
     }
 
     private func end() {
         if let controller { navigator.releaseInput(controller) }
-        if CompanionHub.shared.stream?.controller === controller { CompanionHub.shared.stream = nil }
         controller?.restoreBrightness()
         IdleTimer.disabled = false
         if let shutdownID { StreamShutdown.shared.unregister(shutdownID) }
@@ -416,7 +410,10 @@ struct StreamContent: View {
             case .failed(let text):
                 StreamResultLayer(
                     text: text, focus: focus,
-                    onRetry: retry,
+                    onRetry: {
+                        StreamRetry.run(controller: controller, hosts: hosts, navigator: navigator, toasts: toasts, feedback: layers?.feedback,
+                                        hostID: hostID, appID: appID)
+                    },
                     onBack: { controller.dismiss() })
             }
             #if os(tvOS)
@@ -432,10 +429,6 @@ struct StreamContent: View {
             if director == nil { director = makeDirector() }
         }
         .task { await loadLogo() }
-        // The companion screen: the requested picture for its loader, and this result overlay with the same two callbacks
-        .companionStreamFlow(
-            controller: controller, requested: display.map { LaunchText.parameters(settings: settings, display: $0) }, pcID: hostID,
-            onRetry: retry, onBack: { controller.dismiss() })
         .task(id: controller.phase == .streaming) { await watchFirstFrame() }
         // The on-screen controls hide while a controller is the input in use (`checkbox_hide_osc_when_has_gamepad`)
         .onChange(of: ControllerGlyphs.shared.kind, initial: true) { _, kind in controller.onScreen?.setGamepadInUse(kind == .controller) }
@@ -483,12 +476,6 @@ struct StreamContent: View {
     }
 
     static let sinkID = "stream-sink"
-
-    /// Try again of the result overlay, on the main screen and on the companion screen alike.
-    private func retry() {
-        StreamRetry.run(controller: controller, hosts: hosts, navigator: navigator, toasts: toasts, feedback: layers?.feedback,
-                        hostID: hostID, appID: appID)
-    }
 
     /// A launch scene for a new attempt; its first line is the stage told so far, if any.
     private func makeDirector() -> LaunchDirector {

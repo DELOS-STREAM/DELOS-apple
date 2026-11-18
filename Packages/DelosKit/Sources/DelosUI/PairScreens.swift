@@ -158,8 +158,6 @@ struct PairPCScreen: View {
     /// "Pair with a one-time code" in the menu of a PC that is not paired yet.
     let onCode: @MainActor (HostRecord) -> Void
     let onAddress: @MainActor () -> Void
-    /// The paths the companion's card of a paired PC runs (`PublishCompanionPairList`); without them a paired PC shows no card.
-    var actions: ShellActions? = nil
     @Environment(HostStore.self) private var hosts
     @Environment(\.stage) private var stage
     @State private var searching = false
@@ -220,7 +218,6 @@ struct PairPCScreen: View {
         .entranceScope()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { hosts.startDiscovery() }
-        .companionPage { pairPage }
         .task(id: searching) {
             guard searching else { return }
             try? await Task.sleep(for: .seconds(3))
@@ -232,28 +229,6 @@ struct PairPCScreen: View {
         hosts.stopDiscovery()
         hosts.startDiscovery()
         searching = true
-    }
-
-    /// The companion's page of what is focused (`PublishCompanionPairList`, CompanionPcPublisher.kt:62-87): a PC that is
-    /// not paired shows its status and the two ways to pair (the menu's own entries), a paired one its card, the address
-    /// and search circles an explanation.
-    private var pairPage: CompanionPage? {
-        let focused = focus.focused
-        if let id = CompanionPcCard.focusedID(focused, prefix: Self.hostFocusID("")), let host = hosts.host(id) {
-            if host.pin != nil {
-                guard let actions else { return nil }
-                return CompanionPcPage.page(host, context: .pair, actions: actions)
-            }
-            let shown = CompanionPairHostPage.Shown(
-                id: host.id, name: host.name, online: host.reachability == .online,
-                software: CompanionPcCard.software(online: host.reachability == .online, nvidia: host.isNvidiaServer))
-            return CompanionPairHostPage.page(shown, onPin: { onHost(host) }, onCode: { onCode(host) })
-        }
-        switch focused?.base as? String {
-        case "address": return CompanionPairInfoPage.page(address: true, onSearch: searchAgain)
-        case "search": return CompanionPairInfoPage.page(address: false, onSearch: searchAgain)
-        default: return nil
-        }
     }
 }
 
@@ -272,8 +247,6 @@ struct PinScreen: View {
     @Environment(\.stage) private var stage
     @State private var generatedPIN = HostStore.newPIN()
     @State private var accepted = false
-    /// The library was opened, by the screen or by the companion's result page: once only (`runOnce`).
-    @State private var opened = false
 
     var body: some View {
         let name = hosts.host(hostID)?.name ?? ""
@@ -299,19 +272,6 @@ struct PinScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .entranceScope()
         .task { await pair() }
-        // The PIN (or the one-time-code instruction), then the result once the PC accepted (`PublishCompanionPin`)
-        .companionPage {
-            let pcName = hosts.host(hostID)?.name ?? ""
-            if accepted { return CompanionPairResultPage.page(id: hostID, pcName: pcName, onOpen: open, onBack: onCancel) }
-            if code != nil { return CompanionCodePage.page(id: hostID, pcName: pcName, hints: CompanionHub.shared.context?.hints ?? []) }
-            return CompanionPinPage.page(id: hostID, pcName: pcName, pin: generatedPIN, onCancel: onCancel)
-        }
-    }
-
-    private func open() {
-        guard !opened else { return }
-        opened = true
-        onPaired()
     }
 
     private func pair() async {
@@ -345,7 +305,7 @@ struct PinScreen: View {
         // The trusted paired state, not a fixed delay, gates the connect portal. Already paired returns immediately.
         _ = await PairStateWait.until(timeout: 8, clock: clock) { hosts.host(hostID)?.pin != nil }
         guard !Task.isCancelled else { return }
-        open()
+        onPaired()
     }
 }
 

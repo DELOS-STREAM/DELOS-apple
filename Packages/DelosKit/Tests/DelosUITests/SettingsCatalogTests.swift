@@ -270,24 +270,8 @@ import Testing
         #expect(SecondDisplayRole.load(defaults) == .automatic)
         SecondDisplayRole.save(.builtIn, defaults)
         #expect(defaults.string(forKey: "display_second_role") == "built_in")
-        #expect(DisplaySetting.rows(.display, state: DisplaySetting.State(role: .builtIn), paired: false)[0].value
+        #expect(DisplaySetting.rows(.display, role: .builtIn)[0].value
             == .choice(label: "Part of the device", options: ["Automatic", "External display", "Part of the device"], selected: 2))
-    }
-
-    /// Main screen and the dimming rows exist only while the screens are a pair; the delay only while dimming is on
-    /// (NativeSettings.kt:197-228).
-    @Test func mainScreenAndDimmingFollowThePair() {
-        let state = DisplaySetting.State(role: .builtIn, mainScreen: .swapped, dim: CompanionDim(enabled: true, minutes: 5))
-        #expect(DisplaySetting.rows(.display, state: state, paired: false).map(\.id) == ["display_second_role"])
-        let rows = DisplaySetting.rows(.display, state: state, paired: true)
-        #expect(rows.map(\.id) == ["display_second_role", "display_main_screen", "display_companion_dim", "display_companion_dim_minutes"])
-        #expect(rows[1].value == .choice(label: "Swapped", options: ["Automatic", "Swapped"], selected: 1))
-        #expect(rows[2].value == .choice(label: "On", options: ["On", "Off"], selected: 0))
-        #expect(rows[3].value == .choice(label: "5 minutes", options: ["1 minute", "2 minutes", "5 minutes", "10 minutes"], selected: 2))
-        var off = state
-        off.dim.enabled = false
-        #expect(!DisplaySetting.rows(.display, state: off, paired: true).map(\.id).contains("display_companion_dim_minutes"))
-        #expect(DisplaySetting.rows(.stream, state: state, paired: true).isEmpty)
     }
 
     @Test func rowsAreGroupedBySection() {

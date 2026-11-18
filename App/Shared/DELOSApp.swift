@@ -12,30 +12,14 @@ final class OrientationLock: NSObject, UIApplicationDelegate {
     }
 
     /// Also tells each window scene that it is landscape only, so the system does not start a rotation it then
-    /// refuses (the device still played the rotation animation with the delegate's answer alone). The scene of an
-    /// external display gets its own delegate: the companion screen or the app's window may go there
-    /// (``CompanionDisplays``).
+    /// refuses (the device still played the rotation animation with the delegate's answer alone).
     func application(
         _ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession,
         options: UIScene.ConnectionOptions
     ) -> UISceneConfiguration {
         let configuration = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
-        configuration.delegateClass = connectingSceneSession.role == .windowExternalDisplayNonInteractive ? ExternalDisplayScene.self : LandscapeScene.self
+        configuration.delegateClass = LandscapeScene.self
         return configuration
-    }
-}
-
-/// The scene of an external display (an HDMI or USB-C display, an AirPlay screen): it shows nothing of its own, so the
-/// system mirrors the device's screen, until ``CompanionDisplays`` puts the companion screen or the app's window there.
-final class ExternalDisplayScene: NSObject, UIWindowSceneDelegate {
-    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
-        guard let windowScene = scene as? UIWindowScene else { return }
-        CompanionDisplays.shared.externalSceneConnected(windowScene)
-    }
-
-    func sceneDidDisconnect(_ scene: UIScene) {
-        guard let windowScene = scene as? UIWindowScene else { return }
-        CompanionDisplays.shared.externalSceneDisconnected(windowScene)
     }
 }
 
@@ -43,8 +27,7 @@ final class ExternalDisplayScene: NSObject, UIWindowSceneDelegate {
 /// controller inside ``OrientationLockedContainer``: since iPadOS 26 (and iOS 27 with its SDK) the system rotates a
 /// landscape-only app's scene and plays the rotation animation before it refuses portrait (owner's iPad and iPhone);
 /// the supported way to hold the orientation is a view controller that prefers it locked (TN3192), and SwiftUI's own
-/// hosting controller cannot be told so. The app's own window is also handed to ``CompanionDisplays``, which moves it
-/// only while a second screen is DELOS's; a companion window the scene may hold then is left alone.
+/// hosting controller cannot be told so.
 final class LandscapeScene: NSObject, UIWindowSceneDelegate {
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
@@ -52,10 +35,9 @@ final class LandscapeScene: NSObject, UIWindowSceneDelegate {
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
-        guard let windowScene = scene as? UIWindowScene, let window = windowScene.keyWindow, let root = window.rootViewController,
-              !CompanionDisplays.shared.isCompanion(window) else { return }
-        if !(root is OrientationLockedContainer) { window.rootViewController = OrientationLockedContainer(content: root) }
-        CompanionDisplays.shared.mainWindowReady(window, in: windowScene)
+        guard let window = (scene as? UIWindowScene)?.keyWindow, let root = window.rootViewController,
+              !(root is OrientationLockedContainer) else { return }
+        window.rootViewController = OrientationLockedContainer(content: root)
     }
 }
 

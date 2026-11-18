@@ -55,19 +55,6 @@ struct GameSettingsScreen: View {
     private var rows: [SettingRow] { model.rows(current) }
     private var focusedRow: SettingRow? { rows.first { focus.focused == AnyHashable($0.id) } }
 
-    /// The focused row's description as the companion screen shows it (GameSettingsScreen.kt:205-221).
-    private var focusedHelp: CompanionHelp {
-        let row = focusedRow
-        return CompanionHelp.game(
-            app: app.title, row: row, custom: row.map { model.isCustom($0.id) } ?? false, profileLabel: row.map { model.profileLabel($0.id) } ?? "",
-            currentLabel: row.map { model.currentLabel($0.id) } ?? "", streamCount: model.customCount(.stream), displayCount: model.customCount(.display))
-    }
-
-    /// A companion window shows the help: the panel is left out and the list spans its room too.
-    private var hidesDescription: Bool {
-        companionHidesDescription(windowShowsHelp: CompanionHub.shared.showsHelp, help: CompanionHub.shared.shown ? focusedHelp : nil)
-    }
-
     var body: some View {
         let left = 150 + stage.safe.leading, right = 150 + stage.safe.trailing
         let bottom = SettingsLayout.bottom(scale: stage.textScale) + stage.safe.bottom
@@ -97,23 +84,19 @@ struct GameSettingsScreen: View {
             }
             // The list spans from 132 to 38 short of the panel, which starts where the global settings' panel does
             list(rows)
-                .frame(width: stage.px(
-                    (hidesDescription ? stage.width - 2 * GameSettingsLayout.listX : stage.width - GameSettingsLayout.listWidthLess)
-                        - stage.safe.leading - stage.safe.trailing))
+                .frame(width: stage.px(stage.width - GameSettingsLayout.listWidthLess - stage.safe.leading - stage.safe.trailing))
                 .padding(.leading, stage.px(GameSettingsLayout.listX + stage.safe.leading))
                 .padding(.top, stage.px(GameSettingsLayout.listTop + stage.safe.top))
                 .padding(.bottom, stage.px(bottom))
-            if !hidesDescription {
-                GameSettingsPanel(
-                    app: app.title, row: focusedRow.map { row in
-                        (row, model.isCustom(row.id), model.profileLabel(row.id), model.currentLabel(row.id))
-                    }, streamCount: streamCount, displayCount: displayCount)
-                    .frame(width: stage.px(520))
-                    .padding(.trailing, stage.px(right))
-                    .padding(.top, stage.px(SettingsLayout.listTop + stage.safe.top))
-                    .padding(.bottom, stage.px(bottom))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-            }
+            GameSettingsPanel(
+                app: app.title, row: focusedRow.map { row in
+                    (row, model.isCustom(row.id), model.profileLabel(row.id), model.currentLabel(row.id))
+                }, streamCount: streamCount, displayCount: displayCount)
+                .frame(width: stage.px(520))
+                .padding(.trailing, stage.px(right))
+                .padding(.top, stage.px(SettingsLayout.listTop + stage.safe.top))
+                .padding(.bottom, stage.px(bottom))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             if let popup, let row = rows.first(where: { $0.id == popup.id }) {
                 RowPopover(
                     row: row, kind: popup.kind, focus: popup.focus, anchor: rowFrames[row.id] ?? .zero, slider: popup.slider,
@@ -135,7 +118,6 @@ struct GameSettingsScreen: View {
         .onChange(of: focus.focused) { _, now in
             if let id = now as? String, rows.contains(where: { $0.id == id }) { lastRow = id }
         }
-        .companionHelp { focusedHelp }
     }
 
     /// Another tab: the focus goes to its first row, unless the tab was chosen on the tab itself (tvOS).

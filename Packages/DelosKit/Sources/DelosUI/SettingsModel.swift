@@ -839,21 +839,10 @@ struct StreamSettingsForm: Equatable {
 }
 
 /// Settings → Display → Second display (`SecondDisplayOverride` of DELOS for Android): the kind of a second screen of this
-/// device, kept for the device. While a second screen is part of the device (``ScreenPlanner/paired(second:role:)``) the
-/// tab also has Main screen and the companion screen's idle dimming with its delay (NativeSettings.kt:184-228), which
-/// appear and go with that screen; the delay only while dimming is on.
+/// device, kept for the device. Android's "Main screen" and the idle dimming of the second screen show only with a panel
+/// built into the device, which Apple devices do not have.
 enum DisplaySetting {
     static let secondDisplayID = SecondDisplayRole.key
-    static let mainScreenID = MainScreenChoice.key
-    static let dimID = CompanionDim.enabledKey
-    static let dimMinutesID = CompanionDim.minutesKey
-
-    /// What the rows show: the role, and while the screens are a pair the main screen and the dimming.
-    struct State: Equatable {
-        var role = SecondDisplayRole.load()
-        var mainScreen = MainScreenChoice.load()
-        var dim = CompanionDim.load()
-    }
 
     static func label(_ role: SecondDisplayRole) -> String {
         switch role {
@@ -871,104 +860,14 @@ enum DisplaySetting {
         }
     }
 
-    static func label(_ choice: MainScreenChoice) -> String {
-        switch choice {
-        case .automatic: L("settings_native_main_screen_automatic")
-        case .swapped: L("settings_native_main_screen_swapped")
-        }
-    }
-
-    private static func help(_ choice: MainScreenChoice) -> String {
-        switch choice {
-        case .automatic: L("settings_native_help_main_screen_automatic")
-        case .swapped: L("settings_native_help_main_screen_swapped")
-        }
-    }
-
-    static func minutes(_ count: Int) -> String { LPlural("settings_native_companion_dim_minutes_value", count) }
-
-    /// Whether the delay row shows (`companionDimDelayShown`): with the dimming rows, only while dimming is on.
-    static func delayShown(paired: Bool, dim: CompanionDim) -> Bool { paired && dim.enabled }
-
-    static func rows(_ tab: SettingsTab, state: State, paired: Bool) -> [SettingRow] {
+    static func rows(_ tab: SettingsTab, role: SecondDisplayRole) -> [SettingRow] {
         guard tab == .display else { return [] }
-        let section = L("settings_native_section_displays")
-        let label = label(state.role)
-        var rows = [SettingRow(
-            id: secondDisplayID, tab: .display, section: section, icon: Symbols.externalDisplay,
+        let label = label(role)
+        return [SettingRow(
+            id: secondDisplayID, tab: .display, section: L("settings_native_section_displays"), icon: Symbols.externalDisplay,
             label: L("settings_native_second_display_title"),
-            value: .choice(label: label, options: SecondDisplayRole.allCases.map(Self.label), selected: SecondDisplayRole.allCases.firstIndex(of: state.role)),
-            help: AppearanceForm.details(value: label, explanation: help(state.role), about: L("settings_native_second_display_description")))]
-        guard paired else { return rows }
-        let main = Self.label(state.mainScreen)
-        rows.append(SettingRow(
-            id: mainScreenID, tab: .display, section: section, icon: Symbols.monitor, label: L("settings_native_main_screen_title"),
-            value: .choice(label: main, options: MainScreenChoice.allCases.map(Self.label), selected: MainScreenChoice.allCases.firstIndex(of: state.mainScreen)),
-            help: AppearanceForm.details(value: main, explanation: help(state.mainScreen), about: L("settings_native_main_screen_description"))))
-        let on = state.dim.enabled ? L("common_on") : L("common_off")
-        rows.append(SettingRow(
-            id: dimID, tab: .display, section: section, icon: Symbols.externalDisplay, label: L("settings_native_companion_dim_title"),
-            value: .choice(label: on, options: [L("common_on"), L("common_off")], selected: state.dim.enabled ? 0 : 1),
-            help: AppearanceForm.details(
-                value: on, explanation: state.dim.enabled ? L("settings_native_help_companion_dim_on") : L("settings_native_help_companion_dim_off"),
-                about: L("settings_native_companion_dim_description"))))
-        if delayShown(paired: paired, dim: state.dim) {
-            let value = minutes(state.dim.minutes)
-            rows.append(SettingRow(
-                id: dimMinutesID, tab: .display, section: section, icon: Symbols.timer, label: L("settings_native_companion_dim_minutes_title"),
-                value: .choice(
-                    label: value, options: CompanionDim.minutesChoices.map(minutes), selected: CompanionDim.minutesChoices.firstIndex(of: state.dim.minutes)),
-                help: AppearanceForm.details(value: value, explanation: nil, about: L("settings_native_companion_dim_minutes_description"))))
-        }
-        return rows
-    }
-
-    /// Steps row [id] of [state] by [direction] and keeps it; false for a row that is not one of these.
-    static func step(_ id: String, by direction: Int, in state: inout State) -> Bool {
-        switch id {
-        case secondDisplayID:
-            state.role = step(state.role, by: direction)
-            SecondDisplayRole.save(state.role)
-        case mainScreenID:
-            state.mainScreen = state.mainScreen.step(direction)
-            MainScreenChoice.save(state.mainScreen)
-        case dimID:
-            state.dim.enabled.toggle()
-            CompanionDim.saveEnabled(state.dim.enabled)
-        case dimMinutesID:
-            state.dim.minutes = CompanionDim.step(state.dim.minutes, direction)
-            CompanionDim.saveMinutes(state.dim.minutes)
-        default:
-            return false
-        }
-        return true
-    }
-
-    /// Picks option [index] of row [id] and keeps it; false for a row that is not one of these.
-    static func pick(_ id: String, _ index: Int, in state: inout State) -> Bool {
-        switch id {
-        case secondDisplayID:
-            if SecondDisplayRole.allCases.indices.contains(index) {
-                state.role = SecondDisplayRole.allCases[index]
-                SecondDisplayRole.save(state.role)
-            }
-        case mainScreenID:
-            if MainScreenChoice.allCases.indices.contains(index) {
-                state.mainScreen = MainScreenChoice.allCases[index]
-                MainScreenChoice.save(state.mainScreen)
-            }
-        case dimID:
-            state.dim.enabled = index == 0
-            CompanionDim.saveEnabled(state.dim.enabled)
-        case dimMinutesID:
-            if CompanionDim.minutesChoices.indices.contains(index) {
-                state.dim.minutes = CompanionDim.minutesChoices[index]
-                CompanionDim.saveMinutes(state.dim.minutes)
-            }
-        default:
-            return false
-        }
-        return true
+            value: .choice(label: label, options: SecondDisplayRole.allCases.map(Self.label), selected: SecondDisplayRole.allCases.firstIndex(of: role)),
+            help: AppearanceForm.details(value: label, explanation: help(role), about: L("settings_native_second_display_description")))]
     }
 
     /// The role after a step of [direction], wrapping around.

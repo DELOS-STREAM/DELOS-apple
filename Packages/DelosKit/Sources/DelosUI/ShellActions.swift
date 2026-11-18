@@ -91,7 +91,7 @@ final class ShellActions {
     }
 
     /// Asks the online PC to forget this client (`unpair`); the PC leaves the list once it has.
-    func unpair(_ hostID: String) {
+    private func unpair(_ hostID: String) {
         guard let name = hosts.host(hostID)?.name else { return }
         Task {
             let result = await hosts.unpairOnPC(hostID)
@@ -109,7 +109,7 @@ final class ShellActions {
     }
 
     /// Removes the PC from DELOS at once (`remove`): choosing it is the confirmation; the PC can be found and paired again.
-    func remove(_ hostID: String) {
+    private func remove(_ hostID: String) {
         guard let name = hosts.host(hostID)?.name else { return }
         hosts.remove(hostID)
         gameSettings.remove(hostID: hostID)
@@ -118,12 +118,12 @@ final class ShellActions {
         toasts.show(L("devices_removed_toast", name), icon: Symbols.delete)
     }
 
-    func setDefault(_ host: HostRecord?) {
+    private func setDefault(_ host: HostRecord?) {
         profiles.setDefaultPC(host?.id)
         toasts.show(host.map { L("devices_default_set_toast", $0.name) } ?? L("devices_default_cleared_toast"), icon: Symbols.star)
     }
 
-    func wake(_ hostID: String) {
+    private func wake(_ hostID: String) {
         guard let name = hosts.host(hostID)?.name else { return }
         Task {
             let error: String? = switch await hosts.wake(hostID) {
@@ -159,7 +159,7 @@ final class ShellActions {
     }
 
     /// The PC's name in DELOS on this device: empty returns to the PC's own name.
-    func rename(_ hostID: String) {
+    private func rename(_ hostID: String) {
         guard let host = hosts.host(hostID) else { return }
         layers.openDialog(DialogSpec(
             title: L("devices_rename_title"), note: L("devices_rename_note", host.serverName),
@@ -193,7 +193,7 @@ final class ShellActions {
             // The menu is the confirmation: only its first row quits the running game, and it opens on the other one
             items = [
                 MenuItem(icon: Symbols.swapGame, label: L("home_menu_quit_and_start", running.title), danger: true) { [self] in
-                    quitAndStart(hostID: hostID, running: running, app: app)
+                    quit(hostID: hostID, app: running) { start(app) }
                 },
                 MenuItem(icon: Symbols.resume, label: L("home_menu_resume_other", running.title)) { start(running) },
             ]
@@ -253,12 +253,6 @@ final class ShellActions {
         let apps = libraryHostID.flatMap { hosts.apps[$0] } ?? []
         let hidden = libraryHostID.map { hiding.ids(profile: profiles.current?.id, hostID: $0) } ?? []
         return LibraryHiding.sideRow(count: LibraryHiding.count(apps, hidden: hidden), showing: hiding.showHidden, pcName: pcName)
-    }
-
-    /// Quits [running] on the PC and starts [app] once it has quit: the menu's "Quit X and start Y", and the companion's
-    /// Quit and start (`GameActions.quitAndStart`).
-    func quitAndStart(hostID: String, running: HostApp, app: HostApp) {
-        quit(hostID: hostID, app: running) { [self] in play(hostID: hostID, app: app) }
     }
 
     /// Quits [app] on the PC; [then] runs once it has quit (the other game of "Quit X and start Y" starts). A PC DELOS has

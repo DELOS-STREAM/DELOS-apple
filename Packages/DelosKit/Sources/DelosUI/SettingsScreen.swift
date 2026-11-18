@@ -35,7 +35,6 @@ struct SettingsScreen: View {
     @Environment(\.stage) private var stage
     @Environment(\.openURL) private var openURL
     @Environment(Layers.self) private var layers: Layers?
-    @Environment(HomeArt.self) private var homeArt
     @State private var form: StreamSettingsForm
     @State private var tab: SettingsTab
     /// The popover that is open on a row (its options, or its slider), and the focus inside the options.
@@ -46,8 +45,8 @@ struct SettingsScreen: View {
     /// The focus of the search while it is open, and what it looks for.
     @State private var searchFocus: FocusModel?
     @State private var query = ""
-    /// The device-wide display settings: the kind of a second screen, the main screen and the companion's dimming.
-    @State private var display = DisplaySetting.State()
+    /// The kind of a second screen (device-wide, `display_second_role`).
+    @State private var secondDisplay = SecondDisplayRole.load()
     /// The file picker of Import Custom Keys is open.
     @State private var importingSpecialKeys = false
     private let store = StreamSettingsStore()
@@ -103,8 +102,7 @@ struct SettingsScreen: View {
         let catalog = LinkGuidanceRows.apply(
             form.catalogRows(tab), guidance: linkGuidance, host: linkHost, form: form,
             nowMs: Int64((Date().timeIntervalSince1970 * 1000).rounded()), transport: .current)
-        return (appearanceForm.rows(tab) + form.nativeRows(tab) + DisplaySetting.rows(tab, state: display, paired: CompanionHub.shared.paired)
-            + startupSetting.rows(tab)
+        return (appearanceForm.rows(tab) + form.nativeRows(tab) + DisplaySetting.rows(tab, role: secondDisplay) + startupSetting.rows(tab)
             + DevicesSetting.rows(tab) + coversForm.rows(tab) + AboutSetting.rows(tab) + GameDataSetting.rows(tab)
             + catalog + AppLanguageSetting.rows(tab)).groupedBySection()
     }
@@ -133,16 +131,6 @@ struct SettingsScreen: View {
     /// The rows of every tab, which the search looks through.
     private var searchableRows: [SettingRow] { SettingsTab.availableCases.flatMap { rows(for: $0) } }
     private var focusedRow: SettingRow? { rows.first { focus.focused == AnyHashable($0.id) } }
-
-    /// The focused row's description as the companion screen shows it (`settingsHelp`, SettingsScreen.kt:335-339).
-    private var focusedHelp: CompanionHelp {
-        CompanionHelp.settings(tab: tab, row: focusedRow, colors: colors, appearance: appearance, art: homeArt)
-    }
-
-    /// A companion window shows the help: the description panel (or dock) is left out and the list gets its room.
-    private var hidesDescription: Bool {
-        companionHidesDescription(windowShowsHelp: CompanionHub.shared.showsHelp, help: CompanionHub.shared.shown ? focusedHelp : nil)
-    }
 
     static let searchID = "settings-search"
 
@@ -173,7 +161,6 @@ struct SettingsScreen: View {
         #endif
         .onChange(of: tab) { _, next in SettingsSession.shared.tab = next }
         .onChange(of: focus.focused, initial: true) { navigator.setHints(ScreenHints(adjustable: ShellHints.adjustable(focusedRow)), from: focus) }
-        .companionHelp { focusedHelp }
     }
 
     private var content: some View {
@@ -218,12 +205,10 @@ struct SettingsScreen: View {
                 // The list takes the full width; the help is a dock under it, so the focused row and its help are on screen together
                 VStack(spacing: stage.px(HelpDockLayout.listGap)) {
                     list
-                    if !hidesDescription {
-                        CompactHelpDock(tab: tab, row: focusedRow, appearance: appearance)
-                            .frame(height: stage.px(HelpDockLayout.height(
-                                stageHeight: stage.height, rowsTop: SettingsLayout.compactListTop + stage.safe.top + 14 + SettingsLayout.sectionHeading,
-                                bottom: bottom, rowHeight: SettingsLayout.tallRow(stage))))
-                    }
+                    CompactHelpDock(tab: tab, row: focusedRow, appearance: appearance)
+                        .frame(height: stage.px(HelpDockLayout.height(
+                            stageHeight: stage.height, rowsTop: SettingsLayout.compactListTop + stage.safe.top + 14 + SettingsLayout.sectionHeading,
+                            bottom: bottom, rowHeight: SettingsLayout.tallRow(stage))))
                 }
                 .padding(.leading, stage.px(left))
                 .padding(.trailing, stage.px(right))
@@ -232,10 +217,8 @@ struct SettingsScreen: View {
             } else {
                 HStack(alignment: .top, spacing: stage.px(56)) {
                     list
-                    if !hidesDescription {
-                        DescriptionPanel(tab: tab, row: focusedRow, appearance: appearance)
-                            .frame(width: stage.px(520))
-                    }
+                    DescriptionPanel(tab: tab, row: focusedRow, appearance: appearance)
+                        .frame(width: stage.px(520))
                 }
                 .padding(.leading, stage.px(left))
                 .padding(.trailing, stage.px(right))
@@ -448,8 +431,10 @@ struct SettingsScreen: View {
         case CoversForm.automaticID:
             actions.artwork.automatic.toggle()
             return true
-        case DisplaySetting.secondDisplayID, DisplaySetting.mainScreenID, DisplaySetting.dimID, DisplaySetting.dimMinutesID:
-            return DisplaySetting.step(id, by: direction, in: &display)
+        case DisplaySetting.secondDisplayID:
+            secondDisplay = DisplaySetting.step(secondDisplay, by: direction)
+            SecondDisplayRole.save(secondDisplay)
+            return true
         case StartupSetting.defaultPCID:
             let next = startupSetting.steppedDefault(by: direction)
             guard next != actions.profiles.startup.defaultPC else { return false }
@@ -529,8 +514,11 @@ struct SettingsScreen: View {
             closePopup()
             recordMenuButtons()
             return
-        } else if DisplaySetting.pick(id, index, in: &display) {
-            // A display setting: kept by the pick itself
+        } else if id == DisplaySetting.secondDisplayID {
+            if SecondDisplayRole.allCases.indices.contains(index) {
+                secondDisplay = SecondDisplayRole.allCases[index]
+                SecondDisplayRole.save(secondDisplay)
+            }
         } else if id == StartupSetting.defaultPCID {
             let choices = startupSetting.choices
             if choices.indices.contains(index) { setDefaultPC(choices[index].id) }
