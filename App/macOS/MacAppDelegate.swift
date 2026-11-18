@@ -15,6 +15,8 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             Self.passes(modifiers: event.modifierFlags) ? event : nil
         }
+        // A second screen gets the companion screen, and the Main screen setting decides where the window goes
+        CompanionDisplays.shared.start()
     }
 
     /// Whether a key goes on to AppKit: a key with Command, Control or Option belongs to the menu bar or to the
