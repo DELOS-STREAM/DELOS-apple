@@ -369,12 +369,13 @@ struct StreamContent: View {
             case .connecting:
                 EmptyView()
             case .streaming:
-                if controller.statisticsOverlay.isShown, let statistics = controller.statistics {
-                    StreamStatsOverlay(statistics: statistics, overlay: controller.statisticsOverlay)
-                }
                 if dockShown {
                     StreamMenu(focus: focus, controller: controller, open: controller.menuOpen)
                         .environment(\.glassOverMedia, true)
+                }
+                // Over the menu's backdrop, sharp (Android moves it into the menu's window, DelosStreamActivity.java:2046)
+                if controller.statisticsOverlay.isShown, let statistics = controller.statistics {
+                    StreamStatsOverlay(statistics: statistics, overlay: controller.statisticsOverlay, position: settings.statsPosition)
                 }
             case .leaving, .ended:
                 if exitScene, let exitPortal, let leavingSince {

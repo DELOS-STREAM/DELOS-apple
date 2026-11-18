@@ -1255,3 +1255,10 @@ debug_osc_description
 settings_osc_preview_note
 settings_actions_osc_reset
 wrong_import_format
+stream_stats_compact_low
+stream_stats_one_percent_low
+stream_stats_upscaling
+stream_stats_total_latency
+stream_stats_encryption
+stream_encryption_value
+stream_encryption_unknown
