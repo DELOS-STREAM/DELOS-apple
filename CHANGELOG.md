@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Diagnostics (docs/DIAGNOSTICS.md): DELOS keeps a small rolling log on the device (Settings → About → Keep diagnostic
+  logs), notices a crash, a hang or a failed stream of the last run and offers once, in a card on the start and home
+  screens, to report it: the log, cleaned of addresses, PC and profile names, ids and keys, is uploaded to the report
+  service when the build has one, or saved to Files (DELOS folder) on iPhone and iPad and to Downloads on the Mac, and
+  a prefilled GitHub draft opens. Nothing is sent without the user. Settings → About → Debug info shows the device, its
+  displays and controllers, previews, shares, copies and clears the log, and has the vibration test and the rumble
+  laboratory, whose edits become a Custom rumble feel. Apple TV cannot save, share or copy the log or open the draft.
+  Not verified on a device.
 - On-screen controls on iPhone and iPad, as on DELOS for Android: the D-pad, A/B/X/Y, bumpers, triggers, Back,
   Guide, Start, L3/R3, the trackpad button and fixed or free sticks in the DELOS style, any number of fingers at
   once, sent to the PC as controller 0. The default layout is computed for every screen shape; the gear edits it
