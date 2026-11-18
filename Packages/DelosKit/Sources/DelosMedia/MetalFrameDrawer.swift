@@ -93,6 +93,10 @@ final class MetalFrameDrawer: @unchecked Sendable {
     private var drawn = 0
     /// What the last drawing through the upscaler did; nil when it was drawn directly.
     private(set) var lastReport: UpscaleReport?
+    /// Times the passes apart (``StreamPerf``'s breakdown); nil when nothing reads them or the GPU has no timestamps.
+    let passTimer: GPUPassTimer?
+    /// The last drawing's pass samples, to read once its command buffer has completed.
+    private(set) var lastPasses: GPUPassTimer.Drawing?
 
     private struct UpscaleKey: Equatable {
         var sequence: Int
@@ -104,8 +108,9 @@ final class MetalFrameDrawer: @unchecked Sendable {
         var format: MTLPixelFormat
     }
 
-    /// `metalFX`: the MetalFX scalers to use, nil for those of `device` (tests pass ``MetalFXSupport/none``).
-    init?(device: (any MTLDevice)? = MTLCreateSystemDefaultDevice(), metalFX: MetalFXSupport? = nil) {
+    /// `metalFX`: the MetalFX scalers to use, nil for those of `device` (tests pass ``MetalFXSupport/none``). `timed`: the
+    /// passes' GPU times are sampled (``passTimer``).
+    init?(device: (any MTLDevice)? = MTLCreateSystemDefaultDevice(), metalFX: MetalFXSupport? = nil, timed: Bool = false) {
         guard let device, let queue = device.makeCommandQueue(),
               let library = try? device.makeDefaultLibrary(bundle: .module) else { return nil }
         var textureCache: CVMetalTextureCache?
@@ -117,6 +122,8 @@ final class MetalFrameDrawer: @unchecked Sendable {
         self.textureCache = textureCache
         cache = MetalPipelineCache(device: device, library: library)
         upscaler = MetalUpscaler(cache: cache, support: metalFX ?? MetalFXSupport.probe(device))
+        passTimer = timed ? GPUPassTimer(device: device) : nil
+        cache.passObserver = passTimer
     }
 
     /// The rectangle of a `width` × `height` target the picture fills, in pixels: as large as fits, in the middle.
@@ -143,6 +150,8 @@ final class MetalFrameDrawer: @unchecked Sendable {
         topAligned: Bool = false, upscale: UpscaleRequest? = nil
     ) -> Bool {
         lastReport = nil
+        passTimer?.begin()
+        defer { lastPasses = passTimer?.end() }
         let wide = conversion.bitDepth > 8
         let width = CVPixelBufferGetWidth(pixelBuffer), height = CVPixelBufferGetHeight(pixelBuffer)
         let geometry = PictureGeometry.make(
@@ -178,7 +187,7 @@ final class MetalFrameDrawer: @unchecked Sendable {
         // The arrival is over (or has not begun): its texture is not kept for the rest of the stream
         arrivalTexture = nil
         return convert(pixelBuffer, conversion: conversion, into: target, viewport: geometry.viewport, crop: geometry.crop,
-                       commandBuffer: commandBuffer)
+                       pass: .present, commandBuffer: commandBuffer)
     }
 
     private func drawUpscaled(
@@ -271,10 +280,11 @@ final class MetalFrameDrawer: @unchecked Sendable {
         upscaler.releaseResources()
     }
 
-    /// The Y'CbCr to RGB conversion of `pixelBuffer` into `viewport` of `texture` (cleared to black first).
+    /// The Y'CbCr to RGB conversion of `pixelBuffer` into `viewport` of `texture` (cleared to black first). `pass`: what
+    /// the pass timer is told it is (the conversion into the drawable is the drawing's presentation).
     private func convert(
         _ pixelBuffer: CVPixelBuffer, conversion: ColorConversion, into texture: any MTLTexture, viewport: MTLViewport,
-        crop: SIMD4<Float>, commandBuffer: any MTLCommandBuffer
+        crop: SIMD4<Float>, pass: GPUPass = .conversion, commandBuffer: any MTLCommandBuffer
     ) -> Bool {
         let wide = conversion.bitDepth > 8
         guard let luma = planeTexture(pixelBuffer, plane: 0, format: wide ? .r16Unorm : .r8Unorm),
@@ -283,7 +293,7 @@ final class MetalFrameDrawer: @unchecked Sendable {
         else { return false }
         guard cache.draw(
             "videoFragment", into: texture, textures: [lumaTexture, chromaTexture], uniforms: conversion.uniforms,
-            viewport: viewport, crop: crop, clear: true, commandBuffer: commandBuffer)
+            viewport: viewport, crop: crop, clear: true, pass: pass, commandBuffer: commandBuffer)
         else { return false }
         // The textures must outlive the GPU's reading of them
         nonisolated(unsafe) let held = (luma, chroma, pixelBuffer)

@@ -47,18 +47,21 @@ struct QueueRun {
 }
 
 enum QueueReplay {
-    /// Pushes frame i at `arrivals[i]` and asks for a frame at every refresh of `display`, in time order.
+    /// Pushes frame i at `arrivals[i]` and asks for a frame at every refresh of `display`, in time order. The display
+    /// link calls back `lead` refreshes before the picture appears; it skips the refreshes numbered in `lost` (counted
+    /// from the first one).
     static func run(
-        arrivals: [Double], pacing: FramePacing, fps: Int, display: VirtualDisplay, capacity: Int = 4
+        arrivals: [Double], pacing: FramePacing, fps: Int, display: VirtualDisplay, capacity: Int = 4, lead: Double = 1,
+        lost: Set<Int> = []
     ) -> QueueRun {
         var queue = FrameQueue<Int>(pacing: pacing, fps: fps, capacity: capacity)
         var run = QueueRun()
         let end = (arrivals.last ?? 0) + 0.1
         let ticks = display.refreshes(in: (arrivals.first ?? 0)...end)
         var next = 0
-        for tick in ticks {
-            // Frames that arrived before this refresh's callback; the callback runs a refresh ahead of the presentation
-            while next < arrivals.count, arrivals[next] <= tick - display.refresh {
+        for (index, tick) in ticks.enumerated() where !lost.contains(index) {
+            // Frames that arrived before this refresh's callback
+            while next < arrivals.count, arrivals[next] <= tick - lead * display.refresh {
                 queue.push(next, arrival: arrivals[next])
                 next += 1
             }
@@ -85,16 +88,98 @@ enum QueueReplay {
 @Suite struct FrameQueueTests {
     let refresh = 1.0 / 120
 
-    @Test func theNewestDueFrameWinsInTheLowestLatencyMode() {
+    @Test func theLowestLatencyModeShowsFramesInOrderWithOneFrameOfBacklog() {
         var queue = FrameQueue<Int>(pacing: .latency, fps: 120)
+        // Two frames landed in one refresh: the older is shown, the newer waits for the next refresh
         queue.push(1, arrival: 1.000)
         queue.push(2, arrival: 1.002)
-        queue.push(3, arrival: 1.004)
-        let taken = queue.take(at: 1.006, refresh: refresh)
-        #expect(taken?.frame == 3)
-        #expect(queue.counters.dropped == 2)
-        #expect(queue.counters.presented == 1)
+        #expect(queue.take(at: 1.006, refresh: refresh)?.frame == 1)
+        #expect(queue.take(at: 1.006 + refresh, refresh: refresh)?.frame == 2)
+        #expect(queue.counters.dropped == 0)
+        // Three wait: one more than the backlog, so the oldest is skipped
+        for frame in 3...5 { queue.push(frame, arrival: 1.02) }
+        #expect(queue.take(at: 1.03, refresh: refresh)?.frame == 4)
+        #expect(queue.counters.dropped == 1)
+        #expect(queue.counters.presented == 3)
+        #expect(queue.waiting == 1)
+    }
+
+    @Test func aBacklogDrainsAtARefreshWithoutANewFrame() {
+        for pacing in [FramePacing.latency, .balanced, .smoothness] {
+            var queue = FrameQueue<Int>(pacing: pacing, fps: 120)
+            queue.push(1, arrival: 1.000)
+            queue.push(2, arrival: 1.002)
+            #expect(queue.take(at: 1.1, refresh: refresh)?.frame == 1, "\(pacing)")
+            // No frame arrived for this refresh: the one that waited is shown instead of the previous picture again
+            #expect(queue.take(at: 1.1 + refresh, refresh: refresh)?.frame == 2, "\(pacing)")
+            #expect(queue.counters.repeatedRefreshes == 0, "\(pacing)")
+            #expect(queue.take(at: 1.1 + 2 * refresh, refresh: refresh) == nil, "\(pacing)")
+            #expect(queue.counters.repeatedRefreshes == 1, "\(pacing)")
+        }
+    }
+
+    /// One frame arrives per refresh while one more waits from the start; each is shown two refreshes after it arrived.
+    private func standingBacklog(_ pacing: FramePacing, refreshes: Int) -> (shown: [Int], dropped: Int) {
+        var queue = FrameQueue<Int>(pacing: pacing, fps: 120)
+        queue.push(0, arrival: 0.999)
+        var shown: [Int] = []
+        for tick in 0..<refreshes {
+            let arrival = 1 + Double(tick) * refresh
+            queue.push(tick + 1, arrival: arrival)
+            if let taken = queue.take(at: arrival + 2 * refresh, refresh: refresh) { shown.append(taken.frame) }
+        }
+        return (shown, queue.counters.dropped)
+    }
+
+    @Test func aUsefulJitterReserveIsNotDiscardedOnATimer() {
+        for pacing in FramePacing.allCases {
+            let run = standingBacklog(pacing, refreshes: 600)
+            #expect(run.shown == Array(0..<600), "\(pacing)")
+            #expect(run.dropped == 0, "\(pacing)")
+        }
+    }
+
+    @Test func latencyDoesNotAddAScheduledBufferToASteadyStream() {
+        var queue = FrameQueue<Int>(pacing: .latency, fps: 120)
+        for frame in 0..<600 {
+            let arrival = 1 + Double(frame) * refresh
+            #expect(queue.push(frame, arrival: arrival) == arrival)
+            #expect(queue.take(at: arrival, refresh: refresh)?.frame == frame)
+            #expect(queue.waiting == 0)
+        }
+        #expect(queue.counters.dropped == 0)
+        #expect(queue.counters.repeatedRefreshes == 0)
+    }
+    @Test func aStreamFasterThanTheDisplayKeepsNoBacklogInTheModesWithoutABuffer() {
+        // Warp: 240 fps on a 120 Hz display, two frames per refresh: the newer one is shown.
+        var queue = FrameQueue<Int>(pacing: .warp, fps: 240)
+        queue.push(1, arrival: 1.000)
+        queue.push(2, arrival: 1.004)
+        #expect(queue.take(at: 1.01, refresh: refresh)?.frame == 2)
+        #expect(queue.counters.dropped == 1)
         #expect(queue.waiting == 0)
+    }
+
+    @Test func theSmoothestModeKeepsTwoFramesOfBacklog() {
+        var queue = FrameQueue<Int>(pacing: .smoothness, fps: 120, capacity: 6)
+        for i in 0..<5 { queue.push(i, arrival: 1 + Double(i) * 0.0005) }
+        // Five frames due: one is shown, two may wait, the two oldest are skipped
+        #expect(queue.take(at: 2, refresh: refresh)?.frame == 2)
+        #expect(queue.waiting == 2)
+        #expect(queue.counters.dropped == 2)
+    }
+
+    @Test func aRefreshThatCannotDrawKeepsTheFramesAndThePreviousPicture() {
+        var queue = FrameQueue<Int>(pacing: .latency, fps: 120)
+        queue.push(1, arrival: 1)
+        #expect(queue.take(at: 1.01, refresh: refresh)?.frame == 1)
+        queue.push(2, arrival: 1.012)
+        queue.idle()
+        #expect(queue.waiting == 1)
+        #expect(queue.counters.refreshes == 2)
+        #expect(queue.counters.repeatedRefreshes == 1)
+        #expect(queue.counters.waitingSum == 2)
+        #expect(queue.take(at: 1.03, refresh: refresh)?.frame == 2)
     }
 
     @Test func aFrameThatIsNotDueYetStaysForALaterRefresh() {

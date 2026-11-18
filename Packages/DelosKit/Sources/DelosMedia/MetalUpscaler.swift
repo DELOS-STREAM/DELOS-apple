@@ -4,6 +4,18 @@ import Metal
 import MetalFX
 #endif
 
+/// The GPU passes of an upscaled drawing that a ``GPUPassObserver`` can time apart.
+enum GPUPass: Int, CaseIterable, Sendable {
+    case conversion, flow, metalFX, sharpen, present
+}
+
+/// Sees each pass descriptor before its encoder is made (to attach counter sample buffers, for example). MetalFX's own
+/// encoders inside `encode(commandBuffer:)` take no descriptor and are not seen.
+protocol GPUPassObserver: AnyObject {
+    func willEncode(_ pass: GPUPass, render: MTLRenderPassDescriptor)
+    func willEncode(_ pass: GPUPass, compute: MTLComputePassDescriptor)
+}
+
 /// The render pipeline states of one Metal library, made once per fragment function and pixel format; every draw uses
 /// ``MetalPipelineCache/vertexFunction`` (one triangle with a crop, VideoShaders.metal).
 final class MetalPipelineCache {
@@ -11,6 +23,8 @@ final class MetalPipelineCache {
     let library: any MTLLibrary
     private var renders: [Key: any MTLRenderPipelineState] = [:]
     private var computes: [String: any MTLComputePipelineState] = [:]
+    /// Sees the descriptors of the passes encoded through this cache; nil changes nothing.
+    weak var passObserver: (any GPUPassObserver)?
 
     private struct Key: Hashable {
         var fragment: String
@@ -57,14 +71,18 @@ final class MetalPipelineCache {
         return pass
     }
 
-    /// Encodes one full-viewport draw of `fragment` into `target` from `textures`, with `uniforms` at fragment buffer 0.
+    /// Encodes one full-viewport draw of `fragment` into `target` from `textures`, with `uniforms` at fragment buffer 0;
+    /// `pass` is what ``passObserver`` is told the draw is.
     @discardableResult
     func draw<Uniforms: BitwiseCopyable>(
         _ fragment: String, into target: any MTLTexture, textures: [any MTLTexture], uniforms: Uniforms?,
-        viewport: MTLViewport? = nil, crop: SIMD4<Float> = wholePicture, clear: Bool = false, commandBuffer: any MTLCommandBuffer
+        viewport: MTLViewport? = nil, crop: SIMD4<Float> = wholePicture, clear: Bool = false, pass: GPUPass = .present,
+        commandBuffer: any MTLCommandBuffer
     ) -> Bool {
+        let descriptor = Self.pass(into: target, clear: clear)
+        passObserver?.willEncode(pass, render: descriptor)
         guard let pipeline = render(fragment, for: target.pixelFormat),
-              let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: Self.pass(into: target, clear: clear))
+              let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor)
         else { return false }
         encoder.setViewport(viewport ?? MTLViewport(
             originX: 0, originY: 0, width: Double(target.width), height: Double(target.height), znear: 0, zfar: 1))
@@ -269,7 +287,8 @@ final class MetalUpscaler {
         let stream = (width: picture.texture.width, height: picture.texture.height)
         return cache.draw(
             "casFragment", into: target, textures: [picture.texture],
-            uniforms: CASUniforms(sampled: stream, strength: sharpness), clear: true, commandBuffer: commandBuffer)
+            uniforms: CASUniforms(sampled: stream, strength: sharpness), clear: true, pass: .sharpen,
+            commandBuffer: commandBuffer)
     }
 
     /// The presentation pass: samples `picture` into `viewport` of `target`, sharpened by `sharpness` in the MetalFX modes.
@@ -281,7 +300,7 @@ final class MetalUpscaler {
         return cache.draw(
             "casFragment", into: target, textures: [picture.texture],
             uniforms: CASUniforms(sampled: sampled, strength: picture.sharpenAtPresentation ? sharpness : 0),
-            viewport: viewport, crop: crop, clear: true, commandBuffer: commandBuffer)
+            viewport: viewport, crop: crop, clear: true, pass: .present, commandBuffer: commandBuffer)
     }
 }
 
@@ -312,6 +331,7 @@ final class MetalFXScaler {
     let motionUsage: MTLTextureUsage
     private let scaler: AnyObject
     private let depth: (any MTLTexture)?
+    private let cache: MetalPipelineCache
     /// The depth plane is still to be cleared (the first encoding), or the history to be dropped.
     private var depthCleared = false
     private var needsReset = true
@@ -321,6 +341,7 @@ final class MetalFXScaler {
         guard #available(tvOS 27.1, *) else { return nil }
         let device = cache.device
         self.key = key
+        self.cache = cache
         switch key.mode {
         case .spatial:
             let description = MTLFXSpatialScalerDescriptor()
@@ -427,6 +448,7 @@ final class MetalFXScaler {
             pass.depthAttachment.loadAction = .clear
             pass.depthAttachment.clearDepth = Self.depth
             pass.depthAttachment.storeAction = .store
+            cache.passObserver?.willEncode(.metalFX, render: pass)
             guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: pass) else { return false }
             encoder.endEncoding()
             depthCleared = true
@@ -533,7 +555,9 @@ final class VideoMotion {
         let reset = Self.startsAgain(valid: valid, previous: previousTimestamp, timestamp: timestamp, hdrChanged: self.hdr != hdr)
         self.hdr = hdr
         previousTimestamp = timestamp
-        guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return nil }
+        let pass = MTLComputePassDescriptor()
+        cache.passObserver?.willEncode(.flow, compute: pass)
+        guard let encoder = commandBuffer.makeComputeCommandEncoder(descriptor: pass) else { return nil }
         defer { encoder.endEncoding() }
         let pyramid = MTLSize(width: (width + 7) / 8, height: (height + 7) / 8, depth: 1)
         guard dispatch("videoLumaPyramid", textures: [luma[index], source], groups: pyramid, encoder: encoder) else { return nil }

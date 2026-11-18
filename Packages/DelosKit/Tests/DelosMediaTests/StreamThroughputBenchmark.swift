@@ -12,8 +12,9 @@ import VideoToolbox
 /// The decode-to-present path at 120 Hz on this machine, in real time: a stream the Mac's hardware encoder makes (1080p and
 /// 1440 × 1080 at 120 fps, noise at the stream's bitrate, so the pictures are as heavy as a game's) goes as the core's
 /// decode units through ``VideoOutput`` on a "receive" thread paced at 120 fps, into the Metal renderer's pipeline, whose
-/// refreshes a second thread calls at 120 Hz, drawing into an offscreen target of the iPad Pro 13" panel's size. What the
-/// stages did is printed (the ``StreamPerf`` lines and a summary), nothing about the machine's speed is asserted.
+/// refreshes a second thread calls at 120 Hz, drawing into an offscreen target of the iPad Pro 13" panel's size, directly
+/// and through each upscaler. What the stages did is printed (the ``StreamPerf`` lines with the GPU time of each pass,
+/// and a summary), nothing about the machine's speed is asserted.
 ///
 /// A harness, not part of the normal run (each case streams for 3 s):
 ///
@@ -26,10 +27,13 @@ struct StreamThroughputBenchmark {
         var height: Int
         var megabitsPerSecond: Int
         var asyncDecode: Bool
+        /// The upscaler that draws; nil: the picture is drawn directly.
+        var upscaler: UpscalerMode?
 
         var codecName: String { codec == kCMVideoCodecType_HEVC ? "HEVC" : "H.264" }
         var description: String {
-            "\(codecName) \(width)x\(height)@120 \(megabitsPerSecond) Mbps, \(asyncDecode ? "async" : "sync") decode"
+            "\(codecName) \(width)x\(height)@120 \(megabitsPerSecond) Mbps, \(asyncDecode ? "async" : "sync") decode, "
+                + "upscaler \(upscaler.map(StreamPerf.name) ?? "off")"
         }
     }
 
@@ -40,6 +44,9 @@ struct StreamThroughputBenchmark {
         Case(codec: kCMVideoCodecType_H264, width: 1920, height: 1080, megabitsPerSecond: 40, asyncDecode: true),
         Case(codec: kCMVideoCodecType_HEVC, width: 1440, height: 1080, megabitsPerSecond: 80, asyncDecode: false),
         Case(codec: kCMVideoCodecType_HEVC, width: 1440, height: 1080, megabitsPerSecond: 80, asyncDecode: true),
+        Case(codec: kCMVideoCodecType_HEVC, width: 1440, height: 1080, megabitsPerSecond: 80, asyncDecode: false, upscaler: .spatial),
+        Case(codec: kCMVideoCodecType_HEVC, width: 1440, height: 1080, megabitsPerSecond: 80, asyncDecode: false, upscaler: .temporal),
+        Case(codec: kCMVideoCodecType_HEVC, width: 1440, height: 1080, megabitsPerSecond: 80, asyncDecode: false, upscaler: .sharpen),
     ]
 
     static let fps = 120
@@ -62,8 +69,10 @@ struct StreamThroughputBenchmark {
 
         let lines = Mutex<[String]>([])
         let perf = StreamPerf { line in lines.withLock { $0.append(line) } }
-        let pipeline = try #require(MetalPipeline(
-            pacing: .balanced, fps: Self.fps, options: VideoRenderOptions(asyncDecode: bench.asyncDecode), perf: perf))
+        let options = VideoRenderOptions(
+            upscaler: UpscalerSettings(enabled: bench.upscaler != nil, mode: bench.upscaler ?? .spatial),
+            asyncDecode: bench.asyncDecode)
+        let pipeline = try #require(MetalPipeline(pacing: .balanced, fps: Self.fps, options: options, perf: perf))
         defer { pipeline.invalidate() }
         pipeline.useOffscreenSize(width: Self.panel.width, height: Self.panel.height)
         pipeline.setLinkFrameRate(Double(Self.fps))
@@ -125,11 +134,11 @@ struct StreamThroughputBenchmark {
             let sorted = values.sorted()
             return sorted.isEmpty ? 0 : sorted[min(sorted.count - 1, Int(Double(sorted.count) * fraction))] * 1000
         }
-        print("BENCH \(bench)")
+        print("OFFSCREEN BENCH \(bench) — no physical presentation or display-link callbacks measured")
         for line in lines.withLock({ $0 }) { print("  \(line)") }
         let (submit, behind, refused) = core.withLock { ($0.submit, $0.behind, $0.refused) }
         print(String(
-            format: "  SUMMARY submitted %d (refused %d) in %.2f s; core thread per frame p50 %.2f p99 %.2f max %.2f ms (parse alone p50 %.2f p99 %.2f ms), worst lateness %.2f ms; decoded %d (avg %.2f ms); shown %d, dropped %d, refreshes %d, repeated %d, GPU late %d; shown rate %.1f fps",
+            format: "  SUMMARY submitted %d (refused %d) in %.2f s; core thread per frame p50 %.2f p99 %.2f max %.2f ms (parse alone p50 %.2f p99 %.2f ms), worst lateness %.2f ms; decoded %d (avg %.2f ms); offscreen completed %d, dropped %d, modeled refreshes %d, repeated %d, GPU late %d; completions per modeled second %.1f",
             units.count, refused, wall, ms(submit, 0.5), ms(submit, 0.99), ms(submit, 1), ms(parse, 0.5), ms(parse, 0.99),
             behind * 1000, counters.decodedFrames ?? 0,
             (counters.accumulatedDecodeSeconds ?? 0) * 1000 / Double(max(counters.decodedFrames ?? 1, 1)),

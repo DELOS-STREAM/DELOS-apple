@@ -4,12 +4,10 @@ import Metal
 import QuartzCore
 import Synchronization
 
-/// Decodes with VideoToolbox and presents from the display's own clock: the decoded pictures wait in a small queue
-/// (``FrameQueue``, timed by the same ``FramePacing`` modes as the display layer), and a `CAMetalDisplayLink` calls
-/// back at every refresh with the drawable for it; the frame that is due at that refresh is drawn into the drawable
-/// through a Metal texture cache and presented at the refresh's time. Nothing is shown between refreshes and no frame
-/// is shown twice by the system's own pacing, so the interval between shown frames is decided here, not by
-/// `AVSampleBufferDisplayLayer`'s internals.
+/// Decodes with VideoToolbox and presents from the display's own clock: decoded pictures wait in a bounded queue,
+/// and `CAMetalDisplayLink` supplies a drawable, CPU submission deadline and estimated presentation time.
+/// Actual presentation can still be late or skipped; shown-frame counters use the drawable's presented feedback,
+/// not queue selection or command-buffer submission.
 ///
 /// The second path of decision L4 and the default (``RendererChoice``). It is where the launch scene's arrival
 /// (``LaunchArrival``), the upscalers (MetalFX Spatial, MetalFX Temporal, Sharpen only: ``MetalUpscaler``), the scale
@@ -128,12 +126,19 @@ public final class MetalRenderer: VideoRenderer {
 
 /// Calls back at every refresh of the display, from a thread of its own (the main thread is busy with the interface and
 /// would add its jitter to the pictures).
+///
+/// Requests two frames of rendering latency; the system may grant more. `targetTimestamp` is the CPU deadline for
+/// requesting presentation, not the GPU's completion deadline. `targetPresentationTimestamp` estimates when the
+/// picture will appear. Crossing either estimate does not by itself prove why callbacks were missed.
+/// Timed-present variants are not supported for display-link drawables.
 final class MetalDisplayLinkTicker: NSObject, CAMetalDisplayLinkDelegate, @unchecked Sendable {
     private let handler: @Sendable (RefreshTick) -> Void
     private let nominal: Double
     private let frameRate: Float
     private nonisolated(unsafe) let layer: CAMetalLayer
     private let running = Mutex(false)
+    /// A ticker has one thread lifetime. Reattachment creates a new ticker, never restarts a stopped one.
+    private let started = Mutex(false)
     private var lastPresentation: Double?
     private var refresh: Double
 
@@ -146,10 +151,11 @@ final class MetalDisplayLinkTicker: NSObject, CAMetalDisplayLinkDelegate, @unche
     }
 
     func start() {
-        guard running.withLock({ state in
+        guard started.withLock({ state in
             defer { state = true }
             return !state
         }) else { return }
+        running.withLock { $0 = true }
         let thread = Thread { [self] in
             let link = CAMetalDisplayLink(metalLayer: layer)
             link.delegate = self
@@ -174,14 +180,19 @@ final class MetalDisplayLinkTicker: NSObject, CAMetalDisplayLinkDelegate, @unche
     }
 
     func metalDisplayLink(_ link: CAMetalDisplayLink, needsUpdate update: CAMetalDisplayLink.Update) {
-        let presentation = update.targetPresentationTimestamp
-        if let last = lastPresentation {
-            let delta = presentation - last
-            // A refresh the system skipped doubles the delta; the nominal rate is the better guess then
-            if delta > 0.5 * nominal, delta < 1.5 * nominal { refresh = delta }
+        // stop() waits for a running callback. Reattachment cannot encode into the old drawer concurrently.
+        running.withLock { active in
+            guard active else { return }
+            let presentation = update.targetPresentationTimestamp
+            if let last = lastPresentation {
+                let delta = presentation - last
+                // A missing callback multiplies the delta; retain the nominal refresh in that case.
+                if delta > 0.5 * nominal, delta < 1.5 * nominal { refresh = delta }
+            }
+            lastPresentation = presentation
+            handler(RefreshTick(
+                presentation: presentation, refresh: refresh, drawable: update.drawable, deadline: update.targetTimestamp))
         }
-        lastPresentation = presentation
-        handler(RefreshTick(presentation: presentation, refresh: refresh, drawable: update.drawable))
     }
 }
 

@@ -26,8 +26,10 @@ final class VirtualClock: Sendable {
 }
 
 enum PipelineReplay {
+    /// The display link calls back `lead` refreshes before the picture appears.
     static func run(
-        fixture: String, codec: VideoCodec, arrivals: [Double], pacing: FramePacing, fps: Int, display: VirtualDisplay
+        fixture: String, codec: VideoCodec, arrivals: [Double], pacing: FramePacing, fps: Int, display: VirtualDisplay,
+        lead: Double = 1
     ) throws -> PipelineRun {
         let clock = VirtualClock()
         let pipeline = try #require(MetalPipeline(pacing: pacing, fps: fps, clock: clock.reading))
@@ -37,8 +39,7 @@ enum PipelineReplay {
         var stream = try ReplayStream(fixture: fixture, codec: codec)
         var next = 0
         for tick in display.refreshes(in: (arrivals.first ?? 0)...((arrivals.last ?? 0) + 0.1)) {
-            // The display link calls back a refresh before the picture appears
-            let callback = tick - display.refresh
+            let callback = tick - lead * display.refresh
             while next < arrivals.count, arrivals[next] <= callback {
                 clock.set(arrivals[next])
                 #expect(pipeline.enqueue(try stream.sample(next)))
@@ -238,5 +239,123 @@ enum DisplayLayerModel {
             comparison.layer.add(DisplayLayerModel.run(arrivals: arrivals, pacing: pacing, fps: fps, display: display), refresh: refresh, fps: fps)
         }
         return comparison
+    }
+}
+
+/// Presentation receipts, not scheduled refreshes, drive the counters consumed by the FPS overlay and watchdog.
+@Suite struct FramePresentationLedgerTests {
+    @Test func submittedAndGPUCompletedAreNotPresented() throws {
+        var ledger = FramePresentationLedger()
+        let submitted = ledger.submitted(sequence: 7, due: 1.001, decodedAt: 1)
+        let ticket = try #require(submitted)
+        #expect(ledger.shown == 0)
+        ledger.gpuCompleted(ticket: ticket, succeeded: true)
+        #expect(ledger.shown == 0 && ledger.dropped == 0)
+        let presented = ledger.complete(ticket: ticket, at: 1.025)
+        let confirmed = try #require(presented)
+        #expect(confirmed.sequence == 7 && confirmed.decodedAt == 1)
+        #expect(ledger.shown == 1)
+        #expect(abs(ledger.accumulatedDelay - 0.024) < 1e-12)
+        #expect(ledger.complete(ticket: ticket, at: 1.03) == nil)
+        #expect(ledger.shown == 1)
+    }
+
+    @Test(arguments: [false, true])
+    func GPUErrorAndSkippedFeedbackResolveOneFrameOnly(feedbackFirst: Bool) throws {
+        var ledger = FramePresentationLedger()
+        let submitted = ledger.submitted(sequence: 0, due: 1, decodedAt: 1)
+        let ticket = try #require(submitted)
+        if feedbackFirst { #expect(ledger.complete(ticket: ticket, at: 0) == nil) }
+        ledger.gpuCompleted(ticket: ticket, succeeded: false)
+        #expect(ledger.complete(ticket: ticket, at: nil) == nil)
+        #expect(ledger.shown == 0 && ledger.dropped == 1)
+        #expect(ledger.inFlight == 0)
+    }
+
+    @Test func encodingFailuresAndAnimationRedrawsAreNotNewPictures() throws {
+        var ledger = FramePresentationLedger()
+        ledger.failedToEncode(newFrame: true)
+        ledger.failedToEncode(newFrame: false)
+        #expect(ledger.dropped == 1 && ledger.shown == 0)
+        let ticket = ledger.submitted(sequence: 0, due: nil, decodedAt: 1)
+        #expect(ticket == nil)
+        ledger.gpuCompleted(ticket: ticket, succeeded: true)
+        #expect(ledger.shown == 0 && ledger.dropped == 1)
+    }
+
+    @Test func aFlushDoesNotPretendOutstandingGPUWorkFinished() throws {
+        var ledger = FramePresentationLedger()
+        let firstTicket = ledger.submitted(sequence: 0, due: 1, decodedAt: 1)
+        let first = try #require(firstTicket)
+        let secondTicket = ledger.submitted(sequence: 1, due: 1.008, decodedAt: 1.008)
+        let second = try #require(secondTicket)
+        #expect(!ledger.canDraw)
+        ledger.flush()
+        #expect(!ledger.canDraw)
+        #expect(ledger.complete(ticket: first, at: 1.025) == nil)
+        ledger.gpuCompleted(ticket: first, succeeded: true)
+        #expect(ledger.canDraw && ledger.inFlight == 1)
+        ledger.gpuCompleted(ticket: second, succeeded: false)
+        #expect(ledger.shown == 0 && ledger.dropped == 0 && ledger.inFlight == 0)
+        let freshTicket = ledger.submitted(sequence: 2, due: 2, decodedAt: 2)
+        let fresh = try #require(freshTicket)
+        #expect(fresh != first && fresh != second)
+        #expect(ledger.complete(ticket: fresh, at: 2.016)?.sequence == 2)
+        #expect(ledger.shown == 1)
+    }
+}
+
+@Suite struct FrameDrawingTimingTests {
+    @Test func GPUCanFinishAfterTheCPUDeadlineWithoutMissingPresentation() {
+        let timing = FrameDrawingTiming(callback: 1, presentation: 1.016, submissionDeadline: 1.008)
+        #expect(!timing.submittedLate(at: 1.001))
+        #expect(!timing.gpuFinishedLate(at: 1.012))
+        #expect(timing.gpuFinishedLate(at: 1.017))
+    }
+
+    @Test func CPUSubmissionCanBeLateWhileGPUCompletionIsOnTime() {
+        let timing = FrameDrawingTiming(callback: 1, presentation: 1.016, submissionDeadline: 1.008)
+        #expect(timing.submittedLate(at: 1.009))
+        #expect(!timing.gpuFinishedLate(at: 1.014))
+        #expect(!timing.submittedLate(at: 1.008))
+        #expect(!timing.gpuFinishedLate(at: 1.016))
+        let unknown = FrameDrawingTiming(callback: 1, presentation: 1.016, submissionDeadline: nil)
+        #expect(!unknown.submittedLate(at: 1.02))
+        #expect(unknown.gpuFinishedLate(at: 1.02))
+    }
+}
+
+@Suite struct MetalPresentationLifecycleTests {
+    @Test(arguments: [false, true])
+    func aFlushDiscardsOldPicturesAndInvalidationRefusesNewOnes(asynchronous: Bool) throws {
+        let clock = VirtualClock()
+        let pipeline = try #require(MetalPipeline(
+            pacing: .latency, fps: 120, options: VideoRenderOptions(asyncDecode: asynchronous), clock: clock.reading))
+        defer { pipeline.invalidate() }
+        var stream = try ReplayStream(fixture: "frames.hevc", codec: .hevc)
+        let key = try stream.sample(0)
+        let shown = Mutex<[Int]>([])
+        pipeline.observePresented { frame in shown.withLock { $0.append(frame.sequence) } }
+        clock.set(1)
+        #expect(pipeline.enqueue(key))
+        pipeline.waitForDecodes()
+        pipeline.flush()
+        pipeline.tick(RefreshTick(presentation: 1.016, refresh: 1.0 / 120, drawable: nil))
+        #expect(pipeline.counters().totalFrames == 0)
+        #expect(shown.withLock { $0 }.isEmpty)
+
+        clock.set(2)
+        #expect(pipeline.enqueue(key))
+        pipeline.waitForDecodes()
+        pipeline.tick(RefreshTick(presentation: 2.016, refresh: 1.0 / 120, drawable: nil))
+        #expect(shown.withLock { $0 } == [1])
+        let before = pipeline.counters()
+        #expect(before.totalFrames == 1 && before.decodedFrames == 2)
+        #expect(before.renderLatency == nil, "offscreen completion is not physical display latency")
+        pipeline.invalidate()
+        #expect(!pipeline.enqueue(key))
+        pipeline.tick(RefreshTick(presentation: 2.024, refresh: 1.0 / 120, drawable: nil))
+        #expect(pipeline.counters().totalFrames == before.totalFrames)
+        #expect(shown.withLock { $0 } == [1])
     }
 }

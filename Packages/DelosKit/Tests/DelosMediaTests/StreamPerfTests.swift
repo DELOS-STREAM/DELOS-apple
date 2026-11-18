@@ -137,18 +137,82 @@ import Testing
         perf.dropped(.queueFull)
         perf.dropped(.skipped, count: 2)
         for tick in 0..<120 {
-            perf.tick(presentation: Double(tick) / 120, shown: tick < 117, repeated: tick >= 117)
+            perf.tick(StreamPerf.Refresh(
+                presentation: Double(tick) / 120, selected: tick < 117, repeated: tick >= 117, gpuBusy: tick == 119,
+                waiting: tick % 2, lead: 0.0166, budget: 0.0083))
+            perf.drawingSubmitted(seconds: 0.0003, late: tick < 2)
             perf.gpuFinished(seconds: 0.0005, late: tick == 0)
+            perf.presented(offset: tick == 5 ? nil : 0.0001, newFrame: tick < 117)
         }
         perf.flush(seconds: 1, thermal: .fair, lowPower: true)
         let line = lines.withLock { $0 }.first ?? ""
         #expect(line.hasPrefix(
             "StreamPerf req=0 link=120 in=120.0 gap=1 host=120.0 mbps=48.0 fecfail=- oos=- asm=1.50/1.50 submit=0.10/0.10/0.10 "))
-        #expect(line.contains(" dec=120/120 decfail=0 decq=3 dect=2.00/20.00 queue=120 shown=117 drop=3 full=1 skip=2 gpu-busy=0 repeat=3 "))
-        #expect(line.contains(" tick=120 tickhz=120.0 gpu=0.50/0.50 late=1 thermal=fair lpm=1"))
+        #expect(line.contains(
+            " dec=120/120 decfail=0 decq=3 dect=2.00/20.00 queue=120 selected=117 shown=116 draw=120 drawfail=0 drop=3 full=1 skip=2 gpu-busy=1 repeat=3 wait=0.50 "))
+        #expect(line.contains(" tick=120 tickhz=120.0 lead=16.60 budget=8.30 encode=0.30/0.30 over=2 gpu=0.50/0.50 gpufail=0 late=1 up=off "))
+        // No pass was timed: the breakdown is empty
+        #expect(line.contains(" conv=- flow=- fx=- sharp=- present=- rest=- "))
+        #expect(line.hasSuffix(" glass=119 lost=1 off=0.10/0.10 thermal=fair lpm=1"))
         // The next second starts empty and logs nothing while nothing happens
         perf.flush(seconds: 1, thermal: .nominal, lowPower: false)
         #expect(lines.withLock { $0 }.count == 1)
+    }
+
+    /// Pass samples and residual elapsed time stay separate; residual time is not attributable to a specific workload.
+    @Test func thePassesOfADrawingAreShownApart() {
+        let lines = Mutex<[String]>([])
+        let perf = StreamPerf { line in lines.withLock { $0.append(line) } }
+        var plain = GPUPassTimes()
+        plain.add(.present, seconds: 0.0003)
+        perf.tick(StreamPerf.Refresh(presentation: 1, selected: true))
+        perf.gpuFinished(seconds: 0.0004, late: false, passes: plain)
+        perf.flush(seconds: 1, thermal: .nominal, lowPower: false)
+        var temporal = GPUPassTimes()
+        temporal.add(.conversion, seconds: 0.0002)
+        temporal.add(.flow, seconds: 0.0004)
+        temporal.add(.present, seconds: 0.0003)
+        perf.tick(StreamPerf.Refresh(presentation: 2, selected: true))
+        perf.gpuFinished(seconds: 0.0021, late: false, upscaler: .temporal, passes: temporal)
+        perf.flush(seconds: 1, thermal: .nominal, lowPower: false)
+        var sharpen = GPUPassTimes()
+        sharpen.add(.conversion, seconds: 0.0002)
+        sharpen.add(.sharpen, seconds: 0.0005)
+        sharpen.add(.present, seconds: 0.0003)
+        perf.tick(StreamPerf.Refresh(presentation: 3, selected: true))
+        perf.gpuFinished(seconds: 0.0010, late: false, upscaler: .sharpen, passes: sharpen)
+        perf.flush(seconds: 1, thermal: .nominal, lowPower: false)
+        let all = lines.withLock { $0 }
+        #expect(all.count == 3)
+        #expect(all[0].contains(" up=off conv=- flow=- fx=- sharp=- present=0.30/0.30 rest=0.10/0.10 "))
+        #expect(all[1].contains(" up=temporal conv=0.20/0.20 flow=0.40/0.40 fx=1.20/1.20 sharp=- present=0.30/0.30 rest=- "))
+        #expect(all[2].contains(" up=sharpen conv=0.20/0.20 flow=- fx=- sharp=0.50/0.50 present=0.30/0.30 rest=0.00/0.00 "))
+    }
+
+    @Test func presentationFeedbackCanArriveInALaterWindow() throws {
+        let lines = Mutex<[String]>([])
+        let perf = StreamPerf { line in lines.withLock { $0.append(line) } }
+        perf.tick(StreamPerf.Refresh(presentation: 1, selected: true))
+        perf.drawingSubmitted(seconds: 0.001, late: false)
+        perf.gpuFinished(seconds: 0.002, late: false)
+        perf.flush(seconds: 1, thermal: .nominal, lowPower: false)
+        perf.presented(offset: 0.008, newFrame: true)
+        perf.flush(seconds: 1, thermal: .nominal, lowPower: false)
+        let captured = lines.withLock { $0 }
+        #expect(captured.count == 2)
+        let first = try #require(captured.first)
+        let last = try #require(captured.last)
+        #expect(first.contains(" selected=1 shown=0 draw=1 "))
+        #expect(last.contains(" selected=0 shown=1 draw=0 "))
+        #expect(last.contains(" glass=1 lost=0 off=8.00/8.00 "))
+    }
+
+    @Test func theLaunchLineSaysWhatTheUpscalerStartsWith() {
+        #expect(StreamPerf.launchText(UpscalerSettings()) == "upscaler=off sharpness=50 supersampling=1")
+        #expect(StreamPerf.launchText(UpscalerSettings(enabled: true, mode: .temporal, sharpness: 30, supersamplingLevel: 2))
+            == "upscaler=temporal sharpness=30 supersampling=2")
+        // Switched off: the mode that is stored is not what runs
+        #expect(StreamPerf.launchText(UpscalerSettings(enabled: false, mode: .sharpen)) == "upscaler=off sharpness=50 supersampling=1")
     }
 
     /// The core's packet counters are cumulative: the line shows what changed in its second.

@@ -308,11 +308,11 @@ so `VideoOutput` and `VideoSamples` are unchanged:
 | Part | What it does |
 |---|---|
 | `VideoDecoder` | A `VTDecompressionSession`: hardware decoding where the device has it (not required, so the simulator falls back to software), `RealTime`, one frame at a time in arrival order (no B-frames). The core's receive thread only hands a frame over: the decoding runs on the decoder's own thread (user-interactive), as Android's `MediaCodec` decodes apart from the thread that queues its input; decoding on the receive thread held it 1.5 to 7 ms a 1080p frame (below, "120 fps"). That thread calls VideoToolbox asynchronously with `checkbox_async_decode` (`kVTDecodeFrame_EnableAsynchronousDecompression`; VideoToolbox returns the frames in decode order, and a session that goes away waits for the frames still in flight first), else it decodes each frame before the next. At most 30 frames (a quarter second at 120 fps) wait for it; beyond that they are dropped and the stream asks for a key frame, and a flush drops them too. It outputs Metal-compatible, IOSurface-backed two-plane 4:2:0 buffers, 8 or 10 bits, video or full range, and measures the time from submit to output. A new format description (new parameter sets, another resolution) builds a new session; an error or an invalidated session (the app was in the background) makes the renderer refuse non-key frames until the next key frame, which `VideoOutput` turns into an IDR request |
-| `FrameQueue` | The decoded pictures wait here (at most four; a newer one pushes the oldest out). Each gets the time `FramePacer` gives it, the same three modes as the display layer. At each refresh the queue hands out the oldest frame that is due (a frame is due within half a refresh before its time, so it is shown at the refresh nearest to it); when more than one frame would stay due behind it, it skips ahead and the skipped frames count as dropped. In Lowest latency no frame may stay behind, so the newest due frame wins. A struct that takes times as arguments: a fake clock tests it |
-| `CAMetalDisplayLink` | Calls back once per refresh with the drawable and the time its picture appears (`targetPresentationTimestamp`), from a thread of its own (the main thread is busy with the interface), at the refresh rate of the plan (`DisplayRefreshPlanner`, below). It exists on iOS and tvOS 17 and on macOS 14, so the Mac needs no `CADisplayLink` variant. A refresh without a frame draws nothing and the layer keeps the last picture; the last picture is drawn again when the layer's size changed, when the upscaler was switched on or off, at every refresh while the launch arrival moves it, and once more when the arrival ends |
+| `FrameQueue` | Holds at most four decoded pictures; overflow discards the oldest. At matching source/display rates, Lowest latency and Warp select the oldest due picture and preserve at most one additional due picture to absorb paired arrivals, without delaying an available first picture. Balanced keeps one due picture and Smoothest two. Larger backlogs skip stale pictures; an oversampled unbuffered stream selects the newest due picture. The reserve drains naturally when an arrival is late, not on an arbitrary timer. Fake-clock tests cover selection independently of physical presentation |
+| `CAMetalDisplayLink` | Supplies a drawable, CPU submission deadline (`targetTimestamp`) and estimated presentation time (`targetPresentationTimestamp`) on its own thread at the refresh plan's rate. GPU work may continue after the CPU deadline. The link owns presentation scheduling: timed-present variants are not used. A stopped ticker finishes its active callback before reattachment can encode with a replacement. Idle refreshes retain the layer's last picture; resize, upscaler changes and the launch arrival can redraw it without counting a new picture |
 | `MetalFrameDrawer` | The pixel buffer's planes become textures through a `CVMetalTextureCache` (no copy), `VideoShaders.metal` converts Y'CbCr to RGB and the picture is placed on the drawable on black by the scale mode (`PictureGeometry`: Fit, Fill with the edges cut off through the vertex shader's crop, Stretch). `ColorConversion` reads range and bit depth from the pixel format and the matrix and transfer function from the buffer's attachments; BT.601, BT.709 and BT.2020 matrices, limited and full range, 8 and 10 bits. The transfer function stays as encoded and the layer is tagged with the matching colour space (BT.709, BT.2020, PQ, HLG): tone mapping and linearising for HDR start in the shader, where `VideoUniforms.transfer` is already passed. With the upscaler on, the picture is converted at its own size first and `MetalUpscaler` draws it |
 | Arrival | The launch scene's arrival on the live picture (`LaunchArrival`, `arrivalFragment` in `VideoShaders.metal`). `startArrival(duration:)` starts it on the renderer's own clock; at each refresh the pose is computed for that refresh's presentation time from the exit's opening (0…1 over 2.2 s). From 55 % of the opening until its end the picture is converted into an RGB texture of its own size (8-bit, or half floats for 10-bit pictures, so HDR's encoded values pass unchanged), its mip levels are generated, and the pass draws it into the fitted rectangle: zoom (118 % with a blur of 20 source pixels, read from the mip levels, until 68 %), then a spring that settles to 100 % with a squash, a skew of at most 0.55°, a wave and an RGB split of up to 9 source pixels. At the end, or at `cancelArrival()` when the scene goes away early, the picture is drawn through the plain path again, byte for byte the picture without the arrival. `ArrivalRenderingTests` compares the pass with a CPU reference of the shader (0.012 per channel) and checks the blur, the identity and a 10-bit PQ picture in a half-float target; `ArrivalPipelineTests` drives it with a virtual clock |
-| `MetalPipeline` | The three of them without the layer and the display link: the core's thread enqueues, VideoToolbox's delivers pictures, the display link's thread draws, behind one short lock. The replay tests drive it with a virtual clock and virtual refreshes |
+| `MetalPipeline` | Serializes encoding and flush against the mutable drawer, and decoder submission against session invalidation; queue/counter updates use a separate short lock. A two-drawing GPU cap applies with the upscaler on or off. Busy refreshes leave pictures in the bounded queue. Actual GPU completion releases the cap; no timeout pretends unfinished work completed. A ticket ledger separates selection, submission, GPU completion and positive drawable presentation feedback |
 
 `checkbox_enable_view_top_center` places a picture that leaves room at the top: `PictureGeometry` puts Fit's viewport at
 the top and lets Fill cut off only the bottom (Stretch fills the view either way); the display layer, whose gravity can
@@ -409,10 +409,10 @@ MetalFX framework, so the code is compiled out there
 (`canImport(MetalFX)`). Where a mode's scaler is missing the drawer runs Sharpen only instead, `upscalerStatus` reports
 unavailable and the statistics line says "Sharpen only"; Settings adds a note to the mode row (`StreamDevice.metalFX`).
 
-The load: at most two frames of the upscaler's GPU work in flight (`GPUInFlight`; a frame that waits is replaced by a
-newer one and counted as "GPU busy", and 250 ms of waiting clears the count), its GPU time per frame from the command
-buffers' `gpuStartTime`/`gpuEndTime`, and one-second windows (`UpscalerWindowMeter`) from which `OverloadDetector`
-reports an overload after two windows above 90 % of the frame period or with more than 20 % busy drops. MetalFX
+The load: at most two drawings of GPU work in flight, including with the upscaler off. Refresh callbacks blocked by
+that cap are counted as GPU-busy callbacks, not discarded pictures; queued pictures remain subject to the queue's
+normal bounds. GPU time comes from command-buffer timestamps. One-second windows (`UpscalerWindowMeter`) let
+`OverloadDetector` report an overload above 90 % of the frame period or more than 20 % blocked callbacks.
 Temporal's optical flow is computed for every frame: reusing it every second frame under load saved about 0.07 ms of
 the 2 ms a frame takes and handed MetalFX motion that was a frame old, which made its history drift. The overload only
 tells (a warning toast, once per stream and mode); nothing is switched off. Sixty failed drawings in a row switch the
@@ -445,7 +445,19 @@ at, the display layer the time it hands a frame over), the Render latency (decod
 presented time), the Upscaling time, the scale line (`UpscalerSizeText.statistics`: "Upscaled: 1440 × 1080 → 2752 × 2064",
 "Supersampled: 1920 × 1080 → 2560 × 1440 → 1920 × 1080", "Not upscaled: …", "Sharpen only: …"; the picture's size follows
 when it differs from MetalFX's output), the Sharpen pass (pass and conversion in command buffers of their own) and the GPU
-busy drops.
+busy refresh callbacks.
+
+Metal's shown-frame count, frame-time samples and watchdog progress use positive drawable presentation feedback,
+not selection or submission. Encoding failures, GPU errors and skipped drawables do not count as shown. Offscreen
+tests model presentation at an explicit refresh and report no physical display latency; simulator drawables do not
+fabricate presentation timestamps. Flush rejects stale feedback while outstanding GPU work remains accounted for.
+
+`StreamPerf` separates selected pictures, submitted drawings, actual new pictures shown, encoding failures,
+callback-to-submission time, CPU submission deadline misses (`over`), GPU failures and completion after estimated
+presentation (`late`), and drawable presentation offset/loss. Counter samples measure elapsed fragment/compute
+stage time; residual `fx`/`rest` time cannot be attributed exclusively to MetalFX or the compositor. Persisted
+windows are aggregates, not correlated per-frame traces. The modeled jitter tests cannot establish sustained
+120 FPS or decoded-to-display latency on physical iPad/iPhone hardware.
 
 ### What was measured without a stream
 

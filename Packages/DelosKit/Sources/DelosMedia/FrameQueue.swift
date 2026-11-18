@@ -4,9 +4,9 @@ import Foundation
 public struct FrameQueueCounters: Sendable, Equatable {
     /// Frames handed to the queue (decoded frames).
     public var pushed = 0
-    /// Frames taken to be shown.
+    /// Frames taken to be drawn. Selection is not confirmation of presentation on a display.
     public var presented = 0
-    /// Frames that were never shown: a newer frame was due first, or the queue was full.
+    /// Frames that were never shown: more than the backlog waited, or the queue was full.
     public var dropped = 0
     /// Refreshes that had no new frame to show after the first frame was shown (the previous picture stayed).
     public var repeatedRefreshes = 0
@@ -26,11 +26,19 @@ public struct FrameQueueCounters: Sendable, Equatable {
 /// the display layer's), and at each refresh hands out the frame to show.
 ///
 /// A frame is due when its time is within half a refresh of the refresh's presentation time, so it is shown at the
-/// refresh nearest to its time. At a refresh the queue gives out the oldest frame that is due, so frames keep their
-/// order and a frame that just missed a refresh is shown at the next one instead of being dropped; when more than
-/// `backlog` frames would stay due behind it, it skips ahead (the frames skipped are dropped), so a stall that caught
-/// up or a stream faster than the display cannot build delay. With `backlog` 0 this is "the newest due frame wins"
-/// (lowest latency); the balanced and smoothest modes keep one frame of backlog.
+/// refresh nearest to its time. At a refresh the queue gives out the oldest frame that is due: frames keep their order,
+/// one per refresh, and a frame that landed in the same refresh as the one before it is shown at the next refresh
+/// instead of being dropped. Only when more than `backlog` frames would stay due behind the one shown does the queue
+/// skip ahead (the frames skipped are dropped), so a stall that caught up cannot build delay.
+///
+/// The backlog per mode (the delay it adds is one refresh per waiting frame, and it drains at a refresh without a new
+/// frame, which shows the waiting one instead of repeating the picture):
+/// - Lowest latency, Warp: at most one frame, without delaying a frame that can be drawn now. Arrival jitter can put
+///   none in one refresh and two in the next; keeping the second frame avoids a skip followed by a repeat. The backlog
+///   drains when an arrival is late, not on a timer that would discard a still-useful jitter reserve.
+///   A stream faster than the display keeps no backlog in these modes: the newest due frame wins.
+/// - Balanced, Balanced with FPS limit: one frame, kept until a late arrival drains it.
+/// - Smoothest: two frames, kept likewise.
 ///
 /// A struct without a clock or a lock: the caller passes the times (seconds on one clock, the host clock in the app, a
 /// virtual one in tests) and serializes the calls.
@@ -45,6 +53,8 @@ public struct FrameQueue<Frame> {
     public let capacity: Int
     /// Frames that may stay due behind the one shown.
     public let backlog: Int
+    /// Unbuffered modes select the newest frame when the stream is faster than the display.
+    private let unbuffered: Bool
     public private(set) var counters = FrameQueueCounters()
     private var pacer: FramePacer
     private var entries: [Entry] = []
@@ -52,10 +62,13 @@ public struct FrameQueue<Frame> {
 
     /// How far before its due time a frame may be shown, in refreshes.
     static var earlyTolerance: Double { 0.5 }
+    /// A stream whose frame interval is below this share of the refresh is faster than the display.
+    static var fasterStream: Double { 0.9 }
 
     public init(pacing: FramePacing, fps: Int, capacity: Int = 4) {
         self.capacity = max(capacity, 1)
-        backlog = pacing == .latency ? 0 : 1
+        unbuffered = pacing.bufferFrames == 0
+        backlog = unbuffered ? 1 : Int(pacing.bufferFrames)
         pacer = FramePacer(pacing: pacing, fps: fps)
         entries.reserveCapacity(self.capacity + 1)
     }
@@ -93,8 +106,9 @@ public struct FrameQueue<Frame> {
             if shownOnce { counters.repeatedRefreshes += 1 }
             return nil
         }
-        // Oldest due frame; skip ahead while more than `backlog` frames would stay due behind it
-        let skipped = max(0, dueCount - 1 - backlog)
+        // Oldest due frame; skip ahead while more than the backlog would stay due behind it
+        let allowed = unbuffered && pacer.interval < Self.fasterStream * refresh ? 0 : backlog
+        let skipped = max(0, dueCount - 1 - allowed)
         let entry = entries[skipped]
         entries.removeSubrange(0...skipped)
         counters.dropped += skipped
@@ -103,6 +117,15 @@ public struct FrameQueue<Frame> {
         shownOnce = true
         return (entry.frame, entry.due)
     }
+
+    /// A refresh at which nothing can be drawn (the GPU is still busy): the frames wait and the previous picture stays.
+    public mutating func idle() {
+        counters.refreshes += 1
+        counters.waitingSum += entries.count
+        counters.peakWaiting = max(counters.peakWaiting, entries.count)
+        if shownOnce { counters.repeatedRefreshes += 1 }
+    }
+
 
     /// Drops the waiting frames and the pacing schedule (a new stream or after a decoder error); the counters stay.
     public mutating func flush() {

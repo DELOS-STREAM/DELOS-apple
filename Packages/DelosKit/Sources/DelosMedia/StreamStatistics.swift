@@ -39,7 +39,7 @@ public struct VideoPresentationCounters: Sendable, Equatable {
     public var upscale: UpscalerSizes?
     /// What Sharpen only cost over the window; nil in the other modes and without the upscaler.
     public var sharpen: SharpenCost?
-    /// Frames held back for the upscaler's busy GPU and replaced before they were drawn, cumulative.
+    /// Refresh callbacks blocked by the two-drawing GPU limit, cumulative; queued frames wait rather than being discarded.
     public var gpuBusySkipped: Int?
     /// Variable refresh rate is active for this stream.
     public var vrr = false
@@ -109,7 +109,7 @@ public struct StreamStatistics: Sendable, Equatable {
     public var upscale: UpscalerSizes?
     /// Sharpen only's pass and preparation.
     public var sharpen: SharpenCost?
-    /// Frames per second that waited for the upscaler's busy GPU and were replaced without being drawn.
+    /// Refresh callbacks per second blocked by the two-drawing GPU limit, including when the upscaler is off.
     public var gpuBusySkippedPerSecond: Double?
     /// Variable refresh rate is active: the panel marks it next to the frame rate.
     public var vrr = false

@@ -78,11 +78,13 @@ final class LiveStream: StreamSteps {
             virtualDisplayReady: record.virtualDisplay?.capable == true && record.virtualDisplay?.driverReady == true,
             metered: metered)
         let nvidia = record.isNvidiaServer
-        // What goes out (GeForce Experience gets 0 above 60 fps in the launch query): the throughput lines start from it
+        // What goes out (GeForce Experience gets 0 above 60 fps in the launch query): the throughput lines start from it.
+        // The upscaler and Picture in Picture are what the stream starts with (the app's own settings over the profile's)
         StreamPerf.standard?.note(String(
-            format: "launch mode=%dx%dx%g fps=%d refresh=%d pacing=%@ bitrate=%d nvidia=%d", plan.request.width,
+            format: "launch mode=%dx%dx%g fps=%d refresh=%d pacing=%@ bitrate=%d nvidia=%d %@ pip=%d", plan.request.width,
             plan.request.height, plan.request.frameRate, plan.configuration.fps, display.maxFramesPerSecond,
-            settings.framePacing.rawValue, plan.configuration.bitrateKbps, nvidia ? 1 : 0))
+            settings.framePacing.rawValue, plan.configuration.bitrateKbps, nvidia ? 1 : 0,
+            StreamPerf.launchText(settings.upscalerSettings), settings.bool(.enablePip) ? 1 : 0))
         var sessionURL: String?
         let choice = LaunchChoice.of(app: appID, running: record.runningAppID)
         // Never quit another app unasked: the library's game menu is the confirmed way to quit it and start this one
