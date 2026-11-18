@@ -380,6 +380,12 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- Latency presentation preserves a bounded one-frame jitter reserve instead of discarding paired arrivals. Metal's
+  shown FPS now uses actual drawable presentation feedback, not selection or submission; CPU submission and GPU
+  deadlines are reported separately. Sustained 120 FPS on physical devices is not verified for this change.
+- MetalFX Temporal selects better per-pixel motion matches around stationary text and rejects conflicting motion-layer
+  history without averaging away existing rejection. Synthetic fixtures show less halo, background noise and old-glyph
+  error than Spatial, but small text is not uniformly as clean. Temporal remains experimental; live quality is not verified.
 - On iPad the Native resolution is the whole panel (2752x2064 on a 13" iPad Pro), no longer the area inside the status bar
   and the home indicator (2752x1960) with the panel as "Native fullscreen"; only an iPhone's notch or Dynamic Island
   gives a fullscreen variant.

@@ -172,6 +172,7 @@ kernel void videoFlow(texture2d<float, access::write> flowOutput [[texture(0)]],
     flowOutput.write(float4(motion, 0.0, 0.0), uint2(cell));
 }
 
+
 // A conservative whole-frame cut detector: the mean luma of 8 × 8 blocks of the two pictures (16 samples of the pyramid's
 // coarsest level each, so motion within a block hardly changes it), 1 when the blocks' mean difference is above 0.08. A
 // false positive only makes one frame ignore the history; a cut it misses is still caught per pixel by the reactive mask.
@@ -201,15 +202,28 @@ static float2 flowUv(float2 uv, float2 inputSize, texture2d<float> flow) {
     return ((uv * inputSize - float2(0.5)) / 8.0) / float2(flow.get_width(), flow.get_height());
 }
 
-// MetalFX Temporal's per-pixel inputs at the stream's size. Motion (RG): the backward flow sampled at the pixel, which is
-// where the pixel was in the previous picture minus where it is now, in pixels: MetalFX's convention with a motion vector
-// scale of 1 (an object that moved 10 pixels right and down has (-10, -10)). Reactive mask (R): 1 tells MetalFX to ignore
-// the history at the pixel. It rises where backward and forward flow disagree by more than a tenth of a pixel (an
-// occlusion, a wrong match: MetalFX accumulates even small motion errors into blur), where the luma is outside the range of
-// the four previous texels the flow points between (what the history would bring is not there; within that range bilinear
-// interpolation of fine detail explains the difference), where the previous position is outside the picture, and it is 1
-// everywhere on a cut. Flat areas and straight edges keep the history: the flow along them is uncertain, but every position
-// along them holds the same picture.
+// The current picture's smoothed luma at a pixel and its four neighbours
+struct MotionPatch {
+    float values[5];
+};
+
+static int2 motionOffset(int i) {
+    return int2(int(i == 1) - int(i == 2), int(i == 3) - int(i == 4));
+}
+
+// How badly the previous picture, read `motion` away, matches the patch around `p`
+static float motionCost(texture2d<float> previousLuma, MotionPatch current, int2 p, float2 motion, int2 inputSize) {
+    float cost = 0.0;
+    for (int i = 0; i < 5; i++) {
+        float2 position = float2(clamp(p + motionOffset(i), int2(0), inputSize - 1)) + motion + 0.5;
+        cost += abs(current.values[i] - previousLuma.sample(pyramidLinear, position / float2(inputSize), level(0)).r);
+    }
+    return cost / 5.0;
+}
+
+// Preserve the interpolated flow unless a nearby cell actually matches this pixel's patch better. At a HUD boundary
+// interpolation mixes two motions into a third, invalid motion. Zero is a candidate, not the default: it must explain
+// high-contrast detail demonstrably better, so flat/noisy video and moving glyphs can still accumulate their history.
 kernel void videoMotion(texture2d<float, access::write> motionOutput [[texture(0)]],
                         texture2d<float, access::write> reactiveMask [[texture(1)]],
                         texture2d<float> currentLuma [[texture(2)]],
@@ -223,17 +237,106 @@ kernel void videoMotion(texture2d<float, access::write> motionOutput [[texture(0
     if (any(p >= inputSize)) return;
     float2 size = float2(inputSize);
     float2 uv = (float2(p) + 0.5) / size;
-    float2 backward = backwardFlow.sample(upscaleLinear, flowUv(uv, size, backwardFlow), level(0)).xy;
-    motionOutput.write(float4(backward, 0.0, 0.0), uint2(p));
-    float2 previousUv = uv + backward / size;
-    float2 clamped = clamp(previousUv, float2(0.0), float2(1.0));
-    float2 forward = forwardFlow.sample(upscaleLinear, flowUv(clamped, size, forwardFlow), level(0)).xy;
-    float current = currentLuma.read(uint2(p), 0).r;
-    float4 around = previousLuma.gather(upscaleLinear, clamped);
-    float outside = max(max(min(min(around.x, around.y), min(around.z, around.w)) - current,
-                            current - max(max(around.x, around.y), max(around.z, around.w))), 0.0);
-    float reactive = max(smoothstep(0.1, 0.5, length(backward + forward)), smoothstep(0.025, 0.12, outside));
-    if (any(previousUv < float2(0.0)) || any(previousUv > float2(1.0))) reactive = 1.0;
+    float2 grid = flowUv(uv, size, backwardFlow);
+    float2 flow = backwardFlow.sample(upscaleLinear, grid, level(0)).xy;
+    int2 gridSize = int2(backwardFlow.get_width(), backwardFlow.get_height());
+    int2 firstCell = int2(floor(grid * float2(gridSize) - 0.5));
+    float2 candidates[4];
+    float2 low = flow, high = flow;
+    for (int i = 0; i < 4; i++) {
+        int2 cell = clamp(firstCell + int2(i & 1, i >> 1), int2(0), gridSize - 1);
+        candidates[i] = backwardFlow.read(uint2(cell)).xy;
+        low = min(low, candidates[i]);
+        high = max(high, candidates[i]);
+    }
+    if (all(low == float2(0.0)) && all(high == float2(0.0))) {
+        // No competing motion: avoid two identical patch comparisons on a still picture.
+        float difference = abs(currentLuma.read(uint2(p), 0).r - previousLuma.read(uint2(p), 0).r);
+        motionOutput.write(float4(0.0), uint2(p));
+        reactiveMask.write(float4(max(smoothstep(0.025, 0.12, difference), sceneChange.read(uint2(0)).r)), uint2(p));
+        return;
+    }
+    MotionPatch current;
+    for (int i = 0; i < 5; i++) current.values[i] = currentLuma.read(uint2(clamp(p + motionOffset(i), int2(0), inputSize - 1)), 0).r;
+    float2 motion = flow;
+    float cost = motionCost(previousLuma, current, p, motion, inputSize);
+    float selectedCenter = abs(current.values[0] - previousLuma.sample(pyramidLinear, uv + motion / size, level(0)).r);
+    if (length(high - low) > 0.5) {
+        for (int i = 0; i < 4; i++) {
+            float candidateCost = motionCost(previousLuma, current, p, candidates[i], inputSize);
+            float candidateCenter = abs(current.values[0] -
+                previousLuma.sample(pyramidLinear, uv + candidates[i] / size, level(0)).r);
+            if (candidateCost + 0.003 < cost * 0.8 && candidateCenter <= selectedCenter + 0.003) {
+                cost = candidateCost;
+                motion = candidates[i];
+                selectedCenter = candidateCenter;
+            }
+        }
+    }
+    float still = motionCost(previousLuma, current, p, float2(0.0), inputSize);
+    float stillCenter = abs(current.values[0] - previousLuma.read(uint2(p), 0).r);
+    // A patch crossing an edge must not drag the correctly moving background into its stationary foreground.
+    bool stationary = still + 0.003 < cost * 0.8 && stillCenter <= selectedCenter + 0.003;
+    if (stationary) motion = float2(0.0);
+    motionOutput.write(float4(motion, 0.0, 0.0), uint2(p));
+    float reactive;
+    if (stationary || all(motion == float2(0.0))) {
+        reactive = smoothstep(0.025, 0.12, abs(current.values[0] - previousLuma.read(uint2(p), 0).r));
+    } else {
+        float2 previousUv = uv + motion / size;
+        float2 clamped = clamp(previousUv, float2(0.0), float2(1.0));
+        float2 back = flowUv(clamped, size, forwardFlow);
+        float2 forward = forwardFlow.sample(upscaleLinear, back, level(0)).xy;
+        float disagreement = length(motion + forward);
+        // The inverse flow is mixed at the same boundary. Accept an actual neighbouring inverse vector, not an
+        // unrelated motion from a wide median; the boundary pass below rejects history where the selected layers meet.
+        int2 forwardSize = int2(forwardFlow.get_width(), forwardFlow.get_height());
+        int2 forwardCell = int2(floor(back * float2(forwardSize) - 0.5));
+        if (disagreement > 0.1) {
+            for (int i = 0; i < 4; i++) {
+                int2 q = clamp(forwardCell + int2(i & 1, i >> 1), int2(0), forwardSize - 1);
+                disagreement = min(disagreement, length(motion + forwardFlow.read(uint2(q)).xy));
+            }
+        }
+        float4 around = previousLuma.gather(upscaleLinear, clamped);
+        float outside = max(max(min(min(around.x, around.y), min(around.z, around.w)) - current.values[0],
+                                current.values[0] - max(max(around.x, around.y), max(around.z, around.w))), 0.0);
+        reactive = max(smoothstep(0.1, 0.5, disagreement), smoothstep(0.025, 0.12, outside));
+        if (any(previousUv < float2(0.0)) || any(previousUv > float2(1.0))) reactive = 1.0;
+    }
     reactive = max(reactive, sceneChange.read(uint2(0)).r);
     reactiveMask.write(float4(clamp(reactive, 0.0, 1.0)), uint2(p));
+}
+
+// Reject a one-pixel footprint at conflicting per-pixel motion layers, where antialiasing mixes foreground and
+// background. Do not average/erode the rejection mask: that would reopen rejected history as isolated stippled pixels.
+// Contrast gates only this extra boundary rejection; flat/noisy areas retain the original mask and temporal benefit.
+kernel void videoReactiveMask(texture2d<float, access::write> reactiveMask [[texture(0)]],
+                              texture2d<float> raw [[texture(1)]],
+                              texture2d<float> motion [[texture(2)]],
+                              texture2d<float> luma [[texture(3)]],
+                              uint2 gid [[thread_position_in_grid]],
+                              uint2 local [[thread_position_in_threadgroup]],
+                              uint index [[thread_index_in_threadgroup]],
+                              uint2 group [[threadgroup_position_in_grid]]) {
+    threadgroup float2 vectors[10][10];
+    threadgroup float values[10][10];
+    int2 size = int2(raw.get_width(), raw.get_height());
+    for (uint i = index; i < 100; i += 64) {
+        int2 q = clamp(int2(group * 8) + int2(i % 10, i / 10) - 1, int2(0), size - 1);
+        vectors[i / 10][i % 10] = motion.read(uint2(q)).xy;
+        values[i / 10][i % 10] = luma.read(uint2(q), 0).r;
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    if (any(int2(gid) >= size)) return;
+    float2 center = vectors[local.y + 1][local.x + 1];
+    float low = values[local.y + 1][local.x + 1], high = low, difference = 0.0;
+    for (uint y = 0; y < 3; y++) for (uint x = 0; x < 3; x++) {
+        float value = values[local.y + y][local.x + x];
+        low = min(low, value);
+        high = max(high, value);
+        difference = max(difference, length(center - vectors[local.y + y][local.x + x]));
+    }
+    float boundary = smoothstep(0.25, 0.75, difference) * smoothstep(0.04, 0.12, high - low);
+    reactiveMask.write(float4(max(raw.read(gid).r, boundary)), gid);
 }

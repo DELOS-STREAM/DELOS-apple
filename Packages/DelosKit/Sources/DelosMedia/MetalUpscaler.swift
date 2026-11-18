@@ -505,6 +505,8 @@ final class VideoMotion {
     private var luma: [any MTLTexture] = []
     private var backward: [any MTLTexture] = []
     private var forward: [any MTLTexture] = []
+    /// Per-pixel rejection before adding the boundary between competing motions.
+    private let pixelMask: any MTLTexture
     private let scene: any MTLTexture
     private var index = 0
     private var previousTimestamp = -Double.infinity
@@ -530,10 +532,12 @@ final class VideoMotion {
             forward.append(f)
         }
         guard let scene = cache.texture(.r16Float, width: 1, height: 1, usage: kernelUsage),
+              let pixelMask = cache.texture(.r8Unorm, width: width, height: height, usage: kernelUsage),
               let motion = cache.texture(MetalFXScaler.motionFormat, width: width, height: height, usage: kernelUsage.union(usage)),
               let reactiveMask = cache.texture(
                 MetalFXScaler.reactiveMaskFormat, width: width, height: height, usage: kernelUsage.union(usage))
         else { return nil }
+        self.pixelMask = pixelMask
         self.scene = scene
         self.motion = motion
         self.reactiveMask = reactiveMask
@@ -574,8 +578,10 @@ final class VideoMotion {
         else { return nil }
         var inputSize = SIMD2<Int32>(Int32(width), Int32(height))
         guard dispatch(
-            "videoMotion", textures: [motion, reactiveMask, luma[index], luma[1 - index], backward[0], forward[0], scene],
-            bytes: &inputSize, length: MemoryLayout<SIMD2<Int32>>.stride, groups: pyramid, encoder: encoder)
+            "videoMotion",
+            textures: [motion, pixelMask, luma[index], luma[1 - index], backward[0], forward[0], scene],
+            bytes: &inputSize, length: MemoryLayout<SIMD2<Int32>>.stride, groups: pyramid, encoder: encoder),
+              dispatch("videoReactiveMask", textures: [reactiveMask, pixelMask, motion, luma[index]], groups: pyramid, encoder: encoder)
         else { return nil }
         index = 1 - index
         valid = true

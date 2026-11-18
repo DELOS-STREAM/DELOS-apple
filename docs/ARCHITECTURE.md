@@ -370,8 +370,20 @@ both scalers run in MetalFX's perceptual colour mode and without exposure.
 | Mode (`UpscalerMode`) | Passes |
 |---|---|
 | MetalFX Spatial (`standard`) | `MTLFXSpatialScaler` from the stream's RGB picture to the scaler size, then `casFragment` (FidelityFX CAS on the five-sample cross at the sharpness) samples it into the picture's place |
-| MetalFX Temporal (`temporal`) | `VideoMotion` makes the inputs a game would render, all in one compute encoder: a luma pyramid of four levels for this and the previous frame in one pass (`videoLumaPyramid`: level 0 smoothed by a 3 × 3 binomial filter, so detail near the pixel pitch does not bias the subpixel flow), Lucas-Kanade backward and forward flow on an 8-pixel grid (`videoFlow`, inverse compositional, each level read from its own mip level, every finer level starting from twice the coarser flow or from zero motion, whichever matches the cell better), a whole-frame cut detector (`videoSceneChange`: the mean luma of 8 × 8 blocks from the coarsest level, 1 above a mean difference of 0.08, so a pan does not trigger it), and `videoMotion`, which writes per-pixel motion vectors (`rg16Float`: the backward flow, where the pixel was in the previous frame minus where it is, in input pixels; motion vector scale 1) and a reactive mask (`r16Float`: high where backward and forward flow disagree by more than a tenth of a pixel, where the luma is outside the range of the four previous texels the flow points between and where the previous position is outside the picture; 1 everywhere on a cut; flat areas and straight edges keep the history, as every position along them holds the same picture). `MTLFXTemporalScaler` then reconstructs at the scaler size with jitter 0, a constant depth plane and the mask; `casFragment` sharpens while presenting, so the sharpening never enters MetalFX's history |
+| MetalFX Temporal (`temporal`) | `VideoMotion` builds current/previous four-level luma pyramids (`videoLumaPyramid`: initial 3 × 3 binomial smoothing), independent backward/forward inverse-compositional Lucas–Kanade flow on an 8-pixel grid (`videoFlow`), and a whole-frame cut mask (`videoSceneChange`). `videoMotion` selects per-pixel backward displacement in input pixels (`rg16Float`, motion scale 1) and initial rejection; `videoReactiveMask` adds contrast-gated rejection at conflicting motion layers without averaging away existing rejection. `MTLFXTemporalScaler` reconstructs with jitter 0, a constant depth plane and the final `r16Float` reactive mask; presentation sharpening never enters its history |
 | Sharpen only (`sharpen`) | No scaling: `casFragment` at the stream's size, then a plain bilinear presentation |
+
+Motion upsampling starts from interpolated flow. At conflicting cells, an adjacent actual cell vector or zero motion
+can replace it only when the five-sample luma patch error improves by both 20 % and 0.003, without worsening the
+center error by more than 0.003. Flat ambiguous pixels retain the interpolated flow. The mask keeps forward/backward,
+luma-range, offscreen and cut rejection; a separate one-input-pixel footprint rejects high-contrast boundaries between
+selected motions. Flat low-amplitude noise does not receive this additional boundary rejection.
+
+`TemporalTextArtifactTests` exercises known stationary/moving glyph motion, odd-sized mask boundaries and presented
+output at 1440 × 1080 → 2752 × 2064 with antialiased text, panning backgrounds and foreground occlusion in SDR and
+half-float input. Synthetic fixtures show lower halo/background-noise/old-glyph error than Spatial; small-text
+reconstruction is not uniformly as clean as Spatial, especially during slow pans. Temporal remains experimental. They do not
+establish real decoded HDR quality, physical-device performance or the appearance of a live stream.
 
 Depth: decoded video has none, and MetalFX Temporal requires a depth texture. It gets a `depth32Float` plane cleared
 once to 0.5 (`isDepthReversed` false), the middle of the range so that neither the near nor the far clear value applies:
@@ -439,8 +451,8 @@ Content is on). `list_vrr` Auto follows the display's report: a Mac screen whose
 sync); iPhone and iPad report none (iOS has no Adaptive-Sync presentation), so there VRR is only On by hand. With VRR the
 plan reports the peak rate and asks the display link for the stream's own rate; the statistics mark it.
 
-The statistics gain Android's 1 % low (`FrameTimes`, both renderers: the Metal renderer stamps the refresh a frame is shown
-at, the display layer the time it hands a frame over), the Render latency (decoded picture to the drawable's
+The statistics include Android's 1 % low (`FrameTimes`: actual drawable presentation feedback for Metal, handover time
+for the display layer), Render latency (decoded picture to the drawable's
 `presentedTime`, average / nearest-rank 95th percentile / maximum per window, `StageWindow`; the display layer reports no
 presented time), the Upscaling time, the scale line (`UpscalerSizeText.statistics`: "Upscaled: 1440 × 1080 → 2752 × 2064",
 "Supersampled: 1920 × 1080 → 2560 × 1440 → 1920 × 1080", "Not upscaled: …", "Sharpen only: …"; the picture's size follows
