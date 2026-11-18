@@ -32767,67 +32767,67 @@
         }
       }
     },
-    "home_no_pc_note": {
+    "home_no_pc_devices_note": {
       "extractionState": "manual",
       "localizations": {
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zatím PC spáruj v klasické aplikaci Delos.\nPárování v novém rozhraní přijde v kroku 6.6."
+            "value": "Spáruj PC na obrazovce Zařízení."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Koppel einen PC vorerst in der klassischen Delos-App.\nKoppeln in der neuen Oberfläche kommt in Schritt 6.6."
+            "value": "Koppel einen PC auf dem Bildschirm Geräte."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "For now, pair a PC in the classic Delos app.\nPairing in the new UI comes in step 6.6."
+            "value": "Pair a PC on the Devices screen."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "De momento, empareja un PC en la app clásica de Delos.\nEl emparejamiento en la nueva interfaz llegará en el paso 6.6."
+            "value": "Empareja un PC en la pantalla Dispositivos."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pour l’instant, associe un PC dans l’app Delos classique.\nL’association dans la nouvelle interface arrive à l’étape 6.6."
+            "value": "Associe un PC depuis l’écran Appareils."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "今のところ、PCのペアリングはクラシック版 Delosアプリで行ってください。\n新しいUIでのペアリングはステップ6.6で対応します。"
+            "value": "「デバイス」画面でPCをペアリングしてください。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "지금은 기존 Delos 앱에서 PC를 페어링해 주세요.\n새 UI의 페어링은 6.6단계에서 추가돼요."
+            "value": "기기 화면에서 PC를 페어링해 주세요."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Por enquanto, pareie um PC no app Delos clássico.\nO pareamento na nova interface chega na etapa 6.6."
+            "value": "Pareie um PC na tela Dispositivos."
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Поки що створи пару з ПК у класичному застосунку Delos.\nСтворення пари в новому інтерфейсі з’явиться на кроці 6.6."
+            "value": "Створи пару з ПК на екрані «Пристрої»."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "目前请在经典版 Delos 应用中配对 PC。\n新界面的配对将在第 6.6 步推出。"
+            "value": "请在“设备”页面配对 PC。"
           }
         }
       }
@@ -32897,67 +32897,67 @@
         }
       }
     },
-    "home_offline_note": {
+    "home_offline_devices_note": {
       "extractionState": "manual",
       "localizations": {
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zapni PC, nebo ho probuď z klasické aplikace Delos.\nProbuzení odsud přijde v kroku 6.6."
+            "value": "Zapni PC, nebo ho probuď z jeho menu na obrazovce Zařízení."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Starte den PC oder weck ihn in der klassischen Delos-App auf.\nAufwecken von hier kommt in Schritt 6.6."
+            "value": "Starte den PC oder weck ihn über sein Menü auf dem Bildschirm Geräte auf."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Start the PC, or wake it from the classic Delos app.\nWaking it from here comes in step 6.6."
+            "value": "Start the PC, or wake it from its menu on the Devices screen."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enciende el PC o reactívalo desde la app clásica de Delos.\nReactivarlo desde aquí llegará en el paso 6.6."
+            "value": "Enciende el PC o reactívalo desde su menú en la pantalla Dispositivos."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Démarre le PC, ou réveille-le depuis l’app Delos classique.\nLe réveil depuis ici arrive à l’étape 6.6."
+            "value": "Démarre le PC, ou réveille-le depuis son menu dans l’écran Appareils."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "PCを起動するか、クラシック版 Delosアプリから起動してください。\nここからの起動はステップ6.6で対応します。"
+            "value": "PCを起動するか、「デバイス」画面のPCのメニューから起動してください。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "PC를 켜거나 기존 Delos 앱에서 깨워 주세요.\n여기서 깨우는 기능은 6.6단계에서 추가돼요."
+            "value": "PC를 켜거나 기기 화면의 PC 메뉴에서 깨워 주세요."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ligue o PC ou ative-o pelo app Delos clássico.\nAtivá-lo por aqui chega na etapa 6.6."
+            "value": "Ligue o PC ou ative-o pelo menu dele na tela Dispositivos."
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Увімкни ПК або розбуди його з класичного застосунку Delos.\nРозбудити звідси можна буде на кроці 6.6."
+            "value": "Увімкни ПК або розбуди його через його меню на екрані «Пристрої»."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "请开启 PC，或在经典版 Delos 应用中唤醒。\n在此处唤醒将在第 6.6 步推出。"
+            "value": "请开启 PC，或在“设备”页面通过其菜单唤醒。"
           }
         }
       }

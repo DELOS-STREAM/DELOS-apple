@@ -266,6 +266,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   left, top and bottom edges of the screen (the status bar and the home indicator no longer widen one of them) and
   materialises from the left edge (growing, sharpening from a blur, on a spring) and goes back into it; with reduced
   motion it fades. Not verified on a device yet.
+- The game menu offers Metadata for every game except DELOS's own entries, also without a metadata service (its
+  actions then say the service is unavailable). The home screen's notes for no paired PC and an offline PC point to
+  the Devices screen.
+- The info row's badges, when they do not fit, bounce like Android's: still for 0.7 s, linear to the end at 56 px/s, a
+  0.9 s pause, back, a 0.9 s pause. Disconnect and Quit from the stream menu play SELECT when the library returns.
 
 ### Removed
 

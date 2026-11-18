@@ -151,9 +151,9 @@ devices_add_no_answer
 # Home
 home_loading
 home_no_pc_title
-home_no_pc_note
+home_no_pc_devices_note
 home_offline_title
-home_offline_note
+home_offline_devices_note
 home_empty_title
 home_empty_note
 home_menu_start
