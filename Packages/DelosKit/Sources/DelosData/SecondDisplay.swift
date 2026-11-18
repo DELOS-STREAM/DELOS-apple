@@ -108,6 +108,72 @@ public struct CompanionDim: Equatable, Sendable {
     }
 }
 
+/// The size of a screen in pixels, as the screen planner sees it (`PanelSource` of DELOS for Android, without an id).
+public struct ScreenSize: Equatable, Sendable {
+    public var width: Int
+    public var height: Int
+
+    public init(width: Int, height: Int) {
+        self.width = width
+        self.height = height
+    }
+
+    public var pixels: Int { width * height }
+}
+
+/// One of the two screens: the device's own (the iPhone's or iPad's, the Mac's built-in or menu-bar screen) or the second
+/// one (an external display, AirPlay screen or another monitor).
+public enum ScreenSide: Equatable, Sendable {
+    case device
+    case second
+
+    public var other: ScreenSide { self == .device ? .second : .device }
+}
+
+/// Where the interface and the stream go ([main]) and where the companion screen goes ([companion], always the other one).
+public struct ScreenPlan: Equatable, Sendable {
+    public var main: ScreenSide
+    public var companion: ScreenSide { main.other }
+
+    public init(main: ScreenSide) {
+        self.main = main
+    }
+}
+
+/// What the two screens show (`DualScreenPlanner` and the external-display mode of DELOS for Android,
+/// `display/DualScreen.kt:58-70`, `utils/ServerHelper.java:64-71`), a pure function of the screens and the settings.
+///
+/// - A second screen that is part of the device (Second display: Part of the device) pairs with the device's screen: the
+///   Main screen setting picks the main one (Automatic: the one with more pixels, the device's own on a tie; Swapped: the
+///   other), the interface and the stream go there and the companion screen to the other one.
+/// - A monitor or TV (Automatic, External display) is left to the system (mirrored on iPhone and iPad, a free monitor on
+///   the Mac) except while a stream runs with Fully External Display Mode on: the stream goes to it and the device's own
+///   screen becomes the companion screen, the touch control of that stream (Android's control window).
+/// - Without a second screen nothing changes.
+public enum ScreenPlanner {
+    /// The plan, or nil: the second screen (if any) is not DELOS's and everything stays on the device's screen.
+    public static func plan(
+        device: ScreenSize, second: ScreenSize?, role: SecondDisplayRole, choice: MainScreenChoice, fullExternal: Bool, streaming: Bool
+    ) -> ScreenPlan? {
+        guard let second else { return nil }
+        if role == .builtIn { return pair(device: device, second: second, choice: choice) }
+        return fullExternal && streaming ? ScreenPlan(main: .second) : nil
+    }
+
+    /// The plan of a pair: the larger screen is main with Automatic (a tie goes to the device's own screen), the other one
+    /// with Swapped.
+    public static func pair(device: ScreenSize, second: ScreenSize, choice: MainScreenChoice) -> ScreenPlan {
+        let larger: ScreenSide = second.pixels > device.pixels ? .second : .device
+        return ScreenPlan(main: choice == .automatic ? larger : larger.other)
+    }
+
+    /// Whether the two screens are a pair, so Settings → Display offers Main screen and the companion's idle dimming (Android
+    /// shows them only while a built-in companion display exists).
+    public static func paired(second: ScreenSize?, role: SecondDisplayRole) -> Bool {
+        second != nil && role == .builtIn
+    }
+}
+
 /// The corner of the full statistics panel while streaming (`StatsPosition` of DELOS for Android, `ui_stats_position`,
 /// kept with the profile's settings as ``SettingKey/statsPosition``); the compact line is always at the top center.
 public enum StatsPosition: String, CaseIterable, Sendable {
