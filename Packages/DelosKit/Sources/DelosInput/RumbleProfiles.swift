@@ -1,6 +1,7 @@
 import Foundation
 
-/// Stable preset identities shared by settings and the live stream menu.
+/// Stable preset identities shared by settings and the live stream menu (`RumblePresets` of DELOS for Android; the raw
+/// values are its saved identities).
 public enum RumblePreset: String, Codable, CaseIterable, Sendable {
     case original = "ORIGINAL", soft = "GENTLE", kickStart = "KICK_ONLY", pulsing = "PULSE_25"
 
@@ -12,6 +13,9 @@ public enum RumblePreset: String, Codable, CaseIterable, Sendable {
         case .pulsing: "rumble_preset_pulsing"
         }
     }
+
+    /// Whether the rumble translator shapes the rumble (`RumblePresets.enabled`): Original plays it untranslated.
+    public var translator: Bool { self != .original }
 
     public var profile: RumbleProfile {
         switch self {
@@ -25,7 +29,10 @@ public enum RumblePreset: String, Codable, CaseIterable, Sendable {
 
 public struct RumbleConfiguration: Codable, Equatable, Sendable {
     public var enabled = true
+    /// The selected preset; while [custom] is set the rumble follows that instead and the feel reads Custom.
     public var profile = RumblePreset.original
+    /// The advanced edits of the Debug laboratory (`RumblePreferences.saveCustom`); picking a preset clears them.
+    public var custom: RumbleCustom?
     /// Percent, including amplification up to 200%; the output is saturated, never wrapped.
     public var deviceStrength = 100 { didSet { deviceStrength = min(200, max(1, deviceStrength)) } }
     public var deviceFallback = false
@@ -39,10 +46,35 @@ public struct RumbleConfiguration: Codable, Equatable, Sendable {
         func value<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T { (try? c.decode(T.self, forKey: key)) ?? fallback }
         enabled = value(.enabled, true)
         profile = value(.profile, .original)
+        custom = try? c.decodeIfPresent(RumbleCustom.self, forKey: .custom)
         deviceStrength = min(200, max(1, value(.deviceStrength, 100)))
         deviceFallback = value(.deviceFallback, false)
         deviceEnabled = value(.deviceEnabled, false)
         adaptiveTriggers = value(.adaptiveTriggers, true)
+    }
+
+    /// The preset in use; nil while Custom (`RumblePreferences.activePreset`). An edit is Custom even when its values
+    /// equal a preset's.
+    public var activePreset: RumblePreset? { custom == nil ? profile : nil }
+
+    /// Whether the rumble translator shapes the rumble (`RumblePreferences.isEnabled`).
+    public var translatorEnabled: Bool { custom?.translator ?? profile.translator }
+
+    /// The saved parameters (`RumblePreferences.readProfile`), which the Debug laboratory edits.
+    public var savedProfile: RumbleProfile { custom?.profile ?? profile.profile }
+
+    /// The shaping the stream plays: the saved parameters while the translator is on, else Original.
+    public var translation: RumbleProfile { translatorEnabled ? savedProfile : RumbleProfile() }
+
+    /// Selects [preset] and drops any Custom edit (`RumblePreferences.applyPreset`).
+    public mutating func applyPreset(_ preset: RumblePreset) {
+        profile = preset
+        custom = nil
+    }
+
+    /// Saves an advanced edit as Custom (`RumblePreferences.saveCustom`).
+    public mutating func saveCustom(_ profile: RumbleProfile, translator: Bool) {
+        custom = RumbleCustom(profile: profile, translator: translator)
     }
 
     public func usesDevice(controllerCanRumble: Bool, controllerNumber: UInt16) -> Bool {
@@ -50,8 +82,19 @@ public struct RumbleConfiguration: Codable, Equatable, Sendable {
     }
 }
 
+/// The Custom rumble feel: parameters edited in the Debug laboratory, and whether the translator applies them.
+public struct RumbleCustom: Codable, Equatable, Sendable {
+    public var profile: RumbleProfile
+    public var translator: Bool
+
+    public init(profile: RumbleProfile, translator: Bool) {
+        self.profile = profile
+        self.translator = translator
+    }
+}
+
 /// Eight-bit shaping follows the host rumble translator; raw zero always cancels immediately.
-public struct RumbleProfile: Equatable, Sendable {
+public struct RumbleProfile: Codable, Equatable, Sendable {
     public var gain: Double = 1
     public var curve: Double = 1
     public var minimumAmplitude: Int = 0
@@ -73,6 +116,21 @@ public struct RumbleProfile: Equatable, Sendable {
         self.highWeight = highWeight
         self.smoothing = smoothing
         self.pulseMilliseconds = pulseMilliseconds
+    }
+
+    /// A missing or unreadable value is the default, so data saved before a parameter existed still loads.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = RumbleProfile()
+        func value<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T { (try? c.decode(T.self, forKey: key)) ?? fallback }
+        gain = value(.gain, fallback.gain)
+        curve = value(.curve, fallback.curve)
+        minimumAmplitude = value(.minimumAmplitude, fallback.minimumAmplitude)
+        kickMilliseconds = value(.kickMilliseconds, fallback.kickMilliseconds)
+        lowWeight = value(.lowWeight, fallback.lowWeight)
+        highWeight = value(.highWeight, fallback.highWeight)
+        smoothing = value(.smoothing, fallback.smoothing)
+        pulseMilliseconds = value(.pulseMilliseconds, fallback.pulseMilliseconds)
     }
 
     func shape(_ amplitude: Double, nonzero: Bool) -> Int {

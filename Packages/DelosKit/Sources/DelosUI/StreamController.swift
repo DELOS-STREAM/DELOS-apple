@@ -279,7 +279,12 @@ final class StreamController {
             stopPlaytime()
             stopStatistics()
             stopInput()
-            if let text = StreamText.termination(termination) { fail(text) } else { phase = .ended }
+            if let text = StreamText.termination(termination) {
+                fail(text)
+            } else {
+                DiagLog.i("Stream", "Stream ended: the PC closed it")
+                phase = .ended
+            }
         case let .rumble(controller, low, high):
             input?.rumble(controller: controller, low: low, high: high)
         case let .triggerRumble(controller, left, right):
@@ -371,6 +376,10 @@ final class StreamController {
         stopInput()
         hideMenu()
         phase = .failed(text)
+        // The result is in the log, and a failed stream is a problem the user may report: the card follows once the result has
+        // been answered (`StreamResult.show` and `ProblemMonitor.streamFailed` of DELOS for Android)
+        DiagLog.e("Stream", "Stream ended: FAILED \"\(text.title)\"" + (text.details.map { " (\($0))" } ?? ""))
+        ProblemOffers.shared.streamFailed(title: text.title, details: text.details)
     }
 
     private func stopInput() {

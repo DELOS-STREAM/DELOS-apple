@@ -32,6 +32,9 @@ public enum Screen: Hashable, Sendable {
     case appSettings(hostID: String, appID: Int)
     /// The on-screen controls without a stream (`Screen.OscPreview`: Settings → Controls → Preview on-screen controls).
     case oscPreview
+    /// The device, its displays and controllers, the diagnostic log and the vibration tests (`Screen.DebugInfo`: Settings → About
+    /// → Debug info).
+    case debugInfo
 
     /// Full-screen screens without the top bar and the hint bar: the stream and the on-screen controls' preview.
     var hidesChrome: Bool {

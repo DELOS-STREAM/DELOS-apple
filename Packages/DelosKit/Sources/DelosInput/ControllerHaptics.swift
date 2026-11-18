@@ -12,6 +12,8 @@ final class ControllerHaptics {
     private var last = (low: UInt16(0), high: UInt16(0), left: UInt16(0), right: UInt16(0))
     private(set) var problem: RumbleProblem?
     private(set) var adaptiveTriggerUnsupported = false
+    /// The strongest amplitude, 0...255, the motors issue now (kick and smoothing included); the Debug laboratory shows it.
+    var amplitude: Int { motors.values.map(\.amplitude).max() ?? 0 }
     var configuration = RumbleConfiguration() {
         didSet {
             guard configuration != oldValue else { return }
@@ -44,14 +46,14 @@ final class ControllerHaptics {
         guard configuration.enabled else { return }
         if controller == nil {
             motor(.all, active: low != 0 || high != 0)?.set(
-                low: low, high: high, profile: configuration.profile.profile, strength: strength ?? configuration.deviceStrength)
+                low: low, high: high, profile: configuration.translation, strength: strength ?? configuration.deviceStrength)
         } else if controller?.haptics?.supportedLocalities.contains(.leftHandle) == true
                     && controller?.haptics?.supportedLocalities.contains(.rightHandle) == true {
-            motor(.leftHandle, active: low != 0)?.set(low: low, profile: configuration.profile.profile)
-            motor(.rightHandle, active: high != 0)?.set(low: high, profile: configuration.profile.profile)
+            motor(.leftHandle, active: low != 0)?.set(low: low, profile: configuration.translation)
+            motor(.rightHandle, active: high != 0)?.set(low: high, profile: configuration.translation)
         } else {
             let locality: GCHapticsLocality = controller?.haptics?.supportedLocalities.contains(.handles) == true ? .handles : .all
-            motor(locality, active: low != 0 || high != 0)?.set(low: low, high: high, profile: configuration.profile.profile)
+            motor(locality, active: low != 0 || high != 0)?.set(low: low, high: high, profile: configuration.translation)
         }
     }
 
@@ -59,8 +61,8 @@ final class ControllerHaptics {
         last.left = left
         last.right = right
         guard configuration.enabled, controller != nil else { return }
-        motor(.leftTrigger, active: left != 0)?.set(low: left, profile: configuration.profile.profile)
-        motor(.rightTrigger, active: right != 0)?.set(low: right, profile: configuration.profile.profile)
+        motor(.leftTrigger, active: left != 0)?.set(low: left, profile: configuration.translation)
+        motor(.rightTrigger, active: right != 0)?.set(low: right, profile: configuration.translation)
     }
 
     func adaptiveTriggers(flags: UInt8, typeLeft: UInt8, typeRight: UInt8, left: [UInt8], right: [UInt8]) {
@@ -130,6 +132,8 @@ final class ControllerHaptics {
         private var high: UInt16?
         private var strength = 100
         private var issued = -1
+        /// The amplitude issued last, 0...255.
+        var amplitude: Int { max(0, issued) }
         private var tick: Task<Void, Never>?
         private var pulseFailed = false
 

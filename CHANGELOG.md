@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Diagnostics (docs/DIAGNOSTICS.md): DELOS keeps a small rolling log on the device (Settings → About → Keep diagnostic
+  logs), notices a crash, a hang or a failed stream of the last run and offers once, in a card on the start and home
+  screens, to report it: the log, cleaned of addresses, PC and profile names, ids and keys, is uploaded to the report
+  service when the build has one, or saved to Files (DELOS folder) on iPhone and iPad and to Downloads on the Mac, and
+  a prefilled GitHub draft opens. Nothing is sent without the user. Settings → About → Debug info shows the device, its
+  displays and controllers, previews, shares, copies and clears the log, and has the vibration test and the rumble
+  laboratory, whose edits become a Custom rumble feel. Apple TV cannot save, share or copy the log or open the draft.
+  Not verified on a device.
 - The link test: Settings → Stream has Test link and Use recommended bitrate under the bitrate. Test link measures
   what the network carries from the PC with Vibepollo's UDP probe (a portal shows each step, B stops it) and keeps
   the result per PC and kind of network with its date; the bitrate row then says the recommendation and why, and its

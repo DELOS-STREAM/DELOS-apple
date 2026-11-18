@@ -1,0 +1,78 @@
+# FIELD-ID CONTRACT (docs/DIAGNOSTICS.md, "Field-id contract of the issue form")
+#
+# "Report this problem" in DELOS opens a GitHub new-issue address that names this form file and fills it in through
+# query parameters named after the field ids (Packages/DelosKit/Sources/DelosData/DiagnosticsIssue.swift, IssueURL).
+# Every installed app keeps sending the same names, so these are frozen:
+#
+#   file name    app_report.yml
+#   field ids    what-happened, area, device, build, stream-settings, logs
+#   area options "Other" and "Pairing/connection" (the two values the app sends)
+#
+# Never rename or remove them. Allowed changes: labels, descriptions, new OPTIONAL fields, new Area options.
+# Not allowed: a new required field the app does not fill in (the confirmation checkbox below is the one
+# exception, because only a person can tick it), or turning a field the app fills in into another type.
+# IssueFormContractTests checks this file against the address the app builds.
+name: Problem report from the app
+description: Opened by "Report this problem" in DELOS. Writing a report by hand? Use "Bug report" instead.
+labels: [bug, from-app, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        DELOS filled in this draft after a crash, a failed stream or a report you started. **Nothing has been posted to GitHub yet.** Read it and add what you were doing just before.
+
+        If the first line of "What happened?" is a link to the diagnostic log, DELOS uploaded the cleaned log to its report service: it is kept for 30 days and anyone who has the link can read it, which includes everyone who can see this issue. Without that link, attach the diagnostic file DELOS saved (Downloads on a Mac, the DELOS folder of the Files app on iPhone and iPad): drag it into the "What happened?" box (the log box at the end cannot take files).
+
+        The draft and the log were cleaned by DELOS (addresses, PC and account names, ids and keys are removed). Check them anyway before you submit.
+
+        Security problem? Do not submit it here: use [Report a vulnerability](https://github.com/DELOS-STREAM/DELOS-apple/security/advisories/new).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What DELOS recorded, and what you were doing just before. Without a log link, drag the diagnostic file in here.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Change it when you know better than the app.
+      options:
+        - Stream video
+        - Stream input/controller
+        - Audio
+        - Settings/UI
+        - Library/artwork/metadata
+        - Pairing/connection
+        - Other
+  - type: input
+    id: device
+    attributes:
+      label: Device and system version
+  - type: input
+    id: build
+    attributes:
+      label: DELOS build
+  - type: input
+    id: stream-settings
+    attributes:
+      label: Stream settings
+  - type: input
+    id: host
+    attributes:
+      label: Host software and version (optional)
+      description: Vibepollo, Apollo or Sunshine, and which version. The app does not know this.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log summary
+      description: The short summary from the app. The full log is the file you attach above, or the link.
+      render: text
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before you submit
+      options:
+        - label: I read the draft and the attached file and removed anything private.
+          required: true

@@ -259,7 +259,7 @@ import Testing
 
     @Test func aboutStartsWithTheVersion() {
         let rows = AboutSetting.rows(.about, version: "1.2.0")
-        #expect(rows.map(\.id) == ["about_version", "about_based", "about_welcome"])
+        #expect(rows.map(\.id) == ["about_version", "about_based", "about_welcome", "about_diag_logs"])
         #expect(rows[0].value == .info("1.2.0") && rows[0].help == "DELOS 1.2.0")
     }
 

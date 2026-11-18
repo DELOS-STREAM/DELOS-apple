@@ -19,6 +19,8 @@ final class CoreContext: Sendable {
     let onTermination: @Sendable () -> Void
     /// The last stage the core reported as failed, for the error of `start`.
     let failedStage = Mutex<(stage: StreamStage, errorCode: Int32)?>(nil)
+    /// The video format, size and frame rate the host and the client settled on (the decoder's setup), for the diagnostic log.
+    let negotiatedVideo = Mutex<(format: VideoFormats, width: Int, height: Int, frameRate: Int)?>(nil)
     private let interruption = Atomic<Bool>(false)
 
     init(
@@ -72,14 +74,18 @@ enum CoreBridge {
         current?.events.yield(event)
     }
 
-    /// Set once, before the first connection; the core logs only during connections.
+    /// Set once, before the first connection; the core logs only during connections. Its lines also go into the diagnostic
+    /// log (`BridgeClLogMessage` of DELOS for Android), at most 60 a second; the scrubber removes the addresses when it is shared.
     private static let installLogSink: Void = DelosCommonSetLogSink { message in
         guard let message else { return }
+        // String(cString:) repairs bytes that are not UTF-8
+        let text = String(cString: message)
+        DiagLog.native("Core", text)
         // The messages carry host addresses and RTSP details: readable only while debugging
         #if DEBUG
-        CoreBridge.logger.debug("\(String(cString: message), privacy: .public)")
+        CoreBridge.logger.debug("\(text, privacy: .public)")
         #else
-        CoreBridge.logger.debug("\(String(cString: message), privacy: .private)")
+        CoreBridge.logger.debug("\(text, privacy: .private)")
         #endif
     }
 
@@ -150,7 +156,8 @@ enum CoreBridge {
         var callbacks = DECODER_RENDERER_CALLBACKS()
         LiInitializeVideoCallbacks(&callbacks)
         callbacks.setup = { format, width, height, frameRate, _, _ in
-            guard let sink = CoreBridge.current?.video else { return 0 }
+            guard let context = CoreBridge.current, let sink = context.video else { return 0 }
+            context.negotiatedVideo.withLock { $0 = (VideoFormats(rawValue: format), Int(width), Int(height), Int(frameRate)) }
             let accepted = sink.setup(
                 format: VideoFormats(rawValue: format), width: Int(width), height: Int(height),
                 frameRate: Int(frameRate))

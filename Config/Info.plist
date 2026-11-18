@@ -12,6 +12,8 @@ this file with the keys it generates from the INFOPLIST_KEY_* settings in Shared
 <dict>
 	<key>DelosMetadataURL</key>
 	<string>$(DELOS_METADATA_URL)</string>
+	<key>DelosReportsURL</key>
+	<string>$(DELOS_REPORTS_URL)</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>GCSupportsGameMode</key>

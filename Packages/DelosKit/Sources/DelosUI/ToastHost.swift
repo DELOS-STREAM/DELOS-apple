@@ -1,3 +1,4 @@
+import DelosCore
 import DelosInput
 import Observation
 import SwiftUI
@@ -33,10 +34,16 @@ final class Toasts {
     /// read from the [icon] (``ToastKind/of(explicit:icon:hasAction:)``).
     func show(_ text: String, icon: String? = nil, action: ToastAction? = nil, durationMs: Double? = nil, kind: ToastKind? = nil) {
         counter += 1
+        let shown = ToastKind.of(explicit: kind, icon: icon, hasAction: action != nil)
+        // A toast that tells of a problem goes into the diagnostic log (`DiagLog.logToast`); the rest is not diagnostic
+        switch shown {
+        case .error: DiagLog.e("Toast", text)
+        case .warning: DiagLog.w("Toast", text)
+        case .info, .success, .action: break
+        }
         current = Toast(
             id: counter, text: text, icon: icon, action: action,
-            durationMs: durationMs ?? (action != nil ? ToastTiming.actionMs : ToastTiming.shellMs),
-            kind: ToastKind.of(explicit: kind, icon: icon, hasAction: action != nil))
+            durationMs: durationMs ?? (action != nil ? ToastTiming.actionMs : ToastTiming.shellMs), kind: shown)
     }
 
     /// The toast [id]'s time is up.

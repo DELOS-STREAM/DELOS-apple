@@ -74,12 +74,20 @@ import Testing
 }
 
 @Suite struct AboutRowsTests {
-    @Test func aboutLeadsWithTheVersionWhatDelosIsBasedOnAndReplayingTheWelcome() {
-        let rows = AboutSetting.rows(.about)
-        #expect(rows.map(\.id) == [AboutSetting.versionID, AboutSetting.basedID, AboutSetting.welcomeID])
+    @Test func aboutLeadsWithTheVersionWhatDelosIsBasedOnAndReplayingTheWelcomeThenTheDiagnosticLog() {
+        let rows = AboutSetting.rows(.about, diagnosticLogs: false)
+        #expect(rows.map(\.id) == [AboutSetting.versionID, AboutSetting.basedID, AboutSetting.welcomeID, AboutSetting.diagLogsID])
         #expect(rows[1].value == .info("Artemis · Moonlight"))
+        #expect(rows[3].value == .toggle(false) && rows[3].section == "Diagnostics")
         #expect(AboutSetting.rows(.stream).isEmpty)
         #expect(AboutSetting.firstID == SettingsScreen.firstRow(.about))
+    }
+
+    @Test func debugInfoIsTheLastRowOfTheMiscSectionAfterTheLanguage() {
+        let rows = (AboutSetting.rows(.about) + AppLanguageSetting.rows(.about, supported: true) + DebugInfoSetting.rows(.about)).groupedBySection()
+        #expect(rows.suffix(2).map(\.id) == [AppLanguageSetting.id, DebugInfoSetting.id])
+        #expect(rows.last?.value == .action(label: nil) && rows.last?.icon == Symbols.debug)
+        #expect(DebugInfoSetting.rows(.stream).isEmpty)
     }
 
     @Test func coversSaysWhereToChooseArtwork() {
