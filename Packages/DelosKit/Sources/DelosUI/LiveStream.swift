@@ -46,7 +46,9 @@ final class LiveStream: StreamSteps {
         let watchdog = WatchdogVideoRenderer(renderer: renderer)
         let video = VideoOutput(renderer: watchdog, supportedFormats: formats)
         session = StreamSession(videoSink: video, audioSink: AudioOutput())
-        statisticsSource = StreamStatisticsSource(video: video.statistics, renderer: renderer, session: session, watchdog: watchdog)
+        statisticsSource = StreamStatisticsSource(
+            video: video.statistics, renderer: renderer, session: session, watchdog: watchdog,
+            vrr: VRRDisplay.resolve(setting: settings.text(.vrr), reported: VRRDisplay.reported))
         events = session.events
     }
 

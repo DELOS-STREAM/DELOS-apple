@@ -83,6 +83,58 @@ public struct StreamStatistics: Sendable, Equatable {
     public var repeatedRefreshesPerSecond: Double?
     /// Frames per second the GPU finished drawing after the time of their refresh.
     public var lateRefreshesPerSecond: Double?
+    /// The frame rate of the slowest 1 % of recent frames (``FrameTimes``); nil while there are too few to tell.
+    public var onePercentLowFPS: Double?
+    /// Variable refresh rate is active for this stream (``VRRDisplay``): the panel marks the frame rate with VRR.
+    public var vrr = false
+    /// What the connection encrypts; nil before it reported.
+    public var encryption: StreamEncryption?
+    /// The upscaler's active target, shown under the panel's first line; nil while no upscaler runs.
+    public var scaleDescription: String?
+    /// The GPU post-processing time per frame after decoding (the upscaler's pass); nil while none runs.
+    public var processingMilliseconds: Double?
+
+    /// The delay summed up (`StreamStats.totalMs`): the network round trip, the PC's processing when it reports it, the
+    /// decoding and the post-processing the renderer measures. Nil without the network reading.
+    public var totalMilliseconds: Double? {
+        guard let network = networkMilliseconds else { return nil }
+        return network + max(hostAverageMilliseconds ?? 0, 0) + (decodeMilliseconds ?? 0) + (processingMilliseconds ?? 0)
+    }
+}
+
+/// The 1 % low frame rate of the frames handed to the renderer recently (`FrameTimes` of DELOS for Android,
+/// binding/video/FrameTimes.java): 1000 over the average of the longest 1 % of frame intervals. A fixed ring of about ten
+/// seconds at 120 FPS; a gap longer than half a second is a still picture, not a hitch.
+struct FrameTimes: Sendable {
+    static let capacity = 1200
+    static let idleGap: UInt64 = 500_000_000
+
+    private var intervals = [UInt64](repeating: 0, count: capacity)
+    private var count = 0
+    private var next = 0
+    private var last: UInt64 = 0
+
+    /// A frame at [now] nanoseconds; writes into the ring, never allocates.
+    mutating func add(_ now: UInt64) {
+        if last != 0, now > last {
+            let interval = now - last
+            if interval < Self.idleGap {
+                intervals[next] = interval
+                next = (next + 1) % Self.capacity
+                count = min(count + 1, Self.capacity)
+            }
+        }
+        last = now
+    }
+
+    /// The 1 % low frame rate; nil below 100 frames.
+    var onePercentLow: Double? {
+        guard count >= 100 else { return nil }
+        let sorted = intervals[0..<count].sorted()
+        let worst = max(1, count / 100)
+        let total = sorted[(count - worst)...].reduce(0, +)
+        return 1e9 / (Double(total) / Double(worst))
+    }
 }
 
 /// Scalar-only frame accounting on the core's video thread, sampled from a background actor.
@@ -105,6 +157,7 @@ public final class VideoStatistics: Sendable {
         var renderer: VideoPresentationCounters?
         var rendererSampledAt: UInt64 = 0
         var rendererName = ""
+        var frameTimes = FrameTimes()
     }
 
     private let state = Mutex(State())
@@ -119,10 +172,13 @@ public final class VideoStatistics: Sendable {
         }
     }
 
-    /// No allocation, formatting, wall clock or UI work per frame.
-    func record(frameNumber: UInt32, bytes: Int, hostLatencyTenths: UInt16, hdr: Bool) {
+    /// No allocation, formatting, wall clock or UI work per frame; [now] is the monotonic clock.
+    func record(
+        frameNumber: UInt32, bytes: Int, hostLatencyTenths: UInt16, hdr: Bool, now: UInt64 = DispatchTime.now().uptimeNanoseconds
+    ) {
         state.withLock { s in
             s.frames += 1
+            s.frameTimes.add(now)
             s.bytes += UInt64(max(0, bytes))
             s.hdr = hdr
             if let previous = s.previousFrame {
@@ -195,7 +251,7 @@ public final class VideoStatistics: Sendable {
                 decodedFPS: extra.decodedFPS, decodeMilliseconds: extra.decodeMilliseconds,
                 droppedFramesPerSecond: extra.droppedFramesPerSecond, queueWaitingAverage: extra.queueWaitingAverage,
                 queueWaitingPeak: extra.queueWaitingPeak, repeatedRefreshesPerSecond: extra.repeatedRefreshesPerSecond,
-                lateRefreshesPerSecond: extra.lateRefreshesPerSecond)
+                lateRefreshesPerSecond: extra.lateRefreshesPerSecond, onePercentLowFPS: s.frameTimes.onePercentLow)
             s.sampledAt = now
             s.frames = 0; s.bytes = 0; s.received = 0; s.lost = 0
             s.hostCount = 0; s.hostSum = 0; s.hostMinimum = .greatestFiniteMagnitude; s.hostMaximum = 0
@@ -254,12 +310,17 @@ public actor StreamStatisticsSource {
     private let renderer: any VideoRenderer
     private let session: StreamSession
     private let watchdog: WatchdogVideoRenderer
+    /// Variable refresh rate is active for this stream (``VRRDisplay/resolve(setting:reported:)``).
+    private let vrr: Bool
 
-    public init(video: VideoStatistics, renderer: any VideoRenderer, session: StreamSession, watchdog: WatchdogVideoRenderer) {
+    public init(
+        video: VideoStatistics, renderer: any VideoRenderer, session: StreamSession, watchdog: WatchdogVideoRenderer, vrr: Bool = false
+    ) {
         self.video = video
         self.renderer = renderer
         self.session = session
         self.watchdog = watchdog
+        self.vrr = vrr
     }
 
     public func sample() async -> StreamStatistics? {
@@ -270,7 +331,11 @@ public actor StreamStatisticsSource {
         let packets = session.videoStatistics()
         // Nil once the session stops; the session orders this read before the core's teardown.
         let roundTrip = await session.estimatedRoundTrip()
-        return video.sample(
+        let encryption = await session.encryption
+        var reading = video.sample(
             renderer: presentation, roundTrip: roundTrip, videoPackets: packets.packets, fecPackets: packets.fecPackets)
+        reading?.encryption = encryption
+        reading?.vrr = vrr
+        return reading
     }
 }

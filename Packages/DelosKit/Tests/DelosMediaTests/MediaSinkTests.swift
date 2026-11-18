@@ -197,3 +197,30 @@ import Testing
         #expect(AudioOutput.outputFormat(hardware: unnamed, speakers: Array(repeating: kAudioChannelLabel_Unknown, count: 6)) == nil)
     }
 }
+
+struct FrameTimesTests {
+    @Test func onePercentLowNeedsAHundredFramesAndUsesTheSlowest() {
+        var times = FrameTimes()
+        var now: UInt64 = 1_000
+        times.add(now)
+        for i in 0..<199 {
+            now += i == 50 || i == 100 ? 50_000_000 : 10_000_000
+            times.add(now)
+            if i == 97 { #expect(times.onePercentLow == nil) }
+        }
+        // 199 intervals: the slowest 1 (199 / 100) is 50 ms, so 20 FPS
+        #expect(abs((times.onePercentLow ?? 0) - 20) < 0.001)
+        // A still picture longer than half a second is no hitch
+        times.add(now + 600_000_000)
+        #expect(abs((times.onePercentLow ?? 0) - 20) < 0.001)
+    }
+
+    @Test func totalLatencySumsWhatIsMeasured() {
+        var s = StreamStatistics(width: 1, height: 1, codec: "H.264", hdr: false, incomingFPS: 60, bandwidthKiBPerSecond: 0, videoPackets: 0, fecPackets: 0)
+        #expect(s.totalMilliseconds == nil)
+        s.networkMilliseconds = 5
+        s.hostAverageMilliseconds = 3
+        s.decodeMilliseconds = 2
+        #expect(s.totalMilliseconds == 10)
+    }
+}
