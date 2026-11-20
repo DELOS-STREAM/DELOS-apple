@@ -100,7 +100,9 @@ group from outside lands on the group's item that had the focus last instead of 
 navigation returns to the cover the focus went up from (on tvOS the system's move into the group is redirected the same way).
 Its `tap` is what a touch does when it is not what A does; it gets whether the item had the focus
 before the tap (a settings row's first tap only focuses it, the second changes it, `RowTouch`); a tap always focuses the item
-first.
+first. `focusingOnFirstTap()` gives an item without its own `tap` the same rule with A's action: the library's covers, whose
+first tap only focuses the game (its background, info and chips follow) and whose second starts or resumes it; a pointer's
+click activates at once, as its hover has focused the item. The top navigation and the other buttons act on the first tap.
 
 ## Navigation
 
@@ -178,7 +180,7 @@ stays where it was, so the element a menu belongs to keeps its focus look and ha
 
 | Layer | Opens | Port of |
 |---|---|---|
-| Context menu (`ContextMenuLayer`) | The right menu button, X or the menu key on the focused item, a long press on touch (`FocusItem`'s `menu`, built when it opens), or an item's own action (the profile chip, Switch profile) | `ContextMenuLayer`, `ContextMenuPlacement`: the glass card (Liquid Glass in the card's outline with its caret, `MenuCardShape`), 470 to 640 px as wide as its longest row, a header with the subject's tile, status and facts, rows on one gliding plate (red under a destructive row), submenus in the same card (B or the back chip goes up, the button that opened it closes all). `placeContextMenu` places it beside the element or, for `below`, under or above it; it opens from the caret's tip and shrinks back into it |
+| Context menu (`ContextMenuLayer`) | The right menu button, X or the menu key on the focused item, a long press on touch (`FocusItem`'s `menu`, built when it opens), or an item's own action (the profile chip, Switch profile) | `ContextMenuLayer`, `ContextMenuPlacement`: the glass card (Liquid Glass in the card's rounded body, its caret drawn over the edge, `MenuCardShape` and `CaretCardGlass`), 470 to 640 px as wide as its longest row, a header with the subject's tile, status and facts, rows on one gliding plate (red under a destructive row), submenus in the same card (B or the back chip goes up, the button that opened it closes all). `placeContextMenu` places it beside the element or, for `below`, under or above it; it opens from the caret's tip and shrinks back into it |
 | Dialog (`DialogLayer`) | `Layers.openDialog(DialogSpec)` | `DialogLayer`: title, note, fields (the shared `TextPill`), the confirm button and Cancel; the focus starts on the first field, A or a tap types, Return in the last field confirms, and the card moves above the system keyboard |
 
 `ShellActions` builds the menus and dialogs of the screens and runs their actions (Android's `DeviceActions`,
@@ -966,6 +968,11 @@ one role, so the same kind of element looks the same everywhere:
 
 The circles and the profile chip are `control` glass tinted with the token at its whole alpha (`GlassShape(share: 1)`), so they keep
 Android's fill color on the glass material.
+
+A card with a caret (the context menus, the stream menu's popover, the popovers of the settings rows) has its glass only in the
+rounded body (`CaretCardGlass`, shapes conforming to `CaretCard`); the caret is drawn over the glass's edge in a material and the
+glass's tint (over the video a thin material in the scrim). Glass in the outline of the body with its caret has the system work
+out that outline before the first frame, which held a menu's first opening 300-480 ms on a fresh iPad simulator.
 
 Not glass: primary buttons (solid main color, as on Android), focus rings, progress bars, cover art and toasts (an
 opaque navy card, as on Android, so it reads over any frame of a stream).
@@ -1819,8 +1826,8 @@ has no such setting; both are in `Config/Info.plist`, which Xcode merges with th
 ## Popovers of settings rows
 
 A tap on the focused choice or slider row opens a popover (`RowPopover`, Android's `RowPicker`, issue #92): the stream menu's glass
-card (`PopoverGlass`, with a real blur of what is behind it) in one outline with the shared caret (`CardCaret`, the same for the
-context menus, the stream menu's popover and these; 60 x 24 stage px, exact numbers in Android's MENUS_AND_SETTINGS.md 3.1.1).
+card (`PopoverGlass`, with a real blur of what is behind it) with the shared caret (`CardCaret`, the same for the context menus, the
+stream menu's popover and these; 60 x 24 stage px, exact numbers in Android's MENUS_AND_SETTINGS.md 3.1.1; the glass in the body only, see "Glass").
 `RowPopoverLayout` (pure, tested) places it as Android does: vertically centered on the row and clamped inside the stage (24 px at
 the sides and the bottom, 104 under the top), the caret on the card's left edge pointing left into the row, its tip 360 px from the
 row's right edge (further left as far as the card needs to end 24 px before the stage's edge, at most to 120 px inside the row's left

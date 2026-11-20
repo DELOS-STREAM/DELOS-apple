@@ -640,6 +640,9 @@ private struct LibraryCovers: View, Equatable {
                     Cover(hostID: hostID, app: app, wide: index == 0, focused: isFocused, menuOpen: menuOpen, badge: badge,
                           marks: actions.marks(hostID: hostID, appID: app.id), geometry: covers)
                 }
+                // Touch: a first tap only focuses the cover (its hero, info and chips follow), a tap on the focused one starts
+                // or resumes it, as a settings row's; a tap meant to look at a game never launches it
+                .focusingOnFirstTap()
                 // Left to right, as Android's lazy row composes them
                 .staggerEntrance(index: min(index, Motion.staggerCap))
             }

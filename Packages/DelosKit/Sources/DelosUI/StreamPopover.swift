@@ -111,12 +111,13 @@ private struct StreamPopover: View {
 }
 
 /// The card and its caret as ONE outline (the prototype's `cardPath`, `caretCardPath` of DELOS for Android): a rounded
-/// rectangle with the shared ``CardCaret`` on its bottom edge, centered at [caretX], so the glass is continuous. The rect holds
-/// the caret in its last ``CardCaret/depth`` stage pixels.
-struct StreamCardShape: Shape {
+/// rectangle with the shared ``CardCaret`` on its bottom edge, centered at [caretX]; or only its rounded body or its caret
+/// ([part]: the glass goes in the body, ``CaretCardGlass``). The rect holds the caret in its last ``CardCaret/depth`` stage pixels.
+struct StreamCardShape: CaretCard {
     var caretX: CGFloat
     /// Points per stage pixel.
     let unit: CGFloat
+    var part = CardPart.whole
 
     var animatableData: CGFloat {
         get { caretX }
@@ -125,7 +126,7 @@ struct StreamCardShape: Shape {
 
     func path(in rect: CGRect) -> Path {
         let card = CGRect(x: 0, y: 0, width: rect.width, height: max(rect.height - CardCaret.depth * unit, 0))
-        return CardCaret.outline(card: card, radius: StreamMenuLayout.popoverRadius * unit, side: .bottom, center: caretX, unit: unit)
+        return CardCaret.path(part, card: card, radius: StreamMenuLayout.popoverRadius * unit, side: .bottom, center: caretX, unit: unit)
     }
 }
 
