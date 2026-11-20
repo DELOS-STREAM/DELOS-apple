@@ -310,6 +310,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- The library filter takes several values in every row (for example two genres, a theme and Native HDR): a chip toggles
+  on and off, values in one row match any of them and the rows must all match. The library changes only when the
+  choices are confirmed with the "Show N apps" pill, which counts the matching apps live, or with Y (F; Return on a chip
+  of a keyboard, where Space toggles it); B closes without applying and Reset clears the choices. Down from the last row
+  reaches the pill, the Filter hint counts every chosen value, and a filter kept by an earlier build opens with its values.
 - Touch: a tap on a library cover that does not have the focus only focuses it (the game's background, info and chips
   show); a tap on the focused cover starts or resumes it, as a settings row's second tap changes it, so a tap meant to
   look at a game never launches it. A pointer's click still starts the game at once (its hover has focused the cover);

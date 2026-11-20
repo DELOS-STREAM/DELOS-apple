@@ -3,8 +3,8 @@ import DelosHost
 import Foundation
 import Observation
 
-/// The library filter of each PC (`GameMetadataStore.filters` of DELOS for Android, kept per PC here): which of the four
-/// criteria narrow the library of that PC. Kept across launches; a PC without a filter has no entry.
+/// The library filter of each PC (`GameMetadataStore.filters` of DELOS for Android, kept per PC here): the values that narrow
+/// the library of that PC. Kept across launches; a PC without a filter has no entry.
 @MainActor @Observable
 final class LibraryFilters {
     private var values: [String: MetadataFilters]
@@ -74,9 +74,14 @@ enum LibraryFilter {
         active ? LPlural("filters_result_active", total, shown) : LPlural("filters_result_all", total)
     }
 
-    /// The home hint bar's label for Y: "Filter", with the number of narrowing criteria while any is set.
+    /// The home hint bar's label for Y: "Filter", with the number of chosen values while any is set.
     static func hintLabel(_ filters: MetadataFilters) -> String {
         filters.active ? LPlural("filters_hint_active", filters.activeCount) : L("filters_hint")
+    }
+
+    /// The label of the pill that applies the sheet's choices: "Show 12 apps".
+    static func showLabel(matching: Int) -> String {
+        LPlural("filters_show", matching)
     }
 
     /// The library note of the hint bar while a filter is on: "27 of 55 apps on PC".
@@ -86,16 +91,14 @@ enum LibraryFilter {
 
     static func hdrLabel(_ filter: HDRFilter) -> String {
         switch filter {
-        case .any: L("filters_hdr_any")
         case .hdr: L("filters_hdr_hdr")
         case .sdr: L("filters_hdr_sdr")
         case .unknown: L("metadata_hdr_unverified")
         }
     }
 
-    static func hdrIcon(_ filter: HDRFilter) -> String? {
+    static func hdrIcon(_ filter: HDRFilter) -> String {
         switch filter {
-        case .any: nil
         case .hdr: Symbols.hdrOn
         case .sdr: Symbols.sdr
         case .unknown: Symbols.hdrUnknown
@@ -104,7 +107,6 @@ enum LibraryFilter {
 
     static func lengthLabel(_ filter: LengthFilter) -> String {
         switch filter {
-        case .any: L("filters_length_any")
         case .under10: L("filters_length_under_10")
         case .from10To30: L("filters_length_10_30")
         case .from30To60: L("filters_length_30_60")
@@ -112,4 +114,23 @@ enum LibraryFilter {
         case .unknown: L("filters_length_unknown")
         }
     }
+}
+
+/// The sheet's choices while it is open (`FilterDraft` of DELOS for Android): the library keeps the applied filter until the
+/// choices are confirmed; closing without that drops them, and the next opening starts from the applied filter again.
+struct LibraryFilterDraft: Equatable {
+    /// The filter the library shows while the sheet is open.
+    let applied: MetadataFilters
+    /// What the chips show.
+    var filters: MetadataFilters
+
+    init(applied: MetadataFilters = MetadataFilters()) {
+        self.applied = applied
+        filters = applied
+    }
+
+    mutating func reset() { filters = MetadataFilters() }
+
+    /// What a confirmation applies; nil when the choices are the applied filter.
+    var confirmed: MetadataFilters? { filters == applied ? nil : filters }
 }

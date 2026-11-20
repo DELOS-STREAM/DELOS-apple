@@ -27,18 +27,42 @@ private func game(genres: [Int] = [], themes: [Int] = [], hdr: NativeHDR = .unkn
     }
 
     @Test func aFilterLetsThroughTheGamesThatMatchAndNeverTheBuiltInEntries() {
-        let shooters = LibraryFilter.apply(MetadataFilters(genreID: 5), to: apps) { data[$0.id] }
+        let shooters = LibraryFilter.apply(MetadataFilters(genres: [5]), to: apps) { data[$0.id] }
         #expect(shooters.map(\.id) == [2])
         // Desktop is DELOS's own entry: it has no metadata and shows only while nothing is filtered
-        #expect(!LibraryFilter.apply(MetadataFilters(hdr: .unknown), to: apps) { data[$0.id] }.map(\.id).contains(1))
-        #expect(LibraryFilter.apply(MetadataFilters(hdr: .unknown), to: apps) { data[$0.id] }.map(\.id) == [4])
+        #expect(!LibraryFilter.apply(MetadataFilters(hdr: [.unknown]), to: apps) { data[$0.id] }.map(\.id).contains(1))
+        #expect(LibraryFilter.apply(MetadataFilters(hdr: [.unknown]), to: apps) { data[$0.id] }.map(\.id) == [4])
     }
 
     @Test func theCriteriaCombine() {
-        let filters = MetadataFilters(genreID: 31, hdr: .sdr, length: .from10To30)
+        let filters = MetadataFilters(genres: [31], hdr: [.sdr], length: [.from10To30])
         #expect(LibraryFilter.apply(filters, to: apps) { data[$0.id] }.map(\.id) == [3])
-        #expect(LibraryFilter.apply(MetadataFilters(genreID: 31, hdr: .hdr), to: apps) { data[$0.id] }.isEmpty)
+        #expect(LibraryFilter.apply(MetadataFilters(genres: [31], hdr: [.hdr]), to: apps) { data[$0.id] }.isEmpty)
         #expect(filters.activeCount == 3)
+    }
+
+    @Test func severalValuesOfARowLetThroughAnyOfThemAndTheRowsAllMustMatch() {
+        // Doom (shooter, HDR) or Hades (adventure, SDR)
+        #expect(LibraryFilter.apply(MetadataFilters(genres: [5, 31]), to: apps) { data[$0.id] }.map(\.id) == [2, 3])
+        #expect(LibraryFilter.apply(MetadataFilters(genres: [5, 31], hdr: [.hdr]), to: apps) { data[$0.id] }.map(\.id) == [2])
+        #expect(LibraryFilter.apply(MetadataFilters(genres: [5, 31], themes: [1], hdr: [.hdr, .sdr]), to: apps) { data[$0.id] }.map(\.id) == [3])
+    }
+
+    @Test func theSheetsChoicesApplyOnlyOnConfirmAndClosingDropsThem() {
+        let applied = MetadataFilters(genres: [5])
+        var draft = LibraryFilterDraft(applied: applied)
+        #expect(draft.filters == applied)
+        #expect(draft.confirmed == nil)
+        draft.filters.toggleGenre(31)
+        draft.filters.toggleHDR(.hdr)
+        #expect(draft.confirmed == MetadataFilters(genres: [5, 31], hdr: [.hdr]))
+        // Closing without confirming: the next opening starts from the applied filter
+        #expect(LibraryFilterDraft(applied: applied).filters == applied)
+        // Reset clears the choices; confirming applies the empty filter
+        draft.reset()
+        #expect(draft.confirmed == MetadataFilters())
+        draft.filters.toggleGenre(5)
+        #expect(draft.confirmed == nil)
     }
 
     @Test func countsAreOnePerGameAndGenreAndThemeAreSeparate() {
@@ -54,19 +78,21 @@ private func game(genres: [Int] = [], themes: [Int] = [], hdr: NativeHDR = .unkn
         #expect(sorted.map(\.id) == [31, 12, 5])
     }
 
-    @Test func theSheetStartsOnTheSelectedGenreOrOnAll() {
-        let genres = [GameGenre(id: 5, name: "Shooter")]
+    @Test func theSheetStartsOnTheFirstSelectedGenreOrOnAll() {
+        let genres = [GameGenre(id: 31, name: "Adventure"), GameGenre(id: 5, name: "Shooter")]
         #expect(LibraryFilterIDs.start(MetadataFilters(), genres: genres) == "filter-genre-all")
-        #expect(LibraryFilterIDs.start(MetadataFilters(genreID: 5), genres: genres) == "filter-genre-5")
-        #expect(LibraryFilterIDs.start(MetadataFilters(genreID: 77), genres: genres) == "filter-genre-all")
+        #expect(LibraryFilterIDs.start(MetadataFilters(genres: [5]), genres: genres) == "filter-genre-5")
+        #expect(LibraryFilterIDs.start(MetadataFilters(genres: [5, 31]), genres: genres) == "filter-genre-31")
+        #expect(LibraryFilterIDs.start(MetadataFilters(genres: [77]), genres: genres) == "filter-genre-all")
     }
 
     @Test func aFocusedItemKnowsItsSection() {
         #expect(LibraryFilterIDs.section(of: LibraryFilterIDs.genre(5)) == 0)
         #expect(LibraryFilterIDs.section(of: LibraryFilterIDs.theme(nil)) == 1)
         #expect(LibraryFilterIDs.section(of: LibraryFilterIDs.hdr(.sdr)) == 2)
+        #expect(LibraryFilterIDs.section(of: LibraryFilterIDs.hdr(nil)) == 2)
         #expect(LibraryFilterIDs.section(of: LibraryFilterIDs.length(.over60)) == 3)
-        #expect(LibraryFilterIDs.section(of: LibraryFilterIDs.done) == nil)
+        #expect(LibraryFilterIDs.section(of: LibraryFilterIDs.show) == nil)
         #expect(LibraryFilterIDs.section(of: nil) == nil)
     }
 
@@ -75,7 +101,11 @@ private func game(genres: [Int] = [], themes: [Int] = [], hdr: NativeHDR = .unkn
         #expect(LibraryFilter.resultLine(shown: 55, total: 55, active: false) == "All 55 apps")
         #expect(LibraryFilter.resultLine(shown: 1, total: 1, active: false) == "All 1 app")
         #expect(LibraryFilter.hintLabel(MetadataFilters()) == "Filter")
-        #expect(LibraryFilter.hintLabel(MetadataFilters(genreID: 5, hdr: .hdr)) == "Filter \u{2022} 2 active")
+        #expect(LibraryFilter.hintLabel(MetadataFilters(genres: [5], hdr: [.hdr])) == "Filter \u{2022} 2 active")
+        // Two genres, a theme and HDR
+        #expect(LibraryFilter.hintLabel(MetadataFilters(genres: [5, 31], themes: [1], hdr: [.hdr])) == "Filter \u{2022} 4 active")
+        #expect(LibraryFilter.showLabel(matching: 12) == "Show 12 apps")
+        #expect(LibraryFilter.showLabel(matching: 1) == "Show 1 app")
         #expect(LibraryFilter.filteredNote(shown: 27, total: 55, pc: "PC") == "27 of 55 apps on PC")
         #expect(LibraryFilter.hdrLabel(.hdr) == "Native HDR")
         #expect(LibraryFilter.lengthLabel(.over60) == "60+ h")
@@ -90,6 +120,10 @@ private func game(genres: [Int] = [], themes: [Int] = [], hdr: NativeHDR = .unkn
         #expect(ShellHints.hints(context, kind: .controller).map(\.label)[1] == "Filter")
         context.screenHints.sheetOpen = true
         #expect(ShellHints.hints(context, kind: .controller).map(\.button) == [.pad(.south), .pad(.west), .pad(.north), .pad(.east)])
+        #expect(ShellHints.hints(context, kind: .controller).map(\.label) == ["Select", "Reset", "Apply", "Close"])
+        // A keyboard: Space toggles a chip, Return applies the choices
+        #expect(ShellHints.hints(context, kind: .keyboard).map(\.button) == [.key(.space), .key(.letterO), .key(.returnKey), .key(.escape)])
+        #expect(ShellHints.hints(context, kind: .keyboard).map(\.label) == ["Select", "Reset", "Apply", "Close"])
     }
 }
 
@@ -105,17 +139,17 @@ private func game(genres: [Int] = [], themes: [Int] = [], hdr: NativeHDR = .unkn
         let suite = defaults()
         let store = LibraryFilters(defaults: suite)
         #expect(!store.filters(hostID: "a").active)
-        store.set(MetadataFilters(genreID: 5, hdr: .hdr), hostID: "a")
-        store.set(MetadataFilters(length: .over60), hostID: "b")
-        #expect(store.filters(hostID: "a") == MetadataFilters(genreID: 5, hdr: .hdr))
-        #expect(store.filters(hostID: "b") == MetadataFilters(length: .over60))
+        store.set(MetadataFilters(genres: [5, 31], hdr: [.hdr]), hostID: "a")
+        store.set(MetadataFilters(length: [.over60]), hostID: "b")
+        #expect(store.filters(hostID: "a") == MetadataFilters(genres: [5, 31], hdr: [.hdr]))
+        #expect(store.filters(hostID: "b") == MetadataFilters(length: [.over60]))
         let again = LibraryFilters(defaults: suite)
-        #expect(again.filters(hostID: "a") == MetadataFilters(genreID: 5, hdr: .hdr))
+        #expect(again.filters(hostID: "a") == MetadataFilters(genres: [5, 31], hdr: [.hdr]))
         #expect(again.filters(hostID: "c") == MetadataFilters())
         // Resetting forgets the entry
         again.set(MetadataFilters(), hostID: "a")
         #expect(LibraryFilters(defaults: suite).filters(hostID: "a") == MetadataFilters())
-        #expect(LibraryFilters(defaults: suite).filters(hostID: "b").length == .over60)
+        #expect(LibraryFilters(defaults: suite).filters(hostID: "b").length == [.over60])
     }
 }
 

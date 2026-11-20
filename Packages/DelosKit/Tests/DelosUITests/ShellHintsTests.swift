@@ -198,10 +198,10 @@ import Testing
         #expect(labels(context) == ["Adjust", "Previous tab", "Next tab", "Change", "Options", "Back"])
     }
 
-    @Test func theLibraryFilterSheetClosesWithYAndB() {
+    @Test func theLibraryFilterSheetAppliesWithYAndClosesWithB() {
         var context = ShellHints.Context(screen: .home(hostID: "h"))
         context.screenHints.sheetOpen = true
-        #expect(labels(context) == ["Select", "Reset", "Close", "Close"])
+        #expect(labels(context) == ["Select", "Reset", "Apply", "Close"])
     }
 
     @Test func aRowPopoverHasThePickersHints() {

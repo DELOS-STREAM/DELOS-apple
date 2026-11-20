@@ -82,7 +82,7 @@ enum ShellHints {
         case .keyboard:
             var shown = Set<KeyCap>()
             return hints.compactMap { hint -> Hint? in
-                guard let cap = KeyCap.of(hint.button), shown.insert(cap).inserted else { return nil }
+                guard let cap = hint.key ?? KeyCap.of(hint.button), shown.insert(cap).inserted else { return nil }
                 return map(hint, .key(cap))
             }
         }
@@ -115,8 +115,12 @@ enum ShellHints {
         switch c.screen {
         case .home:
             if c.screenHints.sheetOpen {
-                // The library's filter sheet (Android's `Layer.Filters`): Y closes it as B does, unlike the Artwork sheet's Done
-                return [select, hint(.west, L("shell_hint_reset")), hint(.north, L("shell_hint_close")), hint(.east, L("shell_hint_close"))]
+                // The library's filter sheet (Android's `Layer.Filters`): Y applies the choices, B drops them. On a keyboard Space
+                // toggles a chip and Return applies (`HomeScreen.captureSheet`)
+                return [
+                    Hint(button: .pad(.south), label: L("shell_hint_select"), key: .space), hint(.west, L("shell_hint_reset")),
+                    Hint(button: .pad(.north), label: L("shell_hint_apply"), key: .returnKey), hint(.east, L("shell_hint_close")),
+                ]
             }
             let filter = c.screenHints.filterLabel.map { [Hint(button: .pad(.north), label: $0, tappable: true, icon: Symbols.filter)] } ?? []
             return [hint(.south, L("shell_hint_start"))] + filter + [menu] + optionsHint

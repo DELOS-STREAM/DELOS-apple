@@ -3,14 +3,16 @@ import DelosInput
 import SwiftUI
 
 // The library filter (`FilterModal.kt` of DELOS for Android): a centered glass panel with the genre, theme, HDR support and
-// duration chips and the live count, Reset and Done in its footer. The choices apply at once.
+// duration chips and the live count, Reset and "Show N apps" in its footer. A chip toggles its value; values in one row
+// combine with OR, rows with AND. The library changes only when the choices are confirmed (the pill, Y, Return on a chip).
 
 /// What the filter sheet needs from the home screen.
 struct LibraryFilterState {
+    /// The choices of the open sheet (not applied yet).
     let filters: MetadataFilters
     /// The metadata of every game of the library, in the library's order (nil: not known yet).
     let games: [GameMetadata?]
-    /// How many of them the filters let through.
+    /// How many of them the choices let through.
     let matching: Int
 }
 
@@ -18,16 +20,16 @@ struct LibraryFilterState {
 enum LibraryFilterIDs {
     static func genre(_ id: Int?) -> String { "filter-genre-\(id.map(String.init) ?? "all")" }
     static func theme(_ id: Int?) -> String { "filter-theme-\(id.map(String.init) ?? "all")" }
-    static func hdr(_ filter: HDRFilter) -> String { "filter-hdr-\(filter.rawValue)" }
-    static func length(_ filter: LengthFilter) -> String { "filter-length-\(filter.rawValue)" }
+    static func hdr(_ filter: HDRFilter?) -> String { "filter-hdr-\(filter?.rawValue ?? "any")" }
+    static func length(_ filter: LengthFilter?) -> String { "filter-length-\(filter?.rawValue ?? "any")" }
     static let reset = "filter-reset"
-    static let done = "filter-done"
+    static let show = "filter-show"
     /// The reset row of the filtered-empty state.
     static let emptyReset = "filter-empty-reset"
 
-    /// The option the focus starts on: the selected genre (it must be one of the chips), else "All".
+    /// The option the focus starts on: the first selected genre among the chips, else "All".
     static func start(_ filters: MetadataFilters, genres: [GameGenre]) -> String {
-        genre(filters.genreID.flatMap { id in genres.contains { $0.id == id } ? id : nil })
+        genre(genres.first { filters.genres.contains($0.id) }?.id)
     }
 
     /// The section (0 genre, 1 theme, 2 HDR, 3 duration) the item [id] is in; nil for the footer's buttons.
@@ -41,9 +43,10 @@ enum LibraryFilterIDs {
 struct LibraryFilterSheet: View {
     let state: LibraryFilterState
     let focus: FocusModel
-    let onChange: (MetadataFilters) -> Void
+    /// Changes the choices in place: a second press before the sheet is drawn again builds on the first.
+    let onEdit: ((inout MetadataFilters) -> Void) -> Void
     let onReset: () -> Void
-    let onClose: () -> Void
+    let onConfirm: () -> Void
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @State private var contentHeight = 0.0
@@ -76,45 +79,53 @@ struct LibraryFilterSheet: View {
                     ChipGlideHost {
                         VStack(alignment: .leading, spacing: stage.px(34 * k)) {
                             section(0, Symbols.genreUnknown, L("filters_section_genre")) {
-                                chip(L("filters_all"), selected: filters.genreID == nil, id: LibraryFilterIDs.genre(nil), count: games.count) {
-                                    change { $0.genreID = nil }
+                                chip(L("filters_all"), selected: filters.genres.isEmpty, id: LibraryFilterIDs.genre(nil), count: games.count) {
+                                    change { $0.genres = [] }
                                 }
                                 ForEach(genres, id: \.id) { genre in
-                                    chip(TagLook.genreName(genre), selected: filters.genreID == genre.id, id: LibraryFilterIDs.genre(genre.id),
+                                    chip(TagLook.genreName(genre), selected: filters.genres.contains(genre.id), id: LibraryFilterIDs.genre(genre.id),
                                          icon: TagLook.genreIcon(genre.id), count: genreCounts[genre.id] ?? 0) {
-                                        change { $0.genreID = genre.id }
+                                        change { $0.toggleGenre(genre.id) }
                                     }
                                 }
                             }
                             divider
                             // Without any theme in the library there is nothing to choose (a theme that was chosen stays visible)
-                            if !themes.isEmpty || filters.themeID != nil {
+                            if !themes.isEmpty || !filters.themes.isEmpty {
                                 section(1, Symbols.themes, L("filters_section_theme")) {
-                                    chip(L("filters_all"), selected: filters.themeID == nil, id: LibraryFilterIDs.theme(nil), count: games.count) {
-                                        change { $0.themeID = nil }
+                                    chip(L("filters_all"), selected: filters.themes.isEmpty, id: LibraryFilterIDs.theme(nil), count: games.count) {
+                                        change { $0.themes = [] }
                                     }
                                     ForEach(themes, id: \.id) { theme in
-                                        chip(TagLook.themeName(theme), selected: filters.themeID == theme.id, id: LibraryFilterIDs.theme(theme.id),
+                                        chip(TagLook.themeName(theme), selected: filters.themes.contains(theme.id), id: LibraryFilterIDs.theme(theme.id),
                                              icon: TagLook.themeIcon(theme.id), count: themeCounts[theme.id] ?? 0) {
-                                            change { $0.themeID = theme.id }
+                                            change { $0.toggleTheme(theme.id) }
                                         }
                                     }
                                 }
                                 divider
                             }
                             section(2, Symbols.hdrOn, L("filters_section_hdr")) {
-                                ForEach([HDRFilter.any, .hdr, .sdr, .unknown], id: \.self) { option in
-                                    chip(LibraryFilter.hdrLabel(option), selected: filters.hdr == option, id: LibraryFilterIDs.hdr(option),
+                                chip(L("filters_hdr_any"), selected: filters.hdr.isEmpty, id: LibraryFilterIDs.hdr(nil)) {
+                                    change { $0.hdr = [] }
+                                }
+                                ForEach(HDRFilter.allCases, id: \.self) { option in
+                                    chip(LibraryFilter.hdrLabel(option), selected: filters.hdr.contains(option), id: LibraryFilterIDs.hdr(option),
                                          icon: LibraryFilter.hdrIcon(option)) {
-                                        change { $0.hdr = option }
+                                        change { $0.toggleHDR(option) }
                                     }
                                 }
                             }
                             divider
+                            // The last row: one press down reaches the pill that applies the choices, wherever the focus is in the row
                             section(3, Symbols.completionTime, L("filters_section_duration")) {
-                                ForEach([LengthFilter.any, .under10, .from10To30, .from30To60, .over60, .unknown], id: \.self) { option in
-                                    chip(LibraryFilter.lengthLabel(option), selected: filters.length == option, id: LibraryFilterIDs.length(option)) {
-                                        change { $0.length = option }
+                                chip(L("filters_length_any"), selected: filters.length.isEmpty, id: LibraryFilterIDs.length(nil), down: LibraryFilterIDs.show) {
+                                    change { $0.length = [] }
+                                }
+                                ForEach(LengthFilter.allCases, id: \.self) { option in
+                                    chip(LibraryFilter.lengthLabel(option), selected: filters.length.contains(option), id: LibraryFilterIDs.length(option),
+                                         down: LibraryFilterIDs.show) {
+                                        change { $0.toggleLength(option) }
                                     }
                                 }
                             }
@@ -159,9 +170,7 @@ struct LibraryFilterSheet: View {
     }
 
     private func change(_ edit: (inout MetadataFilters) -> Void) {
-        var next = state.filters
-        edit(&next)
-        onChange(next)
+        onEdit(edit)
     }
 
     private func header(_ filters: MetadataFilters) -> some View {
@@ -194,8 +203,9 @@ struct LibraryFilterSheet: View {
             } else {
                 pill(L("filters_reset"), Symbols.reset, focused: false, primary: false).opacity(0.4)
             }
-            FocusItem(id: LibraryFilterIDs.done, model: focus, clickCue: .back, action: onClose) { focused in
-                pill(L("filters_done"), Symbols.check, focused: focused, primary: true)
+            // The confirm cue comes from [onConfirm], which also closes the sheet
+            FocusItem(id: LibraryFilterIDs.show, model: focus, clickCue: nil, action: onConfirm) { focused in
+                pill(LibraryFilter.showLabel(matching: state.matching), Symbols.check, focused: focused, primary: true)
             }
         }
     }
@@ -236,8 +246,10 @@ struct LibraryFilterSheet: View {
         .id("filter-section-\(index)")
     }
 
-    private func chip(_ label: String, selected: Bool, id: String, icon: String? = nil, count: Int? = nil, action: @escaping () -> Void) -> some View {
-        FocusItem(id: id, model: focus, action: action) { focused in
+    private func chip(
+        _ label: String, selected: Bool, id: String, icon: String? = nil, count: Int? = nil, down: String? = nil, action: @escaping () -> Void
+    ) -> some View {
+        FocusItem(id: id, model: focus, moves: down.map { [.down: AnyHashable($0)] } ?? [:], action: action) { focused in
             LibraryFilterChip(label: label, selected: selected, focused: focused, icon: icon, count: count)
         }
     }

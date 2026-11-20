@@ -80,11 +80,49 @@ struct MetadataPolicyTests {
     @Test func filtersPreserveUnknownAndDurationBoundaries() {
         let time = CompletionTime(id: 1, name: "Game", seconds: 36_000, url: "https://example.invalid/game/1")
         let data = GameMetadata(candidate: MetadataCandidate(id: 1, name: "Game", genres: [GameGenre(id: 12, name: "RPG")]), hdr: HDREvidence(support: .hdr), completion: time)
-        #expect(!MetadataFilters(length: .under10).matches(data))
-        #expect(MetadataFilters(genreID: 12, hdr: .hdr, length: .from10To30).matches(data))
-        #expect(!MetadataFilters(genreID: 7).matches(data))
-        #expect(MetadataFilters(hdr: .unknown, length: .unknown).matches(nil))
-        #expect(!MetadataFilters(hdr: .hdr).matches(data, builtIn: true))
+        #expect(!MetadataFilters(length: [.under10]).matches(data))
+        #expect(MetadataFilters(genres: [12], hdr: [.hdr], length: [.from10To30]).matches(data))
+        #expect(!MetadataFilters(genres: [7]).matches(data))
+        #expect(MetadataFilters(hdr: [.unknown], length: [.unknown]).matches(nil))
+        #expect(!MetadataFilters(hdr: [.hdr]).matches(data, builtIn: true))
+    }
+    @Test func valuesInARowCombineWithOrAndRowsWithAnd() {
+        func game(_ genre: Int, _ themes: [Int], _ hdr: NativeHDR, hours: Int64) -> GameMetadata {
+            GameMetadata(
+                candidate: MetadataCandidate(id: 1, name: "Game", genres: [GameGenre(id: genre, name: "g")], themes: themes.map { GameGenre(id: $0, name: "t") }),
+                hdr: HDREvidence(support: hdr), completion: CompletionTime(id: 1, name: "Game", seconds: hours * 3600, url: ""))
+        }
+        // Either genre
+        #expect(MetadataFilters(genres: [5, 12]).matches(game(5, [], .sdr, hours: 5)))
+        #expect(MetadataFilters(genres: [5, 12]).matches(game(12, [], .sdr, hours: 5)))
+        #expect(!MetadataFilters(genres: [5, 12]).matches(game(1, [], .sdr, hours: 5)))
+        #expect(MetadataFilters(hdr: [.hdr, .unknown]).matches(game(1, [], .unknown, hours: 5)))
+        #expect(!MetadataFilters(hdr: [.hdr, .unknown]).matches(game(1, [], .sdr, hours: 5)))
+        #expect(MetadataFilters(length: [.under10, .over60]).matches(game(1, [], .sdr, hours: 70)))
+        #expect(!MetadataFilters(length: [.under10, .over60]).matches(game(1, [], .sdr, hours: 20)))
+        // Two genres, a theme and HDR: either genre, and the theme, and HDR
+        let filters = MetadataFilters(genres: [5, 12], themes: [19], hdr: [.hdr])
+        #expect(filters.activeCount == 4)
+        #expect(filters.matches(game(12, [1, 19], .hdr, hours: 5)))
+        #expect(!filters.matches(game(12, [1], .hdr, hours: 5)))
+        #expect(!filters.matches(game(12, [19], .sdr, hours: 5)))
+        #expect(!filters.matches(game(1, [19], .hdr, hours: 5)))
+    }
+    @Test func togglingAddsAValueAndASecondToggleRemovesIt() {
+        var filters = MetadataFilters()
+        filters.toggleGenre(5); filters.toggleGenre(12); filters.toggleTheme(19); filters.toggleHDR(.hdr); filters.toggleLength(.under10)
+        #expect(filters == MetadataFilters(genres: [5, 12], themes: [19], hdr: [.hdr], length: [.under10]))
+        filters.toggleGenre(5)
+        #expect(filters.genres == [12])
+        filters.toggleGenre(12); filters.toggleTheme(19); filters.toggleHDR(.hdr); filters.toggleLength(.under10)
+        #expect(filters == MetadataFilters())
+    }
+    @Test func filtersRoundTripAndAFilterWithOneValuePerRowReadsAsThoseValues() throws {
+        let filters = MetadataFilters(genres: [12, 5], themes: [19], hdr: [.hdr, .unknown], length: [.over60])
+        #expect(try JSONDecoder().decode(MetadataFilters.self, from: JSONEncoder().encode(filters)) == filters)
+        let old = Data(#"{"genreID":12,"themeID":19,"hdr":"sdr","length":"any"}"#.utf8)
+        #expect(try JSONDecoder().decode(MetadataFilters.self, from: old) == MetadataFilters(genres: [12], themes: [19], hdr: [.sdr]))
+        #expect(try JSONDecoder().decode(MetadataFilters.self, from: Data(#"{"hdr":"any","length":"any"}"#.utf8)) == MetadataFilters())
     }
     @Test func concurrentPacerReservationsAreDistinctWithoutWallClockSleeps() async throws {
         let base = ContinuousClock().now

@@ -130,7 +130,7 @@ import Testing
             build: { _ in FocusModel(initial: HomeScreen.initialFocus) },
             seed: { fx in
                 if seeded { fx.seedMetadata() }
-                if filtered { fx.actions.libraryFilters.set(MetadataFilters(genreID: 999), hostID: ShellFixture.hostID) }
+                if filtered { fx.actions.libraryFilters.set(MetadataFilters(genres: [999]), hostID: ShellFixture.hostID) }
             }
         ) { fx, focus in
             HomeScreen(hostID: ShellFixture.hostID, focus: focus, actions: fx.actions)
@@ -205,7 +205,7 @@ import Testing
             Case(name: "library filter sheet", initial: start, minItems: 10, scrolled: { _ in true }), on: d,
             build: { _ in FocusModel(initial: start) }
         ) { _, focus in
-            LibraryFilterSheet(state: state, focus: focus, onChange: { _ in }, onReset: {}, onClose: {})
+            LibraryFilterSheet(state: state, focus: focus, onEdit: { _ in }, onReset: {}, onConfirm: {})
         })
     }
 

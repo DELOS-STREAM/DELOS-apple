@@ -55,6 +55,9 @@ public final class MenuInput {
     /// A text field is typed in (the root keeps it): the keys that are letters, Tab or brackets there are the field's, so
     /// only the arrows, Return, Space and Escape still emit (``keyCommand(_:typing:modified:)``).
     public var typing = false
+    /// The command being handled comes from the keyboard's Return or Enter (Space, A and a click are also accepts): a sheet
+    /// whose choices apply on confirm (the library filter) applies them with it. Set only while the handler runs.
+    public private(set) var fromReturn = false
 
     /// - Parameters:
     ///   - only: the commands to emit; nil: all of them.
@@ -107,12 +110,15 @@ public final class MenuInput {
 
     /// A press: the command at once, and for a direction the repeats while [source] holds it. A source that is already
     /// down (the keyboard's own key repeat reaches the app as more "down" events) is not a new press: one press moves
-    /// the focus one step, and the repeats are this class's alone.
-    func press(_ command: MenuCommand, from source: AnyHashable, input: InputKind = .controller) {
+    /// the focus one step, and the repeats are this class's alone. [fromReturn]: the keyboard's Return or Enter
+    /// (``fromReturn``).
+    func press(_ command: MenuCommand, from source: AnyHashable, input: InputKind = .controller, fromReturn: Bool = false) {
         guard down.insert(source).inserted else { return }
         ControllerGlyphs.shared.note(input)
         release(nil)
+        self.fromReturn = fromReturn
         handler(command, 0)
+        self.fromReturn = false
         guard Self.repeats(command) else { return }
         let (after, every) = (repeatAfter, repeatEvery)
         let repeating = Task { [weak self] in
@@ -217,7 +223,7 @@ public final class MenuInput {
                 let source = AnyHashable(["key", AnyHashable(key.rawValue)])
                 guard pressed else { return self.lift(source) }
                 guard let command = Self.keyCommand(key, typing: self.typing, modified: modified), self.emits(command) else { return }
-                self.press(command, from: source, input: .keyboard)
+                self.press(command, from: source, input: .keyboard, fromReturn: key == .returnOrEnter || key == .keypadEnter)
             }
         }
     }

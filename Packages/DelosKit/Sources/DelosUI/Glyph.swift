@@ -4,7 +4,7 @@ import SwiftUI
 /// A key of a hardware keyboard, drawn with the shared font's Mac key caps: the key of each button of the shell
 /// (``MenuInput/keyCommand(_:typing:modified:)``, docs/ARCHITECTURE.md, "Input kind and the hints").
 enum KeyCap: Hashable, Sendable {
-    case returnKey, escape, tab, letterF, letterO, leftBracket, rightBracket, arrows
+    case returnKey, space, escape, tab, letterF, letterO, leftBracket, rightBracket, arrows
 
     /// The key that does what the controller's [button] does; nil for one no key has (the guide, the sticks).
     static func of(_ button: HintButton) -> KeyCap? {
@@ -26,6 +26,7 @@ enum KeyCap: Hashable, Sendable {
     var symbols: [String] {
         switch self {
         case .returnKey: [Symbols.macReturn]
+        case .space: [Symbols.macSpace]
         case .escape: [Symbols.macEscape]
         case .tab: [Symbols.macTab]
         case .letterF: [Symbols.macLetterF]
@@ -60,6 +61,9 @@ struct Hint: Hashable, Sendable {
     var tappable = false
     /// The symbol of the pill a tappable hint becomes (the filter's funnel), so it reads as a button.
     var icon: String? = nil
+    /// The key that does it on a keyboard when that is not the button's own (``KeyCap/of(_:)``): in the library filter Space
+    /// toggles a chip and Return applies the choices.
+    var key: KeyCap? = nil
 }
 
 /// Sizes for complete controller caps and the unchanged non-controller hints.
