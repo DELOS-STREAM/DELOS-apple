@@ -149,7 +149,8 @@ struct HomeScreen: View {
                         // animations are released meanwhile
                         GameLibrary(hostID: hostID, apps: visible, focus: focus, actions: actions)
                             .environment(\.artMotion, artMotion(visible: !sheetOpen && overview == nil))
-                            .environment(\.overviewDescent, OverviewDescent(active: overview?.shown ?? false, appID: overview?.app.id))
+                            .environment(\.overviewDescent, OverviewDescent(active: overview?.shown ?? false, appID: overview?.app.id,
+                                                                         visibleCoverDistance: overview?.visibleCoverDistance ?? 0))
                             .environment(\.overviewLauncher, launcher)
                     }
                 }
@@ -200,8 +201,9 @@ struct HomeScreen: View {
             }
         }
         .onChange(of: ScreenFilter(label: offeredNow ? LibraryFilter.hintLabel(filters) : nil, open: sheetOpen, overview: overview != nil,
-                                   viewer: viewerItem), initial: true) { _, now in
-            navigator.setHints(ScreenHints(sheetOpen: now.open, filterLabel: now.label, overview: now.overview, overviewViewer: now.viewer), from: focus)
+                                   viewer: viewerItem, viewerControlsVisible: overview?.viewerControlsVisible ?? true), initial: true) { _, now in
+            navigator.setHints(ScreenHints(sheetOpen: now.open, filterLabel: now.label, overview: now.overview, overviewViewer: now.viewer,
+                                           overviewViewerControlsVisible: now.viewerControlsVisible), from: focus)
         }
         .onAppear {
             launcher.canOpen = { [metadata] app in metadata.hasOverview(app) }
@@ -218,6 +220,7 @@ struct HomeScreen: View {
         let open: Bool
         let overview: Bool
         let viewer: OverviewViewerItem?
+        let viewerControlsVisible: Bool
     }
 
     /// The item of the overview's open viewer.
@@ -232,25 +235,18 @@ struct HomeScreen: View {
     @ViewBuilder private func overviewLayer(listed: [HostApp]) -> some View {
         if let session = overview {
             GameOverview(session: session, actions: actions, library: listed, onClose: closeOverview, onJump: jump, libraryFocus: focus)
+                // Closing, it only shows: touches already reach the dashboard's row under it
+                .allowsHitTesting(session.phase != .closing)
                 // The overview's cover, logo and hero play by the library's rule, not under the full-screen viewer
                 .environment(\.artMotion, artMotion(visible: session.viewer == nil))
-            // Always there while the overview is, hidden once landed: inserted with the closing's animation it would start at
-            // its end, the card's place, instead of flying there
-            let covers = HomeMetrics(stage: stage).covers
-            OverviewFlight(hostID: hostID, app: session.app, from: session.source, to: overviewSlot,
-                           fromCorner: stage.px(covers.corner * CoverGeometry.focusScale), toCorner: stage.px(30),
-                           fromArt: session.flightFrom, toArt: session.flightTo, wide: session.wide, coverScale: covers.scale,
-                           progress: session.flight)
-                .opacity(session.landed ? 0 : 1)
+                .onChange(of: session.viewer) { _, now in
+                    if now == nil { session.viewerControlsVisible = true }
+                }
             if let index = session.viewer, session.viewerMedia.indices.contains(index) {
-                OverviewViewer(session: session, media: session.viewerMedia, index: index)
+                OverviewViewer(session: session, media: session.viewerMedia, index: index,
+                               onControlsVisibilityChanged: { session.viewerControlsVisible = $0 })
             }
         }
-    }
-
-    /// The header's cover slot in the screen's space (points): 150 px in, 150 px down, 340 × 510.
-    private var overviewSlot: CGRect {
-        CGRect(x: stage.px(150 + stage.safe.leading), y: stage.px(150), width: stage.px(340), height: stage.px(510))
     }
 
     /// Whether animated artwork may play on this screen (`rememberArtworkMotion`): the screen's part [visible] and nothing
@@ -290,6 +286,13 @@ struct HomeScreen: View {
         guard overview == nil, !sheetOpen, metadata.hasOverview(app), let source = cardFrame(app, drag: drag) else { return }
         let session = OverviewSession(hostID: hostID, app: app, coverID: AnyHashable(GameLibrary.id(app)), source: source,
                                       details: metadata.details(for: app))
+        let apps = LibraryFilter.apply(filters, to: listed) { metadata.data(for: $0) }
+        let selectedIndex = apps.firstIndex(where: { $0.id == app.id }) ?? 0
+        let viewport = CGRect(origin: homeOrigin, size: CGSize(width: stage.px(stage.width), height: stage.px(stage.height)))
+        session.visibleCoverDistance = apps.indices.compactMap { index -> Int? in
+            guard let frame = focus.registeredFrames[AnyHashable(GameLibrary.id(apps[index]))], frame.intersects(viewport) else { return nil }
+            return abs(index - selectedIndex)
+        }.max() ?? 0
         // The pictures come from memory: nothing loads or restarts while the card flies
         session.wide = source.width > source.height
         session.coverStill = art.cachedCard(hostID: hostID, app: app, wide: false)
@@ -297,68 +300,80 @@ struct HomeScreen: View {
         session.flightTo = session.coverStill
         overview = session
         actions.layers.feedback?.play(.open)
-        let ms = reducedMotion ? 280.0 : OverviewMotion.flight
         Task { @MainActor in
-            // The flight starts on the next frame, from the card's place
+            // The flight starts on the next frame, from the card's place; a spring, so a Back mid-flight turns it around
+            // from where it is, at its speed
             try? await Task.sleep(for: .milliseconds(16))
-            withAnimation(reducedMotion ? .easeOut(duration: 0.28) : .timingCurve(0.2, 0.9, 0.25, 1, duration: ms / 1000)) { session.flight = 1 }
+            withAnimation(reducedMotion ? .easeOut(duration: 0.28) : OverviewMotion.flightOpenSpring, completionCriteria: .logicallyComplete) {
+                session.flight = 1
+            } completion: {
+                guard overview === session, session.phase == .opening else { return }
+                session.landed = true
+                session.phase = .open
+            }
             session.shown = true
             try? await Task.sleep(for: .milliseconds(Int(reducedMotion ? 0 : OverviewMotion.ratingsDelay)))
-            session.ratingsOn = true
-            try? await Task.sleep(for: .milliseconds(Int(max(ms - (reducedMotion ? 0 : OverviewMotion.ratingsDelay), 0))))
-            guard overview === session else { return }
-            session.landed = true
-            session.phase = .open
-            if session.closeWhenOpen { closeOverview() }
+            if session.phase == .opening || session.phase == .open { session.ratingsOn = true }
         }
     }
 
     /// Back to the dashboard, the opening reversed: the page scrolls to its top, the cover flies back into its card, the
-    /// other covers return. Back while still opening waits for the opening, then reverses.
+    /// other covers return. Back while still opening reverses the flight at once, from where the cover is.
     private func closeOverview() {
         guard let session = overview, session.phase != .closing else { return }
-        guard session.phase == .open else { session.closeWhenOpen = true; return }
+        let wasOpen = session.phase == .open
         session.phase = .closing
         actions.layers.feedback?.play(.back)
         Task { @MainActor in
-            if session.scroll > 1 {
+            if wasOpen, session.scroll > 1 {
                 withAnimation(reducedMotion ? nil : .timingCurve(0.65, 0, 0.35, 1, duration: 0.42)) { session.position.scrollTo(y: 0) }
                 try? await Task.sleep(for: .milliseconds(reducedMotion ? 0 : 430))
             }
             session.ring.hide()
-            if let source = cardFrame(session.app) { session.source = source }
-            // The header's picture as it shows now (its animation's frame) flies back into the card's still (the library's
-            // animations were released while the overview was open)
-            session.wide = session.source.width > session.source.height
-            session.flightTo = AnimatedFrames.last(art.animationKey(hostID: hostID, appID: session.app.id, kind: .cover)) ?? session.coverStill
-            session.flightFrom = art.cachedCard(hostID: hostID, app: session.app, wide: session.wide)
+            if wasOpen {
+                if let source = cardFrame(session.app) { session.source = source }
+                // The header's picture as it shows now (its animation's frame) flies back into the card's still (the
+                // library's animations were released while the overview was open)
+                session.wide = session.source.width > session.source.height
+                session.flightTo = AnimatedFrames.last(art.animationKey(hostID: hostID, appID: session.app.id, kind: .cover)) ?? session.coverStill
+                session.flightFrom = art.cachedCard(hostID: hostID, app: session.app, wide: session.wide)
+            }
             session.landed = false
-            withAnimation(reducedMotion ? .easeIn(duration: 0.24) : .timingCurve(0.65, 0, 0.35, 1, duration: OverviewMotion.flightBack / 1000)) { session.flight = 0 }
+            withAnimation(reducedMotion ? .easeIn(duration: 0.24) : OverviewMotion.flightCloseSpring, completionCriteria: .logicallyComplete) {
+                session.flight = 0
+            } completion: {
+                finishClose(session)
+            }
             session.shown = false
-            try? await Task.sleep(for: .milliseconds(Int(reducedMotion ? 280 : OverviewMotion.flightBack + 20)))
-            if overview === session { overview = nil }
-            focus.focus(session.coverID)
         }
     }
 
-    /// A similar game in the library: its own overview, in place of this one (the library's focus goes to its cover).
-    private func jump(_ app: HostApp) {
-        guard let current = overview else { return }
-        focus.focus(GameLibrary.id(app))
-        let session = OverviewSession(hostID: hostID, app: app, coverID: AnyHashable(GameLibrary.id(app)), source: current.source,
-                                      details: metadata.details(for: app))
-        session.coverStill = art.cachedCard(hostID: hostID, app: app, wide: false)
-        session.flight = 1
-        session.landed = true
-        session.phase = .open
-        actions.layers.feedback?.play(.open)
-        overview = session
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(16))
-            session.shown = true
-            try? await Task.sleep(for: .milliseconds(Int(reducedMotion ? 0 : OverviewMotion.ratingsDelay)))
-            session.ratingsOn = true
+    /// The flight back has landed: the overview goes; the focus stays on the card, or an owned similar game's card takes
+    /// it (the row brings it in) and its own overview opens from there.
+    private func finishClose(_ session: OverviewSession) {
+        guard overview === session else { return }
+        overview = nil
+        // A swipe that opened it may have left its drag state behind (its end never came): the row's own drags are free
+        launcher.dragApp = nil
+        launcher.dragOffset = 0
+        guard let target = session.jumpTarget else {
+            focus.focus(session.coverID)
+            return
         }
+        let targetID = AnyHashable(GameLibrary.id(target))
+        focus.focus(targetID)
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(reducedMotion ? 60 : 460))
+            guard overview == nil, focus.focused == targetID else { return }
+            openOverview(target)
+        }
+    }
+
+    /// An owned Similar game: this overview closes with the reverse flight, then the chosen game's opens from its card.
+    private func jump(_ app: HostApp) {
+        guard let current = overview, current.phase != .closing, app.id != current.app.id else { return }
+        current.jumpTarget = app
+        closeOverview()
     }
 
     /// Every command while the overview is open: the viewer's, then Back and Up from the header close it, the rest walks
@@ -658,7 +673,7 @@ struct GameLibrary: View {
             GameInfo(hostID: hostID, app: focused, pcName: host?.name ?? "", running: running == focused.id,
                      virtualDisplay: VirtualDisplayChip.shows(app: focused, support: host?.virtualDisplay),
                      playtime: actions.playtime(hostID: hostID, appID: focused.id), metrics: metrics,
-                     titleAway: descent.appID != nil)
+                     titleAway: descent.active)
                 .padding(.leading, stage.px(metrics.infoStart))
                 .padding(.top, stage.px(metrics.titleTop))
                 // Behind an open context menu the info block dims to 40 %
@@ -667,7 +682,7 @@ struct GameLibrary: View {
                 // The overview opens: the info row rises out and the title leaves at once (it flies into the header)
                 .offset(y: descent.active && !reduceMotion ? stage.px(OverviewMotion.infoLift) : 0)
                 .opacity(descent.active ? 0 : 1)
-                .animation(descent.active ? Motion.out(OverviewMotion.homeOut) : .timingCurve(0.65, 0, 0.35, 1, duration: OverviewMotion.flightBack / 1000),
+                .animation(descent.active ? Motion.out(OverviewMotion.homeOut) : .timingCurve(0.7, 0, 0.84, 0, duration: OverviewMotion.homeOut / 1000),
                            value: descent.active)
             ScrollView(.horizontal, showsIndicators: false) {
                 LibraryCovers(
@@ -907,7 +922,7 @@ private struct GameInfo: View {
     let virtualDisplay: Bool
     let playtime: Playtime
     let metrics: HomeMetrics
-    /// The title is in the game overview (its flight there and back): hidden here, at once, until it has flown back.
+    /// The overview is open: the title fades out here and the overview's fades in (``TitleCrossfade``), and back.
     let titleAway: Bool
     @Environment(GameMetadataModel.self) private var metadata
     @Environment(HomeArt.self) private var art
@@ -925,7 +940,7 @@ private struct GameInfo: View {
         let gameColors = matchGameColors ? art.gameColors(GameArt.key(hostID, app.id)) : nil
         VStack(alignment: .leading, spacing: 0) {
             GameTitle(hostID: hostID, app: app, metrics: metrics, width: metrics.infoWidth)
-                .opacity(titleAway ? 0 : 1)
+                .modifier(TitleCrossfade(shown: titleAway, here: false))
             Spacer().frame(height: stage.px(metrics.titleGap))
             InfoRow(playtime: playtime, height: metrics.infoHeight,
                     hasFacts: running || hdr != nil || completion != nil || virtualDisplay,
@@ -1137,6 +1152,14 @@ private struct Cover: View {
     @State private var animating = false
     /// Some of the cover is on screen.
     @State private var visible = false
+    @AppStorage("overview.touchLiftShown") private var touchLiftShown = false
+    @Environment(\.reducedMotion) private var reduced
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var cueLift = 0.0
+
+    private var touchCueActive: Bool {
+        focused && visible && artMotion && scenePhase == .active && ControllerGlyphs.shared.kind == .touch && metadata.hasOverview(app)
+    }
 
     /// A lookup that never finishes (offline, failed) stops being waited for after this long.
     static let lookupGiveUp = Duration.seconds(20)
@@ -1146,7 +1169,7 @@ private struct Cover: View {
         let tone = CoverTone.of(focused: focused, menuOpen: menuOpen)
         let shape = RoundedRectangle(cornerRadius: stage.px(geometry.corner))
         // The Game info hint inside the focused cover, at its bottom (not on a compact stage, whose covers are small)
-        let hint = focused && !stage.compact && metadata.hasOverview(app)
+        let hint = focused && (!stage.compact || ControllerGlyphs.shared.kind == .touch) && metadata.hasOverview(app)
         ZStack(alignment: .topLeading) {
             shape.fill(colors.surface2.color)
             ZStack {
@@ -1213,7 +1236,7 @@ private struct Cover: View {
                         .frame(height: stage.px(geometry.height * 0.36))
                         .allowsHitTesting(false)
                         .transition(.opacity)
-                    GameInfoHint(kind: ControllerGlyphs.shared.kind, onOpen: openInfo)
+                    GameInfoHint(kind: ControllerGlyphs.shared.kind, onOpen: openInfo, active: visible && artMotion)
                         .padding(.bottom, stage.px(22))
                         .transition(.opacity.combined(with: .offset(y: stage.px(8))))
                 }
@@ -1231,6 +1254,16 @@ private struct Cover: View {
         .focusLook(focused, scale: 1.055, ring: 5, glowBlur: 80, glowY: 30, corner: geometry.corner, anchor: wide ? .trailing : .center, sweep: true,
                    glowSpread: -18, gap: 5)
         .task(id: "\(app.id)#\(art.artwork.version)") { await load() }
+        .offset(y: stage.px(cueLift))
+        .task(id: touchCueActive) {
+            guard touchCueActive, !touchLiftShown else { return }
+            touchLiftShown = true
+            guard !reduced else { return }
+            withAnimation(Motion.out(420)) { cueLift = -24 }
+            do { try await Task.sleep(for: .milliseconds(500)) }
+            catch { cueLift = 0; return }
+            withAnimation(Motion.out(620)) { cueLift = 0 }
+        }
         // The picture says nothing to VoiceOver: the cover reads as the game's name, its badge and its corner marks
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(([app.title, badge?.label].compactMap { $0 } + marks.map(\.label)).joined(separator: ", "))

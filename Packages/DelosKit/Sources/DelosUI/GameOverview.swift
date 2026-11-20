@@ -44,12 +44,15 @@ final class OverviewSession {
     /// The streaming section's numbers have counted up.
     var streamingOn = false
     var details: GameDetails?
-    /// Back came while the overview was still opening: it closes once open.
-    @ObservationIgnored var closeWhenOpen = false
     let focus = FocusModel(initial: OverviewNavigation.initialFocus)
     let ring = OverviewRing()
     /// The viewer's item, nil when it is closed: an index into [viewerMedia].
     var viewer: Int?
+    var viewerControlsVisible = true
+    var buttonsVisible = false
+    /// The owned Similar target is focused only after the current reverse flight finishes.
+    var jumpTarget: HostApp?
+    var visibleCoverDistance = 0
     /// The screenshots and videos as they were when the viewer opened: its indices stay put while it is open, even when
     /// the carousel leaves out a video that turned out not to play.
     var viewerMedia: [OverviewContent.Media] = []
@@ -57,6 +60,9 @@ final class OverviewSession {
     let video = OverviewVideo()
     /// The page's scroll position (page pixels, points) and the request to scroll it.
     var scroll = 0.0
+    /// How far the page is pulled down past its top (points): changes only while pulled, so the header cover is not
+    /// re-evaluated on every scroll frame.
+    var pull = 0.0
     var position = ScrollPosition(y: 0)
     /// The focused screenshot or video, for the backdrop.
     var mediaFocus: Int?
@@ -87,6 +93,7 @@ struct OverviewDescent: Equatable {
     var active = false
     /// The app whose card is in the overview.
     var appID: Int?
+    var visibleCoverDistance = 0
 }
 
 /// What the dashboard's covers and hint ask of the overview: open it for a game, and the finger's drag of the focused
@@ -140,6 +147,7 @@ struct GameOverview: View {
     @Environment(\.delosColors) private var colors
     @Environment(\.reducedMotion) private var reduced
     @Environment(\.openURL) private var openURL
+    @Namespace private var buttonRing
 
     private var kind: InputKind { ControllerGlyphs.shared.kind }
 
@@ -149,6 +157,13 @@ struct GameOverview: View {
         }
         ZStack(alignment: .topLeading) {
             OverviewBackdrop(session: session, content: content)
+            let covers = HomeMetrics(stage: stage).covers
+            OverviewFlight(hostID: session.hostID, app: session.app, from: session.source,
+                           to: CGRect(x: stage.px(150 + stage.safe.leading), y: stage.px(150), width: stage.px(340), height: stage.px(510)),
+                           fromCorner: stage.px(covers.corner * CoverGeometry.focusScale), toCorner: stage.px(30),
+                           fromArt: session.flightFrom, toArt: session.flightTo, wide: session.wide, coverScale: covers.scale,
+                           progress: session.flight)
+                .opacity(session.landed ? 0 : 1)
             // The page rises with the flight and sinks back as it closes (`page.animate`), transforms only; its parts fade
             // in and out on their own (``Rise``), the title flies and the cover lands
             page(content)
@@ -161,6 +176,15 @@ struct GameOverview: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .task(id: session.shown) {
+            session.buttonsVisible = false
+            guard session.shown else { return }
+            if !reduced {
+                do { try await Task.sleep(for: .milliseconds(398)) } catch { return }
+            }
+            guard !Task.isCancelled else { return }
+            session.buttonsVisible = true
+        }
         .task(id: session.app.id) {
             // The details come from the cache, else they are fetched now; the first thumbnails and the first full
             // screenshot are fetched while the overview opens
@@ -189,10 +213,9 @@ struct GameOverview: View {
             VStack(alignment: .leading, spacing: 0) {
                 header(content)
                 if let content {
-                    ForEach(Array(content.sections.enumerated()), id: \.element) { index, section in
+                    ForEach(content.sections, id: \.self) { section in
                         sectionView(section, content: content)
                             .padding(.top, stage.px(70))
-                            .modifier(Rise(index: 9 + index, delay: 260, shown: session.shown))
                             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(OverviewRing.space)) } action: {
                                 session.sectionFrames[section.rawValue] = $0
                             }
@@ -204,12 +227,15 @@ struct GameOverview: View {
             .padding(.trailing, stage.px(150 + stage.safe.trailing))
             .padding(.bottom, stage.px(220))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .overviewRingHost(session.ring, hidden: kind == .touch || session.viewer != nil || !session.shown)
+            // Touch shows its focus too: a first tap only focuses (focus-first), and the ring says so
+            .overviewRingHost(session.ring, hidden: session.viewer != nil || !session.shown)
         }
         .scrollPosition(Binding(get: { session.position }, set: { session.position = $0 }))
         .onGeometryChange(for: Double.self) { $0.frame(in: .global).minY } action: { globalTop = $0 }
         .onScrollGeometryChange(for: Double.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, now in
             session.scroll = now
+            let pull = max(-now, 0)
+            if pull != session.pull { session.pull = pull }
         }
         .onScrollPhaseChange { old, now in
             // Pulling the page down at its top closes the overview
@@ -322,10 +348,12 @@ struct GameOverview: View {
                             .modifier(Rise(index: 2, delay: 260, shown: session.shown))
                     }
                     HStack(spacing: stage.px(20)) {
-                        OverviewButton(id: OverviewNavigation.play, focus: session.focus, icon: Symbols.playArrow, label: L("overview_play"), primary: true) {
+                        OverviewButton(id: OverviewNavigation.play, focus: session.focus, icon: Symbols.playArrow, label: L("overview_play"), primary: true,
+                                       active: session.buttonsVisible && session.shown && session.viewer == nil, ringNamespace: buttonRing) {
                             actions.activate(hostID: session.hostID, app: session.app, focus: libraryFocus)
                         }
-                        OverviewButton(id: OverviewNavigation.settings, focus: session.focus, icon: Symbols.settings, label: L("home_menu_settings"), primary: false) {
+                        OverviewButton(id: OverviewNavigation.settings, focus: session.focus, icon: Symbols.settings, label: L("home_menu_settings"), primary: false,
+                                       active: session.buttonsVisible && session.shown && session.viewer == nil, ringNamespace: buttonRing) {
                             actions.navigator.push(.appSettings(hostID: session.hostID, appID: session.app.id), focus: GameSettingsScreen.firstFocus())
                         }
                     }
@@ -653,7 +681,8 @@ struct GameOverview: View {
     }
 
     private func similar(_ content: OverviewContent) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        let side = 150 + stage.safe.leading
+        return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: stage.px(30)) {
                 ForEach(Array(content.similar.enumerated()), id: \.element.id) { index, game in
                     OverviewFocusable(id: OverviewNavigation.similar(index), focus: session.focus, corner: SimilarCover.corner, pad: 0, scale: 1.06) {
@@ -661,12 +690,25 @@ struct GameOverview: View {
                     } action: {
                         if let app = game.app { onJump(app) } else { actions.toasts.show(L("overview_not_in_library", game.name), icon: Symbols.info) }
                     }
+                    .id("ov-similar-\(index)")
                 }
             }
+            .padding(.horizontal, stage.px(side))
             .padding(.vertical, stage.px(24))
         }
+        .scrollPosition($similarPosition)
         .scrollClipDisabled()
+        .overviewAnchorRow()
+        .padding(.horizontal, -stage.px(side))
+        .onChange(of: session.focus.focused) { _, now in
+            guard kind != .pointer, kind != .touch, !session.focus.pointerMoved,
+                  let id = now as? String, id.hasPrefix("ov-similar-"),
+                  let index = Int(id.dropFirst("ov-similar-".count)) else { return }
+            OverviewAnchorRow.step(position: $similarPosition, x: stage.px(Double(index) * (SimilarCover.width + 30)), reduced: reduced)
+        }
     }
+
+    @State private var similarPosition = ScrollPosition(x: 0)
 
     private var credit: some View {
         HStack(spacing: stage.px(10)) {
@@ -757,26 +799,88 @@ private struct OverviewButton: View {
     let icon: String
     let label: String
     let primary: Bool
+    let active: Bool
+    let ringNamespace: Namespace.ID
     let action: () -> Void
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
+    @Environment(\.reducedMotion) private var reduced
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.shellCoversArt) private var covered
 
     var body: some View {
-        OverviewFocusable(id: id, focus: focus, corner: 38, pad: 0, scale: 1.06) {
+        FocusItem(id: id, model: focus, action: action, tap: { wasFocused in if wasFocused { action() } }) { focused in
             HStack(spacing: stage.px(14)) {
                 SymbolView(symbol: icon, size: 32, color: primary ? colors.onAccent : colors.text, filled: primary)
                 Text(label).font(DelosFonts.figtree(stage.tpx(26), .bold)).foregroundStyle((primary ? colors.onAccent : colors.text).color)
             }
-            .padding(.horizontal, stage.px(38))
-            .frame(height: stage.px(76))
+            .padding(.horizontal, stage.px(54))
+            .frame(height: stage.px(86))
             .background {
-                if primary {
-                    Capsule().fill(colors.accent.color)
-                } else {
-                    GlassShape(Capsule(), tint: colors.surface).overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
+                if primary { Capsule().fill(colors.accent.color) }
+                else { GlassShape(Capsule(), tint: colors.surface).overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1))) }
+            }
+            .overlay {
+                // The ring only once the pill itself has risen in (``Rise`` index 3), never ahead of it
+                if focused && active {
+                    // A 4 px band 2–6 px outside the pill, the pill's own capsule
+                    Capsule().strokeBorder(colors.accent.color, lineWidth: stage.px(4)).padding(-stage.px(6))
+                        .shadow(color: colors.glow.color, radius: stage.px(primary && reduced ? 22 : 15))
+                        .matchedGeometryEffect(id: "overview-button-ring", in: ringNamespace)
+                        .animation(.timingCurve(0.3, 1.22, 0.42, 1, duration: 0.56), value: focused)
+                    if primary && scenePhase == .active && !covered && !reduced && ControllerGlyphs.shared.kind != .touch { PlayPerimeterSweep() }
                 }
             }
-        } action: { action() }
+            .animation(.easeOut(duration: 0.24), value: active)
+            .modifier(OverviewPillTransform(focused: focused))
+        }
+    }
+}
+
+private struct OverviewPillTransform: ViewModifier {
+    let focused: Bool
+    @Environment(\.pressed) private var pressed
+    @Environment(\.reducedMotion) private var reduced
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(focusScale(focused: focused, pressed: pressed, focus: 1.06))
+            .animation(.focusScale(pressed: pressed, reduced: reduced), value: focused)
+            .animation(.focusScale(pressed: pressed, reduced: reduced), value: pressed)
+    }
+}
+
+/// Play's signature focus (`b.html`, "living gold sweep"): a warm highlight runs around a band just outside the ring once
+/// every 5.8 s. Only the gradient turns; the pill, its text and its ring stay put. Not drawn with reduced motion (the
+/// ring's static glow stays).
+private struct PlayPerimeterSweep: View {
+    @Environment(\.delosColors) private var colors
+    @Environment(\.stage) private var stage
+    @State private var turned = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            let side = hypot(proxy.size.width, proxy.size.height)
+            // `conic-gradient(from 0deg, transparent 120deg, accent 27 % 190deg, #ffe9b8 235deg, accent 67 % 257deg, transparent 290deg)`
+            AngularGradient(stops: [
+                .init(color: .clear, location: 0),
+                .init(color: .clear, location: 120 / 360),
+                .init(color: colors.accent.opacity(0.27).color, location: 190 / 360),
+                .init(color: RGBA(red: colors.accent.red + (1 - colors.accent.red) * 0.65, green: colors.accent.green + (1 - colors.accent.green) * 0.65,
+                                  blue: colors.accent.blue + (1 - colors.accent.blue) * 0.65).color, location: 235 / 360),
+                .init(color: colors.accent.opacity(0.67).color, location: 257 / 360),
+                .init(color: .clear, location: 290 / 360),
+                .init(color: .clear, location: 1),
+            ], center: .center, angle: .degrees(-90))
+            .frame(width: side, height: side)
+            .rotationEffect(.degrees(turned ? 360 : 0))
+            .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+        }
+        // `.sweep-mask`: a 4 px band 11 px outside the pill
+        .mask(Capsule().strokeBorder(lineWidth: stage.px(4)))
+        .padding(-stage.px(11))
+        .allowsHitTesting(false)
+        .onAppear { withAnimation(.linear(duration: 5.8).repeatForever(autoreverses: false)) { turned = true } }
     }
 }
 
@@ -788,14 +892,17 @@ struct Rise: ViewModifier {
     let shown: Bool
     @Environment(\.reducedMotion) private var reduced
     @Environment(\.stage) private var stage
+    @State private var hasEntered = false
+    private var sessionExitOffset: Double { hasEntered ? Motion.rise * 0.6 : Motion.rise }
 
     func body(content: Content) -> some View {
-        let wait = (delay + Double(min(index, Motion.staggerCap)) * Motion.staggerRow) / 1000
+        let wait = (delay + Double(min(index, Motion.staggerCap)) * 46) / 1000
         content
             .opacity(shown ? 1 : 0)
-            .offset(y: shown || reduced ? 0 : stage.px(Motion.rise))
+            .offset(y: shown || reduced ? 0 : stage.px(sessionExitOffset))
             .animation(shown ? .timingCurve(0.16, 1, 0.3, 1, duration: Motion.rowIn / 1000).delay(reduced ? 0 : wait)
                 : .timingCurve(0.5, 0, 0.75, 0, duration: Motion.exit / 1000), value: shown)
+            .onChange(of: shown) { _, now in if now { hasEntered = true } }
     }
 }
 
@@ -806,9 +913,10 @@ struct OverviewCover: View {
     @Environment(\.stage) private var stage
 
     var body: some View {
-        let pull = max(-session.scroll, 0) / stage.scale
+        let pull = session.pull / stage.scale
         // The picture in memory at once; its animation plays once the flight has landed (nothing decodes during the motion)
         CardArt(hostID: session.hostID, app: session.app, still: session.coverStill, plays: session.landed)
+            .id(GameArt.key(session.hostID, session.app.id))
             .frame(width: stage.px(340), height: stage.px(510))
             .clipShape(RoundedRectangle(cornerRadius: stage.px(30), style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: stage.px(30), style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: stage.px(1)))
@@ -826,6 +934,7 @@ struct CardArt: View {
     let hostID: String
     let app: HostApp
     let plays: Bool
+    private let initialStill: CGImage?
     @Environment(HomeArt.self) private var art
     @Environment(HostStore.self) private var hosts
     @Environment(\.artMotion) private var artMotion
@@ -840,6 +949,7 @@ struct CardArt: View {
         self.hostID = hostID
         self.app = app
         self.plays = plays
+        initialStill = still
         _image = State(initialValue: still)
     }
 
@@ -864,12 +974,20 @@ struct CardArt: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .onScrollVisibilityChange(threshold: 0.01) { visible = $0 }
-        .task(id: "\(app.id)#\(art.artwork.version)") {
-            if art.artwork.enabled, let cover = await art.image(hostID: hostID, appID: app.id, kind: .cover) {
-                image = cover
-                animation = await art.animation(hostID: hostID, app: app, kind: .cover)
-            } else if let box = await art.boxArt(hostID: hostID, appID: app.id, hosts: hosts) {
-                image = box
+        .task(id: "\(hostID)#\(app.id)#\(art.artwork.version)") {
+            image = initialStill
+            animation = nil
+            animating = false
+            let cover = art.artwork.enabled ? await art.image(hostID: hostID, appID: app.id, kind: .cover) : nil
+            let loaded: CGImage?
+            if let cover { loaded = cover }
+            else { loaded = await art.boxArt(hostID: hostID, appID: app.id, hosts: hosts) }
+            guard !Task.isCancelled else { return }
+            image = loaded
+            if cover != nil {
+                let source = await art.animation(hostID: hostID, app: app, kind: .cover)
+                guard !Task.isCancelled else { return }
+                animation = source
             }
         }
     }
@@ -914,19 +1032,16 @@ private struct SimilarCover: View {
 }
 
 /// The title beside the cover (`.a-title`): the game's logo as the dashboard's title box shows it (``HomeArt/logo(hostID:app:)``),
-/// else its name in Unbounded 68 px in the gradient of the dashboard's title; flying in from the dashboard's title box as
-/// the overview opens and back as it closes (the logo from the dashboard's logo, by one scale).
+/// else its name in Unbounded 68 px in the gradient of the dashboard's title. It does not fly (owner's decision): the
+/// dashboard's fades out where it is and this one fades in here, with the flight (``TitleCrossfade``).
 private struct OverviewTitle: View {
     let session: OverviewSession
     @Environment(HomeArt.self) private var art
     @Environment(\.stage) private var stage
     @Environment(\.delosColors) private var colors
-    @Environment(\.reducedMotion) private var reduced
     @Environment(\.artMotion) private var artMotion
     @State private var logo: CGImage?
     @State private var animation: AnimatedSource?
-    /// Where the title stands on the page at rest (the page's space, points), measured outside its flight.
-    @State private var slot: CGRect?
 
     init(session: OverviewSession, logo: CGImage?) {
         self.session = session
@@ -934,20 +1049,14 @@ private struct OverviewTitle: View {
     }
 
     var body: some View {
-        let home = HomeMetrics(stage: stage)
-        let flying = !session.shown && !reduced
         Group {
             if let logo {
                 let box = CGSize(width: stage.px(OverviewMotion.logoWidth), height: stage.px(OverviewMotion.logoHeight))
-                let homeBox = CGSize(width: stage.px(min(home.logoWidth(stageWidth: stage.width), home.infoWidth)),
-                                     height: stage.px(home.titleBox - 2 * home.logoPad))
                 // The animated logo plays once the flight has landed
                 LogoArt(logo: logo, animation: animation, box: box, playing: artMotion && session.landed)
                     .frame(width: box.width, height: box.height, alignment: .leading)
                     .accessibilityElement()
                     .accessibilityLabel(session.app.title)
-                    .modifier(TitleFlight(flying: flying, shown: session.shown, slot: slot, home: home,
-                                          scale: OverviewMotion.logoScale(aspect: Double(logo.width) / Double(max(logo.height, 1)), from: homeBox, to: box)))
             } else {
                 Text(session.app.title)
                     .font(DelosFonts.unbounded(stage.tpx(68), .bold))
@@ -956,13 +1065,9 @@ private struct OverviewTitle: View {
                     .shadow(color: .black.opacity(0.4), radius: stage.px(14), y: stage.px(6))
                     .frame(maxWidth: stage.px(1150), alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
-                    .modifier(TitleFlight(flying: flying, shown: session.shown, slot: slot, home: home,
-                                          scale: home.titleSize(length: session.app.title.count) / 68))
             }
         }
-        // After the flight's transforms: the frame at rest
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(OverviewRing.space)) } action: { slot = $0 }
-        .opacity(session.shown || !reduced ? 1 : 0)
+        .modifier(TitleCrossfade(shown: session.shown, here: true))
         .task(id: session.app.id) {
             if logo == nil { logo = await art.logo(hostID: session.hostID, app: session.app) }
             if logo != nil { animation = await art.animation(hostID: session.hostID, app: session.app, kind: .logo) }
@@ -970,26 +1075,22 @@ private struct OverviewTitle: View {
     }
 }
 
-/// The title's flight: while [flying] it stands where the dashboard's title box shows the title (its start, centred in
-/// the box), [scale] times larger, less the page's rise (the page itself stands lower then); hidden until its place on the
-/// page is known. In with the flight's easing over 720 ms, back with the in-out one over 600 ms (`Flight.text`).
-private struct TitleFlight: ViewModifier {
-    let flying: Bool
+/// The title's crossfade between the dashboard and the overview, by opacity only: the side being left fades out over
+/// the first 40 % of the flight, the side arrived at fades in over its last 50 %. [here]: the overview's title (shown
+/// while [shown]); else the dashboard's (shown while not).
+struct TitleCrossfade: ViewModifier {
     let shown: Bool
-    let slot: CGRect?
-    let home: HomeMetrics
-    let scale: Double
-    @Environment(\.stage) private var stage
+    let here: Bool
+    @Environment(\.reducedMotion) private var reduced
 
     func body(content: Content) -> some View {
-        let slot = slot ?? .zero
-        let dx = stage.px(home.infoStart) - slot.minX
-        let dy = stage.px(home.titleTop + home.titleBox / 2 - OverviewMotion.pageRise) - slot.midY
+        let visible = here == shown
+        // Opening: 780 ms, closing: 640 ms
+        let flight = (shown ? OverviewMotion.flight : OverviewMotion.flightBack) / 1000
         content
-            .scaleEffect(flying ? scale : 1, anchor: .leading)
-            .offset(x: flying ? dx : 0, y: flying ? dy : 0)
-            .animation(shown ? .timingCurve(0.2, 0.9, 0.25, 1, duration: 0.72) : .timingCurve(0.65, 0, 0.35, 1, duration: 0.6), value: shown)
-            .opacity(self.slot == nil ? 0 : 1)
+            .opacity(visible ? 1 : 0)
+            .animation(reduced ? .easeOut(duration: 0.24)
+                       : visible ? .easeOut(duration: flight * 0.5).delay(flight * 0.5) : .easeIn(duration: flight * 0.4), value: visible)
     }
 }
 
@@ -1029,7 +1130,7 @@ private struct OverviewBackdrop: View {
             }
             if let media {
                 RemoteImage(url: OverviewImageSizes.thumb(media, tall: false), maxPixels: 640)
-                    .blur(radius: stage.px(56))
+                    .blur(radius: stage.px(Double(OverviewMotion.deepBlur(from: look?.blur ?? 16))))
                     .brightness(-0.25)
                     .id(media.id)
                     .transition(.opacity)
@@ -1043,7 +1144,7 @@ private struct OverviewBackdrop: View {
         .offset(y: reduced ? 0 : stage.px(OverviewMotion.heroDrift(scroll)))
         .animation(.easeInOut(duration: 0.8), value: media?.id)
         .opacity(session.shown ? 1 : 0)
-        .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.9), value: session.shown)
+        .animation(session.shown ? Motion.out(900) : .timingCurve(0.65, 0, 0.35, 1, duration: 0.64), value: session.shown)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
         .allowsHitTesting(false)
@@ -1071,7 +1172,8 @@ private struct OverviewCarousel: View {
         let side = 150 + stage.safe.leading
         let tall = stage.height > 1200
         ScrollView(.horizontal, showsIndicators: false) {
-            LazyHStack(spacing: stage.px(26)) {
+            // Not lazy: every thumbnail is registered, so the arrows can walk to one past the edge and the row follows
+            HStack(spacing: stage.px(26)) {
                 ForEach(Array(media.enumerated()), id: \.offset) { index, item in
                     OverviewFocusable(id: OverviewNavigation.media(index), focus: session.focus, corner: 22, pad: 0, scale: 1.06) {
                         thumb(item, tall: tall)
@@ -1080,7 +1182,7 @@ private struct OverviewCarousel: View {
                         session.viewerMedia = media
                         session.viewer = index
                     }
-                    .id(index)
+                    .id("ov-media-\(index)")
                 }
             }
             .padding(.horizontal, stage.px(side))
@@ -1089,8 +1191,10 @@ private struct OverviewCarousel: View {
         }
         .scrollPosition($position)
         .scrollClipDisabled()
+        .overviewAnchorRow()
         .padding(.horizontal, -stage.px(side))
         .onChange(of: session.focus.focused) { _, now in
+            guard ControllerGlyphs.shared.kind != .pointer, ControllerGlyphs.shared.kind != .touch, !session.focus.pointerMoved else { return }
             guard let id = now as? String, id.hasPrefix("ov-media-"), let index = Int(id.dropFirst("ov-media-".count)) else { return }
             reveal(index)
         }
@@ -1106,9 +1210,10 @@ private struct OverviewCarousel: View {
         }
     }
 
+    /// The focused thumbnail glides to the row's start (150 px in, the previous one peeking into the fade), as the
+    /// dashboard's covers do; the row clamps at its end.
     private func reveal(_ index: Int, animated: Bool = true) {
-        let scroll = { position.scrollTo(id: index, anchor: UnitPoint(x: 0.5, y: 0.5)) }
-        if reduced || !animated { scroll() } else { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.56)) { scroll() } }
+        OverviewAnchorRow.step(position: $position, x: stage.px(Double(index) * (520 + 26)), reduced: reduced || !animated)
     }
 
     private func thumb(_ item: OverviewContent.Media, tall: Bool) -> some View {
@@ -1162,6 +1267,7 @@ struct OverviewFlight: View {
     let coverScale: Double
     let progress: Double
     @Environment(\.stage) private var stage
+    @Environment(\.delosColors) private var colors
 
     var body: some View {
         let path = FlightPath(from: from, to: to, lift: stage.px(OverviewMotion.arc))
@@ -1173,11 +1279,14 @@ struct OverviewFlight: View {
             ZStack(alignment: .topLeading) {
                 card(path)
                 if fromArt == nil || toArt == nil || fromArt !== toArt {
-                    header(path).opacity(progress)
+                    header(path).modifier(FlightCrossfade(progress: progress))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .clipShape(clip)
+            clip.stroke(colors.accent.color, lineWidth: stage.px(5))
+                .shadow(color: colors.glow.color.opacity(1 - progress), radius: stage.px(30))
+                .opacity(1 - progress)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .allowsHitTesting(false)
@@ -1244,7 +1353,23 @@ private struct FlightClip: Shape {
     }
 
     func path(in rect: CGRect) -> Path {
-        RoundedRectangle(cornerRadius: Motion.lerp(fromCorner, toCorner, progress), style: .continuous).path(in: path.frame(progress))
+        // The spring may pass its end a little; the corners never do
+        RoundedRectangle(cornerRadius: Motion.lerp(fromCorner, toCorner, min(max(progress, 0), 1)), style: .continuous).path(in: path.frame(progress))
+    }
+}
+
+/// The header's picture over the card's in the flying frame: it crosses over linearly between 30 and 70 % of the flight,
+/// following the flight's own progress frame by frame, so neither end shows the other picture.
+private struct FlightCrossfade: ViewModifier, Animatable {
+    var progress: Double
+
+    nonisolated var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content.opacity(min(max((progress - 0.3) / 0.4, 0), 1))
     }
 }
 
@@ -1283,13 +1408,14 @@ struct CoverDescent: ViewModifier {
         let mine = descent.appID == app.id
         let lift = descent.active && !mine && !reduced
         let dragged = launcher?.dragApp == app.id ? launcher?.dragOffset ?? 0 : 0
+        let returnDelay = reduced ? 0 : min(Double(max(descent.visibleCoverDistance - distance, 0)) * OverviewMotion.coverLiftStagger, 300)
         content
             .offset(y: lift ? stage.px(OverviewMotion.coverLift(distance: distance)) : 0)
             .scaleEffect(lift ? OverviewMotion.coverLiftScale : 1)
             .opacity(descent.active ? 0 : 1)
             .animation(descent.active
                 ? Motion.out(OverviewMotion.homeOut).delay(reduced ? 0 : Double(distance) * OverviewMotion.coverLiftStagger / 1000)
-                : .timingCurve(0.65, 0, 0.35, 1, duration: OverviewMotion.flightBack / 1000), value: descent.active)
+                : .timingCurve(0.7, 0, 0.84, 0, duration: (OverviewMotion.homeOut - returnDelay) / 1000).delay(returnDelay / 1000), value: descent.active)
             .animation(nil) { $0.opacity(mine ? 0 : 1) }
             .offset(y: dragged)
             #if os(iOS)
@@ -1297,5 +1423,32 @@ struct CoverDescent: ViewModifier {
                 .onChanged { value in if distance == 0 { launcher?.drag(app, translation: value.translation, slop: OverviewMotion.swipeSlop) } }
                 .onEnded { value in if distance == 0 { launcher?.end(app, translation: value.translation, threshold: stage.px(OverviewMotion.swipeOpen)) } })
             #endif
+    }
+}
+
+extension OverviewMotion {
+    /// The cover's flight is a spring (interruptible: Back mid-flight turns it around from where it is, at its speed):
+    /// response 0.55 s, damping 0.86 out to the header; 0.45 s, 0.90 back to the card (Android: stiffness 130.5 and 195).
+    static let flightOpenSpring = Animation.spring(response: 0.55, dampingFraction: 0.86)
+    static let flightCloseSpring = Animation.spring(response: 0.45, dampingFraction: 0.9)
+}
+
+/// The overview's horizontal rows (Screenshots and videos, Similar games) move like the dashboard's covers: each step of
+/// the arrows or the D-pad glides the focused item to the row's start (its content inset, 150 px) in 200 ms
+/// (`cubic-bezier(.33, 1, .68, 1)`), the row clamping at its end; the ends fade as the dashboard's row's do.
+enum OverviewAnchorRow {
+    @MainActor static func step(position: Binding<ScrollPosition>, x: Double, reduced: Bool) {
+        if reduced { position.wrappedValue.scrollTo(x: x) }
+        else { withAnimation(.timingCurve(0.33, 1, 0.68, 1, duration: 0.2)) { position.wrappedValue.scrollTo(x: x) } }
+    }
+}
+
+extension View {
+    /// The row is moved by the focus alone (a hardware keyboard's arrows would also scroll it by themselves), and its
+    /// ends fade where items go on behind them (``RowFade``).
+    func overviewAnchorRow() -> some View {
+        focusable(false)
+            .scrollEdgeFade(.horizontal, FadeEdges(start: FadeEdge(solid: RowFade.start), end: FadeEdge(solid: RowFade.endSolid, clear: RowFade.endClear)),
+                            growth: RowFade.switching, outset: 1000)
     }
 }

@@ -2,17 +2,14 @@ import DelosData
 import DelosInput
 import SwiftUI
 
-/// The full-screen screenshot and video viewer (`Viewer` of the prototype): it zooms out of the thumbnail and back into it
-/// (a fade when the thumbnail is off screen), crossfades with a little parallax between items, shows the count and a
-/// filmstrip over a blurred backdrop (a material: real blur). A video plays in the app once the viewer has settled on it
-/// (``OverviewVideoPlayer``), with DELOS's controls under it. Left and Right browse (on a video they seek), L1 and R1
-/// browse, A plays or pauses, Y mutes, B closes; touch swipes sideways to browse and down to close; the pointer has arrows
-/// and a close button.
+/// Full-viewport media. The native player, its loading thumbnail and the controls are independent siblings:
+/// effects and transitions belong only to images and overlays, never to the live native surface.
 struct OverviewViewer: View {
     let session: OverviewSession
     /// The items as they were when the viewer opened (``OverviewSession/viewerMedia``).
     let media: [OverviewContent.Media]
     let index: Int
+    var onControlsVisibilityChanged: (Bool) -> Void = { _ in }
     @Environment(\.stage) private var stage
     @Environment(\.delosColors) private var colors
     @Environment(\.reducedMotion) private var reduced
@@ -28,78 +25,102 @@ struct OverviewViewer: View {
 
     private var video: OverviewVideo { session.video }
 
-    /// The fitted picture, stage pixels: 16:9 inside the stage less 280 × 300.
-    static func fit(width: Double, height: Double) -> CGRect {
-        var w = width - 280, h = w * 9 / 16
-        if h > height - 300 { h = height - 300; w = h * 16 / 9 }
-        return CGRect(x: (width - w) / 2, y: (height - h) / 2 - 10, width: w, height: h)
-    }
-
-    /// The fitted video, stage pixels: 16:9 inside the stage less 280 × 440, higher up, so its controls fit under it.
-    static func videoFit(width: Double, height: Double) -> CGRect {
-        var w = width - 280, h = w * 9 / 16
-        if h > height - 440 { h = height - 440; w = h * 16 / 9 }
-        return CGRect(x: (width - w) / 2, y: (height - h) / 2 - 70, width: w, height: h)
-    }
-
-    /// Where [item] shows, stage pixels.
+    /// Where [item] shows, stage pixels: the whole viewport, edge to edge, for screenshots (fitted inside it by their
+    /// aspect) and videos (the player letterboxes) alike.
     static func frame(_ item: OverviewContent.Media, width: Double, height: Double) -> CGRect {
-        item.kind == .video ? videoFit(width: width, height: height) : fit(width: width, height: height)
+        CGRect(x: 0, y: 0, width: width, height: height)
     }
 
     var body: some View {
         let item = media[index]
         let target = target(item)
-        let tall = stage.height > 1200
-        let pullDown = max(drag.height, 0)
+        let controls = video.controls
         ZStack(alignment: .topLeading) {
-            Rectangle().fill(.ultraThinMaterial)
-                .overlay(Color(.sRGB, red: 4 / 255, green: 8 / 255, blue: 16 / 255, opacity: 0.55))
-                .opacity(zoom * (1 - min(pullDown, 400) / 500))
-                .ignoresSafeArea()
-                .onTapGesture { close() }
-            picture(item, tall: tall, target: target)
+            Color.black.ignoresSafeArea()
+            if item.kind == .video, settled == index, !closing, video.error == nil, video.videoID == item.id {
+                #if !os(tvOS)
+                OverviewVideoPlayer(videoID: item.id, video: video)
+                    .frame(width: target.width, height: target.height)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .transition(.identity)
+                    .transaction { $0.animation = nil; $0.disablesAnimations = true }
+                #endif
+            }
+            picture(item, tall: stage.height > 1200, target: target)
                 .id(index)
                 .transition(reduced ? .opacity : .asymmetric(
                     insertion: .modifier(active: Slide(x: session.viewerDirection * stage.px(160), scale: 0.96, opacity: 0), identity: Slide(x: 0, scale: 1, opacity: 1))
                         .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.56)),
                     removal: .modifier(active: Slide(x: -session.viewerDirection * stage.px(90), scale: 0.94, opacity: 0), identity: Slide(x: 0, scale: 1, opacity: 1))
                         .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42))))
-            if item.kind == .video, settled == index, !closing {
-                player(item, target: target)
+            if item.kind == .video, let error = video.error {
+                OverviewVideoError(code: error).frame(width: target.width, height: target.height)
             }
-            ui(item, target: target)
-                .opacity(ready ? 1 : 0)
-                .animation(.easeOut(duration: 0.3), value: ready)
+            if ready, controls.visible, !closing {
+                ui(item, target: target)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .ignoresSafeArea()
+        .contentShape(Rectangle())
         .onGeometryChange(for: CGPoint.self) { $0.frame(in: .global).origin } action: { origin = $0 }
         #if !os(tvOS)
-        .gesture(DragGesture(minimumDistance: 12).onChanged { drag = $0.translation }.onEnded { value in
+        .simultaneousGesture(SpatialTapGesture().onEnded { _ in controls.onInput() })
+        .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged {
+            controls.onInput()
+            drag = $0.translation
+        }.onEnded { value in
+            controls.onInput()
             let t = value.translation
-            withAnimation(Motion.spring(400)) { drag = .zero }
+            withAnimation(reduced ? nil : Motion.spring(400)) { drag = .zero }
             if t.height > stage.px(120), abs(t.height) > abs(t.width) { close() }
             else if t.width < -stage.px(90) { go(index + 1) }
             else if t.width > stage.px(90) { go(index - 1) }
         })
+        .onContinuousHover { _ in controls.onInput() }
+        .onKeyPress(phases: [.down, .up, .repeat]) { _ in controls.onInput(); return .ignored }
         #endif
         .onChange(of: session.viewerClosing) { _, now in if now { close() } }
-        .onChange(of: index) { _, now in
-            // Browsing: the player goes at once, the next one comes once the new item has slid in
-            settle(nil)
-            settle(now, after: reduced ? 280 : 560)
-        }
-        .onChange(of: scenePhase) { _, now in if now == .background { video.pause() } }
-        .onAppear {
-            session.viewerClosing = false
-            withAnimation(reduced ? .easeOut(duration: 0.28) : .timingCurve(0.2, 0.9, 0.25, 1, duration: 0.56)) { zoom = 1 }
-            settle(index, after: reduced ? 280 : 560)
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(reduced ? 0 : 300))
-                ready = true
+        .onChange(of: scenePhase) { _, now in video.setActive(now == .active) }
+        .onChange(of: controls.visible, initial: true) { _, visible in onControlsVisibilityChanged(visible) }
+        .task(id: controls.visible) {
+            while controls.visible {
+                do { try await Task.sleep(for: controls.remaining()) } catch { return }
+                controls.hideIfIdle()
             }
         }
-        .onDisappear { if video.videoID != nil { video.reset(nil) } }
+        .task(id: index) {
+            settled = nil
+            video.reset(nil)
+            controls.onInput()
+            do { try await Task.sleep(for: .milliseconds(reduced ? 280 : 560)) } catch { return }
+            guard !Task.isCancelled, session.viewer == index, !closing else { return }
+            video.reset(item.kind == .video ? item.id : nil)
+            settled = index
+        }
+        .task {
+            do { try await Task.sleep(for: .milliseconds(reduced ? 0 : 300)) } catch { return }
+            ready = true
+        }
+        .task(id: closing) {
+            guard closing else { return }
+            do { try await Task.sleep(for: .milliseconds(reduced ? 240 : 440)) } catch { return }
+            guard session.viewer == index, session.viewerClosing else { return }
+            session.viewer = nil
+            session.viewerClosing = false
+        }
+        .onAppear {
+            session.viewerClosing = false
+            video.setActive(scenePhase == .active)
+            controls.onInput()
+            withAnimation(reduced ? .easeOut(duration: 0.28) : .timingCurve(0.2, 0.9, 0.25, 1, duration: 0.56)) { zoom = 1 }
+        }
+        .onDisappear {
+            video.setActive(false)
+            video.reset(nil)
+            onControlsVisibilityChanged(true)
+        }
     }
 
     /// [item]'s place on the screen, points.
@@ -108,104 +129,51 @@ struct OverviewViewer: View {
         return CGRect(x: stage.px(fit.minX), y: stage.px(fit.minY), width: stage.px(fit.width), height: stage.px(fit.height))
     }
 
-    /// Settles on item [k] (nil: on nothing) now or [after] ms, when the viewer is still on it then.
-    private func settle(_ k: Int?, after ms: Int = 0) {
-        guard ms > 0 else {
-            video.reset(k.flatMap { media.indices.contains($0) && media[$0].kind == .video ? media[$0].id : nil })
-            settled = k
-            return
-        }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(ms))
-            // The view value this task holds is the one it started in: the session has the current item
-            guard k == session.viewer, !closing, settled != k else { return }
-            settle(k)
-        }
-    }
 
     private func picture(_ item: OverviewContent.Media, tall: Bool, target: CGRect) -> some View {
         let thumb = session.thumbFrames[item.id].map { $0.offsetBy(dx: -origin.x, dy: -origin.y) }
-        // From the thumbnail when it is on screen, else a fade
-        let from = thumb.flatMap { $0.intersects(CGRect(x: 0, y: 0, width: stage.px(stage.width), height: stage.px(stage.height))) ? $0 : nil }
+        let from = thumb.flatMap { $0.intersects(target) ? $0 : nil }
         let z = reduced || from == nil ? 1 : zoom
-        let sx = from.map { Motion.lerp($0.width / target.width, 1, z) } ?? 1
-        let sy = from.map { Motion.lerp($0.height / target.height, 1, z) } ?? 1
-        let dx = from.map { Motion.lerp($0.minX - target.minX, 0, z) } ?? 0
-        let dy = from.map { Motion.lerp($0.minY - target.minY, 0, z) } ?? 0
-        let pull = max(drag.height, 0)
-        let failed = item.kind == .video && video.videoID == item.id && video.error != nil
-        return ZStack(alignment: .bottomLeading) {
-            RemoteImage(url: OverviewImageSizes.full(item, tall: tall), maxPixels: tall ? 1920 : 1280,
-                        placeholder: OverviewImageSizes.thumb(item, tall: tall), placeholderPixels: tall ? 900 : 600)
-            if item.kind == .video, !failed {
-                SymbolView(symbol: Symbols.videoPlay, size: 96, color: RGBA(red: 1, green: 1, blue: 1), filled: true)
-                    .shadow(color: .black.opacity(0.6), radius: stage.px(8))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                Text(L("overview_video_youtube", item.name ?? L("overview_video"))).font(DelosFonts.figtree(stage.tpx(26), .bold)).foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.7), radius: stage.px(5)).padding(stage.px(28))
-            }
-        }
-        .frame(width: target.width, height: target.height)
-        .clipShape(RoundedRectangle(cornerRadius: stage.px(Motion.lerp(40, 18, z)), style: .continuous))
-        .shadow(color: .black.opacity(0.8), radius: stage.px(60), y: stage.px(50))
-        .scaleEffect(x: sx * (1 - min(pull, 400) / 1600), y: sy * (1 - min(pull, 400) / 1600), anchor: .topLeading)
-        .offset(x: target.minX + dx + (pull > 0 ? 0 : drag.width * 0.6), y: target.minY + dy + pull)
-        .opacity(from == nil && !reduced ? zoom : 1)
-    }
-
-    /// The settled video's player on its picture (invisible until it plays: the thumbnail shows until then), or why it
-    /// cannot play.
-    @ViewBuilder private func player(_ item: OverviewContent.Media, target: CGRect) -> some View {
-        let pull = max(drag.height, 0)
-        Group {
-            if let error = video.error {
-                OverviewVideoError(code: error)
-            } else if video.videoID == item.id {
-                #if !os(tvOS)
-                OverviewVideoPlayer(videoID: item.id, video: video)
-                    .opacity(video.started ? 1 : 0)
-                #endif
-            }
-        }
-        .frame(width: target.width, height: target.height)
-        .clipShape(RoundedRectangle(cornerRadius: stage.px(18), style: .continuous))
-        .scaleEffect(1 - min(pull, 400) / 1600, anchor: .topLeading)
-        .offset(x: target.minX + (pull > 0 ? 0 : drag.width * 0.6), y: target.minY + pull)
-        .id(item.id)
+        let startScale = from.map { min($0.width / target.width, $0.height / target.height) } ?? 1
+        let scale = Motion.lerp(startScale, 1, z)
+        let dx = from.map { ($0.midX - target.width * startScale / 2) * (1 - z) } ?? 0
+        let dy = from.map { ($0.midY - target.height * startScale / 2) * (1 - z) } ?? 0
+        let playing = item.kind == .video && video.videoID == item.id && video.started && video.error == nil && !closing
+        return ViewerImage(item: item, maxPixels: max(1920, Int(max(target.width, target.height))))
+            .frame(width: target.width, height: target.height)
+            .background(Color.black)
+            .scaleEffect(scale, anchor: .topLeading)
+            .offset(x: dx + (item.kind == .video || reduced ? 0 : drag.width * 0.6),
+                    y: dy + (item.kind == .video || reduced ? 0 : max(drag.height, 0)))
+            .opacity(playing ? 0 : (from == nil ? zoom : 1))
+            .animation(reduced ? nil : .easeOut(duration: 0.28), value: playing)
+            .allowsHitTesting(false)
     }
 
     private func ui(_ item: OverviewContent.Media, target: CGRect) -> some View {
         let pointer = ControllerGlyphs.shared.kind == .pointer
         let touch = ControllerGlyphs.shared.kind == .touch
         return ZStack(alignment: .topLeading) {
+            LinearGradient(stops: [
+                .init(color: .black.opacity(0.65), location: 0), .init(color: .clear, location: 0.2),
+                .init(color: .clear, location: 0.7), .init(color: .black.opacity(0.8), location: 1)
+            ], startPoint: .top, endPoint: .bottom)
+            .allowsHitTesting(false)
             HStack(alignment: .firstTextBaseline, spacing: stage.px(6)) {
-                Text("\(index + 1)").font(DelosFonts.unbounded(stage.tpx(26), .bold)).foregroundStyle(colors.text.color)
+                Text("\(index + 1)").font(DelosFonts.unbounded(stage.tpx(26), .bold)).foregroundStyle(colors.accent.color)
                 Text(L("overview_viewer_count", media.count, name(item))).font(DelosFonts.figtree(stage.tpx(22), .bold)).foregroundStyle(colors.text2.color)
             }
             .monospacedDigit()
+            .padding(.trailing, stage.px(180))
             .padding(.leading, stage.px(72 + stage.safe.leading))
             .padding(.top, stage.px(40))
             #if !os(tvOS)
             if item.kind == .video, video.error == nil {
                 OverviewVideoBar(video: video)
-                    .frame(width: target.width)
-                    .offset(x: target.minX, y: target.maxY + stage.px(22))
+                    .frame(width: target.width - stage.px(144), height: stage.px(72))
+                    .position(x: target.midX, y: target.maxY - stage.px(148))
             }
             #endif
-            HStack(spacing: stage.px(12)) {
-                ForEach(Array(media.enumerated()), id: \.offset) { k, m in
-                    RemoteImage(url: OverviewImageSizes.thumb(m, tall: false), maxPixels: 200)
-                        .frame(width: stage.px(96), height: stage.px(54))
-                        .clipShape(RoundedRectangle(cornerRadius: stage.px(8)))
-                        .overlay { if k == index { RoundedRectangle(cornerRadius: stage.px(8)).strokeBorder(colors.accent.color, lineWidth: stage.px(3)).padding(-stage.px(3)) } }
-                        .opacity(k == index ? 1 : 0.45)
-                        .scaleEffect(k == index ? 1.18 : 1)
-                        .animation(reduced ? nil : Motion.spring(420), value: index)
-                        .onTapGesture { go(k) }
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            .padding(.bottom, stage.px(112))
             if pointer {
                 navButton(Symbols.chevronLeft, label: L("overview_previous")) { go(index - 1) }
                     .position(x: stage.px(40 + 42), y: stage.px(stage.height / 2))
@@ -238,6 +206,7 @@ struct OverviewViewer: View {
 
     /// Goes to item [k]; past either end the picture nudges instead.
     func go(_ k: Int) {
+        video.controls.onInput()
         guard media.indices.contains(k), k != index else { return }
         session.viewerDirection = k > index ? 1 : -1
         withAnimation(reduced ? .easeOut(duration: 0.28) : nil) { session.viewer = k }
@@ -245,22 +214,21 @@ struct OverviewViewer: View {
 
     func close() {
         guard !closing else { return }
+        video.controls.onInput()
         closing = true
+        session.viewerClosing = true
         ready = false
-        // The player goes first: the thumbnail under it zooms back
-        settle(nil)
+        settled = nil
+        video.setActive(false)
+        video.reset(nil)
         withAnimation(reduced ? .easeIn(duration: 0.24) : .timingCurve(0.16, 1, 0.3, 1, duration: 0.44)) { zoom = 0 }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(reduced ? 240 : 440))
-            session.viewer = nil
-            session.viewerClosing = false
-        }
     }
 
     /// A command while the viewer is open, always taken. On a video that can play Left and Right seek 10 s, A plays or
     /// pauses and Y (or M) mutes; elsewhere Left and Right browse. L1 and R1 browse, B closes.
     static func handle(_ command: MenuCommand, session: OverviewSession, media: [OverviewContent.Media]) {
         guard let index = session.viewer, media.indices.contains(index) else { return }
+        session.video.controls.onInput()
         let video = session.video
         let playable = media[index].kind == .video && video.error == nil
         func browse(_ step: Int) {
@@ -278,6 +246,62 @@ struct OverviewViewer: View {
         case .back: session.viewerClosing = true
         default: break
         }
+    }
+}
+
+/// A monotonic, allocation-free input deadline. Pointer motion does not invalidate the view while controls remain visible.
+@MainActor
+@Observable
+final class OverviewViewerControls {
+    private(set) var visible = true
+    @ObservationIgnored private var lastInput: ContinuousClock.Instant
+
+    init(now: ContinuousClock.Instant = .now) { lastInput = now }
+
+    func onInput(at now: ContinuousClock.Instant = .now) {
+        lastInput = now
+        if !visible { visible = true }
+    }
+
+    func remaining(at now: ContinuousClock.Instant = .now) -> Duration {
+        max(.zero, .seconds(3) - lastInput.duration(to: now))
+    }
+
+    func hideIfIdle(at now: ContinuousClock.Instant = .now) {
+        if remaining(at: now) == .zero { visible = false }
+    }
+}
+
+/// Viewer-specific aspect fit, sharing the overview's decoded-image cache and download store.
+private struct ViewerImage: View {
+    let item: OverviewContent.Media
+    let maxPixels: Int
+    @Environment(GameMetadataModel.self) private var metadata
+    @State private var image: CGImage?
+
+    var body: some View {
+        ZStack {
+            Color.black
+            if let image { Image(decorative: image, scale: 1).resizable().scaledToFit() }
+        }
+        .task(id: item.id) {
+            image = nil
+            if let url = OverviewImageSizes.thumb(item, tall: true) {
+                image = await load(url, pixels: 900)
+            }
+            guard !Task.isCancelled, let url = OverviewImageSizes.full(item, tall: true) else { return }
+            if let full = await load(url, pixels: maxPixels), !Task.isCancelled { image = full }
+        }
+    }
+
+    private func load(_ url: URL, pixels: Int) async -> CGImage? {
+        let key = "\(url.absoluteString)#\(pixels)"
+        if let cached = OverviewImageMemory.image(key) { return cached }
+        guard let data = await metadata.images.data(url), !Task.isCancelled else { return nil }
+        let decoded = await Task.detached(priority: .userInitiated) { OverviewImageMemory.decode(data, maxPixels: pixels) }.value
+        guard !Task.isCancelled else { return nil }
+        if let decoded { OverviewImageMemory.store(decoded, key) }
+        return decoded
     }
 }
 

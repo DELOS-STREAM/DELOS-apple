@@ -246,9 +246,6 @@ public struct DelosRoot: View {
                             // The interface scale zooms the whole bar
                             .modifier(ZoomedBar())
                             .modifier(LayerBackdropBlur(active: librarySheetOpen))
-                            // Over the game overview its pills are plain fills: the page is masked out under the bar, so glass
-                            // there would only blur the still backdrop (the prototype's `.sb-nav`)
-                            .environment(\.glassFlat, navigator.screenHints.overview)
                             // The game overview's viewer covers the whole screen, the bar too (as on Android): its count sits
                             // where the brand is
                             .opacity(navigator.screenHints.overviewViewer == nil ? 1 : 0)
@@ -307,6 +304,9 @@ public struct DelosRoot: View {
                         libraryRow: showsLibraryRow,
                         // The only tappable hint is the library's Filter: the screen's own Y
                         onTap: { _ in _ = navigator.commandCapture?(.toastAction) })
+                    // The overview's viewer is edge to edge: its hints hide with its overlay after ~3 s without input
+                    .opacity(navigator.screenHints.overviewViewer != nil && !navigator.screenHints.overviewViewerControlsVisible ? 0 : 1)
+                    .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: navigator.screenHints.overviewViewerControlsVisible)
                 }
                 ZStack {
                     if let portal = actions.connection.portal {

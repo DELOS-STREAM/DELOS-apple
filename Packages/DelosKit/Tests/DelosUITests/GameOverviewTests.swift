@@ -114,13 +114,9 @@ import Testing
         #expect(abs(base.width * start.scale - wide.width) < 0.001)
     }
 
-    @Test func logoFliesByOneScaleAndTheHeroBlurDeepensFromTheDashboards() {
-        let home = CGSize(width: 900, height: 180), header = CGSize(width: OverviewMotion.logoWidth, height: OverviewMotion.logoHeight)
-        // The same box shape: one scale whatever the logo's shape
-        #expect(abs(OverviewMotion.logoScale(aspect: 2, from: home, to: header) - 1.25) < 0.0001)
-        #expect(abs(OverviewMotion.logoScale(aspect: 8, from: home, to: header) - 1.25) < 0.0001)
-        #expect(abs(OverviewMotion.logoScale(aspect: 4, from: CGSize(width: 600, height: 180), to: header) - 600.0 / 576) < 0.0001)
-        #expect(OverviewMotion.deepBlur(from: 0) == 40 && OverviewMotion.deepBlur(from: 20) == 60)
+    @Test func theHeroBlurDeepensFromTheDashboards() {
+        // 60 % of the former 40 px on top of the dashboard's
+        #expect(OverviewMotion.deepBlur(from: 0) == 24 && OverviewMotion.deepBlur(from: 20) == 44)
     }
 
     @Test func homeMotionNumbers() {
@@ -153,22 +149,21 @@ import Testing
         #expect(opened == nil && launcher.dragApp == nil)
     }
 
-    @Test func viewerFitsSixteenByNine() {
-        let odin = OverviewViewer.fit(width: 1920, height: 1080)
-        #expect(odin.height == 780 && abs(odin.width - 780 * 16 / 9) < 0.001)
-        let ipad = OverviewViewer.fit(width: 1920, height: 1440)
-        #expect(ipad.width == 1640 && abs(ipad.height - 922.5) < 0.001)
+    @Test func viewerIsEdgeToEdge() {
+        let item = OverviewContent.Media(kind: .video, id: "v", name: nil)
+        #expect(OverviewViewer.frame(item, width: 1920, height: 1080) == CGRect(x: 0, y: 0, width: 1920, height: 1080))
+        #expect(OverviewViewer.frame(.init(kind: .screenshot, id: "s", name: nil), width: 1920, height: 1440) == CGRect(x: 0, y: 0, width: 1920, height: 1440))
     }
 
-    @Test func videoFitsUnderItsControls() {
-        let odin = OverviewViewer.videoFit(width: 1920, height: 1080)
-        #expect(odin.height == 640 && abs(odin.width - 640 * 16 / 9) < 0.001)
-        #expect(abs(odin.minX - (1920 - 640 * 16 / 9) / 2) < 0.001 && odin.minY == 150)
-        let ipad = OverviewViewer.videoFit(width: 1920, height: 1440)
-        #expect(ipad.width == 1640 && abs(ipad.height - 922.5) < 0.001 && abs(ipad.minY - ((1440 - 922.5) / 2 - 70)) < 0.001)
-        let item = OverviewContent.Media(kind: .video, id: "v", name: nil)
-        #expect(OverviewViewer.frame(item, width: 1920, height: 1080) == odin)
-        #expect(OverviewViewer.frame(.init(kind: .screenshot, id: "s", name: nil), width: 1920, height: 1080) == OverviewViewer.fit(width: 1920, height: 1080))
+    @MainActor @Test func viewerOverlayHidesAfterThreeIdleSeconds() {
+        let start = ContinuousClock.now
+        let controls = OverviewViewerControls(now: start)
+        controls.hideIfIdle(at: start + .milliseconds(2900))
+        #expect(controls.visible)
+        controls.hideIfIdle(at: start + .seconds(3))
+        #expect(!controls.visible)
+        controls.onInput(at: start + .seconds(4))
+        #expect(controls.visible && controls.remaining(at: start + .seconds(5)) == .seconds(2))
     }
 
     @Test func viewerCommands() {

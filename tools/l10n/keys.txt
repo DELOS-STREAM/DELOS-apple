@@ -1667,6 +1667,7 @@ overview_self_published
 overview_show_less
 overview_split_screen
 overview_streaming_note
+overview_swipe_up_game_info
 overview_unavailable
 overview_video
 overview_video_back

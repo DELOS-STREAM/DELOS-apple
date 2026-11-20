@@ -444,6 +444,14 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   context menu now and then. The window's recognizer of the right click and the trackpad's two-finger click took every
   finger's tap too, because UIKit checks its button mask on indirect input only; it now takes only the pointer's
   touches. The context menu opens on touch only by holding the item; the pointer's click still activates at once.
+- The game overview (#23): screenshots and trailers open edge to edge, with the count, the controls and the hint bar
+  over them hiding after 3 s without input and back on any input; a trailer shows its thumbnail until it really plays.
+  The cover's flight crosses from the card's picture to the header's in the middle of the motion, aspect-filled, and
+  the title flies over it; the dashboard's covers return during the flight back, nearest last. Play's focus ring
+  appears with the pill, hugs it, and Play has a gold highlight running around it every 5.8 s (a static glow with
+  reduced motion). An owned similar game closes the overview and opens its own. Touch shows a finger with rising
+  chevrons and "Swipe up for game info" in the cover, with a one-time lift of the cover. The deeper blur further down
+  the page is 24 px over the dashboard's instead of 40, and the header cover no longer redraws on every scroll frame.
   Not verified on a device.
 - The first opening of a settings row's popover and of the stream menu's popover no longer holds the screen without a
   frame, as the context menu's no longer does: Liquid Glass is drawn in the card's rounded body only and the caret over

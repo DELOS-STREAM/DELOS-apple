@@ -388,9 +388,11 @@ enum OverviewImageSizes {
 struct GameInfoHint: View {
     let kind: InputKind
     let onOpen: () -> Void
+    var active = true
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduced
+    @Environment(\.scenePhase) private var scenePhase
     @State private var hovered = false
 
     static func dpadDown(_ family: PadFamily) -> String {
@@ -405,8 +407,8 @@ struct GameInfoHint: View {
     var body: some View {
         let tappable = kind == .touch || kind == .pointer
         HStack(spacing: stage.px(10)) {
-            glyph.modifier(Bob(up: kind == .touch, paused: reduced))
-            Text(L("overview_game_info"))
+            glyph
+            Text(L(kind == .touch ? "overview_swipe_up_game_info" : "overview_game_info"))
                 .font(DelosFonts.figtree(stage.tpx(20), .semibold))
                 .foregroundStyle(.white)
                 .lineLimit(1)
@@ -433,19 +435,33 @@ struct GameInfoHint: View {
             Text(Self.dpadDown(ControllerGlyphs.shared.family))
                 .font(DelosFonts.symbol(stage.px(GlyphLook.controllerEm(for: 32)), filled: false))
                 .foregroundStyle(.white)
+                .modifier(Bob(up: false, paused: bobPaused))
         case .keyboard:
             Text(Symbols.macArrowDown)
                 .font(DelosFonts.symbol(stage.px(GlyphLook.controllerEm(for: 32)), filled: true))
                 .foregroundStyle(.white)
+                .modifier(Bob(up: false, paused: bobPaused))
         case .touch:
-            SymbolView(symbol: Symbols.expandLess, size: 26, color: colors.accent, filled: true)
+            // A finger with two stacked chevrons rising above it (swipe the cover up)
+            HStack(spacing: stage.px(2)) {
+                SymbolView(symbol: Symbols.touchApp, size: 26, color: RGBA(red: 1, green: 1, blue: 1), filled: true)
+                VStack(spacing: -stage.px(15)) {
+                    SymbolView(symbol: Symbols.expandLess, size: 22, color: colors.accent, filled: true)
+                    SymbolView(symbol: Symbols.expandLess, size: 22, color: colors.accent, filled: true).opacity(0.6)
+                }
+                .modifier(Bob(up: true, paused: bobPaused))
+            }
         case .pointer:
             SymbolView(symbol: Symbols.expandMore, size: 26, color: colors.accent, filled: true)
+                .modifier(Bob(up: false, paused: bobPaused))
         }
     }
+
+    /// No clock while hidden, in the background or with reduced motion.
+    private var bobPaused: Bool { reduced || !active || scenePhase != .active }
 }
 
-/// The hint's bob: 5 px down (touch: 6 px up) and back over 2.2 s.
+/// The hint's bob: 5 px down and back over 2.2 s; touch's chevrons rise 10 px and fade in and out over 2.2 s, looping.
 private struct Bob: ViewModifier {
     let up: Bool
     let paused: Bool
@@ -453,9 +469,12 @@ private struct Bob: ViewModifier {
 
     func body(content: Content) -> some View {
         TimelineView(.animation(paused: paused)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2.2) / 2.2
-            let wave = paused ? 0 : (1 - cos(t * 2 * .pi)) / 2
-            content.offset(y: stage.px((up ? -6 : 5) * wave))
+            let period = up ? 1.8 : 2.2
+            let t = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
+            let wave = paused ? 0 : (up ? t : (1 - cos(t * 2 * .pi)) / 2)
+            // Touch: from 5 px below to 7 px above, 25 % to full and back, every 1.8 s
+            content.offset(y: stage.px(up ? (paused ? 0 : 5 - 12 * wave) : 5 * wave))
+                .opacity(up && !paused ? 0.25 + 0.75 * sin(t * .pi) : 1)
         }
     }
 }
