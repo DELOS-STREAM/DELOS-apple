@@ -18,6 +18,10 @@ struct ScreenHints: Equatable, Sendable {
     var artworkBuiltIn = false
     /// The result of a failed stream is up (`shell.result`): Select and Back to library.
     var streamResult = false
+    /// The Settings screen's search is open (`Screen.SettingsSearch`): Select and Back.
+    var settingsSearch = false
+    /// The popover of the focused row is open (Android's `shell.picker`): a list of values or a slider.
+    var rowPopup: RowPopupKind?
 }
 
 /// The button hints of the shell (`hints` in DELOS for Android's `Shell.kt`, the prototype's `updateHints`): by screen and
@@ -33,6 +37,8 @@ enum ShellHints {
         var screen: Screen
         var layer: Layer?
         var sideMenu = false
+        /// The side menu's focused row changes its value with left and right (Theme, Background): the adjust hint.
+        var sideMenuAdjustable = false
         /// The portal into a PC is up: nil when it is not, else whether B can cancel it.
         var portalCancellable: Bool?
         var canGoBack = false
@@ -87,7 +93,12 @@ enum ShellHints {
         let tabs = [hint(.leftShoulder, L("shell_hint_previous_tab")), hint(.rightShoulder, L("shell_hint_next_tab"))]
         let menu = hint(.menuLeft, L("shell_hint_menu"))
         if let cancellable = c.portalCancellable { return cancellable ? [hint(.east, L("shell_hint_cancel"))] : [] }
-        if c.sideMenu { return [adjust, hint(.south, L("shell_hint_change")), hint(.east, L("shell_hint_close"))] }
+        switch c.screenHints.rowPopup {
+        case .options?: return [select, hint(.east, L("shell_hint_close"))]
+        case .slider?: return [adjust, hint(.south, L("shell_hint_done")), hint(.east, L("shell_hint_close"))]
+        case nil: break
+        }
+        if c.sideMenu { return (c.sideMenuAdjustable ? [adjust] : []) + [hint(.south, L("shell_hint_change")), hint(.east, L("shell_hint_close"))] }
         switch c.layer {
         case .context(let root)?: return [select, hint(.east, L(root ? "shell_hint_close" : "shell_hint_back"))]
         case .dialog?: return [select, hint(.east, L("shell_hint_cancel"))]
@@ -98,13 +109,14 @@ enum ShellHints {
         switch c.screen {
         case .home:
             if c.screenHints.sheetOpen {
-                // The same as the Artwork screen's sheet (Android's sheet hints): Y is Done, not a second Close
-                return [hint(.south, L("shell_hint_choose")), hint(.west, L("shell_hint_reset_filters"), short: L("shell_hint_reset")),
-                        hint(.north, L("shell_hint_done")), hint(.east, L("shell_hint_close"))]
+                // The library's filter sheet (Android's `Layer.Filters`): Y closes it as B does, unlike the Artwork sheet's Done
+                return [select, hint(.west, L("shell_hint_reset")), hint(.north, L("shell_hint_close")), hint(.east, L("shell_hint_close"))]
             }
             let filter = c.screenHints.filterLabel.map { [Hint(button: .pad(.north), label: $0, tappable: true, icon: Symbols.filter)] } ?? []
             return [hint(.south, L("shell_hint_start"))] + filter + [menu] + optionsHint
-        case .settings: return adjustHint + tabs + [hint(.north, L("shell_hint_search")), hint(.south, L("shell_hint_change")), back]
+        case .settings:
+            if c.screenHints.settingsSearch { return [select, back] }
+            return adjustHint + tabs + [hint(.north, L("shell_hint_search")), hint(.south, L("shell_hint_change")), back]
         case .start: return [hint(.south, L("shell_hint_connect")), menu] + optionsHint
         case .boot: return [select] + (c.canGoBack ? [back] : [])
         case .createProfile: return [select, back]
@@ -135,9 +147,12 @@ enum ShellHints {
             // X is the search by name here and resets the filters only inside the sheet, which has its own buttons above
             return tabs + [south, hint(.west, L("shell_hint_search_name"), short: L("shell_hint_search")), hint(.north, L("shell_hint_filter")), back]
         case .appSettings:
-            return adjustHint + [hint(.south, L("shell_hint_change"))]
-                + (c.screenHints.resetsRow ? [hint(.west, L("shell_hint_reset_to_profile"), short: L("shell_hint_reset"))] : [])
-                + optionsHint + [back]
+            // Only a custom row has a menu (its reset), as on Android: the rows register a menu closure that returns nil
+            // otherwise, which ``FocusModel/focusedHasMenu`` does not run (it would observe whatever every menu reads)
+            let custom = c.screenHints.resetsRow
+            return adjustHint + tabs + [hint(.south, L("shell_hint_change"))]
+                + (custom ? [hint(.west, L("shell_hint_reset_to_profile"), short: L("shell_hint_reset"))] : [])
+                + (custom ? optionsHint : []) + [back]
         case .profile, .devices: return [select, back, menu]
         }
     }
