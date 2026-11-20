@@ -671,7 +671,7 @@ private struct StreamResultLayer: View {
     var body: some View {
         ZStack {
             colors.scrim.color.ignoresSafeArea()
-            VStack(spacing: stage.px(24)) {
+            VStack(spacing: stage.px(StreamResultLayout.stackGap)) {
                 ZStack {
                     Circle().fill(colors.accent.opacity(0.16).color)
                         .overlay(Circle().strokeBorder(colors.accent.opacity(0.42).color, lineWidth: stage.px(2)))
@@ -691,7 +691,7 @@ private struct StreamResultLayer: View {
                         .lineSpacing(stage.px(28) * 0.4)
                         .frame(maxWidth: stage.px(1000))
                 }
-                HStack(spacing: stage.px(24)) {
+                HStack(spacing: stage.px(FocusSpacing.pillGap)) {
                     FocusItem(id: "result-retry", model: focus, action: onRetry) { focused in
                         PillButton(label: L("stream_result_try_again"), icon: Symbols.refresh, primary: true, focused: focused)
                     }
@@ -712,6 +712,7 @@ private struct StreamResultLayer: View {
                         .padding(.vertical, stage.px(12))
                         .focusLook(focused, scale: 1.06, ring: 3, glowBlur: 0, glowY: 0)
                     }
+                    .padding(.top, stage.px(StreamResultLayout.detailsGap - StreamResultLayout.stackGap))
                     if expanded {
                         ScrollView {
                             Text(details)
@@ -735,6 +736,16 @@ private struct StreamResultLayer: View {
         }
         .onAppear { focus.focus("result-retry") }
     }
+}
+
+/// The gaps of the result overlay, stage pixels (``FocusSpacing``).
+enum StreamResultLayout {
+    /// Between the face, the title, the sentence and the buttons.
+    static let stackGap = 24.0
+    /// Between Try again / Back to library and Details below them: the ``PillButton``s reach 11.68 px below their edge,
+    /// Details (a pill about 50 px high growing by 6 % with a 3 px ring 3 px out inside its scale) about 8, so
+    /// ``FocusSpacing/pillLineGap`` keeps them clear.
+    static let detailsGap = FocusSpacing.pillLineGap
 }
 
 /// Keeps the screen on during a stream (`UIApplication.isIdleTimerDisabled`). On the Mac it is a process activity: the

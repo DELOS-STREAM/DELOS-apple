@@ -202,7 +202,13 @@ import Testing
         let state = LibraryFilterState(filters: MetadataFilters(), games: games, matching: games.count)
         let start = LibraryFilterIDs.start(MetadataFilters(), genres: LibraryFilter.genres(games))
         report(await audit(
-            Case(name: "library filter sheet", initial: start, minItems: 10, scrolled: { _ in true }), on: d,
+            // The chips scroll in a clipped area above the footer: a section scrolled below it lies behind the footer's
+            // pills, cut away, until the focus brings it to the middle
+            Case(name: "library filter sheet", initial: start, minItems: 10, scrolled: { _ in true },
+                 allowOverlap: { a, b in
+                     let footer: Set = [LibraryFilterIDs.show, LibraryFilterIDs.reset]
+                     return footer.contains(a) != footer.contains(b)
+                 }), on: d,
             build: { _ in FocusModel(initial: start) }
         ) { _, focus in
             LibraryFilterSheet(state: state, focus: focus, onEdit: { _ in }, onReset: {}, onConfirm: {})

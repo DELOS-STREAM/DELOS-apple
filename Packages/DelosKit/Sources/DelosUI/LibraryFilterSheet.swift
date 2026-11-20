@@ -194,18 +194,20 @@ struct LibraryFilterSheet: View {
     }
 
     private func footer(active: Bool) -> some View {
-        HStack(spacing: stage.px(24)) {
+        HStack(spacing: 0) {
             Spacer(minLength: 0)
-            if active {
-                FocusItem(id: LibraryFilterIDs.reset, model: focus, clickCue: nil, action: onReset) { focused in
-                    pill(L("filters_reset"), Symbols.reset, focused: focused, primary: false)
+            HStack(spacing: stage.px(FocusSpacing.pillGap)) {
+                if active {
+                    FocusItem(id: LibraryFilterIDs.reset, model: focus, clickCue: nil, action: onReset) { focused in
+                        pill(L("filters_reset"), Symbols.reset, focused: focused, primary: false)
+                    }
+                } else {
+                    pill(L("filters_reset"), Symbols.reset, focused: false, primary: false).opacity(0.4)
                 }
-            } else {
-                pill(L("filters_reset"), Symbols.reset, focused: false, primary: false).opacity(0.4)
-            }
-            // The confirm cue comes from [onConfirm], which also closes the sheet
-            FocusItem(id: LibraryFilterIDs.show, model: focus, clickCue: nil, action: onConfirm) { focused in
-                pill(LibraryFilter.showLabel(matching: state.matching), Symbols.check, focused: focused, primary: true)
+                // The confirm cue comes from [onConfirm], which also closes the sheet
+                FocusItem(id: LibraryFilterIDs.show, model: focus, clickCue: nil, action: onConfirm) { focused in
+                    pill(LibraryFilter.showLabel(matching: state.matching), Symbols.check, focused: focused, primary: true)
+                }
             }
         }
     }
@@ -235,8 +237,9 @@ struct LibraryFilterSheet: View {
                     .lineLimit(1)
             }
             FocusScroll(axis: .horizontal) {
-                // The chips keep their own width: the row scrolls instead of squeezing a label
-                HStack(spacing: stage.px(14 * k)) { chips() }
+                // The chips keep their own width: the row scrolls instead of squeezing a label. Their gap does not shrink on a
+                // compact stage, where the chips keep their height and their text
+                HStack(spacing: stage.px(LibraryFilterLayout.chipGap)) { chips() }
                     .fixedSize(horizontal: true, vertical: false)
                     .padding(.horizontal, stage.px(12))
                     .padding(.vertical, stage.px(12))
@@ -253,6 +256,16 @@ struct LibraryFilterSheet: View {
             LibraryFilterChip(label: label, selected: selected, focused: focused, icon: icon, count: count)
         }
     }
+}
+
+/// The gaps of the filter sheet, stage pixels (``FocusSpacing``).
+enum LibraryFilterLayout {
+    /// The widest chip in any language: "4X" with IGDB's explanation, its icon and its count, about 740 px in Brazilian
+    /// Portuguese at 1080.
+    static let chipMaxWidth = 740.0
+    /// Between two chips of a row: the gliding ring (``GlideLook/chip``, 5 % growth, 3 px ring 3 px out, not scaled)
+    /// reaches 24.5 px beyond a chip as wide as ``chipMaxWidth``.
+    static let chipGap = FocusSpacing.gap(reach: GlideLook.chip.reach(width: chipMaxWidth)).rounded(.up)
 }
 
 /// A selectable chip (`FilterChip`): filled with the accent while chosen, the flat surface tint otherwise, with its icon and

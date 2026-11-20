@@ -64,22 +64,20 @@ struct ProblemOfferCard: View {
                 .lineSpacing(stage.tpx(20 * 0.4))
                 .foregroundStyle(colors.text2.color)
                 .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: stage.px(stage.compact ? 14 : 18)) {
-                if ProblemOffers.canReport {
-                    FocusItem(id: ProblemOffers.reportID, model: offers.focus, action: { onReport(.upload) }) { focused in
-                        PillButton(label: L("shell_problem_report"), icon: Symbols.reportIssue, primary: true, focused: focused, glyph: .south)
-                    }
+            // The buttons keep FocusSpacing's gaps; where Report and Dismiss do not fit side by side in the card (long labels
+            // in some languages, a larger interface scale) they stand one above the other
+            VStack(alignment: .leading, spacing: stage.px(FocusSpacing.pillLineGap)) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: stage.px(FocusSpacing.pillGap)) { answerButtons }
+                    VStack(alignment: .leading, spacing: stage.px(FocusSpacing.pillLineGap)) { answerButtons }
                 }
-                FocusItem(id: ProblemOffers.dismissID, model: offers.focus, clickCue: .back, action: onDismiss) { focused in
-                    PillButton(label: L("shell_problem_dismiss"), icon: Symbols.close, focused: focused, glyph: .east)
+                if uploads, DiagnosticsExport.saveFolder != nil {
+                    FocusItem(id: ProblemOffers.saveID, model: offers.focus, action: { onReport(.save) }) { focused in
+                        PillButton(label: ReportOutcomeText.saveLabel, icon: Symbols.download, focused: focused)
+                    }
                 }
             }
             .padding(.top, stage.px(6))
-            if uploads, DiagnosticsExport.saveFolder != nil {
-                FocusItem(id: ProblemOffers.saveID, model: offers.focus, action: { onReport(.save) }) { focused in
-                    PillButton(label: ReportOutcomeText.saveLabel, icon: Symbols.download, focused: focused)
-                }
-            }
         }
         .padding(stage.px(stage.compact ? 32 : 36))
         .background {
@@ -87,6 +85,18 @@ struct ProblemOfferCard: View {
                 .overlay(RoundedRectangle(cornerRadius: stage.px(34)).strokeBorder(colors.line.color, lineWidth: stage.px(1)))
         }
         .onAppear { if !ProblemOffers.canReport { offers.focus.focus(ProblemOffers.dismissID) } }
+    }
+
+    /// Report this problem (A) and Dismiss (B).
+    @ViewBuilder private var answerButtons: some View {
+        if ProblemOffers.canReport {
+            FocusItem(id: ProblemOffers.reportID, model: offers.focus, action: { onReport(.upload) }) { focused in
+                PillButton(label: L("shell_problem_report"), icon: Symbols.reportIssue, primary: true, focused: focused, glyph: .south)
+            }
+        }
+        FocusItem(id: ProblemOffers.dismissID, model: offers.focus, clickCue: .back, action: onDismiss) { focused in
+            PillButton(label: L("shell_problem_dismiss"), icon: Symbols.close, focused: focused, glyph: .east)
+        }
     }
 
     static func title(_ kind: ProblemKind) -> String {

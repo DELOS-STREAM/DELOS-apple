@@ -28,6 +28,14 @@ import Testing
         #expect(phone.top == 104 && phone.bottom == 92)
     }
 
+    @Test func aCenteredColumnsGapShrinksOnlyToItsFloor() {
+        #expect(CenterColumnLayout.gap(40, min: FocusSpacing.pillLineGap, stage(1920, 1080)) == 40)
+        // At the lowest compact scale 40 px would be 24.8: Change name and Create keep the pills' gap
+        let tiny = stage(1000 * 0.43, 400 * 0.43)
+        #expect(CenterColumnLayout.gap(40, min: FocusSpacing.pillLineGap, tiny) == FocusSpacing.pillLineGap)
+        #expect(CenterColumnLayout.gap(54, min: 0, tiny) == 54 * Stage.minCompactScale)
+    }
+
     @Test func theAvatarGridTakesAsManyColumnsAsFit() {
         #expect(AvatarGridLayout.columns(stage(1920, 1080)) == 8)
         // 688 points are 1600 stage pixels (the floor): a narrow tall window is compact and takes four

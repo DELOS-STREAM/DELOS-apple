@@ -24,7 +24,7 @@ struct BootScreen: View {
                 .font(DelosFonts.figtree(stage.tpx(28)))
                 .foregroundStyle(colors.text2.color)
                 .multilineTextAlignment(.center)
-            HStack(spacing: stage.px(stage.compact ? 44 : 24)) {
+            HStack(spacing: stage.px(FocusSpacing.pillGap)) {
                 FocusItem(id: "begin", model: focus, action: onBegin) { focused in
                     PillButton(label: L("firstrun_boot_begin"), icon: Symbols.arrowForward, primary: true, focused: focused)
                 }
@@ -138,7 +138,8 @@ struct CreateProfileScreen: View {
     private var columns: Int { AvatarGridLayout.columns(stage) }
 
     var body: some View {
-        CenterColumn(gap: 40) {
+        // Change name and Create, one above the other, keep their focus clear of each other on a compact stage too
+        CenterColumn(gap: 40, minGap: FocusSpacing.pillLineGap) {
             Heading(
                 title: editing ? L("firstrun_create_edit_title") : L("firstrun_create_new_title"),
                 sub: editing ? L("firstrun_create_edit_note") : L("firstrun_create_new_note")
