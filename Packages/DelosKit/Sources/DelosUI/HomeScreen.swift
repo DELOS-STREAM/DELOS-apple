@@ -385,10 +385,12 @@ enum CoverTone {
 }
 
 /// The row's edge fades (`fadeMask` of DELOS for Android), stage pixels: the fade at the left edge, and at the right edge the
-/// fade with the clear strip at its end, each at full strength once that much of the row is hidden behind the edge.
+/// fade with the clear strip at its end, each whole while covers go on behind that edge and gone when none do, switching
+/// over ``switching`` (`animateFloatAsState(…, tween(300))` on `canScrollBackward` / `canScrollForward`).
 enum RowFade {
     static let start = 120.0
     static let endSolid = 260.0, endClear = 20.0
+    static let switching = FadeGrowth.whileHidden(Motion.fastOutSlowIn(300))
 }
 
 /// The games: the focused one's title and info above the row of covers. The focused cover stays where the first one
@@ -459,10 +461,11 @@ struct GameLibrary: View {
             // focus ran off the screen); the content switches the scroll view's own keyboard scrolling off
             .focusable(false)
             .scrollGlide(follow, axis: .horizontal, position: $position)
-            // The ends fade where covers go on behind them, growing with the first pixels scrolled away; the mask reaches far
-            // above and below the row for the focused cover's glow and ring
+            // The ends fade where covers go on behind them, so the first and the last cover's ring and glow stay whole; the
+            // mask reaches far above and below the row for the focused cover's glow and ring
             .scrollEdgeFade(.horizontal, FadeEdges(
-                start: FadeEdge(solid: RowFade.start), end: FadeEdge(solid: metrics.fadeSolid, clear: metrics.fadeClear)), outset: 1000)
+                start: FadeEdge(solid: RowFade.start), end: FadeEdge(solid: metrics.fadeSolid, clear: metrics.fadeClear)),
+                growth: RowFade.switching, outset: 1000)
             .padding(.top, stage.px(metrics.coverTop - metrics.rowPad))
             .opacity(rowAlpha)
             .offset(x: stage.px(rowBounce))

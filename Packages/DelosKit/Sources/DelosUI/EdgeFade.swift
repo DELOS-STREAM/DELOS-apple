@@ -110,11 +110,32 @@ struct EdgeFadeMask: ViewModifier, Animatable {
     }
 }
 
-/// The fading edges of a scroll view along [axis] (stage pixels): each edge fades as far as content is scrolled away
-/// behind it (``EdgeFadeMath``). Put on the `ScrollView` itself, whose geometry it reads.
+/// How an edge's fade of a scrolling row or list comes and goes.
+enum FadeGrowth {
+    /// It grows with the first pixels scrolled away behind the edge, to its full length once that much is hidden
+    /// (`fadeEdges(stage, scroll, …)` of DELOS for Android: the lists).
+    case scrolled
+    /// It is whole while anything is hidden behind the edge and gone when nothing is, switching on [animation] (none: at
+    /// once). DELOS for Android's rows (`ScrollRow`, the stream dock, the home row: `animateFloatAsState` on
+    /// `canScrollBackward` / `canScrollForward`; `tabScroll` at once).
+    case whileHidden(Animation?)
+    /// It is always whole, whatever the scroll (the compact letter picker's `fadeMask`).
+    case always
+
+    /// DELOS for Android's row: `tween(Motion.FADE, easing = Motion.Ease)`.
+    static let row = FadeGrowth.whileHidden(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000))
+
+    /// The fade a scroll view along [axis] gets unless told otherwise: DELOS for Android's rows switch theirs, its lists grow
+    /// theirs with the scroll.
+    static func standard(_ axis: Axis) -> FadeGrowth { axis == .horizontal ? .row : .scrolled }
+}
+
+/// The fading edges of a scroll view along [axis] (stage pixels): each edge fades where content lies behind it, as
+/// [growth] says (``EdgeFadeMath``). Put on the `ScrollView` itself, whose geometry it reads.
 private struct ScrollEdgeFade: ViewModifier {
     let axis: Axis
     let fades: FadeEdges
+    let growth: FadeGrowth
     let bleed: Double
     let outset: Double
     @Environment(\.stage) private var stage
@@ -128,31 +149,47 @@ private struct ScrollEdgeFade: ViewModifier {
     func body(content: Content) -> some View {
         let start = fades.start.points(stage), end = fades.end.points(stage)
         let horizontal = axis == .horizontal
-        content
-            .onScrollGeometryChange(for: Hidden.self) { geometry in
-                let visible = geometry.visibleRect
-                let amount = EdgeFadeMath.hidden(
-                    visibleStart: horizontal ? visible.minX : visible.minY, visibleEnd: horizontal ? visible.maxX : visible.maxY,
-                    contentLength: horizontal ? geometry.contentSize.width : geometry.contentSize.height, cap: (start.solid, end.solid))
-                // Whole points: a fade that grows by less shows no difference, and the mask is not redrawn for it
-                return Hidden(start: amount.start.rounded(), end: amount.end.rounded())
-            } action: { _, now in
-                // The fade follows the scroll as it is, never on an animation of its own
-                var still = Transaction()
-                still.disablesAnimations = true
-                withTransaction(still) { hidden = now }
-            }
-            .modifier(EdgeFadeMask(
-                hiddenStart: hidden.start, hiddenEnd: hidden.end, axis: axis, start: start, end: end,
+        let whole = Hidden(start: start.solid, end: end.solid)
+        if case .always = growth {
+            content.modifier(EdgeFadeMask(
+                hiddenStart: whole.start, hiddenEnd: whole.end, axis: axis, start: start, end: end,
                 bleed: stage.px(bleed), outset: stage.px(outset)))
+        } else {
+            content
+                .onScrollGeometryChange(for: Hidden.self) { geometry in
+                    let visible = geometry.visibleRect
+                    let amount = EdgeFadeMath.hidden(
+                        visibleStart: horizontal ? visible.minX : visible.minY, visibleEnd: horizontal ? visible.maxX : visible.maxY,
+                        contentLength: horizontal ? geometry.contentSize.width : geometry.contentSize.height, cap: (start.solid, end.solid))
+                    // Whole points: a fade that grows by less shows no difference, and the mask is not redrawn for it
+                    let now = Hidden(start: amount.start.rounded(), end: amount.end.rounded())
+                    guard case .whileHidden = growth else { return now }
+                    return Hidden(start: now.start > 0 ? whole.start : 0, end: now.end > 0 ? whole.end : 0)
+                } action: { _, now in
+                    if case .whileHidden(let animation?) = growth {
+                        withAnimation(animation) { hidden = now }
+                    } else {
+                        // The fade follows the scroll as it is, never on an animation of its own
+                        var still = Transaction()
+                        still.disablesAnimations = true
+                        withTransaction(still) { hidden = now }
+                    }
+                }
+                .modifier(EdgeFadeMask(
+                    hiddenStart: hidden.start, hiddenEnd: hidden.end, axis: axis, start: start, end: end,
+                    bleed: stage.px(bleed), outset: stage.px(outset)))
+        }
     }
 }
 
 extension View {
-    /// Fades the edges of the scroll view this is put on where content is scrolled away behind them (stage pixels; see
-    /// ``EdgeFadeMath``): [bleed] is how far the mask reaches beyond the edges along [axis] (a scroll view that does not clip
-    /// its content shows a ring or glow there), [outset] how far beyond its sides across it.
-    func scrollEdgeFade(_ axis: Axis, _ fades: FadeEdges, bleed: Double = 0, outset: Double = 400) -> some View {
-        modifier(ScrollEdgeFade(axis: axis, fades: fades, bleed: bleed, outset: outset))
+    /// Fades the edges of the scroll view this is put on where content lies behind them (stage pixels; see
+    /// ``EdgeFadeMath``), coming and going as [growth] says (by default a row's switches, a list's grows with the scroll):
+    /// [bleed] is how far the mask reaches beyond the edges along [axis] (a scroll view that does not clip its content shows
+    /// a ring or glow there), [outset] how far beyond its sides across it.
+    func scrollEdgeFade(_ axis: Axis, _ fades: FadeEdges, growth: FadeGrowth? = nil, bleed: Double = 0, outset: Double = 400)
+        -> some View
+    {
+        modifier(ScrollEdgeFade(axis: axis, fades: fades, growth: growth ?? .standard(axis), bleed: bleed, outset: outset))
     }
 }
