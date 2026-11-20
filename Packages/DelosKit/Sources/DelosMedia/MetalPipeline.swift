@@ -168,15 +168,17 @@ final class MetalPipeline: @unchecked Sendable {
             return max(now, min(latest, now + tick.refresh - MetalPipeline.drawingGuard))
         }
 
-        /// Phase lock: the waiting refresh ends without a new picture. Returns its throughput record.
-        mutating func expireParked() -> StreamPerf.Refresh? {
+        /// Phase lock: the waiting refresh ends without a new picture. Returns its throughput record and the refresh
+        /// itself: the caller drops it (and its drawable) after leaving the state lock. Releasing a drawable takes the
+        /// layer's lock, which Core Animation holds while it calls the presented handler that takes the state lock.
+        mutating func expireParked() -> (refresh: StreamPerf.Refresh, released: ParkedRefresh)? {
             guard let parked else { return nil }
             self.parked = nil
             let repeats = queue.counters.repeatedRefreshes
             queue.idle(at: parked.tick.presentation)
             var refresh = parked.refresh
             refresh.repeated = queue.counters.repeatedRefreshes > repeats
-            return refresh
+            return (refresh, parked)
         }
 
         /// The arrival's pose for a refresh at `time`, nil when the picture is drawn plainly; an arrival that is complete
@@ -407,13 +409,13 @@ final class MetalPipeline: @unchecked Sendable {
     private func resumeParked(now: Double) {
         guard state.withLock({ $0.parked != nil }), drawing.try() else { return }
         defer { drawing.unlock() }
-        let resumed = state.withLock { s -> (ParkedRefresh?, StreamPerf.Refresh?) in
+        let resumed = state.withLock { s -> (ParkedRefresh?, (refresh: StreamPerf.Refresh, released: ParkedRefresh)?) in
             guard let parked = s.parked else { return (nil, nil) }
             guard now <= parked.latest else { return (nil, s.expireParked()) }
             s.parked = nil
             return (parked, nil)
         }
-        if let expired = resumed.1 { perf?.tick(expired) }
+        if let expired = resumed.1 { perf?.tick(expired.refresh) }
         guard let parked = resumed.0 else { return }
         select(parked.tick, now: now, latest: parked.latest, refresh: parked.refresh, waited: true)
     }
@@ -426,15 +428,19 @@ final class MetalPipeline: @unchecked Sendable {
         // Drain callbacks from the old session before clearing its pictures. discardPending alone leaves
         // asynchronous VideoToolbox frames able to enter the freshly flushed queue.
         decoder.invalidate()
-        state.withLock { s in
+        // The waiting refresh leaves the lock first: its drawable is released outside it (see `expireParked`)
+        let released = state.withLock { s -> ParkedRefresh? in
             s.queue.flush()
+            let parked = s.parked
             s.parked = nil
             s.lastFrame = nil
             s.awaitingKeyFrame = true
             s.presentation.flush()
             s.lastDrawnSize = (0, 0)
             s.posedOnScreen = false
+            return parked
         }
+        withExtendedLifetime(released) {}
     }
 
     /// Blocks until the frames submitted so far are decoded and queued (replay tests only).
@@ -447,13 +453,16 @@ final class MetalPipeline: @unchecked Sendable {
         defer { drawing.unlock() }
         submissions.lock()
         defer { submissions.unlock() }
-        state.withLock { s in
+        let released = state.withLock { s -> ParkedRefresh? in
             s.accepting = false
             s.queue.flush()
+            let parked = s.parked
             s.parked = nil
             s.lastFrame = nil
             s.presentation.flush()
+            return parked
         }
+        withExtendedLifetime(released) {}
         decoder.invalidate()
     }
 
@@ -478,7 +487,8 @@ final class MetalPipeline: @unchecked Sendable {
             select(tick, now: now, latest: nil, refresh: refresh, waited: false)
             return
         }
-        let (expired, latest, parked) = state.withLock { s -> (StreamPerf.Refresh?, Double, Bool) in
+        let (expired, latest, parked) = state.withLock {
+            s -> ((refresh: StreamPerf.Refresh, released: ParkedRefresh)?, Double, Bool) in
             let expired = s.expireParked()
             let latest = s.latestDrawing(for: tick, now: now)
             refresh.margin = s.queue.phaseMargin
@@ -489,7 +499,7 @@ final class MetalPipeline: @unchecked Sendable {
             s.parked = ParkedRefresh(tick: tick, latest: latest, refresh: refresh)
             return (expired, latest, true)
         }
-        if let expired { perf?.tick(expired) }
+        if let expired { perf?.tick(expired.refresh) }
         guard !parked else { return }
         select(tick, now: now, latest: latest, refresh: refresh, waited: false)
     }
@@ -557,7 +567,7 @@ final class MetalPipeline: @unchecked Sendable {
     func endWaitingRefresh() {
         drawing.lock()
         defer { drawing.unlock() }
-        if let expired = state.withLock({ $0.expireParked() }) { perf?.tick(expired) }
+        if let expired = state.withLock({ $0.expireParked() }) { perf?.tick(expired.refresh) }
     }
 
     /// Starts the launch scene's arrival now on the renderer's clock; it lasts `duration` seconds (the exit's).
