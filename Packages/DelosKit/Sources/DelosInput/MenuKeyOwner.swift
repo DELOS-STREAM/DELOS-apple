@@ -168,7 +168,8 @@ extension UIResponder {
 
 /// Switches the keyboard scrolling off in the scroll view that holds this view (`UIScrollView.allowsKeyboardScrolling`:
 /// on from iPadOS 17, it scrolls and animates by itself on every arrow, Page and Space key, next to DELOS's own scroll
-/// that follows the focus).
+/// that follows the focus). The pointer's scroll stays the player's: the scroll view takes the trackpad's two fingers
+/// and a wheel with their momentum (`allowedScrollTypesMask` `.all`: continuous and discrete).
 @MainActor
 public final class KeyboardScrollOffView: UIView {
     public override func didMoveToWindow() {
@@ -185,7 +186,10 @@ public final class KeyboardScrollOffView: UIView {
     static func apply(from view: UIView) {
         var next = view.superview
         while let current = next {
-            if let scroll = current as? UIScrollView, scroll.allowsKeyboardScrolling { scroll.allowsKeyboardScrolling = false }
+            if let scroll = current as? UIScrollView {
+                if scroll.allowsKeyboardScrolling { scroll.allowsKeyboardScrolling = false }
+                if scroll.panGestureRecognizer.allowedScrollTypesMask != .all { scroll.panGestureRecognizer.allowedScrollTypesMask = .all }
+            }
             next = current.superview
         }
     }

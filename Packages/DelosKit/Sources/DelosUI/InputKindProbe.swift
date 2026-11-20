@@ -10,8 +10,8 @@ extension View {
     /// Tells ``ControllerGlyphs`` which kind of input the player uses, as it happens: a finger on the screen (touch), a
     /// mouse or trackpad (pointer). Keys and controllers are noted by ``MenuInput``. It is also where the pointer reaches
     /// [router] beyond what the items do themselves (docs/ARCHITECTURE.md, "Pointer"): a right click or a two-finger
-    /// click (``ShellRouter/secondaryClick(at:)``), and on the iPad the pointer hiding over the items
-    /// (``ShellRouter/pointerTarget(at:)``). Put once at the root of the shell.
+    /// click (``ShellRouter/secondaryClick(at:)``). The system pointer is left as it is everywhere: it never hides over the
+    /// items. Put once at the root of the shell.
     func tracksInputKind(router: ShellRouter) -> some View {
         #if os(iOS)
         background(InputKindProbe(router: router))
@@ -27,7 +27,7 @@ extension View {
 /// Watches every touch of the window without taking part: a recognizer that only looks at the touches that begin (a
 /// direct one is a finger or the Pencil, an indirect pointer one a mouse or trackpad) and then fails, at once, and a hover
 /// recognizer for the pointer moving over the window. A tap recognizer of the secondary button takes the right click and
-/// the trackpad's two-finger click, and a pointer interaction hides the pointer over the items.
+/// the trackpad's two-finger click.
 private struct InputKindProbe: UIViewRepresentable {
     let router: ShellRouter
 
@@ -40,10 +40,9 @@ private struct InputKindProbe: UIViewRepresentable {
     func updateUIView(_ view: ProbeView, context: Context) { view.router = router }
 }
 
-private final class ProbeView: UIView, UIGestureRecognizerDelegate, UIPointerInteractionDelegate {
+private final class ProbeView: UIView, UIGestureRecognizerDelegate {
     weak var router: ShellRouter?
     private var recognizers: [UIGestureRecognizer] = []
-    private var pointer: UIPointerInteraction?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -56,8 +55,6 @@ private final class ProbeView: UIView, UIGestureRecognizerDelegate, UIPointerInt
         super.didMoveToWindow()
         recognizers.forEach { $0.view?.removeGestureRecognizer($0) }
         recognizers = []
-        pointer.map { $0.view?.removeInteraction($0) }
-        pointer = nil
         guard let window else { return }
         let hover = UIHoverGestureRecognizer(target: self, action: #selector(hovered))
         hover.cancelsTouchesInView = false
@@ -68,9 +65,6 @@ private final class ProbeView: UIView, UIGestureRecognizerDelegate, UIPointerInt
         secondary.delegate = self
         recognizers = [TouchKindRecognizer(), hover, secondary]
         recognizers.forEach(window.addGestureRecognizer)
-        let pointer = UIPointerInteraction(delegate: self)
-        window.addInteraction(pointer)
-        self.pointer = pointer
     }
 
     /// The pointer moved over the window (not merely there when a view appeared under it); the Pencil hovering above the
@@ -90,20 +84,6 @@ private final class ProbeView: UIView, UIGestureRecognizerDelegate, UIPointerInt
 
     // The pointer's hover reaches every other recognizer as well (the buttons' own pointer effects)
     func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
-
-    /// Over an item the pointer is hidden (its focus ring, which the hover moved there, shows where it is: a highlight or a
-    /// lift of the system would draw a second focus over ours); elsewhere it is the system's.
-    func pointerInteraction(
-        _ interaction: UIPointerInteraction, regionFor request: UIPointerRegionRequest, defaultRegion: UIPointerRegion
-    ) -> UIPointerRegion? {
-        // The interaction is the window's: the location is in window points, SwiftUI's global space
-        guard let frame = router?.pointerTarget(at: request.location) else { return nil }
-        return UIPointerRegion(rect: frame, identifier: NSValue(cgRect: frame))
-    }
-
-    func pointerInteraction(_ interaction: UIPointerInteraction, styleFor region: UIPointerRegion) -> UIPointerStyle? {
-        .hidden()
-    }
 }
 
 final class TouchKindRecognizer: UIGestureRecognizer, UIGestureRecognizerDelegate {

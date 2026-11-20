@@ -263,25 +263,20 @@ final class ShellRouter {
 
     // MARK: Pointer
 
-    /// The focus the pointer's own entry points act on (``secondaryClick(at:)``, ``pointerTarget(at:)``): the side menu's,
-    /// an open layer's or a sheet's, else the screen's. Nil while the portal is up and on the stream screen, where the
-    /// pointer is the PC's mouse (the stream menu's items take the hover and clicks themselves, as ``FocusItem``s).
+    /// The focus the pointer's own entry point acts on (``secondaryClick(at:)``): the side menu's, an open layer's or a
+    /// sheet's, else the screen's. Nil while the portal is up and on the stream screen, where the pointer is the PC's mouse
+    /// (the stream menu's items take the hover and clicks themselves, as ``FocusItem``s).
     var pointerFocus: FocusModel? {
         if actions.connection.isActive { return nil }
         if case .stream = navigator.current { return nil }
         return modalFocus ?? navigator.focus
     }
 
-    /// The frame of the item under the pointer at [point] (global points), over which the iPad's pointer hides: the item's
-    /// focus ring shows where it is. Nil over no item.
-    func pointerTarget(at point: CGPoint) -> CGRect? {
-        pointerFocus?.item(at: point)?.frame
-    }
-
-    /// A right click or a two-finger click at [point] (global points): the item under it takes the focus and gets the
-    /// command of the right menu button (``MenuCommand/options``, its context menu), once the focus has scrolled it to its
-    /// place. Over an item without a menu it only takes the focus; with a layer open a click beside its items is Options too
-    /// (the button that opened a context menu closes it). True when the click did something.
+    /// A right click or a two-finger click at [point] (global points): the item under it takes the focus where it is (the
+    /// pointer's move, ``FocusModel/point(to:)``: nothing scrolls) and gets the command of the right menu button
+    /// (``MenuCommand/options``, its context menu). Over an item without a menu it only takes the focus; with a layer open a
+    /// click beside its items is Options too (the button that opened a context menu closes it). True when the click did
+    /// something.
     @discardableResult
     func secondaryClick(at point: CGPoint) async -> Bool {
         guard let focus = pointerFocus else { return false }
@@ -290,13 +285,8 @@ final class ShellRouter {
             route(.options, repeatCount: 0)
             return true
         }
-        let hadFocus = focus.focused == id
-        focus.focus(id)
+        focus.point(to: id)
         guard focus.hasMenu(id) else { return true }
-        if !hadFocus {
-            await focus.settled(id)
-            guard focus.focused == id, pointerFocus === focus else { return true }
-        }
         route(.options, repeatCount: 0)
         return true
     }

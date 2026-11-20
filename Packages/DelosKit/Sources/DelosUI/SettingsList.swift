@@ -76,9 +76,12 @@ struct SettingsListScroll: ViewModifier {
             .scrollEdgeFade(.vertical, FadeEdges(start: FadeEdge(solid: fadeTop), end: FadeEdge(solid: fadeBottom)))
             .environment(\.settingsRowFrames, frames)
             .onChange(of: focus.focused) { _, now in
-                guard let id = now as? String, contains(id) else { return }
+                // The pointer's move leaves the list where it is (``FocusModel/pointerMoved``)
+                guard let id = now as? String, contains(id), !focus.pointerMoved else { return }
                 bringIntoView(id)
             }
+            // The player scrolls (a finger, the trackpad, a wheel): a later focus is judged from where the list is then
+            .onScrollPhaseChange { _, phase in if ScrollGlide.isPlayers(phase) { goal = nil } }
             .onChange(of: resetKey) { _, _ in
                 goal = nil
                 glide.jump(to: 0)

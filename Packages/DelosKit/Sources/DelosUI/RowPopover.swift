@@ -242,7 +242,7 @@ private struct OptionsList: View {
                 .scrollEdgeFade(.vertical, .menu)
                 .frame(height: stage.px(listHeight))
                 .onAppear { proxy.scrollTo(RowPopover.optionID(selected ?? 0)) }
-                .onChange(of: focus.focused) { _, now in if let now { proxy.scrollTo(now) } }
+                .onChange(of: focus.focused) { _, now in if let now, !focus.pointerMoved { proxy.scrollTo(now) } }
             }
         }
         .padding(.vertical, stage.px(L.pad))

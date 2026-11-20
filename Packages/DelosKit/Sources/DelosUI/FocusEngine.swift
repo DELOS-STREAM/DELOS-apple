@@ -113,6 +113,10 @@ public final class FocusModel {
     /// focus last.
     @ObservationIgnored private var groups: [AnyHashable: AnyHashable] = [:]
     @ObservationIgnored private var lastInGroup: [AnyHashable: AnyHashable] = [:]
+    /// Whether the pointer made the last move of the focus (``point(to:)``). The item is under the pointer, where it is: no
+    /// scroll view follows that move (docs/ARCHITECTURE.md, "Pointer"), so the trackpad's or the wheel's own scroll is the
+    /// only one and a hover never runs a row away under the pointer. Every scroll that follows the focus asks it first.
+    @ObservationIgnored private(set) var pointerMoved = false
 
     public init(initial: AnyHashable? = nil) {
         focused = initial
@@ -121,6 +125,13 @@ public final class FocusModel {
     public func focus(_ id: AnyHashable) {
         watchingForFirst = false
         move(to: id)
+    }
+
+    /// The pointer moved over [id] or clicked it: it takes the focus where it is, and nothing scrolls for that move
+    /// (``pointerMoved``).
+    func point(to id: AnyHashable) {
+        watchingForFirst = false
+        move(to: id, byPointer: true)
     }
 
     /// Whether [id] has the focus. Observes only that item's own state: a move of the focus redraws the item that loses it
@@ -134,9 +145,11 @@ public final class FocusModel {
         return flag.on
     }
 
-    /// Moves the focus to [id]; nothing changes, and nothing is redrawn, when it is there already.
-    private func move(to id: AnyHashable?) {
+    /// Moves the focus to [id]; nothing changes, and nothing is redrawn, when it is there already. [byPointer]: the
+    /// pointer's move (``pointerMoved``); every other move is followed by its scroll view.
+    private func move(to id: AnyHashable?, byPointer: Bool = false) {
         guard focused != id else { return }
+        pointerMoved = byPointer
         if let old = focused { flags[old]?.on = false }
         focused = id
         if let id {
@@ -525,10 +538,13 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
         }
     }
 
-    /// The item gained the focus: its scroll view brings it into view, from where the item is laid out now.
+    /// The item gained the focus: its scroll view brings it into view, from where the item is laid out now. Not for a move of
+    /// the pointer's (``FocusModel/pointerMoved``): the item is under the pointer and stays where it is; the item appearing
+    /// in a new scroll view with the focus is still placed.
     private func revealed(_ now: AnyHashable?, animated: Bool = true) {
         let key = AnyHashable(id)
-        if now == key { reveal?.reveal(key, frame: model.registeredFrames[key], animated: animated) }
+        guard now == key, !animated || !model.pointerMoved else { return }
+        reveal?.reveal(key, frame: model.registeredFrames[key], animated: animated)
     }
 
     #if os(tvOS)
@@ -610,7 +626,8 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
                 let key = AnyHashable(id)
                 // The pointer focused the item when it moved over it: a click is never only the first tap that focuses
                 let wasFocused = model.focused == key || ControllerGlyphs.shared.kind == .pointer
-                model.focus(key)
+                // A click takes the focus where the item is, as the hover does: nothing scrolls for it
+                if ControllerGlyphs.shared.kind == .pointer { model.point(to: key) } else { model.focus(key) }
                 if let tap {
                     pulse()
                     tap(wasFocused)
@@ -619,12 +636,12 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
                 }
             }
             // The pointer moving over the item focuses it (docs/ARCHITECTURE.md, "Pointer"): global points, so content that
-            // scrolls under a pointer at rest does not take the focus
+            // scrolls under a pointer at rest does not take the focus; the item stays where it is, no scroll follows
             .onContinuousHover(coordinateSpace: .global) { phase in
                 guard case .active(let point) = phase, !blocked, PointerHover.shared.moved(to: point) else { return }
                 let key = AnyHashable(id)
                 guard model.focused != key else { return }
-                model.focus(key)
+                model.point(to: key)
                 if PointerHover.shared.cues(at: .now) { layers?.feedback?.play(.move) }
             }
             .modifier(accessibility)

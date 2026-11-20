@@ -60,6 +60,8 @@ import Testing
         focus.focus("tab")
         #expect(await fx.router.secondaryClick(at: center(cover)))
         #expect(focus.focused == AnyHashable("cover"))
+        // The cover is under the pointer: the menu opens at once, and nothing scrolls the cover away first
+        #expect(focus.pointerMoved)
         #expect(fx.layers.isOpen)
         // Beside the open menu's rows, a secondary click is the button that opened it: it closes
         #expect(await fx.router.secondaryClick(at: CGPoint(x: 5000, y: 5000)))
@@ -85,11 +87,11 @@ import Testing
         let screen = fx.navigator.focus
         screen.register("cover", frame: cover, menu: { menu }) {}
         #expect(fx.router.pointerFocus === screen)
-        #expect(fx.router.pointerTarget(at: center(cover)) == cover)
+        #expect(fx.router.pointerFocus?.item(at: center(cover))?.frame == cover)
         fx.layers.openDialog(DialogSpec(title: "t", note: "n", fields: [], confirm: "ok") { _ in true })
         #expect(fx.router.pointerFocus === fx.layers.focus)
         // The pointer shows over the screen's cover behind the dialog: it is no item of the dialog's
-        #expect(fx.router.pointerTarget(at: center(cover)) == nil)
+        #expect(fx.router.pointerFocus?.item(at: center(cover)) == nil)
         fx.layers.close()
         fx.router.openSideMenu()
         #expect(fx.router.pointerFocus === fx.router.sideMenu)
@@ -101,9 +103,58 @@ import Testing
         let focus = fx.navigator.focus
         focus.register("cover", frame: cover, menu: { menu }) {}
         #expect(fx.router.pointerFocus == nil)
-        #expect(fx.router.pointerTarget(at: center(cover)) == nil)
         #expect(!(await fx.router.secondaryClick(at: center(cover))))
         #expect(!fx.layers.isOpen)
+    }
+
+    // MARK: Hover focus never requests a scroll
+
+    @Test func theHoversFocusAsksNoScrollViewToFollowIt() {
+        let model = FocusModel(initial: "a")
+        model.register("a", frame: CGRect(x: 0, y: 0, width: 80, height: 100)) {}
+        model.register("b", frame: CGRect(x: 100, y: 0, width: 80, height: 100)) {}
+        #expect(!model.pointerMoved)
+        model.point(to: "b")
+        #expect(model.focused == AnyHashable("b"))
+        #expect(model.pointerMoved)
+        // The pointer over the item that has the focus moves nothing: the last move stays the pointer's
+        model.point(to: "b")
+        #expect(model.pointerMoved)
+        // An arrow or a screen's own move of the focus is followed again
+        model.handle(.left)
+        #expect(model.focused == AnyHashable("a"))
+        #expect(!model.pointerMoved)
+        model.point(to: "b")
+        model.focus("a")
+        #expect(!model.pointerMoved)
+    }
+
+    @Test func theLibraryRowStaysWhereItIsForEveryHover() {
+        let row = LibraryRow(count: 8)
+        // A sweep of the pointer over the covers, then over the last and back to the first (the arrows' wrap)
+        for index in [1, 2, 3, 7, 0] {
+            row.point(at: index)
+        }
+        #expect(row.targets == Array(repeating: .stay, count: 5))
+        // The next arrow is followed from the hovered cover
+        row.handle(.right)
+        #expect(row.targets.last == .follow(to: 1))
+    }
+
+    @Test func noStepOfThePointerScrollsTheRowEvenAtItsEnds() {
+        for (old, new) in [(0, 7), (7, 0), (3, 4), (nil, 5)] as [(Int?, Int)] {
+            #expect(LibraryScroll.step(from: old, to: new, count: 8, byPointer: true) == .stay)
+        }
+        #expect(LibraryScroll.step(from: 0, to: 7, count: 8, byPointer: false) == .wrap)
+        #expect(LibraryScroll.step(from: 3, to: 4, count: 8, byPointer: false) == .follow(to: 4))
+    }
+
+    @Test func thePlayersOwnScrollStopsTheGlideTheProgramsDoesNot() {
+        #expect(ScrollGlide.isPlayers(.tracking))
+        #expect(ScrollGlide.isPlayers(.interacting))
+        #expect(ScrollGlide.isPlayers(.decelerating))
+        #expect(!ScrollGlide.isPlayers(.animating))
+        #expect(!ScrollGlide.isPlayers(.idle))
     }
 
     @Test func thePressSqueezesTo096AndPulsesTheGlow() {
