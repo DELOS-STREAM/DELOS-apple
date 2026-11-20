@@ -136,11 +136,38 @@ final class HomeArt {
 
     func cachedBoxArt(hostID: String, appID: Int) -> CGImage? { images["box/\(hostID)/\(appID)"] }
 
+    /// What a cover of the library shows, from memory (``Cover``): the SteamGridDB cover (the wide one for the [wide]
+    /// first cover; DELOS's own entries' bundled art), else the PC's box art; nil when none is decoded yet.
+    func cachedCard(hostID: String, app: HostApp, wide: Bool) -> CGImage? {
+        let kind: ArtKind = wide ? .wide : .cover
+        if BundledArtwork.kind(app) != nil { return cachedImage(hostID: hostID, app: app, kind: kind) }
+        if artwork.enabled, let tile = cachedImage(hostID: hostID, appID: app.id, kind: kind) { return tile }
+        return cachedBoxArt(hostID: hostID, appID: app.id)
+    }
+
+    /// The logo of a game's title (`GameTitle`, the overview's header): its SteamGridDB logo, the player's choice or else
+    /// the default one; nil without SteamGridDB, without a logo, and for DELOS's own entries, whose name is their logo.
+    func logo(hostID: String, app: HostApp) async -> CGImage? {
+        guard BundledArtwork.kind(app) == nil, artwork.enabled else { return nil }
+        return await image(hostID: hostID, appID: app.id, kind: .logo)
+    }
+
+    /// The same without waiting, for a logo in memory already.
+    func cachedLogo(hostID: String, app: HostApp) -> CGImage? {
+        guard BundledArtwork.kind(app) == nil, artwork.enabled else { return nil }
+        return cachedImage(hostID: hostID, appID: app.id, kind: .logo)
+    }
+
+    /// The key of the animation ``animation(hostID:app:kind:)`` gives (``AnimatedFrames`` knows its frame by it).
+    func animationKey(hostID: String, appID: Int, kind: ArtKind) -> String {
+        "sgdb/\(hostID)/\(appID)/\(kind.rawValue)#\(artwork.version)"
+    }
+
     /// The SteamGridDB image of [kind] when it is an animation that plays (its still first frame is ``image(hostID:appID:kind:)``),
     /// nil for a still image, none, or DELOS's own entries (`rememberAnimatedArtwork`). The answer is kept per artwork version.
     func animation(hostID: String, app: HostApp, kind: ArtKind) async -> AnimatedSource? {
         guard BundledArtwork.kind(app) == nil, artwork.enabled else { return nil }
-        let key = "sgdb/\(hostID)/\(app.id)/\(kind.rawValue)#\(artwork.version)"
+        let key = animationKey(hostID: hostID, appID: app.id, kind: kind)
         if let known = animations[key] { return known }
         let source = await artwork.animation(hostID: hostID, appID: app.id, kind: kind).map { AnimatedSource(key: key, data: $0) }
         animations[key] = .some(source)

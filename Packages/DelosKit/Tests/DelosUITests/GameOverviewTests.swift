@@ -86,13 +86,41 @@ import Testing
 
     @Test func flightRunsFromTheCardToTheSlot() {
         let from = CGRect(x: 150, y: 520, width: 316.5, height: 474.75), to = CGRect(x: 150, y: 150, width: 340, height: 510)
-        let start = OverviewMotion.flightTransform(from: from, to: to, progress: 0)
-        #expect(abs(start.dy - 370) < 0.001 && abs(start.sx - from.width / to.width) < 0.001)
-        let end = OverviewMotion.flightTransform(from: from, to: to, progress: 1)
-        #expect(end.dx == 0 && end.dy == 0 && end.sx == 1 && end.sy == 1)
-        let middle = OverviewMotion.flightTransform(from: from, to: to, progress: 0.5)
+        #expect(OverviewMotion.flightFrame(from: from, to: to, progress: 0, lift: 30) == from)
+        #expect(OverviewMotion.flightFrame(from: from, to: to, progress: 1, lift: 30) == to)
+        let middle = OverviewMotion.flightFrame(from: from, to: to, progress: 0.5, lift: 30)
         // Above the straight line and a little larger at the middle
-        #expect(middle.dy < 185 && middle.sx > (from.width / to.width + 1) / 2)
+        #expect(middle.midY < (from.midY + to.midY) / 2 - 29 && middle.width > (from.width + to.width) / 2)
+    }
+
+    /// Regression (#23): flying back into the wide first cover stretched the portrait art to the landscape frame; the
+    /// frame now changes its shape while the picture keeps one scale for both axes, filling it.
+    @Test func wideFlightKeepsThePictureUnstretched() {
+        let wide = CGRect(x: 120, y: 560, width: 1000, height: 474), slot = CGRect(x: 150, y: 150, width: 340, height: 510)
+        let aspect = 2.0 / 3
+        let base = OverviewMotion.fillSize(aspect: aspect, box: slot.size)
+        #expect(abs(base.width - 340) < 0.001 && abs(base.height - 510) < 0.001)
+        for progress in [0.0, 0.3, 0.7, 1.0] {
+            let frame = OverviewMotion.flightFrame(from: wide, to: slot, progress: progress, lift: 30)
+            let fill = OverviewMotion.fill(aspect: aspect, base: base, frame: frame)
+            let shown = CGRect(x: fill.dx, y: fill.dy, width: base.width * fill.scale, height: base.height * fill.scale)
+            // The same shape as the picture, covering the frame, centred on it
+            #expect(abs(shown.width / shown.height - aspect) < 0.0001)
+            #expect(shown.width >= frame.width - 0.001 && shown.height >= frame.height - 0.001)
+            #expect(abs(shown.midX - frame.midX) < 0.001 && abs(shown.midY - frame.midY) < 0.001)
+        }
+        // At the card the wide frame crops the portrait art to its width
+        let start = OverviewMotion.fill(aspect: aspect, base: base, frame: wide)
+        #expect(abs(base.width * start.scale - wide.width) < 0.001)
+    }
+
+    @Test func logoFliesByOneScaleAndTheHeroBlurDeepensFromTheDashboards() {
+        let home = CGSize(width: 900, height: 180), header = CGSize(width: OverviewMotion.logoWidth, height: OverviewMotion.logoHeight)
+        // The same box shape: one scale whatever the logo's shape
+        #expect(abs(OverviewMotion.logoScale(aspect: 2, from: home, to: header) - 1.25) < 0.0001)
+        #expect(abs(OverviewMotion.logoScale(aspect: 8, from: home, to: header) - 1.25) < 0.0001)
+        #expect(abs(OverviewMotion.logoScale(aspect: 4, from: CGSize(width: 600, height: 180), to: header) - 600.0 / 576) < 0.0001)
+        #expect(OverviewMotion.deepBlur(from: 0) == 40 && OverviewMotion.deepBlur(from: 20) == 60)
     }
 
     @Test func homeMotionNumbers() {

@@ -17,6 +17,14 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - The game overview's trailers play in the app (iPhone, iPad, Mac): YouTube's player in the viewer with DELOS's controls
   under it (A plays or pauses, Left and Right seek 10 s, Y mutes, L1 and R1 browse); nothing opens a browser or the
   YouTube app. Videos YouTube does not let other apps play are left out; Apple TV lists no videos.
+- The game overview below the dashboard: Down on a game's cover (a swipe of the cover up, or the Game info chip at the
+  bottom of the focused cover) continues the dashboard downward. The cover flies into the header, keeping its picture's
+  shape as its frame turns from the wide first cover's into the portrait one, beside the game's logo (the dashboard's,
+  else the title), ratings, age rating, Play and App settings; About with the storyline, Screenshots and videos with a
+  full-screen viewer, Details, Your streaming, Links and Similar games follow below. Animated covers, logos and game
+  backgrounds play there as on the dashboard, and the game background starts from the dashboard's blur, deepening as
+  the page scrolls. Up from the header, Back or a pull down at the top returns the way it came. The details come from
+  the metadata Worker's game-details endpoint, cached with the game's record for 7 days.
 - Pointer (Magic Keyboard's trackpad, a mouse) in the shell, outside a stream: moving over an item focuses it with the
   gliding focus ring where the item is (nothing scrolls for the pointer), a click activates it with the press, a right
   click or a two-finger click opens the item's context menu (Control-click on the Mac). The system pointer stays visible

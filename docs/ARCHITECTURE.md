@@ -974,6 +974,9 @@ rounded body (`CaretCardGlass`, shapes conforming to `CaretCard`); the caret is 
 glass's tint (over the video a thin material in the scrim). Glass in the outline of the body with its caret has the system work
 out that outline before the first frame, which held a menu's first opening 300-480 ms on a fresh iPad simulator.
 
+Over the game overview the top bar's glass is a plain fill of its token (`glassFlat`, the prototype's `.sb-nav`): the page
+is masked out under the bar, so the glass would only blur the still backdrop while the content moves past unseen.
+
 Not glass: primary buttons (solid main color, as on Android), focus rings, progress bars, cover art and toasts (an
 opaque navy card, as on Android, so it reads over any frame of a stream).
 
@@ -1253,6 +1256,13 @@ background stays (a portal opens, motion is reduced) it holds its frame for 1 s 
 a frame (`Bitmap`) is CoreGraphics' and Accelerate's work only, about 3 ms in a debug build on an M6 Mac besides the
 frame's decoding: a loop over the pixels in Swift costs about 100 ms a frame unoptimized, which played the background at
 4 frames a second on the iPad.
+
+The game overview plays by the library's rule too, with the library's own animations released while it is open (the
+covers are hidden then): the header's cover and the logo once the cover's flight has landed (nothing decodes during the
+motion), the similar games' covers on screen, none under the full-screen viewer. Its game background is the root's (the
+dashboard's, with the profile's blur, playing when animated) under a deeper blur rendered once that fades in as the page
+scrolls. The flying cover takes the frame the card's or the header's animation shows as it starts (`AnimatedFrames`, the
+last frame each playing layer drew), so it neither restarts nor falls back to the first frame.
 
 `AnimatedArtBenchmark` (DelosUITests, `DELOS_ART_BENCH=1` or `DELOS_ART_BENCH=<file>:<file>`) plays animated files through
 these players in real time at 120 Hz for 2 s, with the main thread idle and busy, and prints the frames presented

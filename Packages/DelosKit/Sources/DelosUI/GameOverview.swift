@@ -23,6 +23,16 @@ final class OverviewSession {
     var shown = false
     /// The flight has landed: the header's own cover shows instead of the flying one.
     var landed = false
+    /// The card is the library's wide first cover (its own wide art in a landscape frame).
+    @ObservationIgnored var wide = false
+    /// The header cover's still picture (the card art: the SteamGridDB cover, else the PC's box art), from memory when the
+    /// overview opens; nil until loaded when it was not there.
+    @ObservationIgnored var coverStill: CGImage?
+    /// What the flight shows at its two ends, taken as it starts so nothing loads or restarts during the motion: the card's
+    /// picture ([flightFrom], the wide art for the wide cover) and the header's ([flightTo]); each the frame its animation
+    /// showed at that moment when it plays.
+    @ObservationIgnored var flightFrom: CGImage?
+    @ObservationIgnored var flightTo: CGImage?
     /// The ratings fill and count up.
     var ratingsOn = false
     /// The details' lookup has finished (the page says "not available" instead of "loading" when none came).
@@ -139,9 +149,13 @@ struct GameOverview: View {
         }
         ZStack(alignment: .topLeading) {
             OverviewBackdrop(session: session, content: content)
+            // The page rises with the flight and sinks back as it closes (`page.animate`), transforms only; its parts fade
+            // in and out on their own (``Rise``), the title flies and the cover lands
             page(content)
-                .opacity(session.shown ? 1 : 0)
-                .offset(y: session.shown || reduced ? 0 : stage.px(OverviewMotion.pageRise))
+                .animation(session.shown ? .timingCurve(0.2, 0.9, 0.25, 1, duration: OverviewMotion.flight / 1000)
+                           : .timingCurve(0.65, 0, 0.35, 1, duration: OverviewMotion.pageSink / 1000)) {
+                    $0.offset(y: session.shown || reduced ? 0 : stage.px(OverviewMotion.pageRise))
+                }
             if kind == .touch || kind == .pointer {
                 backButton
             }
@@ -279,7 +293,7 @@ struct GameOverview: View {
                             .foregroundStyle(colors.accent.color)
                             .modifier(Rise(index: 0, delay: 260, shown: session.shown))
                     }
-                    OverviewTitle(session: session)
+                    OverviewTitle(session: session, logo: art.cachedLogo(hostID: session.hostID, app: session.app))
                     WrapLayout(spacing: stage.px(10), lineSpacing: stage.px(10)) {
                         ForEach(genres.prefix(2), id: \.id) { OverviewTag(icon: TagLook.genreIcon($0.id), label: TagLook.genreName($0), genre: true) }
                         ForEach(themes.prefix(2), id: \.id) { OverviewTag(icon: TagLook.themeIcon($0.id), label: TagLook.themeName($0)) }
@@ -642,7 +656,7 @@ struct GameOverview: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: stage.px(30)) {
                 ForEach(Array(content.similar.enumerated()), id: \.element.id) { index, game in
-                    OverviewFocusable(id: OverviewNavigation.similar(index), focus: session.focus, corner: 20, pad: 0, scale: 1.06) {
+                    OverviewFocusable(id: OverviewNavigation.similar(index), focus: session.focus, corner: SimilarCover.corner, pad: 0, scale: 1.06) {
                         SimilarCover(hostID: session.hostID, game: game)
                     } action: {
                         if let app = game.app { onJump(app) } else { actions.toasts.show(L("overview_not_in_library", game.name), icon: Symbols.info) }
@@ -670,7 +684,7 @@ struct GameOverview: View {
         .buttonStyle(.plain)
         .padding(.leading, stage.px(56 + stage.safe.leading))
         .padding(.top, stage.px(130))
-        .opacity(session.shown ? 1 : 0)
+        .animation(.easeOut(duration: Motion.exit / 1000)) { $0.opacity(session.shown ? 1 : 0) }
         .accessibilityLabel(L("shell_hint_back"))
     }
 }
@@ -793,7 +807,8 @@ struct OverviewCover: View {
 
     var body: some View {
         let pull = max(-session.scroll, 0) / stage.scale
-        CardArt(hostID: session.hostID, app: session.app)
+        // The picture in memory at once; its animation plays once the flight has landed (nothing decodes during the motion)
+        CardArt(hostID: session.hostID, app: session.app, still: session.coverStill, plays: session.landed)
             .frame(width: stage.px(340), height: stage.px(510))
             .clipShape(RoundedRectangle(cornerRadius: stage.px(30), style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: stage.px(30), style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: stage.px(1)))
@@ -804,11 +819,13 @@ struct OverviewCover: View {
     }
 }
 
-/// A game's card art, as its library cover shows it: the SteamGridDB cover (playing when animated), else the PC's box
-/// art, else the placeholder art with the title.
+/// A game's card art, as its library cover shows it: the SteamGridDB cover (playing when animated, while [plays], the
+/// screen's artwork may play and it is on screen), else the PC's box art, else the placeholder art with the title.
+/// [still]: the picture already in memory, shown from the first frame.
 struct CardArt: View {
     let hostID: String
     let app: HostApp
+    let plays: Bool
     @Environment(HomeArt.self) private var art
     @Environment(HostStore.self) private var hosts
     @Environment(\.artMotion) private var artMotion
@@ -816,6 +833,15 @@ struct CardArt: View {
     @State private var image: CGImage?
     @State private var animation: AnimatedSource?
     @State private var animating = false
+    /// Some of it is on screen (its scroll view's).
+    @State private var visible = false
+
+    init(hostID: String, app: HostApp, still: CGImage? = nil, plays: Bool = true) {
+        self.hostID = hostID
+        self.app = app
+        self.plays = plays
+        _image = State(initialValue: still)
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -824,7 +850,7 @@ struct CardArt: View {
                     Image(decorative: image, scale: 1).resizable().scaledToFill()
                         .opacity(animating ? 0 : 1)
                         .overlay {
-                            AnimatedArtLayer(source: animation, playing: artMotion,
+                            AnimatedArtLayer(source: animation, playing: artMotion && plays && visible,
                                              width: Int(proxy.size.width * displayScale), height: Int(proxy.size.height * displayScale),
                                              covering: $animating)
                         }
@@ -837,6 +863,7 @@ struct CardArt: View {
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
+        .onScrollVisibilityChange(threshold: 0.01) { visible = $0 }
         .task(id: "\(app.id)#\(art.artwork.version)") {
             if art.artwork.enabled, let cover = await art.image(hostID: hostID, appID: app.id, kind: .cover) {
                 image = cover
@@ -857,63 +884,119 @@ private struct SimilarCover: View {
     @Environment(\.stage) private var stage
     @Environment(\.displayScale) private var displayScale
 
+    /// 1.3 times the prototype's 200 × 300 cover with its 20 px corners (owner's decision).
+    static let width = 260.0, height = 390.0, corner = 26.0
+
     var body: some View {
         ZStack(alignment: .topLeading) {
             if let app = game.app {
                 CardArt(hostID: hostID, app: app)
             } else if let id = game.coverImageID {
-                RemoteImage(url: IGDBImage.url(id, size: .coverBig, retina: displayScale > 1), maxPixels: 600)
+                RemoteImage(url: IGDBImage.url(id, size: .coverBig, retina: displayScale > 1), maxPixels: 800)
             } else {
                 let art = GameArt(hostID: hostID, app: HostApp(id: Int(game.id % 100_000), title: game.name))
-                PlaceholderArt(hue: art.hue, hue2: art.hue2, icon: art.icon, glyphSize: 210, glyphRight: -24, glyphTop: 0.24,
-                               title: game.name, titleSize: 22, titleInset: 16, titleBottom: 16, titleFit: true)
+                PlaceholderArt(hue: art.hue, hue2: art.hue2, icon: art.icon, glyphSize: 273, glyphRight: -31, glyphTop: 0.24,
+                               title: game.name, titleSize: 29, titleInset: 21, titleBottom: 21, titleFit: true)
             }
             if game.app != nil {
                 Text(L("overview_in_library"))
-                    .font(DelosFonts.figtree(stage.tpx(15), .bold)).foregroundStyle(colors.accent.color)
-                    .padding(.horizontal, stage.px(10)).padding(.vertical, stage.px(4))
+                    .font(DelosFonts.figtree(stage.tpx(17), .bold)).foregroundStyle(colors.accent.color)
+                    .padding(.horizontal, stage.px(12)).padding(.vertical, stage.px(5))
                     .background(Capsule().fill(.ultraThinMaterial).overlay(Capsule().fill(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0.6))))
-                    .padding(stage.px(12))
+                    .padding(stage.px(15))
             }
         }
-        .frame(width: stage.px(200), height: stage.px(300))
-        .clipShape(RoundedRectangle(cornerRadius: stage.px(20), style: .continuous))
+        .frame(width: stage.px(Self.width), height: stage.px(Self.height))
+        .clipShape(RoundedRectangle(cornerRadius: stage.px(Self.corner), style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(game.name)
     }
 }
 
-/// The title beside the cover (`.a-title`): Unbounded 68 px in the gradient of the dashboard's title, flying in from the
-/// dashboard's title box as the overview opens.
+/// The title beside the cover (`.a-title`): the game's logo as the dashboard's title box shows it (``HomeArt/logo(hostID:app:)``),
+/// else its name in Unbounded 68 px in the gradient of the dashboard's title; flying in from the dashboard's title box as
+/// the overview opens and back as it closes (the logo from the dashboard's logo, by one scale).
 private struct OverviewTitle: View {
     let session: OverviewSession
+    @Environment(HomeArt.self) private var art
     @Environment(\.stage) private var stage
     @Environment(\.delosColors) private var colors
     @Environment(\.reducedMotion) private var reduced
+    @Environment(\.artMotion) private var artMotion
+    @State private var logo: CGImage?
+    @State private var animation: AnimatedSource?
+    /// Where the title stands on the page at rest (the page's space, points), measured outside its flight.
+    @State private var slot: CGRect?
+
+    init(session: OverviewSession, logo: CGImage?) {
+        self.session = session
+        _logo = State(initialValue: logo)
+    }
 
     var body: some View {
-        // The dashboard's title sits 562 px to the left, about 70 px higher, in its larger size
         let home = HomeMetrics(stage: stage)
-        let dx = home.infoStart - (150 + stage.safe.leading + 340 + 72)
-        let dy = home.titleTop + home.titleBox / 2 - 230
-        let k = home.titleSize(length: session.app.title.count) / 68
-        Text(session.app.title)
-            .font(DelosFonts.unbounded(stage.tpx(68), .bold))
-            .lineSpacing(0)
-            .foregroundStyle(LinearGradient(colors: [colors.text.color, colors.accent2.color], startPoint: UnitPoint(x: 0.5, y: 0.3), endPoint: .bottom))
-            .shadow(color: .black.opacity(0.4), radius: stage.px(14), y: stage.px(6))
-            .frame(maxWidth: stage.px(1150), alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
-            .scaleEffect(session.shown || reduced ? 1 : k, anchor: .leading)
-            .offset(x: session.shown || reduced ? 0 : stage.px(dx), y: session.shown || reduced ? 0 : stage.px(dy))
-            .opacity(session.shown || !reduced ? 1 : 0)
-            .animation(.timingCurve(0.2, 0.9, 0.25, 1, duration: (session.shown ? 720 : 600) / 1000), value: session.shown)
+        let flying = !session.shown && !reduced
+        Group {
+            if let logo {
+                let box = CGSize(width: stage.px(OverviewMotion.logoWidth), height: stage.px(OverviewMotion.logoHeight))
+                let homeBox = CGSize(width: stage.px(min(home.logoWidth(stageWidth: stage.width), home.infoWidth)),
+                                     height: stage.px(home.titleBox - 2 * home.logoPad))
+                // The animated logo plays once the flight has landed
+                LogoArt(logo: logo, animation: animation, box: box, playing: artMotion && session.landed)
+                    .frame(width: box.width, height: box.height, alignment: .leading)
+                    .accessibilityElement()
+                    .accessibilityLabel(session.app.title)
+                    .modifier(TitleFlight(flying: flying, shown: session.shown, slot: slot, home: home,
+                                          scale: OverviewMotion.logoScale(aspect: Double(logo.width) / Double(max(logo.height, 1)), from: homeBox, to: box)))
+            } else {
+                Text(session.app.title)
+                    .font(DelosFonts.unbounded(stage.tpx(68), .bold))
+                    .lineSpacing(0)
+                    .foregroundStyle(LinearGradient(colors: [colors.text.color, colors.accent2.color], startPoint: UnitPoint(x: 0.5, y: 0.3), endPoint: .bottom))
+                    .shadow(color: .black.opacity(0.4), radius: stage.px(14), y: stage.px(6))
+                    .frame(maxWidth: stage.px(1150), alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .modifier(TitleFlight(flying: flying, shown: session.shown, slot: slot, home: home,
+                                          scale: home.titleSize(length: session.app.title.count) / 68))
+            }
+        }
+        // After the flight's transforms: the frame at rest
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(OverviewRing.space)) } action: { slot = $0 }
+        .opacity(session.shown || !reduced ? 1 : 0)
+        .task(id: session.app.id) {
+            if logo == nil { logo = await art.logo(hostID: session.hostID, app: session.app) }
+            if logo != nil { animation = await art.animation(hostID: session.hostID, app: session.app, kind: .logo) }
+        }
     }
 }
 
-/// The hero behind the overview (the prototype's `#backdrop` steered by `linkBackdrop`): sharp at the top, crossfading to
-/// a deeply blurred copy as the page scrolls, drifting slower than the page and zooming slightly; a focused screenshot
-/// takes the blurred layer's place. Opacity and transforms only: the blur itself is fixed.
+/// The title's flight: while [flying] it stands where the dashboard's title box shows the title (its start, centred in
+/// the box), [scale] times larger, less the page's rise (the page itself stands lower then); hidden until its place on the
+/// page is known. In with the flight's easing over 720 ms, back with the in-out one over 600 ms (`Flight.text`).
+private struct TitleFlight: ViewModifier {
+    let flying: Bool
+    let shown: Bool
+    let slot: CGRect?
+    let home: HomeMetrics
+    let scale: Double
+    @Environment(\.stage) private var stage
+
+    func body(content: Content) -> some View {
+        let slot = slot ?? .zero
+        let dx = stage.px(home.infoStart) - slot.minX
+        let dy = stage.px(home.titleTop + home.titleBox / 2 - OverviewMotion.pageRise) - slot.midY
+        content
+            .scaleEffect(flying ? scale : 1, anchor: .leading)
+            .offset(x: flying ? dx : 0, y: flying ? dy : 0)
+            .animation(shown ? .timingCurve(0.2, 0.9, 0.25, 1, duration: 0.72) : .timingCurve(0.65, 0, 0.35, 1, duration: 0.6), value: shown)
+            .opacity(self.slot == nil ? 0 : 1)
+    }
+}
+
+/// The hero behind the overview (the prototype's `#backdrop` steered by `linkBackdrop`): at the top it is the dashboard's
+/// own game background showing through (the root's backdrop, with the profile's blur, playing when animated); as the page
+/// scrolls a deeper blur of it fades in (rendered once, ``OverviewMotion/deepBlur(from:)``), drifting slower than the
+/// page and zooming slightly; a focused screenshot takes the deep layer's place. Opacity and transforms only.
 private struct OverviewBackdrop: View {
     let session: OverviewSession
     let content: OverviewContent?
@@ -921,21 +1004,28 @@ private struct OverviewBackdrop: View {
     @Environment(\.stage) private var stage
     @Environment(\.delosColors) private var colors
     @Environment(\.reducedMotion) private var reduced
+    @Environment(\.heroLook) private var look
+    @State private var deepImage: CGImage?
+
+    private struct DeepKey: Equatable {
+        let hero: GameArt?
+        let blur: Int?
+        let area: HeroArea
+    }
 
     var body: some View {
         let scroll = max(session.scroll, 0) / stage.scale
         let deep = session.mediaFocus != nil ? 1 : min(1, scroll / OverviewMotion.deepBlurScroll)
         let media = session.mediaFocus.flatMap { content?.media.indices.contains($0) == true ? content?.media[$0] : nil }
+        let area = HeroArea.of(stageWidth: stage.width, stageHeight: stage.height)
         // Sized by the screen, never by the pictures (filled pictures are larger than it)
         Color.clear.overlay {
         ZStack {
-            if let hero = art.hero?.image {
-                Image(decorative: hero, scale: 1).resizable().scaledToFill()
-                    .opacity(0.62 * (1 - deep))
-                Image(decorative: hero, scale: 1).resizable().scaledToFill()
-                    .blur(radius: stage.px(56))
+            if let deepImage, let look {
+                Image(decorative: deepImage, scale: 1).resizable().interpolation(.medium)
+                    .frame(width: stage.px(area.width), height: stage.px(area.height))
                     .brightness(-0.25)
-                    .opacity(media == nil ? deep : 0)
+                    .opacity(media == nil ? deep * look.opacity : 0)
             }
             if let media {
                 RemoteImage(url: OverviewImageSizes.thumb(media, tall: false), maxPixels: 640)
@@ -958,6 +1048,13 @@ private struct OverviewBackdrop: View {
         .clipped()
         .allowsHitTesting(false)
         .ignoresSafeArea()
+        .task(id: DeepKey(hero: art.hero, blur: look?.blur, area: area)) {
+            guard let hero = art.hero, let look else {
+                deepImage = nil
+                return
+            }
+            deepImage = await art.background(hero, blur: OverviewMotion.deepBlur(from: look.blur), area: area)
+        }
     }
 }
 
@@ -1043,38 +1140,137 @@ private struct OverviewCarousel: View {
     }
 }
 
-/// The card flying between the dashboard and the header (`Flight.cover`): the card's own art drawn at the header slot's
-/// size, moved and scaled from the card's frame along a slight arc. Transforms only.
-struct OverviewFlight: View, Animatable {
+/// The cover flying between the dashboard and the header (`Flight.cover`): a frame running from the card's place and size
+/// to the header slot's along a slight arc, its corners rounding from the card's to the slot's, and in it the pictures
+/// filling it as the cover does (cropped, the same scale on both axes, never stretched): the card's own picture (the wide
+/// art of the wide first cover) under the header's, which fades in over it when they differ. The pictures are the ones
+/// in memory as it starts; during the motion only transforms, the clip's outline and the opacity change (the body is not
+/// evaluated on each frame, nothing is laid out or decoded).
+struct OverviewFlight: View {
     let hostID: String
     let app: HostApp
     let from: CGRect
     let to: CGRect
+    /// The card's corner radius as it shows (focused) and the slot's, points.
+    let fromCorner: Double
+    let toCorner: Double
+    /// The pictures at the two ends (nil: the placeholder art the card or the header shows then); the card is the [wide]
+    /// first cover at the covers' [coverScale].
+    let fromArt: CGImage?
+    let toArt: CGImage?
+    let wide: Bool
+    let coverScale: Double
+    let progress: Double
+    @Environment(\.stage) private var stage
+
+    var body: some View {
+        let path = FlightPath(from: from, to: to, lift: stage.px(OverviewMotion.arc))
+        let clip = FlightClip(path: path, fromCorner: fromCorner, toCorner: toCorner, progress: progress)
+        ZStack(alignment: .topLeading) {
+            clip.fill(Color.black)
+                .shadow(color: .black.opacity(Motion.lerp(0.5, 0.7, progress)), radius: stage.px(Motion.lerp(40, 60, progress)),
+                        y: stage.px(Motion.lerp(30, 50, progress)))
+            ZStack(alignment: .topLeading) {
+                card(path)
+                if fromArt == nil || toArt == nil || fromArt !== toArt {
+                    header(path).opacity(progress)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .clipShape(clip)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// The card's picture filling the flying frame, else the card's placeholder art laid out at the card's size.
+    @ViewBuilder private func card(_ path: FlightPath) -> some View {
+        if let fromArt {
+            picture(fromArt, path: path)
+        } else {
+            let size = CGSize(width: from.width / CoverGeometry.focusScale, height: from.height / CoverGeometry.focusScale)
+            PlaceholderArt(cover: app, hostID: hostID, wide: wide, scale: coverScale)
+                .frame(width: size.width, height: size.height)
+                .modifier(FlightFill(path: path, aspect: size.width / max(size.height, 1), base: size, progress: progress))
+        }
+    }
+
+    /// The header's picture filling the flying frame, else its placeholder art (``CardArt``'s) laid out at the slot's size.
+    @ViewBuilder private func header(_ path: FlightPath) -> some View {
+        if let toArt {
+            picture(toArt, path: path)
+        } else {
+            let placeholder = GameArt(hostID: hostID, app: app)
+            PlaceholderArt(hue: placeholder.hue, hue2: placeholder.hue2, icon: placeholder.icon, glyphSize: 320 * to.width / 300 / 1.13,
+                           glyphRight: -36, glyphTop: 0.24, title: app.title, titleSize: 34 * to.width / 300,
+                           titleInset: 26, titleBottom: 26, titleFit: false)
+                .frame(width: to.width, height: to.height)
+                .modifier(FlightFill(path: path, aspect: to.width / max(to.height, 1), base: to.size, progress: progress))
+        }
+    }
+
+    /// [image] filling the flying frame, drawn once at its size filling the slot.
+    private func picture(_ image: CGImage, path: FlightPath) -> some View {
+        let aspect = Double(image.width) / Double(max(image.height, 1))
+        let base = OverviewMotion.fillSize(aspect: aspect, box: to.size)
+        return Image(decorative: image, scale: 1).resizable().interpolation(.medium)
+            .frame(width: base.width, height: base.height)
+            .modifier(FlightFill(path: path, aspect: aspect, base: base, progress: progress))
+    }
+}
+
+/// Where the flying cover is: ``OverviewMotion/flightFrame(from:to:progress:lift:)`` between two frames.
+private struct FlightPath {
+    let from: CGRect
+    let to: CGRect
+    let lift: Double
+
+    func frame(_ progress: Double) -> CGRect {
+        OverviewMotion.flightFrame(from: from, to: to, progress: progress, lift: lift)
+    }
+}
+
+/// The flying cover's outline at the flight's progress: its frame with the corners between the card's and the slot's.
+private struct FlightClip: Shape {
+    let path: FlightPath
+    let fromCorner: Double
+    let toCorner: Double
     var progress: Double
 
-    nonisolated var animatableData: Double {
+    var animatableData: Double {
         get { progress }
         set { progress = newValue }
     }
 
-    @Environment(\.stage) private var stage
+    func path(in rect: CGRect) -> Path {
+        RoundedRectangle(cornerRadius: Motion.lerp(fromCorner, toCorner, progress), style: .continuous).path(in: path.frame(progress))
+    }
+}
 
-    var body: some View {
-        let t = OverviewMotion.flightTransform(from: from, to: to, progress: progress)
-        let corner = Motion.lerp(26 * CoverGeometry.focusScale / max(from.width / max(to.width, 1), 0.01), 30, progress)
-        CardArt(hostID: hostID, app: app)
-            .frame(width: to.width, height: to.height)
-            .clipShape(RoundedRectangle(cornerRadius: stage.px(corner), style: .continuous))
-            .shadow(color: .black.opacity(Motion.lerp(0.5, 0.7, progress)), radius: stage.px(Motion.lerp(40, 60, progress)), y: stage.px(Motion.lerp(30, 50, progress)))
-            .scaleEffect(x: t.sx, y: t.sy, anchor: .topLeading)
-            .offset(x: to.minX + t.dx, y: to.minY + t.dy)
-            .allowsHitTesting(false)
+/// A picture drawn at [base] (its size filling the slot) moved and scaled to fill the flying frame at the flight's
+/// progress: one scale for both axes (``OverviewMotion/fill(aspect:base:frame:)``).
+private struct FlightFill: GeometryEffect {
+    let path: FlightPath
+    let aspect: Double
+    let base: CGSize
+    var progress: Double
+
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        let fill = OverviewMotion.fill(aspect: aspect, base: base, frame: path.frame(progress))
+        return ProjectionTransform(CGAffineTransform(a: fill.scale, b: 0, c: 0, d: fill.scale, tx: fill.dx, ty: fill.dy))
     }
 }
 
 /// A cover of the dashboard's row while the overview opens or closes (`homeOut` of the prototype): the others lift away
 /// one after another (up by 160 px plus 30 per cover of distance, to 92 %, 45 ms apart), the one in the overview hides
-/// while its card flies; with reduced motion they only fade. The focused cover follows a finger swiping it up.
+/// while its card flies and shows again at once when the flight lands; with reduced motion they only fade. The focused
+/// cover follows a finger swiping it up.
 struct CoverDescent: ViewModifier {
     let app: HostApp
     let distance: Int
@@ -1090,10 +1286,11 @@ struct CoverDescent: ViewModifier {
         content
             .offset(y: lift ? stage.px(OverviewMotion.coverLift(distance: distance)) : 0)
             .scaleEffect(lift ? OverviewMotion.coverLiftScale : 1)
-            .opacity(mine ? 0 : descent.active ? 0 : 1)
-            .animation(mine ? nil : descent.active
+            .opacity(descent.active ? 0 : 1)
+            .animation(descent.active
                 ? Motion.out(OverviewMotion.homeOut).delay(reduced ? 0 : Double(distance) * OverviewMotion.coverLiftStagger / 1000)
-                : .timingCurve(0.65, 0, 0.35, 1, duration: OverviewMotion.flightBack / 1000), value: descent)
+                : .timingCurve(0.65, 0, 0.35, 1, duration: OverviewMotion.flightBack / 1000), value: descent.active)
+            .animation(nil) { $0.opacity(mine ? 0 : 1) }
             .offset(y: dragged)
             #if os(iOS)
             .simultaneousGesture(DragGesture(minimumDistance: OverviewMotion.swipeSlop)
