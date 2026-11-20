@@ -14,6 +14,9 @@ import UniformTypeIdentifiers
 ///   -DelosDemo YES                      the fake PC and its library, a profile
 ///   -DelosScreen <name>                 (with -DelosDemo) start (default), home, devices, profile, pair, settings:<tab>, artwork, appsettings, osc
 ///   -DelosDemoCommands "w1 menu w1 down accept"   commands routed like a controller's: up down left right accept back menu options toast prevtab nexttab, w<seconds>;
+///                                       over a stream: streammenu (opens or closes the stream menu, as a controller's Home tap; then
+///                                       the directions, accept and back drive the dock, its pages and Quit game);
+///                                       every command waits until something can take it (the library loaded, no PC being woken);
 ///                                       input kinds: touch (a finger begins a touch, through the window's probe), click (the pointer's), pad (a controller's button)
 ///   -DelosDemoApps <n>                  how many apps (default 16; 0 empty)
 ///   -DelosDemoInput controller|touch|keyboard   the kind of input the hints and the back arrow start with (controller: a pad counts as connected)
@@ -116,14 +119,15 @@ enum DemoHarness {
     }
 
     /// The commands of -DelosFakeCommands, with the seconds to wait before each.
-    static var script: [(wait: Double, command: String)] {
+    @MainActor static var script: [(wait: Double, command: String)] {
         guard let text = UserDefaults.standard.string(forKey: "DelosDemoCommands") else { return [] }
         var wait = 1.0
         var out: [(Double, String)] = []
         for token in text.split(separator: " ") {
             if token.hasPrefix("w"), let seconds = Double(token.dropFirst()) { wait = seconds; continue }
             out.append((wait, String(token)))
-            wait = 0.4
+            // The stream menu ignores what comes before it has been open a moment (``StreamController/menuGrace``)
+            wait = token == "streammenu" ? StreamController.menuGrace + 0.2 : 0.4
         }
         return out
     }
@@ -164,6 +168,26 @@ enum DemoHarness {
             router.moveSideDrag(travel: travel * Double(step) / Double(steps))
         }
         router.endSideDrag(opening: opening, travel: travel, velocity: 0)
+        return true
+    }
+
+    /// Waits (up to 15 s) until the router has a target for a command: a stream's input over a stream, else no PC being
+    /// woken (its portal holds every command) and a focused item on the screen. A command sent before the library has
+    /// loaded would be lost.
+    @MainActor static func waitForTarget(navigator: Navigator, actions: ShellActions) async {
+        for _ in 0..<300 {
+            if navigator.commandCapture != nil { return }
+            if !actions.connection.isActive, navigator.focus.focused != nil { return }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
+    /// `streammenu` over a stream: the stream menu opens (or closes) through the stream's own input path, as the Siri
+    /// Remote's menu command does there, the same ``StreamController/openMenu()`` a controller's Home tap calls. True when
+    /// [name] was one.
+    @MainActor static func streamMenu(_ name: String, navigator: Navigator, router: ShellRouter) -> Bool {
+        guard name == "streammenu" else { return false }
+        if case .stream = navigator.current { router.route(.options, repeatCount: 0, fromRemote: true) }
         return true
     }
 
