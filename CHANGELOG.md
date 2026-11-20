@@ -439,6 +439,12 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- A finger's tap on the iPad no longer counts as the pointer's secondary click: a first tap on a library cover again only
+  focuses it (the second starts it), and a tap on a PC's circle on the start screen connects instead of opening its
+  context menu now and then. The window's recognizer of the right click and the trackpad's two-finger click took every
+  finger's tap too, because UIKit checks its button mask on indirect input only; it now takes only the pointer's
+  touches. The context menu opens on touch only by holding the item; the pointer's click still activates at once.
+  Not verified on a device.
 - The first opening of a settings row's popover and of the stream menu's popover no longer holds the screen without a
   frame, as the context menu's no longer does: Liquid Glass is drawn in the card's rounded body only and the caret over
   its edge in the glass's blur and tint (one `CaretCardGlass` for all three), because glass in the outline of the body

@@ -671,7 +671,7 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
         if menu != nil {
             // A long press is the touch way to the context menu; simultaneous, so a scroll view around still scrolls. An item
             // that had no focus is scrolled into view first: the menu opens where the item comes to rest.
-            item.simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in
+            item.simultaneousGesture(LongPressGesture(minimumDuration: ItemTouch.menuHold).onEnded { _ in
                 let key = AnyHashable(id), hadFocus = model.focused == key
                 model.focus(key)
                 if hadFocus {
@@ -689,20 +689,17 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
         }
     }
 
-    /// A tap or a click on the item.
+    /// A tap or a click on the item (``ItemTouch/of(focused:kind:ownTap:firstTapFocuses:)``).
     private func tapped() {
-        let key = AnyHashable(id)
-        // The pointer focused the item when it moved over it: a click is never only the first tap that focuses
-        let wasFocused = model.focused == key || ControllerGlyphs.shared.kind == .pointer
+        let key = AnyHashable(id), kind = ControllerGlyphs.shared.kind
+        let touch = ItemTouch.of(focused: model.focused == key, kind: kind, ownTap: tap != nil, firstTapFocuses: firstTapFocuses)
         // A click takes the focus where the item is, as the hover does: nothing scrolls for it
-        if ControllerGlyphs.shared.kind == .pointer { model.point(to: key) } else { model.focus(key) }
-        if let tap {
-            afterPress { tap(wasFocused) }
-        } else if firstTapFocuses && !wasFocused {
-            // A first touch on a library cover only focuses it (`focusingOnFirstTap()`)
-            layers?.feedback?.play(.move)
-        } else {
-            activate(action)
+        if kind == .pointer { model.point(to: key) } else { model.focus(key) }
+        switch touch {
+        case .own(let wasFocused): afterPress { tap?(wasFocused) }
+        // A first touch on a library cover only focuses it (`focusingOnFirstTap()`)
+        case .focusOnly: layers?.feedback?.play(.move)
+        case .activate: activate(action)
         }
     }
     #endif
