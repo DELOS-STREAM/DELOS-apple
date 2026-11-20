@@ -15,9 +15,14 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   Links and Similar games follow below. Up from the header, Back or a pull down at the top returns the way it came.
   The details come from the metadata Worker's game-details endpoint, cached with the game's record for 7 days.
 - Pointer (Magic Keyboard's trackpad, a mouse) in the shell, outside a stream: moving over an item focuses it with the
-  gliding focus ring, a click activates it with the press, a right click or a two-finger click opens the item's context
-  menu (Control-click on the Mac), and on the iPad the pointer hides over the items. The hint bar shows the trackpad's (iPad)
-  or the mouse's (Mac) click and secondary click.
+  gliding focus ring where the item is (nothing scrolls for the pointer), a click activates it with the press, a right
+  click or a two-finger click opens the item's context menu (Control-click on the Mac). The system pointer stays visible
+  over everything, and the library row and the lists scroll with the trackpad's two fingers or a wheel, with their
+  momentum. The hint bar shows the trackpad's (iPad) or the mouse's (Mac) click and secondary click.
+- One press look for every interactive element and every activation (a click, a tap, A): it squeezes in with a glow
+  pulse, clearly apart from the focus ring, and a tap or a click lets it show before the screen changes. With the
+  pointer, elements without a focus ring (hint pills, the back arrow, the Settings tabs, small buttons, toast actions)
+  brighten and lift a little on hover; the others take the focus ring.
 - Keyboard keys for every shell action, shown on the hint bar with key caps when the keyboard was used last: Tab the side
   menu, O the context menu, F the filter and the Settings search, [ and ] the tabs, beside Return, Esc and the arrows.
   Keys with Command, Control or Option, and the letters while a text field is typed in, are left alone.

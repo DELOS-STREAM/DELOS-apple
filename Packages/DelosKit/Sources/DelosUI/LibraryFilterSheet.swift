@@ -145,7 +145,7 @@ struct LibraryFilterSheet: View {
                 // The section of the focused chip glides to the middle; read apart, so a move of the focus does not rebuild
                 // every chip of the sheet
                 .onFocusChange(focus) { now in
-                    guard let section = LibraryFilterIDs.section(of: now) else { return }
+                    guard let section = LibraryFilterIDs.section(of: now), !focus.pointerMoved else { return }
                     withAnimation(SettingsScrollMotion.animation(distance: 0)) { proxy.scrollTo("filter-section-\(section)", anchor: .center) }
                 }
             }

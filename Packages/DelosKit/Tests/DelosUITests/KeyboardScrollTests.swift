@@ -33,7 +33,17 @@ final class LibraryRow {
         guard let focused = model.focused as? String, let now = Int(focused.dropFirst()), now != before else { return }
         index = now
         focusSteps += 1
-        targets.append(LibraryScroll.step(from: before, to: now, count: count))
+        targets.append(LibraryScroll.step(from: before, to: now, count: count, byPointer: model.pointerMoved))
+    }
+
+    /// The pointer moves over cover [at]: the hover's move of the focus (``FocusModel/point(to:)``).
+    func point(at cover: Int) {
+        let before = index
+        model.point(to: AnyHashable("c\(cover)"))
+        guard cover != before else { return }
+        index = cover
+        focusSteps += 1
+        targets.append(LibraryScroll.step(from: before, to: cover, count: count, byPointer: model.pointerMoved))
     }
 }
 

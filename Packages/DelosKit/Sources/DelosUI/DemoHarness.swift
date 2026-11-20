@@ -18,7 +18,8 @@ import UniformTypeIdentifiers
 ///                                       the directions, accept and back drive the dock, its pages and Quit game);
 ///                                       every command waits until something can take it (the library loaded, no PC being woken);
 ///                                       input kinds: touch (a finger begins a touch, through the window's probe), click (the pointer's), pad (a controller's button);
-///                                       rightclick (a secondary click at the middle of the focused item, through the router's pointer entry)
+///                                       rightclick (a secondary click at the middle of the focused item, through the router's pointer entry);
+///                                       tap (the focused item's own tap, a click after `click`: its press and its action)
 ///   -DelosDemoApps <n>                  how many apps (default 16; 0 empty)
 ///   -DelosDemoInput controller|touch|keyboard|pointer   the kind of input the hints and the back arrow start with (controller: a pad counts as connected)
 enum DemoHarness {
@@ -187,6 +188,20 @@ enum DemoHarness {
         ControllerGlyphs.shared.note(.pointer)
         if let focus = router.pointerFocus, let id = focus.focused, let frame = focus.registeredFrames[id] {
             await router.secondaryClick(at: CGPoint(x: frame.midX, y: frame.midY))
+        }
+        return true
+    }
+
+    /// Posted by `tap` with the focused item's id (`userInfo["id"]`): that ``FocusItem`` runs its own tap, as a finger's or
+    /// the pointer's (after `touch` or `click`) would.
+    static let tapNotification = Notification.Name("DelosDemoTap")
+
+    /// `tap`: a tap (a click after `click`) on the focused item of whoever has the commands: an open layer or the side menu,
+    /// else the screen. True when [name] was one.
+    @MainActor static func tap(_ name: String, navigator: Navigator, router: ShellRouter) -> Bool {
+        guard name == "tap" else { return false }
+        if let id = (router.modalFocus ?? navigator.focus).focused {
+            NotificationCenter.default.post(name: tapNotification, object: nil, userInfo: ["id": id])
         }
         return true
     }

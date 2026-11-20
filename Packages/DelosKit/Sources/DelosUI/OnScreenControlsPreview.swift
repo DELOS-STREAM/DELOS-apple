@@ -59,7 +59,7 @@ struct OnScreenControlsPreview: View {
                             .background(GlassShape(Circle(), tint: colors.surface))
                             .overlay(Circle().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
                     }
-                    .buttonStyle(.plain)
+                    .pressButton()
                     .accessibilityLabel(L("shell_hint_back"))
                     .inputKindVisibility(.withoutController)
                     #endif

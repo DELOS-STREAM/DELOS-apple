@@ -141,6 +141,12 @@ final class ScrollGlide: NSObject {
 
     var isGliding: Bool { link != nil }
 
+    /// Whether the player scrolls the scroll view in [phase]: a finger drags or flicks it, or the trackpad's two fingers or a
+    /// wheel move it with their momentum. The player's scroll owns the scroll view: the glide stops for it.
+    nonisolated static func isPlayers(_ phase: ScrollPhase) -> Bool {
+        phase == .tracking || phase == .interacting || phase == .decelerating
+    }
+
     /// Glides to [target] (clamped to the content), from where the scroll view is or, while gliding, from where the glide is.
     func glide(to target: Double, unit: Double) {
         let target = min(max(target, 0), geometry.maxOffset)
@@ -211,10 +217,7 @@ private struct ScrollGlideHost: ViewModifier {
         content
             .scrollPosition($position)
             .onScrollGeometryChange(for: GlideGeometry.self) { GlideGeometry($0, axis: axis) } action: { _, now in glide.geometry = now }
-            .onScrollPhaseChange { _, phase in
-                // A finger or the system took over the scroll view
-                if phase == .tracking || phase == .interacting || phase == .decelerating { glide.stop() }
-            }
+            .onScrollPhaseChange { _, phase in if ScrollGlide.isPlayers(phase) { glide.stop() } }
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { glide.viewport = $0 }
             .onAppear {
                 let position = $position, horizontal = axis == .horizontal

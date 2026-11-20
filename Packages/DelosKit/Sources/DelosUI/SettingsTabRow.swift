@@ -77,7 +77,7 @@ struct TabRow<ID: Hashable>: View {
         Button { onSelect(tab.id) } label: {
             pillView(tab).contentShape(Capsule())
         }
-        .buttonStyle(TabPressStyle(reduced: reduceMotion))
+        .pressButton()
         .focusable(false)
         .padding(.horizontal, stage.cpx(stage.compact ? 3 : 5))
         #endif
@@ -113,17 +113,6 @@ struct TabRow<ID: Hashable>: View {
         .accessibilityLabel(tab.label)
         .accessibilityValue(tab.badge > 0 ? "\(tab.badge)" : "")
         .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
-    }
-}
-
-/// A tap squeezes the tab for a moment (`rememberPressPulse`, ``Motion/pressScale``).
-private struct TabPressStyle: ButtonStyle {
-    let reduced: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? Motion.pressScale : 1)
-            .animation(.focusScale(pressed: configuration.isPressed, reduced: reduced), value: configuration.isPressed)
     }
 }
 

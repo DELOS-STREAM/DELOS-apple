@@ -536,10 +536,14 @@ enum LibraryScroll {
         case wrap
         /// The row brings cover [to] to its start.
         case follow(to: Int)
+        /// The row stays: the pointer moved the focus to the cover under it (``FocusModel/pointerMoved``), and the
+        /// trackpad's own scroll is the row's only other one.
+        case stay
     }
 
-    static func step(from old: Int?, to new: Int, count: Int) -> Step {
-        LibraryWrap.isWrap(from: old, to: new, count: count) ? .wrap : .follow(to: new)
+    static func step(from old: Int?, to new: Int, count: Int, byPointer: Bool) -> Step {
+        if byPointer { return .stay }
+        return LibraryWrap.isWrap(from: old, to: new, count: count) ? .wrap : .follow(to: new)
     }
 
     /// The row's glide (``ScrollGlide``): a critically damped spring that settles within 2 % in 250 ms. Android's row
@@ -669,8 +673,11 @@ struct GameLibrary: View {
                 guard let now else { return }
                 lastIndex = now
                 actions.rememberHomeGame(hostID: hostID, appID: apps[now].id)
-                // One focus step, one scroll target: this is the only thing that scrolls the row
-                switch LibraryScroll.step(from: old, to: now, count: apps.count) {
+                // One focus step, one scroll target: this is the only thing that scrolls the row besides the player's own
+                // scroll (a finger, the trackpad, a wheel)
+                switch LibraryScroll.step(from: old, to: now, count: apps.count, byPointer: focus.pointerMoved) {
+                case .stay:
+                    break
                 case .wrap:
                     glide(to: now, from: old ?? now)
                 case .follow(let index):

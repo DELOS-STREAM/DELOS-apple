@@ -125,7 +125,7 @@ struct HintBar: View {
                     }
                     .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .pressButton()
                 .transition(.opacity.combined(with: .scale(scale: Motion.popFromScale)))
             } else {
                 HStack(spacing: stage.px(12)) {

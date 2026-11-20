@@ -518,7 +518,7 @@ struct RowResetButton: View {
                 .background(Capsule().fill(tint.opacity(0.22).color))
                 .overlay(Capsule().strokeBorder(tint.opacity(0.5).color, lineWidth: stage.px(1)))
             }
-            .buttonStyle(.plain)
+            .pressButton()
             .fixedSize()
             .accessibilityLabel(L("row_reset_to_profile"))
         }

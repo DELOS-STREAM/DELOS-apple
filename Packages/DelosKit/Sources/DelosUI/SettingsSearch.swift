@@ -437,13 +437,14 @@ struct SettingsSearchView: View {
                 .padding(.horizontal, stage.px(18))
                 .padding(.top, stage.px(14))
                 .padding(.bottom, stage.px(48))
+                .focusDrivenScroll()
             }
             .focusable(false)
             .scrollClipDisabled()
             .scrollEdgeFade(.vertical, FadeEdges(
                 start: FadeEdge(solid: stage.compact ? SettingsLayout.compactFadeTop : SettingsLayout.fadeTop), end: FadeEdge(solid: 40)))
             .onChange(of: focus.focused) { _, now in
-                guard let id = now as? String, id.hasPrefix("search-result-") else { return }
+                guard let id = now as? String, id.hasPrefix("search-result-"), !focus.pointerMoved else { return }
                 withAnimation(reduceMotion ? nil : SettingsScrollMotion.animation(distance: 0)) { proxy.scrollTo(id) }
             }
         }
