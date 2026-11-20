@@ -170,10 +170,9 @@ public struct DelosRoot: View {
         _router = State(initialValue: ShellRouter(navigator: navigator, layers: layers, toasts: toasts, actions: actions))
         if !profiles.isFirstRun { navigator.reset(to: .start, focus: actions.startFocus()) }
         #if DEBUG
-        if DemoHarness.on {
-            DemoHarness.navigate(navigator, actions: actions)
-            DemoHarness.forceInput()
-        }
+        if DemoHarness.on { DemoHarness.navigate(navigator, actions: actions) }
+        // -DelosDemoInput also works with the real data, for screenshots of the real library with the controller's hints
+        DemoHarness.forceInput()
         #endif
         var appearance = profiles.current.map { AppearanceStore().load(profile: $0.id) } ?? Appearance()
         var settingsTab: SettingsTab?
@@ -375,6 +374,8 @@ public struct DelosRoot: View {
                     continue
                 }
                 if DemoHarness.input(step.command) { continue }
+                await DemoHarness.waitForTarget(navigator: navigator, actions: actions)
+                if DemoHarness.streamMenu(step.command, navigator: navigator, router: router) { continue }
                 if await DemoHarness.sideDrag(step.command, router: router) { continue }
                 if let command = DemoHarness.command(step.command) { router.route(command, repeatCount: 0) }
             }
