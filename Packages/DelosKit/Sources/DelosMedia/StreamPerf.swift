@@ -11,7 +11,7 @@ import Synchronization
 /// One-off lines (``note(_:)``) say what the launch asked for and how the display was planned. Nothing is counted in
 /// release builds.
 ///
-///     StreamPerf req=120 link=120 in=119.8 gap=0 host=120.0 mbps=38.2 fecfail=0 oos=0 asm=0.90/2.10 submit=0.08/0.30/0.90 dec=120/120 decfail=0 decq=1 dect=3.10/4.00 queue=120 selected=120 shown=120 draw=120 drawfail=0 drop=0 full=0 skip=0 gpu-busy=0 repeat=0 wait=0.40 tick=120 tickhz=120.0 lead=16.60 budget=8.30 encode=0.40/0.60 over=0 gpu=0.40/0.60 gpufail=0 late=0 up=off conv=- flow=- fx=- sharp=- present=0.30/0.50 rest=0.05/0.10 glass=120 lost=0 off=0.02/0.10 thermal=nominal lpm=0
+///     StreamPerf req=120 link=120 in=119.8 gap=0 host=120.0 mbps=38.2 fecfail=0 oos=0 asm=0.90/2.10 submit=0.08/0.30/0.90 dec=120/120 decfail=0 decq=1 dect=3.10/4.00 queue=120 selected=120 shown=120 draw=120 drawfail=0 drop=0 full=0 skip=0 gpu-busy=0 repeat=0 wait=0.40 tick=120 tickhz=120.0 lead=16.60 budget=8.30 lock=2.40/6.80/31 encode=0.40/0.60 over=0 gpu=0.40/0.60 gpufail=0 late=0 up=off conv=- flow=- fx=- sharp=- present=0.30/0.50 rest=0.05/0.10 glass=120 lost=0 off=0.02/0.10 thermal=nominal lpm=0
 ///
 /// - `req`: the frame rate the stream negotiated; `link`: the rate the display link asks for.
 /// - `in`: frames per second from the core; `gap`: frame numbers that never arrived; `host`: the rate the host encoded at
@@ -25,6 +25,9 @@ import Synchronization
 ///   after the first selection, not an observation of scanout; `wait` is the mean queued count at a callback.
 /// - `tick`, `tickhz`: display link callbacks and their measured rate; `lead`: from the callback to the time its picture
 ///   is estimated to appear; `budget`: callback to the CPU submission deadline (`targetTimestamp`), both medians.
+/// - `lock` (Phase lock): the jitter margin frames are held for (99th percentile minus median arrival), the window after
+///   the callback in which a frame is still drawn for its refresh (both medians), and the refreshes that drew a frame
+///   decoded inside that window; `-` in the other modes. The launch line's `lock=` names the arrival estimate.
 /// - `encode`: callback to command-buffer submission; `over`: submissions after `targetTimestamp`. The GPU may
 ///   continue after that deadline; crossing it is not itself a GPU deadline miss.
 /// - `gpu`: summed command-buffer GPU durations, including intervening contention, not necessarily active shader time;
@@ -108,6 +111,9 @@ public final class StreamPerf: Sendable {
         var lastTick: Double?
         var lead = Samples()
         var budget = Samples()
+        var lockMargin = Samples()
+        var lockWindow = Samples()
+        var caught = 0
         var gpu = Samples()
         var gpuFailures = 0
         var late = 0
@@ -128,8 +134,9 @@ public final class StreamPerf: Sendable {
             var next = Window(lastFrameNumber: lastFrameNumber)
             next.assemble = assemble; next.submit = submit; next.decode = decode; next.lead = lead; next.budget = budget
             next.gpu = gpu; next.passes = passes; next.offTarget = offTarget; next.encode = encode
+            next.lockMargin = lockMargin; next.lockWindow = lockWindow
             next.assemble.reset(); next.submit.reset(); next.decode.reset(); next.lead.reset(); next.budget.reset()
-            next.gpu.reset(); next.offTarget.reset(); next.encode.reset()
+            next.gpu.reset(); next.offTarget.reset(); next.encode.reset(); next.lockMargin.reset(); next.lockWindow.reset()
             for index in next.passes.indices { next.passes[index].reset() }
             self = next
         }
@@ -176,6 +183,13 @@ public final class StreamPerf: Sendable {
     public static func launchText(_ upscaler: UpscalerSettings) -> String {
         "upscaler=\(upscaler.enabled ? name(upscaler.mode) : "off") sharpness=\(upscaler.sharpness) "
             + "supersampling=\(upscaler.supersamplingLevel)"
+    }
+
+    /// The pacing's arrival estimate in the words of the launch line: `lock=p99/240` (Phase lock holds each frame for
+    /// the 99th percentile arrival of the last 240 frames), `lock=off` in the other modes.
+    public static func launchText(_ pacing: FramePacing) -> String {
+        guard pacing == .phaseLock else { return "lock=off" }
+        return "lock=p\(Int((ArrivalPhase.percentile * 100).rounded()))/\(ArrivalPhase.window)"
     }
 
     /// Where the per-second line reads the core's packet counters (FEC failures and reordering on the network).
@@ -296,6 +310,11 @@ public final class StreamPerf: Sendable {
         var lead: Double?
         /// Seconds from the callback to the display link's deadline for the drawing.
         var budget: Double?
+        /// Phase lock: the seconds frames are held for the jitter, and from the callback to the latest drawing time.
+        var margin: Double?
+        var window: Double?
+        /// Phase lock: the refresh waited for its frame and drew it.
+        var caught = false
     }
 
     /// A refresh of the display link.
@@ -310,6 +329,9 @@ public final class StreamPerf: Sendable {
             s.window.waitingSum += refresh.waiting
             if let lead = refresh.lead { s.window.lead.add(lead * 1000) }
             if let budget = refresh.budget { s.window.budget.add(budget * 1000) }
+            if let margin = refresh.margin { s.window.lockMargin.add(margin * 1000) }
+            if let window = refresh.window { s.window.lockWindow.add(window * 1000) }
+            if refresh.caught { s.window.caught += 1 }
         }
     }
 
@@ -422,6 +444,7 @@ public final class StreamPerf: Sendable {
             + "drop=\(w.droppedFull + w.droppedSkipped) full=\(w.droppedFull) skip=\(w.droppedSkipped) "
             + "gpu-busy=\(w.busyRefreshes) repeat=\(w.repeated) wait=\(waiting) "
             + "tick=\(w.ticks) tickhz=\(tickRate) lead=\(median(w.lead)) budget=\(median(w.budget)) "
+            + "lock=\(w.lockWindow.values.isEmpty ? "-" : "\(median(w.lockMargin))/\(median(w.lockWindow))/\(w.caught)") "
             + "encode=\(times(w.encode)) over=\(w.over) gpu=\(times(w.gpu)) gpufail=\(w.gpuFailures) late=\(w.late) "
             + "up=\(upscaler.map(name) ?? "off") "
             + "conv=\(pass(.conversion)) flow=\(pass(.flow)) fx=\(times(w.passes[extra])) sharp=\(pass(.sharpen)) "

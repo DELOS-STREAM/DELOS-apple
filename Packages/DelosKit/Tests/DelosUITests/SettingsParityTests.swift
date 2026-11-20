@@ -65,7 +65,7 @@ import Testing
     }
 
     @Test func theCostChipsFollowTheValuesInEffect() {
-        let ctx = ImpactContext(height: 1080, fps: 60, bitrateMbps: 40, codec: "auto", hdr: false, pacing: "latency")
+        let ctx = ImpactContext(height: 1080, fps: 60, bitrateMbps: 40, codec: "auto", hdr: false, pacing: "phase-lock")
         #expect(settingImpact(id: StreamSettingsForm.resolution, context: ctx) == SettingImpact(gpu: .low, latency: .low, network: .low))
         #expect(settingImpact(id: StreamSettingsForm.frameRate, context: ctx) == SettingImpact(gpu: .low, latency: .medium, network: .low))
         #expect(settingImpact(id: StreamSettingsForm.bitrate, context: ctx) == SettingImpact(gpu: .none, latency: .low, network: .low))

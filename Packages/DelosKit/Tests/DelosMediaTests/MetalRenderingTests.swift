@@ -141,10 +141,11 @@ struct ReplayStream {
         pictures = codec == .av1 ? try Self.temporalUnits(Fixtures.data(name)) : try Fixtures.pictures(name, codec: codec)
     }
 
-    /// The sample for frame `index`: even frames are key frames, odd ones the fixture's P frame.
-    mutating func sample(_ index: Int) throws -> CMSampleBuffer {
+    /// The sample for frame `index`: even frames are key frames, odd ones the fixture's P frame. `hostTimeUs`: the
+    /// host's time of the frame (``VideoSamples/sample(for:keyFrame:hostTimeUs:)``).
+    mutating func sample(_ index: Int, hostTimeUs: UInt64? = nil) throws -> CMSampleBuffer {
         let key = index % 2 == 0
-        return try pictures[index % 2].withUnsafeBytes { try samples.sample(for: $0, keyFrame: key) }
+        return try pictures[index % 2].withUnsafeBytes { try samples.sample(for: $0, keyFrame: key, hostTimeUs: hostTimeUs) }
     }
 
     /// Splits low-overhead OBUs into temporal units at the temporal delimiters.

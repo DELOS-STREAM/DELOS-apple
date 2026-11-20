@@ -283,19 +283,35 @@ of the frame, `AV1.sequenceHeader` the sequence header), and writes it once, int
 
 ## Frame pacing
 
-`FramePacer` (DelosMedia) times the frames on screen. With Lowest latency each frame is shown as soon as it is decoded,
-so the network's jitter shows as uneven motion: on a 120 Hz screen a frame that arrives a little late misses its
-refresh. Balanced (the default on Apple, unlike Android's Lowest latency, after the owner's test on the iPad Pro M5)
-holds a frame up to one frame interval and Smoothest up to two; frames are shown at their arrival plus that buffer,
-never sooner than 0.9 of a frame after the previous one (the slack follows the host's clock), and a backlog beyond the
-buffer starts the schedule again instead of carrying delay. `DisplayLayerRenderer` gives each sample that time on a
-timebase that follows the host clock; the layer shows it at the first refresh at or after it. Settings → Stream →
-Video frame pacing offers these modes plus Balanced with FPS limit, Warp Drive and Warp 2. The cap follows Android's
-near-refresh rules in both the launch request and core configuration; Warp requests 2x/4x the selected host FPS and
-uses immediate presentation, not interpolation. Android's Fast V-Sync (Nano Pacer) is not offered: Lowest latency
-already shows each frame at the first refresh after it is decoded, which is all it adds. The renderers pace at the
-plan's stream rate once the display is known (`FramePacer.retime(fps:)` at `attached(to:)`), the rate the host is told,
-so Cap FPS uses the refresh rate the display really runs on both sides.
+`FramePacer` (DelosMedia) times the frames on screen. Balanced (the default on Apple, unlike Android's Lowest latency,
+after the owner's test on the iPad Pro M5) holds a frame up to one frame interval and Smoothest up to two; frames are
+shown at their arrival plus that buffer, never sooner than 0.9 of a frame after the previous one (the slack follows the
+host's clock), and a backlog beyond the buffer starts the schedule again instead of carrying delay.
+`DisplayLayerRenderer` gives each sample that time on a timebase that follows the host clock; the layer shows it at the
+first refresh at or after it. Settings → Stream → Video frame pacing offers these modes plus Phase lock (labelled
+"Steady low latency"), Balanced with FPS limit, Warp Drive and Warp 2. The cap follows Android's near-refresh rules in
+both the launch request and core configuration; Warp requests 2x/4x the selected host FPS and uses immediate
+presentation, not interpolation. The renderers pace at the plan's stream rate once the display is known
+(`FramePacer.retime(fps:)` at `attached(to:)`), the rate the host is told, so Cap FPS uses the refresh rate the display
+really runs on both sides.
+
+Phase lock replaces Android's Lowest latency on Apple (a stored `latency` reads as `phase-lock`); Fast V-Sync (Nano
+Pacer) is not offered. Lowest latency showed each frame at the first refresh after it was decoded, so on the iPad's
+120 Hz screen arrival jitter put two frames in one refresh and none in the next (87 to 121 shown a second on the
+owner's iPad Pro M5 before the queue kept a jitter reserve), and the reserve then made it Balanced in all but name.
+Phase lock (`ArrivalPhase`, `FrameQueue`, `MetalPipeline`) times each frame by the host: the sample carries the core's
+`presentationTimeUs` through VideoToolbox, and arrival minus host time over the last 240 frames (two seconds) gives the
+99th percentile arrival, which follows the network's jitter and the drift between the host's and the device's clocks.
+A frame is due at its host time plus that percentile, so it goes to the earliest refresh its arrival makes 99 times out
+of 100 and is held only by the jitter's margin, a few milliseconds. When no frame waits at a callback and the next one
+is due before the latest moment it can still be drawn (the link's `targetTimestamp` and the presentation time less the
+GPU's 99th percentile, less the encoding's), the refresh keeps its drawable and the decoder's thread draws the frame as
+it comes; a frame decoded after the callback reaches the same refresh. The backlog is one frame; one that stays due
+behind the shown frame for a second is dropped so the delay does not settle a frame higher, and the frames of a
+callback the link skipped are dropped at once. With VRR the link asks for the display's fastest rate. Timed presents
+are not used (they assert with display-link drawables), and the display layer, without a link, shows the frames at
+once. The StreamPerf launch line names the estimate (`lock=p99/240`) and the per-second line its margin, window and
+the refreshes that waited (`lock=`).
 See [Decoder equivalents](DECODER_EQUIVALENTS.md) for the verified public API boundary, platform differences and
 unverified hardware behavior; no private options are applied to the display layer's internal decoder.
 
@@ -308,7 +324,7 @@ so `VideoOutput` and `VideoSamples` are unchanged:
 | Part | What it does |
 |---|---|
 | `VideoDecoder` | A `VTDecompressionSession`: hardware decoding where the device has it (not required, so the simulator falls back to software), `RealTime`, one frame at a time in arrival order (no B-frames). The core's receive thread only hands a frame over: the decoding runs on the decoder's own thread (user-interactive), as Android's `MediaCodec` decodes apart from the thread that queues its input; decoding on the receive thread held it 1.5 to 7 ms a 1080p frame (below, "120 fps"). That thread calls VideoToolbox asynchronously with `checkbox_async_decode` (`kVTDecodeFrame_EnableAsynchronousDecompression`; VideoToolbox returns the frames in decode order, and a session that goes away waits for the frames still in flight first), else it decodes each frame before the next. At most 30 frames (a quarter second at 120 fps) wait for it; beyond that they are dropped and the stream asks for a key frame, and a flush drops them too. It outputs Metal-compatible, IOSurface-backed two-plane 4:2:0 buffers, 8 or 10 bits, video or full range, and measures the time from submit to output. A new format description (new parameter sets, another resolution) builds a new session; an error or an invalidated session (the app was in the background) makes the renderer refuse non-key frames until the next key frame, which `VideoOutput` turns into an IDR request |
-| `FrameQueue` | Holds at most four decoded pictures; overflow discards the oldest. At matching source/display rates, Lowest latency and Warp select the oldest due picture and preserve at most one additional due picture to absorb paired arrivals, without delaying an available first picture. Balanced keeps one due picture and Smoothest two. Larger backlogs skip stale pictures; an oversampled unbuffered stream selects the newest due picture. The reserve drains naturally when an arrival is late, not on an arbitrary timer. Fake-clock tests cover selection independently of physical presentation |
+| `FrameQueue` | Holds at most four decoded pictures; overflow discards the oldest. Phase lock makes a picture due at its host time plus the 99th percentile arrival (`ArrivalPhase`) and compares that with the refresh's latest drawing time; one due picture may wait behind the shown one, for a second at most, and a skipped callback's pictures are dropped. Warp at matching rates selects the oldest due picture and preserves one more; Balanced keeps one due picture and Smoothest two, drained when an arrival is late. Larger backlogs skip stale pictures; an oversampled Warp stream selects the newest due picture. Fake-clock tests cover selection independently of physical presentation |
 | `CAMetalDisplayLink` | Supplies a drawable, CPU submission deadline (`targetTimestamp`) and estimated presentation time (`targetPresentationTimestamp`) on its own thread at the refresh plan's rate. GPU work may continue after the CPU deadline. The link owns presentation scheduling: timed-present variants are not used. A stopped ticker finishes its active callback before reattachment can encode with a replacement. Idle refreshes retain the layer's last picture; resize, upscaler changes and the launch arrival can redraw it without counting a new picture |
 | `MetalFrameDrawer` | The pixel buffer's planes become textures through a `CVMetalTextureCache` (no copy), `VideoShaders.metal` converts Y'CbCr to RGB and the picture is placed on the drawable on black by the scale mode (`PictureGeometry`: Fit, Fill with the edges cut off through the vertex shader's crop, Stretch). `ColorConversion` reads range and bit depth from the pixel format and the matrix and transfer function from the buffer's attachments; BT.601, BT.709 and BT.2020 matrices, limited and full range, 8 and 10 bits. The transfer function stays as encoded and the layer is tagged with the matching colour space (BT.709, BT.2020, PQ, HLG): tone mapping and linearising for HDR start in the shader, where `VideoUniforms.transfer` is already passed. With the upscaler on, the picture is converted at its own size first and `MetalUpscaler` draws it |
 | Arrival | The launch scene's arrival on the live picture (`LaunchArrival`, `arrivalFragment` in `VideoShaders.metal`). `startArrival(duration:)` starts it on the renderer's own clock; at each refresh the pose is computed for that refresh's presentation time from the exit's opening (0…1 over 2.2 s). From 55 % of the opening until its end the picture is converted into an RGB texture of its own size (8-bit, or half floats for 10-bit pictures, so HDR's encoded values pass unchanged), its mip levels are generated, and the pass draws it into the fitted rectangle: zoom (118 % with a blur of 20 source pixels, read from the mip levels, until 68 %), then a spring that settles to 100 % with a squash, a skew of at most 0.55°, a wave and an RGB split of up to 9 source pixels. At the end, or at `cancelArrival()` when the scene goes away early, the picture is drawn through the plain path again, byte for byte the picture without the arrival. `ArrivalRenderingTests` compares the pass with a CPU reference of the shader (0.012 per channel) and checks the blur, the identity and a 10-bit PQ picture in a half-float target; `ArrivalPipelineTests` drives it with a virtual clock |
@@ -491,12 +507,12 @@ stream's clock against a 120 Hz display (1200 frames each, 9600 refreshes), 120 
 | ±3 ms, Balanced | 0 / 4 | 550 / 552 | 5.9 / 3.9 ms |
 | ±4 ms, Balanced | 0 / 5 | 610 / 612 | 6.4 / 3.9 ms |
 | ±3 ms, Smoothest | 0 / 4 | 550 / 552 | 2.2 / 3.9 ms |
-| ±3 ms, Lowest latency | 1116 / 1115 | 1116 / 1115 | 12.2 / 12.2 ms |
+| ±3 ms, Phase lock (without host times: due at arrival) | 0 / 4 | 1116 / 1115 | 15.1 / 12.2 ms |
 | bursts every 40 frames, Balanced | 248 / 233 | 599 / 367 | 9.5 / 3.9 ms |
 
-Judder is an interval a refresh or more away from the cadence the stream and the display allow. In Lowest latency both
-drop a frame whenever the next one is due in the same refresh, which jitter makes frequent: that mode is steady only
-on a network without jitter. In the other modes the model drops frames in some phases of the two clocks (a frame whose
+Judder is an interval a refresh or more away from the cadence the stream and the display allow. The layer showing
+frames at once (Phase lock on the display layer) drops a frame whenever the next one is due in the same refresh, which
+jitter makes frequent; the Metal queue keeps them. In the other modes the model drops frames in some phases of the two clocks (a frame whose
 time falls on a refresh's edge goes to either side), and because the host's and the display's clocks drift, every
 phase comes round: a possible cause of the uneven 120 fps of issue #9, to be tested with a stream, since the layer's real
 behaviour is not known. The queue keeps those frames and shows them one refresh apart; the price is up to one refresh of

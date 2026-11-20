@@ -148,7 +148,7 @@ public enum DisplayRefreshPlanner {
         public var streamFrameRate: Double
         public var vrr: Bool
         /// The frame rate the display link asks for (Android's `Surface.setFrameRate`): normally ``surfaceFrameRate(desiredRefreshRate:fps:pacing:reduceRefreshRate:)``,
-        /// the true stream frame rate with VRR.
+        /// the true stream frame rate with VRR (Phase lock with VRR: the display's fastest rate).
         public var surfaceFrameRate: Double
         /// The stream asks for HDR: Apple TV's display criteria ask for its dynamic range with the frame rate. Not a planner
         /// decision; the renderer fills it from its options.
@@ -218,8 +218,10 @@ public enum DisplayRefreshPlanner {
         let pacedFrameRate = chosenFrameRate
         let warp = warpFactor(input.pacing)
         if warp > 0 { chosenFrameRate *= Double(warp) }
+        // With VRR the link runs at the stream's rate and the display follows it; phase lock asks for the display's
+        // fastest rate instead, so a frame waits at most one of those shorter refreshes for the first one it makes
         let surface = input.vrr
-            ? pacedFrameRate
+            ? (pacing == .phaseLock ? displayRefreshRate : pacedFrameRate)
             : surfaceFrameRate(desiredRefreshRate: desiredRefreshRate, fps: input.fps, pacing: pacing, reduceRefreshRate: input.reduceRefreshRate)
         return Plan(
             currentMode: current, bestMode: bestMode, modeSwitch: modeSwitch, desiredRefreshRate: desiredRefreshRate,

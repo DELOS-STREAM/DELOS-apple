@@ -26,10 +26,12 @@ final class VirtualClock: Sendable {
 }
 
 enum PipelineReplay {
-    /// The display link calls back `lead` refreshes before the picture appears.
+    /// The display link calls back `lead` refreshes before the picture appears. `sources`: the frames' host times
+    /// (seconds, whole microseconds) carried as the samples' presentation times; `deadline`: the display link's CPU
+    /// deadline, seconds after the callback (none: the offscreen ticks have no deadline).
     static func run(
         fixture: String, codec: VideoCodec, arrivals: [Double], pacing: FramePacing, fps: Int, display: VirtualDisplay,
-        lead: Double = 1
+        lead: Double = 1, sources: [Double]? = nil, deadline: Double? = nil
     ) throws -> PipelineRun {
         let clock = VirtualClock()
         let pipeline = try #require(MetalPipeline(pacing: pacing, fps: fps, clock: clock.reading))
@@ -42,13 +44,15 @@ enum PipelineReplay {
             let callback = tick - lead * display.refresh
             while next < arrivals.count, arrivals[next] <= callback {
                 clock.set(arrivals[next])
-                #expect(pipeline.enqueue(try stream.sample(next)))
+                let hostTimeUs = sources.map { ModeledDeviceEnvelope.hostTimeUs($0[next]) }
+                #expect(pipeline.enqueue(try stream.sample(next, hostTimeUs: hostTimeUs)))
                 // The decoded picture arrives on the virtual clock's time, not after it moved on
                 pipeline.waitForDecodes()
                 next += 1
             }
             clock.set(callback)
-            pipeline.tick(RefreshTick(presentation: tick, refresh: display.refresh, drawable: nil))
+            pipeline.tick(RefreshTick(
+                presentation: tick, refresh: display.refresh, drawable: nil, deadline: deadline.map { callback + $0 }))
         }
         return PipelineRun(shown: shown.withLock { $0 }, counters: pipeline.counters(), pixels: pipeline.offscreenPixels())
     }
@@ -119,7 +123,7 @@ enum DisplayLayerModel {
     }
 
     @Test func aPictureThatIsNotAKeyFrameWaitsForOne() throws {
-        let pipeline = try #require(MetalPipeline(pacing: .latency, fps: 60))
+        let pipeline = try #require(MetalPipeline(pacing: .phaseLock, fps: 60))
         defer { pipeline.invalidate() }
         var stream = try ReplayStream(fixture: "frames.h264", codec: .h264)
         // The first sample of a stream sets its format, so it is made first
@@ -138,7 +142,7 @@ enum DisplayLayerModel {
 
     @Test func aRefreshWithoutANewPictureDrawsNothing() throws {
         let clock = VirtualClock()
-        let pipeline = try #require(MetalPipeline(pacing: .latency, fps: 60, clock: clock.reading))
+        let pipeline = try #require(MetalPipeline(pacing: .phaseLock, fps: 60, clock: clock.reading))
         defer { pipeline.invalidate() }
         let drawn = Mutex(0)
         pipeline.observePresented { _ in drawn.withLock { $0 += 1 } }
@@ -330,7 +334,7 @@ enum DisplayLayerModel {
     func aFlushDiscardsOldPicturesAndInvalidationRefusesNewOnes(asynchronous: Bool) throws {
         let clock = VirtualClock()
         let pipeline = try #require(MetalPipeline(
-            pacing: .latency, fps: 120, options: VideoRenderOptions(asyncDecode: asynchronous), clock: clock.reading))
+            pacing: .phaseLock, fps: 120, options: VideoRenderOptions(asyncDecode: asynchronous), clock: clock.reading))
         defer { pipeline.invalidate() }
         var stream = try ReplayStream(fixture: "frames.hevc", codec: .hevc)
         let key = try stream.sample(0)

@@ -71,6 +71,15 @@ enum ModeledDeviceEnvelope {
         }
     }
 
+    /// The host's times of the modeled frames (``arrivals(count:hostFPS:seed:assembly:)``): frame i at 1 + i / hostFPS
+    /// on the host's clock, which runs `hostFPS / 120` times as fast as a 120 fps stream's nominal one. In whole
+    /// microseconds, as the core reports them (`presentationTimeUs`), so the pipeline's replay sees the same values.
+    static func sources(count: Int, hostFPS: Double) -> [Double] {
+        (0..<count).map { Double(hostTimeUs(1 + Double($0) / hostFPS)) / 1_000_000 }
+    }
+
+    static func hostTimeUs(_ seconds: Double) -> UInt64 { UInt64((seconds * 1_000_000).rounded()) }
+
     /// An aggregate-derived synthetic scenario. Two arbitrarily chosen frames per modeled second use its p99.
     /// The remaining frames follow an assumed distribution; no measured per-frame ordering is recovered.
     static func loggedArrivals(hostFPS: Double, seed: UInt64) -> [Double] {
@@ -111,7 +120,8 @@ extension SeededRandom {
     }
 }
 
-/// What a replay showed, second by second, and how long its frames waited beyond the first refresh that could show them.
+/// What a replay showed, second by second, how long its frames waited beyond the first refresh that could show them,
+/// and how long from their arrival (decoded) to the modeled presentation on the display ("glass").
 struct ReplaySummary {
     /// Frames shown in each whole second of the replay (by the refresh they appeared at).
     var shownPerSecond: [Int] = []
@@ -119,11 +129,16 @@ struct ReplaySummary {
     var repeated = 0
     /// Seconds each shown frame waited after the first refresh whose callback came after it arrived.
     var added: [Double] = []
+    /// Seconds from each shown frame's arrival to the refresh it appeared at.
+    var glass: [Double] = []
 
     var meanShown: Double { Double(shownPerSecond.reduce(0, +)) / Double(max(shownPerSecond.count, 1)) }
 
-    func addedPercentile(_ fraction: Double) -> Double {
-        let sorted = added.sorted()
+    func addedPercentile(_ fraction: Double) -> Double { Self.percentile(added, fraction) }
+    func glassPercentile(_ fraction: Double) -> Double { Self.percentile(glass, fraction) }
+
+    static func percentile(_ values: [Double], _ fraction: Double) -> Double {
+        let sorted = values.sorted()
         return sorted.isEmpty ? 0 : sorted[min(sorted.count - 1, Int(Double(sorted.count) * fraction))]
     }
 
@@ -138,6 +153,7 @@ struct ReplaySummary {
             // The first refresh whose callback came at or after the arrival
             let callbacks = ((arrivals[frame.frame] + lead * display.refresh - display.phase) / display.refresh).rounded(.up)
             added.append(max(0, frame.presentation - (display.phase + callbacks * display.refresh)))
+            glass.append(frame.presentation - arrivals[frame.frame])
         }
         shownPerSecond = counts
     }
@@ -150,9 +166,10 @@ struct ReplaySummary {
 
     func row(_ label: String) -> String {
         String(
-            format: "MODEL %@: shown/s mean %.1f min %d, seconds below 119: %d of %d, dropped %d, repeated %d, added delay p50 %.1f p99 %.1f max %.1f ms",
+            format: "MODEL %@: shown/s mean %.2f min %d, seconds below 119: %d of %d, dropped %d, repeated %d, added delay p50 %.1f p99 %.1f max %.1f ms, arrival to glass p50 %.2f p99 %.2f ms",
             label, meanShown, shownPerSecond.min() ?? 0, shownPerSecond.filter { $0 < 119 }.count, shownPerSecond.count,
-            dropped, repeated, addedPercentile(0.5) * 1000, addedPercentile(0.99) * 1000, (added.max() ?? 0) * 1000)
+            dropped, repeated, addedPercentile(0.5) * 1000, addedPercentile(0.99) * 1000, (added.max() ?? 0) * 1000,
+            glassPercentile(0.5) * 1000, glassPercentile(0.99) * 1000)
     }
 }
 
@@ -190,14 +207,21 @@ enum NewestWinsModel {
     /// Assumed source/display drift in both directions; no host clock rate was recovered from aggregate windows.
     static let hostRates = [119.98, 119.988, 120.012, 120.02]
 
-    /// The refreshes of delay a waiting frame may add in each mode.
-    static func backlog(_ pacing: FramePacing) -> Double { pacing == .smoothness ? 2 : 1 }
+    /// The refreshes of delay a waiting frame may add in each mode: phase lock holds a frame for its jitter margin (less
+    /// than a refresh) and may keep one more behind it.
+    static func backlog(_ pacing: FramePacing) -> Double { pacing == .smoothness || pacing == .phaseLock ? 2 : 1 }
 
-    private func replay(_ arrivals: [Double], _ pacing: FramePacing, lost: Set<Int> = []) -> (before: ReplaySummary, after: ReplaySummary) {
+    /// The frames' host times go with the arrivals, so phase lock measures its arrival phase against them. `window`:
+    /// phase lock's time after the callback in which a frame is still drawn for its refresh.
+    private func replay(
+        _ arrivals: [Double], _ pacing: FramePacing, hostFPS: Double, lost: Set<Int> = [], window: Double = 0
+    ) -> (before: ReplaySummary, after: ReplaySummary) {
         let before = ReplaySummary(
             NewestWinsModel.run(arrivals: arrivals, display: display, lead: lead, lost: lost), arrivals: arrivals,
             display: display, lead: lead)
-        let run = QueueReplay.run(arrivals: arrivals, pacing: pacing, fps: 120, display: display, lead: lead, lost: lost)
+        let run = QueueReplay.run(
+            arrivals: arrivals, pacing: pacing, fps: 120, display: display, lead: lead, lost: lost,
+            sources: ModeledDeviceEnvelope.sources(count: arrivals.count, hostFPS: hostFPS), window: window)
         #expect(run.shown.map(\.frame) == run.shown.map(\.frame).sorted(), "frames keep their order")
         return (before, ReplaySummary(run, arrivals: arrivals, display: display, lead: lead))
     }
@@ -207,7 +231,7 @@ enum NewestWinsModel {
     @Test(arguments: hostRates, FramePacing.allCases)
     func truncatedModeledJitterPreservesCadence(hostFPS: Double, pacing: FramePacing) {
         let arrivals = ModeledDeviceEnvelope.typicalArrivals(seconds: 169, hostFPS: hostFPS, seed: 20_261_118, longest: 8)
-        let (before, after) = replay(arrivals, pacing)
+        let (before, after) = replay(arrivals, pacing, hostFPS: hostFPS)
         print(before.row("jitter 3.5/8 ms, host \(hostFPS) fps, before (the newest frame wins)"))
         print(after.row("jitter 3.5/8 ms, host \(hostFPS) fps, \(pacing)"))
         #expect(before.meanShown < 112)
@@ -220,7 +244,7 @@ enum NewestWinsModel {
     @Test(arguments: hostRates, FramePacing.allCases)
     func modeledTailKeepsCadenceAndDelayBounded(hostFPS: Double, pacing: FramePacing) {
         let arrivals = ModeledDeviceEnvelope.typicalArrivals(seconds: 169, hostFPS: hostFPS, seed: 20_261_118)
-        let (before, after) = replay(arrivals, pacing)
+        let (before, after) = replay(arrivals, pacing, hostFPS: hostFPS)
         print(before.row("jitter 3.5/8 ms with its tail, host \(hostFPS) fps, before"))
         print(after.row("jitter 3.5/8 ms with its tail, host \(hostFPS) fps, \(pacing)"))
         #expect(before.meanShown < 112)
@@ -232,10 +256,10 @@ enum NewestWinsModel {
 
     /// Aggregate percentiles plus invented within-second ordering and callback placement.
     /// Missing callbacks impose an independent ceiling; no output here is the original device's shown rate.
-    @Test(arguments: hostRates, [FramePacing.latency, .balanced])
+    @Test(arguments: hostRates, [FramePacing.phaseLock, .balanced])
     func aggregateDerivedSyntheticScenarios(hostFPS: Double, pacing: FramePacing) {
         let arrivals = ModeledDeviceEnvelope.loggedArrivals(hostFPS: hostFPS, seed: 20_261_118)
-        let whole = replay(arrivals, pacing)
+        let whole = replay(arrivals, pacing, hostFPS: hostFPS)
         print(whole.before.row("aggregate-derived synthetic arrivals, host \(hostFPS) fps, before"))
         print(whole.after.row("aggregate-derived synthetic arrivals, host \(hostFPS) fps, \(pacing)"))
         #expect(whole.before.meanShown < 112)
@@ -244,21 +268,49 @@ enum NewestWinsModel {
         let lost = ModeledDeviceEnvelope.lostRefreshes(seed: 7)
         let delivered = Double(ModeledDeviceEnvelope.seconds.map { min(120, $0.ticks) }.reduce(0, +))
             / Double(ModeledDeviceEnvelope.seconds.count)
-        let modeled = replay(arrivals, pacing, lost: lost)
+        let modeled = replay(arrivals, pacing, hostFPS: hostFPS, lost: lost)
         print(modeled.before.row("synthetic arrivals and missing callbacks, host \(hostFPS) fps, before"))
         print(modeled.after.row("synthetic arrivals and missing callbacks, host \(hostFPS) fps, \(pacing)"))
         #expect(modeled.after.meanShown > modeled.before.meanShown)
         #expect(modeled.after.meanShown >= delivered - 0.5)
     }
 
+    /// The replay the mode was accepted on: every scenario above, with and without the window after the callback in
+    /// which phase lock still draws a frame for its refresh. 7.2 ms models a CPU deadline one refresh after the callback,
+    /// the iPad log's GPU p99 of 8.2 ms before a two-refresh presentation and 0.6 ms of encoding (`MetalPipeline`
+    /// computes the window at run time from the display link's deadline and its own measurements). Phase lock must show
+    /// at least 119 frames a second and reach the glass sooner than Balanced, at the median.
+    @Test(arguments: hostRates, [0.0, 0.0072])
+    func phaseLockShowsTheStreamSoonerThanBalanced(hostFPS: Double, window: Double) {
+        let lost = ModeledDeviceEnvelope.lostRefreshes(seed: 7)
+        let scenarios: [(String, [Double], Set<Int>)] = [
+            ("aggregate-derived", ModeledDeviceEnvelope.loggedArrivals(hostFPS: hostFPS, seed: 20_261_118), []),
+            ("jitter 3.5/8 ms", ModeledDeviceEnvelope.typicalArrivals(seconds: 169, hostFPS: hostFPS, seed: 20_261_118, longest: 8), []),
+            ("jitter 3.5/8 ms with its tail", ModeledDeviceEnvelope.typicalArrivals(seconds: 169, hostFPS: hostFPS, seed: 20_261_118), []),
+            ("aggregate-derived, missing callbacks", ModeledDeviceEnvelope.loggedArrivals(hostFPS: hostFPS, seed: 20_261_118), lost),
+        ]
+        for (name, arrivals, lost) in scenarios {
+            let label = "\(name), host \(hostFPS) fps"
+            let balanced = replay(arrivals, .balanced, hostFPS: hostFPS, lost: lost)
+            let locked = replay(arrivals, .phaseLock, hostFPS: hostFPS, lost: lost, window: window).after
+            print(balanced.before.row("\(label), before (the newest frame wins)"))
+            print(balanced.after.row("\(label), balanced"))
+            print(locked.row(String(format: "%@, phase lock, window %.1f ms", label, window * 1000)))
+            #expect(locked.glassPercentile(0.5) < balanced.after.glassPercentile(0.5), "\(label)")
+            #expect(locked.meanShown >= (lost.isEmpty ? 119.8 : balanced.after.meanShown - 0.1), "\(label)")
+        }
+    }
+
     /// Synthetic arrivals through actual fixture decoding and offscreen drawing. The virtual refresh and completed
     /// drawing are modeled presentation, not evidence of physical scanout or this machine meeting a 120 Hz budget.
-    @Test(arguments: [FramePacing.latency, .balanced])
+    @Test(arguments: [FramePacing.phaseLock, .balanced])
     func modeledJitterThroughFixtureDecodeAndOffscreenDrawing(pacing: FramePacing) throws {
         let arrivals = ModeledDeviceEnvelope.typicalArrivals(seconds: 20, hostFPS: 120.012, seed: 20_261_118, longest: 8)
+        let sources = ModeledDeviceEnvelope.sources(count: arrivals.count, hostFPS: 120.012)
         let run = try PipelineReplay.run(
-            fixture: "frames.hevc", codec: .hevc, arrivals: arrivals, pacing: pacing, fps: 120, display: display, lead: lead)
-        let model = QueueReplay.run(arrivals: arrivals, pacing: pacing, fps: 120, display: display, lead: lead)
+            fixture: "frames.hevc", codec: .hevc, arrivals: arrivals, pacing: pacing, fps: 120, display: display, lead: lead,
+            sources: sources)
+        let model = QueueReplay.run(arrivals: arrivals, pacing: pacing, fps: 120, display: display, lead: lead, sources: sources)
         #expect(run.shown.map(\.sequence) == model.shown.map(\.frame))
         let counters = try #require(run.counters)
         #expect(counters.decodedFrames == 2400)
@@ -271,6 +323,25 @@ enum NewestWinsModel {
         print(before.row("modeled baseline before offscreen replay"))
         print(summary.row("modeled arrivals, fixture decode and offscreen draw, \(pacing)"))
         #expect(summary.shownPerSecond.allSatisfy { $0 >= 119 })
-        #expect((summary.added.max() ?? 0) <= refresh + 1e-9)
+        #expect((summary.added.max() ?? 0) <= Self.backlog(pacing) * refresh + 1e-9)
+    }
+
+    /// Phase lock's wait through the pipeline: the display link's deadline one refresh after the callback lets a frame
+    /// decoded after the callback still reach that refresh, drawn on the decoder's thread.
+    @Test func phaseLockDrawsAFrameDecodedAfterTheCallbackForItsRefresh() throws {
+        let arrivals = ModeledDeviceEnvelope.typicalArrivals(seconds: 10, hostFPS: 120.012, seed: 20_261_118, longest: 8)
+        let sources = ModeledDeviceEnvelope.sources(count: arrivals.count, hostFPS: 120.012)
+        let waiting = try PipelineReplay.run(
+            fixture: "frames.hevc", codec: .hevc, arrivals: arrivals, pacing: .phaseLock, fps: 120, display: display,
+            lead: lead, sources: sources, deadline: refresh)
+        let atCallback = QueueReplay.run(arrivals: arrivals, pacing: .phaseLock, fps: 120, display: display, lead: lead, sources: sources)
+        #expect(waiting.shown.map(\.sequence) == waiting.shown.map(\.sequence).sorted())
+        let summary = ReplaySummary(
+            shown: waiting.shown.map { ($0.sequence, $0.presentation) }, dropped: 0, repeated: 0, arrivals: arrivals,
+            display: display, lead: lead)
+        let model = ReplaySummary(atCallback, arrivals: arrivals, display: display, lead: lead)
+        print(summary.row("modeled arrivals, fixture decode, phase lock drawing until the deadline"))
+        #expect(summary.shownPerSecond.allSatisfy { $0 >= 119 })
+        #expect(summary.glassPercentile(0.5) < model.glassPercentile(0.5) - 0.002)
     }
 }

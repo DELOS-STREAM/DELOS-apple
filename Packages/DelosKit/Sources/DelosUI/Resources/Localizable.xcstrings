@@ -36080,67 +36080,67 @@
         }
       }
     },
-    "help_frame_pacing_latency": {
+    "help_frame_pacing_phase_lock": {
       "extractionState": "manual",
       "localizations": {
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zobrazí nejnovější snímek hned; může sekat."
+            "value": "Zobrazí každý snímek při nejbližším obnovení, které spolehlivě stihne; čeká jen milisekundy."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zeigt sofort das neueste Bild; kann ruckeln."
+            "value": "Zeigt jedes Bild bei der frühesten Bildwiederholung, die es sicher erreicht; wartet nur Millisekunden."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Shows the newest frame at once; may stutter."
+            "value": "Shows each frame at the earliest refresh it reliably makes; waits only milliseconds."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Muestra al instante el fotograma más reciente; puede entrecortarse."
+            "value": "Muestra cada fotograma en el primer refresco que alcanza con seguridad; solo espera milisegundos."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Affiche aussitôt l’image la plus récente ; peut saccader."
+            "value": "Affiche chaque image au premier rafraîchissement qu’elle atteint à coup sûr ; n’attend que des millisecondes."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "最新のフレームをすぐに表示します。カクつくことがあります。"
+            "value": "各フレームを、確実に間に合う最も早いリフレッシュで表示します。待つのは数ミリ秒だけです。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "가장 최신 프레임을 바로 표시해요. 끊길 수 있어요."
+            "value": "각 프레임을 확실히 맞출 수 있는 가장 빠른 화면 갱신에 표시해요. 몇 밀리초만 기다려요."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mostra o quadro mais recente na hora; pode travar."
+            "value": "Mostra cada quadro na primeira atualização que ele alcança com segurança; espera só milissegundos."
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Одразу показує найновіший кадр; можливі підвисання."
+            "value": "Показує кожен кадр на найближчому оновленні, яке він надійно встигає; чекає лише мілісекунди."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "立即显示最新一帧；可能卡顿。"
+            "value": "在每帧能稳定赶上的最早一次刷新时显示；只等待几毫秒。"
           }
         }
       }
@@ -52853,67 +52853,67 @@
         }
       }
     },
-    "pacing_latency": {
+    "pacing_phase_lock": {
       "extractionState": "manual",
       "localizations": {
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nejnižší latence"
+            "value": "Stabilní nízká latence"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Niedrigste Latenz"
+            "value": "Stabile niedrige Latenz"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lowest latency"
+            "value": "Steady low latency"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Latencia mínima"
+            "value": "Latencia baja estable"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Latence minimale"
+            "value": "Latence faible et stable"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "最小遅延"
+            "value": "安定した低遅延"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "최저 지연"
+            "value": "안정적인 저지연"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Menor latência"
+            "value": "Latência baixa estável"
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Найменша затримка"
+            "value": "Стабільна низька затримка"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "最低延迟"
+            "value": "稳定低延迟"
           }
         }
       }

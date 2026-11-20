@@ -68,7 +68,7 @@ import Testing
         // The 64 × 64 fixture into a 128 × 64 target: Fit leaves black bars left and right, Stretch and Fill cover it
         for (mode, barred) in [(VideoScaleMode.fit, true), (.stretch, false), (.fill, false)] {
             let clock = VirtualClock()
-            let pipeline = try #require(MetalPipeline(pacing: .latency, fps: 60, options: VideoRenderOptions(scaleMode: mode), clock: clock.reading))
+            let pipeline = try #require(MetalPipeline(pacing: .phaseLock, fps: 60, options: VideoRenderOptions(scaleMode: mode), clock: clock.reading))
             defer { pipeline.invalidate() }
             pipeline.useOffscreenSize(width: 128, height: 64)
             var stream = try ReplayStream(fixture: "frames.h264", codec: .h264)
@@ -88,7 +88,7 @@ import Testing
     @Test(.enabled(if: MetalFXSupport.system.spatial)) func theUpscalerStartsRunsAndStops() throws {
         let clock = VirtualClock()
         let options = VideoRenderOptions(upscaler: UpscalerSettings(enabled: true, mode: .spatial))
-        let pipeline = try #require(MetalPipeline(pacing: .latency, fps: 60, options: options, clock: clock.reading))
+        let pipeline = try #require(MetalPipeline(pacing: .phaseLock, fps: 60, options: options, clock: clock.reading))
         defer { pipeline.invalidate() }
         pipeline.useOffscreenSize(width: 128, height: 128)
         #expect(pipeline.upscalerStatus == .starting)
@@ -131,7 +131,7 @@ import Testing
     @Test(.enabled(if: MetalFXSupport.system.temporal)) func aStreamThatMatchesTheViewIsSupersampled() throws {
         let clock = VirtualClock()
         let options = VideoRenderOptions(upscaler: UpscalerSettings(enabled: true, mode: .temporal, supersamplingLevel: 2))
-        let pipeline = try #require(MetalPipeline(pacing: .latency, fps: 60, options: options, clock: clock.reading))
+        let pipeline = try #require(MetalPipeline(pacing: .phaseLock, fps: 60, options: options, clock: clock.reading))
         defer { pipeline.invalidate() }
         var stream = try ReplayStream(fixture: "frames.h264", codec: .h264)
         for frame in 0..<2 {
@@ -150,7 +150,7 @@ import Testing
         for mode in [UpscalerMode.spatial, .temporal] {
             let clock = VirtualClock()
             let options = VideoRenderOptions(upscaler: UpscalerSettings(enabled: true, mode: mode, supersamplingLevel: 2))
-            let pipeline = try #require(MetalPipeline(pacing: .latency, fps: 60, options: options, clock: clock.reading, metalFX: MetalFXSupport.none))
+            let pipeline = try #require(MetalPipeline(pacing: .phaseLock, fps: 60, options: options, clock: clock.reading, metalFX: MetalFXSupport.none))
             defer { pipeline.invalidate() }
             pipeline.useOffscreenSize(width: 128, height: 128)
             var stream = try ReplayStream(fixture: "frames.h264", codec: .h264)
@@ -172,7 +172,7 @@ import Testing
     }
 
     @Test func theDisplayLayerReportsARequestedUpscalerAsUnavailable() async {
-        let layer = await DisplayLayerRenderer(pacing: .latency, fps: 60)
+        let layer = await DisplayLayerRenderer(pacing: .phaseLock, fps: 60)
         #expect(layer.upscalerStatus == .off)
         layer.setUpscaler(UpscalerSettings(enabled: true))
         #expect(layer.upscalerStatus == .unavailable)

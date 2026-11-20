@@ -229,7 +229,7 @@ public struct StreamSettings: Codable, Equatable, Sendable {
         case .warp2: fps * 4
         case .capFPS:
             refreshRate > 49 && fps >= refreshRate && fps - refreshRate <= 3 ? refreshRate - 1 : fps
-        case .latency, .balanced, .smoothness: fps
+        case .phaseLock, .balanced, .smoothness: fps
         }
     }
 

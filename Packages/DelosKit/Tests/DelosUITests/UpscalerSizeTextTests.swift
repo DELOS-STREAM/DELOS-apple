@@ -119,7 +119,7 @@ import Testing
             let plan = UpscalerSizePlan(
                 stream: stream, displayWidth: device.pixelWidth, displayHeight: device.pixelHeight, scaleMode: .fit,
                 support: device.metalFX)
-            return RendererUpscaler(renderer: RendererChoice.layer.makeRenderer(pacing: .latency, fps: 60, options: options), sizePlan: plan)
+            return RendererUpscaler(renderer: RendererChoice.layer.makeRenderer(pacing: .phaseLock, fps: 60, options: options), sizePlan: plan)
         }
         // A 2× that does not fit on the 11" iPad still offers the 1.33× that does
         #expect(upscaler(StreamResolution(width: 2420, height: 1668), on: iPad11, level: 2).supersamplingMode)

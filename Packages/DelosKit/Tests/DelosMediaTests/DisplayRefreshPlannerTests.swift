@@ -39,7 +39,7 @@ import Testing
         #expect(!DisplayRefreshPlanner.reachesFPS(119, fps: 120))
         #expect(DisplayRefreshPlanner.mayReduceRefreshRate(.capFPS, reduceRefreshRate: false))
         #expect(DisplayRefreshPlanner.mayReduceRefreshRate(.balanced, reduceRefreshRate: true))
-        #expect(!DisplayRefreshPlanner.mayReduceRefreshRate(.latency, reduceRefreshRate: true))
+        #expect(!DisplayRefreshPlanner.mayReduceRefreshRate(.phaseLock, reduceRefreshRate: true))
         #expect(!DisplayRefreshPlanner.isNativeResolution(width: 1920, height: 1080))
         #expect(DisplayRefreshPlanner.isNativeResolution(width: 2400, height: 1080))
     }
@@ -53,7 +53,7 @@ import Testing
         let reduced = self.plan(hz120, 60, reduce: true)
         #expect(reduced.bestMode == hz60 && reduced.displayRefreshRate == 60 && reduced.surfaceFrameRate == 60)
         #expect(self.plan(hz144, 60, pacing: .smoothness).bestMode == hz60)
-        #expect(self.plan(hz60, 60, pacing: .latency, reduce: true).bestMode == hz120)
+        #expect(self.plan(hz60, 60, pacing: .phaseLock, reduce: true).bestMode == hz120)
         #expect(self.plan(hz60, 30).bestMode == hz120)
         #expect(self.plan(hz144, 30, reduce: true).bestMode == hz60)
         #expect(self.plan(hz60, 90).bestMode == hz90)
@@ -136,7 +136,7 @@ import Testing
         let limited = VideoDisplay.builtIn(width: 2796, height: 1290, maxFramesPerSecond: 120, limited: true)
         #expect(options.refreshPlan(for: limited, pacing: .balanced, fps: 60).displayRefreshRate == 60)
         // A 120 FPS stream on ProMotion runs at 120 Hz
-        #expect(VideoRenderOptions(frameRate: 120).refreshPlan(for: promotion, pacing: .latency, fps: 120).surfaceFrameRate == 120)
+        #expect(VideoRenderOptions(frameRate: 120).refreshPlan(for: promotion, pacing: .phaseLock, fps: 120).surfaceFrameRate == 120)
     }
 
     /// The iPad Pro 13" (M5) panel and the owner's 1080p and 1440 × 1080 streams at 120 fps: no pacing and no refresh

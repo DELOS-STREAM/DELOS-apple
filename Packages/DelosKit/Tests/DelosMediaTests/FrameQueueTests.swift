@@ -49,24 +49,50 @@ struct QueueRun {
 enum QueueReplay {
     /// Pushes frame i at `arrivals[i]` and asks for a frame at every refresh of `display`, in time order. The display
     /// link calls back `lead` refreshes before the picture appears; it skips the refreshes numbered in `lost` (counted
-    /// from the first one).
+    /// from the first one). `sources` are the host's times of the frames (phase lock's arrival estimate).
+    ///
+    /// Phase lock as ``MetalPipeline`` runs it: a frame can still be drawn for a refresh until `window` seconds after the
+    /// callback; when the queue waits for a frame (``FrameQueue/waitsForFrame(before:)``) the refresh takes the first
+    /// frame that arrives before then, and ends without a picture when none does.
     static func run(
         arrivals: [Double], pacing: FramePacing, fps: Int, display: VirtualDisplay, capacity: Int = 4, lead: Double = 1,
-        lost: Set<Int> = []
+        lost: Set<Int> = [], sources: [Double]? = nil, window: Double = 0
     ) -> QueueRun {
         var queue = FrameQueue<Int>(pacing: pacing, fps: fps, capacity: capacity)
         var run = QueueRun()
         let end = (arrivals.last ?? 0) + 0.1
         let ticks = display.refreshes(in: (arrivals.first ?? 0)...end)
         var next = 0
+        var parked: (presentation: Double, latest: Double)?
+        func take(at presentation: Double, latest: Double) {
+            if let taken = queue.take(at: presentation, refresh: display.refresh, latest: latest) {
+                run.shown.append((taken.frame, taken.due, presentation))
+            }
+        }
         for (index, tick) in ticks.enumerated() where !lost.contains(index) {
-            // Frames that arrived before this refresh's callback
-            while next < arrivals.count, arrivals[next] <= tick - lead * display.refresh {
-                queue.push(next, arrival: arrivals[next])
+            let callback = tick - lead * display.refresh
+            // Frames that arrived before this refresh's callback; the first one resumes a waiting refresh
+            while next < arrivals.count, arrivals[next] <= callback {
+                queue.push(next, arrival: arrivals[next], source: sources?[next])
+                if let waiting = parked {
+                    if arrivals[next] <= waiting.latest {
+                        take(at: waiting.presentation, latest: waiting.latest)
+                    } else {
+                        queue.idle(at: waiting.presentation)
+                    }
+                    parked = nil
+                }
                 next += 1
             }
-            if let taken = queue.take(at: tick, refresh: display.refresh) {
-                run.shown.append((taken.frame, taken.due, tick))
+            if let waiting = parked {
+                queue.idle(at: waiting.presentation)
+                parked = nil
+            }
+            let latest = callback + window
+            if queue.waitsForFrame(before: latest) {
+                parked = (tick, latest)
+            } else {
+                take(at: tick, latest: latest)
             }
         }
         run.counters = queue.counters
@@ -88,8 +114,8 @@ enum QueueReplay {
 @Suite struct FrameQueueTests {
     let refresh = 1.0 / 120
 
-    @Test func theLowestLatencyModeShowsFramesInOrderWithOneFrameOfBacklog() {
-        var queue = FrameQueue<Int>(pacing: .latency, fps: 120)
+    @Test func phaseLockShowsFramesInOrderWithOneFrameOfBacklog() {
+        var queue = FrameQueue<Int>(pacing: .phaseLock, fps: 120)
         // Two frames landed in one refresh: the older is shown, the newer waits for the next refresh
         queue.push(1, arrival: 1.000)
         queue.push(2, arrival: 1.002)
@@ -98,14 +124,95 @@ enum QueueReplay {
         #expect(queue.counters.dropped == 0)
         // Three wait: one more than the backlog, so the oldest is skipped
         for frame in 3...5 { queue.push(frame, arrival: 1.02) }
-        #expect(queue.take(at: 1.03, refresh: refresh)?.frame == 4)
+        #expect(queue.take(at: 1.006 + 2 * refresh, refresh: refresh)?.frame == 4)
         #expect(queue.counters.dropped == 1)
         #expect(queue.counters.presented == 3)
         #expect(queue.waiting == 1)
     }
 
+    /// A steady stream whose frames all take 4 ms from the host to the queue, frame `i` from host time `i / 120`. Each
+    /// is taken by a refresh whose latest drawing time is a microsecond after its arrival.
+    private func steadyPhaseLock(frames: Int, delay: Double = 0.004) -> FrameQueue<Int> {
+        var queue = FrameQueue<Int>(pacing: .phaseLock, fps: 120)
+        for frame in 0..<frames {
+            let source = Double(frame) * refresh
+            queue.push(frame, arrival: source + delay, source: source)
+            _ = queue.take(at: source + delay + 2 * refresh, refresh: refresh, latest: source + delay + 1e-6)
+        }
+        return queue
+    }
+
+    @Test func phaseLockDoesNotHoldASteadyStream() throws {
+        var queue = steadyPhaseLock(frames: 240)
+        #expect(queue.counters.presented == 240)
+        #expect(queue.counters.repeatedRefreshes == 0)
+        #expect(try #require(queue.phaseMargin) < 1e-9)
+        // The next frame is due when it arrives, like all before it
+        let source = 240 * refresh
+        #expect(abs(queue.push(240, arrival: source + 0.004, source: source) - (source + 0.004)) < 1e-9)
+    }
+
+    @Test func phaseLockHoldsAnEarlyFrameForItsOwnRefreshOnly() {
+        var queue = steadyPhaseLock(frames: 240)
+        // Frame 240 comes 3 ms sooner than the others: it is due at the time they arrive, not before
+        let source = 240 * refresh
+        #expect(abs(queue.push(240, arrival: source + 0.001, source: source) - (source + 0.004)) < 1e-9)
+        #expect(queue.take(at: source + 0.003 + 2 * refresh, refresh: refresh, latest: source + 0.003) == nil)
+        #expect(queue.take(at: source + 0.004 + 3 * refresh, refresh: refresh, latest: source + 0.004 + 1e-6)?.frame == 240)
+    }
+
+    @Test func phaseLockNeverHoldsAFrameMoreThanAFrame() {
+        var queue = steadyPhaseLock(frames: 240)
+        // The host's times jump a second ahead of the arrivals: the frame is still due within a frame of its arrival
+        let arrival = 240 * refresh + 0.004
+        #expect(abs(queue.push(240, arrival: arrival, source: arrival + 1) - (arrival + refresh)) < 1e-9)
+    }
+
+    @Test func phaseLockWaitsOnlyForAFrameDueBeforeTheLatestDrawing() {
+        let queue = steadyPhaseLock(frames: 240)
+        // Frame 240 is due 4 ms after its host time
+        let due = 240 * refresh + 0.004
+        #expect(queue.waitsForFrame(before: due + 1e-6))
+        #expect(!queue.waitsForFrame(before: due - 0.0001))
+        // The other modes never wait
+        var balanced = FrameQueue<Int>(pacing: .balanced, fps: 120)
+        balanced.push(0, arrival: 1, source: 1)
+        _ = balanced.take(at: 2, refresh: refresh)
+        #expect(!balanced.waitsForFrame(before: 3))
+    }
+
+    @Test func phaseLockDropsTheFramesOfARefreshTheDisplayLinkSkipped() {
+        var queue = steadyPhaseLock(frames: 240)
+        // No callback for frame 240's refresh: at the next one, frames 240 and 241 are due and 240's refresh went by
+        for frame in 240...241 {
+            let source = Double(frame) * refresh
+            queue.push(frame, arrival: source + 0.004, source: source)
+        }
+        let latest = 241 * refresh + 0.004 + 1e-6
+        #expect(queue.take(at: latest + 2 * refresh, refresh: refresh, latest: latest)?.frame == 241)
+        #expect(queue.counters.dropped == 1)
+        #expect(queue.waiting == 0)
+    }
+
+    @Test func phaseLockCatchesUpAfterASecondARefreshBehind() {
+        // Frames 4 ms after their host time, the callback 1 ms after that; frame 300 comes 6 ms late, after its callback
+        let sources = (0..<600).map { 1 + Double($0) * refresh }
+        var arrivals = sources.map { $0 + 0.004 }
+        arrivals[300] += 0.006
+        let display = VirtualDisplay(refresh: refresh, phase: 0.005)
+        let run = QueueReplay.run(
+            arrivals: arrivals, pacing: .phaseLock, fps: 120, display: display, lead: 2, sources: sources)
+        #expect(run.shown.map(\.frame) == run.shown.map(\.frame).sorted())
+        // One refresh waits in vain for frame 300, a second of frames is shown a refresh late, then one is dropped
+        #expect(run.counters.dropped == 1)
+        #expect(run.shown.count == 599)
+        let late = run.shown.filter { $0.presentation - arrivals[$0.frame] > 2 * refresh + 0.002 }
+        #expect(abs(Double(late.count) - 120) <= 2)
+        #expect(run.shown.suffix(100).allSatisfy { $0.presentation - arrivals[$0.frame] < 2 * refresh + 0.002 })
+    }
+
     @Test func aBacklogDrainsAtARefreshWithoutANewFrame() {
-        for pacing in [FramePacing.latency, .balanced, .smoothness] {
+        for pacing in [FramePacing.phaseLock, .warp, .balanced, .smoothness] {
             var queue = FrameQueue<Int>(pacing: pacing, fps: 120)
             queue.push(1, arrival: 1.000)
             queue.push(2, arrival: 1.002)
@@ -132,15 +239,16 @@ enum QueueReplay {
     }
 
     @Test func aUsefulJitterReserveIsNotDiscardedOnATimer() {
-        for pacing in FramePacing.allCases {
+        // Phase lock holds by its jitter margin instead and catches a standing frame up (above)
+        for pacing in FramePacing.allCases where pacing != .phaseLock {
             let run = standingBacklog(pacing, refreshes: 600)
             #expect(run.shown == Array(0..<600), "\(pacing)")
             #expect(run.dropped == 0, "\(pacing)")
         }
     }
 
-    @Test func latencyDoesNotAddAScheduledBufferToASteadyStream() {
-        var queue = FrameQueue<Int>(pacing: .latency, fps: 120)
+    @Test func warpDoesNotAddAScheduledBufferToASteadyStream() {
+        var queue = FrameQueue<Int>(pacing: .warp, fps: 120)
         for frame in 0..<600 {
             let arrival = 1 + Double(frame) * refresh
             #expect(queue.push(frame, arrival: arrival) == arrival)
@@ -170,11 +278,11 @@ enum QueueReplay {
     }
 
     @Test func aRefreshThatCannotDrawKeepsTheFramesAndThePreviousPicture() {
-        var queue = FrameQueue<Int>(pacing: .latency, fps: 120)
+        var queue = FrameQueue<Int>(pacing: .phaseLock, fps: 120)
         queue.push(1, arrival: 1)
         #expect(queue.take(at: 1.01, refresh: refresh)?.frame == 1)
         queue.push(2, arrival: 1.012)
-        queue.idle()
+        queue.idle(at: 1.01 + refresh)
         #expect(queue.waiting == 1)
         #expect(queue.counters.refreshes == 2)
         #expect(queue.counters.repeatedRefreshes == 1)
@@ -191,9 +299,9 @@ enum QueueReplay {
     }
 
     @Test func aFrameIsShownAtTheRefreshNearestToItsTime() {
-        var queue = FrameQueue<Int>(pacing: .latency, fps: 120)
+        var queue = FrameQueue<Int>(pacing: .warp, fps: 120)
         queue.push(1, arrival: 10)
-        // Latency mode: due at arrival; a refresh half a frame before it already shows it, one more than that does not
+        // Warp: due at arrival; a refresh half a frame before it already shows it, one more than that does not
         #expect(queue.take(at: 10 - 0.6 * refresh, refresh: refresh) == nil)
         #expect(queue.take(at: 10 - 0.4 * refresh, refresh: refresh)?.frame == 1)
     }
@@ -227,7 +335,7 @@ enum QueueReplay {
     }
 
     @Test func refreshesWithoutAFrameAreCountedOnlyAfterTheFirstFrameWasShown() {
-        var queue = FrameQueue<Int>(pacing: .latency, fps: 60)
+        var queue = FrameQueue<Int>(pacing: .phaseLock, fps: 60)
         #expect(queue.take(at: 1, refresh: refresh) == nil)
         #expect(queue.counters.repeatedRefreshes == 0)
         queue.push(1, arrival: 1.5)
@@ -239,7 +347,7 @@ enum QueueReplay {
     }
 
     @Test func latenessIsHowLongAfterItsTimeTheFrameWasShown() {
-        var queue = FrameQueue<Int>(pacing: .latency, fps: 120)
+        var queue = FrameQueue<Int>(pacing: .warp, fps: 120)
         queue.push(1, arrival: 5)
         _ = queue.take(at: 5.004, refresh: refresh)
         #expect(abs(queue.counters.accumulatedLateness - 0.004) < 1e-12)
@@ -328,7 +436,7 @@ enum QueueReplay {
     @Test func aSlowStreamOnAFastDisplayRepeatsTheRefreshesBetweenFrames() {
         // 60 fps on 120 Hz: every other refresh shows the previous picture again
         let arrivals = QueueReplay.arrivals(count: 120, fps: 60, jitter: 0)
-        let run = QueueReplay.run(arrivals: arrivals, pacing: .latency, fps: 60, display: VirtualDisplay(refresh: refresh, phase: 0.001))
+        let run = QueueReplay.run(arrivals: arrivals, pacing: .phaseLock, fps: 60, display: VirtualDisplay(refresh: refresh, phase: 0.001))
         #expect(run.counters.dropped == 0)
         #expect(run.shown.count == 120)
         #expect(abs(Double(run.counters.repeatedRefreshes) - 120) <= 14, "the refreshes after the last frame included")

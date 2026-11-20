@@ -86,7 +86,7 @@ public final class PictureInPictureVideo: VideoRenderer {
             source = layer
             sharesLayer = true
         } else {
-            let source = DisplayLayerRenderer(pacing: .latency, options: options)
+            let source = DisplayLayerRenderer(pacing: .phaseLock, options: options)
             self.source = source
             sharesLayer = false
             (main as? MetalRenderer)?.observeDecoded { [weak self] pixelBuffer in

@@ -55,7 +55,7 @@ public protocol VideoRenderer: Sendable {
 extension VideoRenderer {
     public func setHDR(_ active: Bool) {}
     @MainActor public func attached(to display: VideoDisplay) -> DisplayRefreshPlanner.Plan {
-        VideoRenderOptions().refreshPlan(for: display, pacing: .latency, fps: Int(display.currentMode.refreshRate.rounded()))
+        VideoRenderOptions().refreshPlan(for: display, pacing: .phaseLock, fps: Int(display.currentMode.refreshRate.rounded()))
     }
     @MainActor public func detached() {}
     public func startArrival(duration: Double) {}
@@ -75,7 +75,8 @@ public enum UpscalerOverload {
 
 /// Renders through an `AVSampleBufferDisplayLayer`; a view hosts ``layer`` (on the main actor), while frames go to its
 /// `sampleBufferRenderer`, which accepts them from any thread. With pacing (``FramePacer``) each frame gets the time it is
-/// shown at on a timebase that follows the host clock; without it, frames are shown as soon as they are decoded.
+/// shown at on a timebase that follows the host clock; without it, frames are shown as soon as they are decoded. Phase
+/// lock needs the display link's refreshes (``MetalRenderer``): the layer shows its frames as soon as they are decoded.
 public final class DisplayLayerRenderer: VideoRenderer {
     public nonisolated(unsafe) let layer: AVSampleBufferDisplayLayer
     private nonisolated(unsafe) let renderer: AVSampleBufferVideoRenderer
@@ -93,7 +94,7 @@ public final class DisplayLayerRenderer: VideoRenderer {
     @MainActor public var hostLayer: CALayer { layer }
 
     @MainActor
-    public init(pacing: FramePacing = .latency, fps: Int = 60, options: VideoRenderOptions = VideoRenderOptions()) {
+    public init(pacing: FramePacing = .phaseLock, fps: Int = 60, options: VideoRenderOptions = VideoRenderOptions()) {
         layer = AVSampleBufferDisplayLayer()
         layer.videoGravity = Self.gravity(options.scaleMode)
         renderer = layer.sampleBufferRenderer
@@ -101,7 +102,7 @@ public final class DisplayLayerRenderer: VideoRenderer {
         self.pacing = pacing
         self.fps = fps
         self.options = Mutex(options)
-        if pacing != .latency {
+        if pacing != .phaseLock {
             var timebase: CMTimebase?
             CMTimebaseCreateWithSourceClock(allocator: kCFAllocatorDefault, sourceClock: CMClockGetHostTimeClock(), timebaseOut: &timebase)
             if let timebase {

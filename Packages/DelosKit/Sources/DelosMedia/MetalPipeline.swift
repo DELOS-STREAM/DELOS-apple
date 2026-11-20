@@ -153,6 +153,31 @@ final class MetalPipeline: @unchecked Sendable {
         /// Decoded to presented on the display (Android's avail->present, "Render latency").
         var renderLatency = StageWindow()
         var vrr = false
+        /// Phase lock: the refresh whose drawing waits for the next frame, until its latest drawing time.
+        var parked: ParkedRefresh?
+        /// Phase lock: the CPU's time to encode a drawing and the GPU's to run it, seconds, over the last frames.
+        var encodeTimes = RunningPercentile(capacity: 120, fraction: 0.99)
+        var gpuTimes = RunningPercentile(capacity: 120, fraction: 0.99)
+
+        /// Phase lock: the last moment a frame that arrives now can still be drawn for `tick`, from `now` (its callback):
+        /// the display link's CPU deadline and the presentation time less the GPU's time, less the encoding, 99th
+        /// percentiles each, and never past the next callback. Without a deadline or before any drawing: `now`.
+        func latestDrawing(for tick: RefreshTick, now: Double) -> Double {
+            guard let deadline = tick.deadline, let encode = encodeTimes.value, let gpu = gpuTimes.value else { return now }
+            let latest = min(deadline, tick.presentation - gpu) - encode - MetalPipeline.drawingGuard
+            return max(now, min(latest, now + tick.refresh - MetalPipeline.drawingGuard))
+        }
+
+        /// Phase lock: the waiting refresh ends without a new picture. Returns its throughput record.
+        mutating func expireParked() -> StreamPerf.Refresh? {
+            guard let parked else { return nil }
+            self.parked = nil
+            let repeats = queue.counters.repeatedRefreshes
+            queue.idle(at: parked.tick.presentation)
+            var refresh = parked.refresh
+            refresh.repeated = queue.counters.repeatedRefreshes > repeats
+            return refresh
+        }
 
         /// The arrival's pose for a refresh at `time`, nil when the picture is drawn plainly; an arrival that is complete
         /// at `time` ends here.
@@ -194,6 +219,17 @@ final class MetalPipeline: @unchecked Sendable {
         var upscale: UpscaleRequest?
     }
 
+    /// Phase lock: a refresh whose drawing waits for a frame due before `latest`. The drawable stays with it; a refresh
+    /// whose frame does not come is not drawn, and the layer keeps its picture.
+    private struct ParkedRefresh {
+        var tick: RefreshTick
+        var latest: Double
+        var refresh: StreamPerf.Refresh
+    }
+
+    /// Phase lock: seconds kept free before a drawing's deadline and before the next callback.
+    static let drawingGuard = 0.0005
+
     /// What the pipeline calls back, in one struct and read as a whole: a function kept in a `Mutex` by itself is
     /// wrapped in two more conversion thunks every time `withLock` touches it (the lock hands its value out `inout`,
     /// and a function in generic storage is converted on the way out and again on the way back in), so a callback
@@ -221,6 +257,8 @@ final class MetalPipeline: @unchecked Sendable {
     private let observers = Mutex(Observers())
     /// Debug builds: the per-second throughput line (``StreamPerf``).
     private let perf: StreamPerf?
+    /// The pacing is phase lock: refreshes may wait for their frame, and drawing times are measured for that.
+    private let phaseLocked: Bool
 
     init?(
         pacing: FramePacing, fps: Int, options: VideoRenderOptions = VideoRenderOptions(),
@@ -231,6 +269,7 @@ final class MetalPipeline: @unchecked Sendable {
         self.drawer = drawer
         self.clock = clock
         self.perf = perf
+        phaseLocked = pacing == .phaseLock
         topAligned = options.topAligned
         state = Mutex(State(queue: FrameQueue(pacing: pacing, fps: fps), scaleMode: options.scaleMode, upscaler: options.upscaler))
         decoder = VideoDecoder(
@@ -346,7 +385,7 @@ final class MetalPipeline: @unchecked Sendable {
         let overflowed = state.withLock { s -> Int? in
             guard s.accepting else { return nil }
             let dropped = s.queue.counters.dropped
-            s.queue.push(NumberedFrame(frame: frame, sequence: s.decoded, arrival: now), arrival: now)
+            s.queue.push(NumberedFrame(frame: frame, sequence: s.decoded, arrival: now), arrival: now, source: frame.sourceTime)
             s.decoded += 1
             s.decodeSeconds += frame.decodeSeconds
             if s.upscalerActive { s.window.arrived(at: now) }
@@ -359,6 +398,24 @@ final class MetalPipeline: @unchecked Sendable {
             perf.dropped(.queueFull, count: overflowed)
         }
         observers.withLock { $0 }.decoded?(frame.pixelBuffer)
+        if phaseLocked { resumeParked(now: now) }
+    }
+
+    /// Phase lock: a frame came while a refresh waited for one. Before the refresh's latest drawing time the refresh
+    /// takes its frame and draws it here, on the decoder's thread; after it, the refresh ends without a new picture.
+    /// A callback, a flush or a reattachment that holds the drawing lock decides instead (a flush waits for this thread).
+    private func resumeParked(now: Double) {
+        guard state.withLock({ $0.parked != nil }), drawing.try() else { return }
+        defer { drawing.unlock() }
+        let resumed = state.withLock { s -> (ParkedRefresh?, StreamPerf.Refresh?) in
+            guard let parked = s.parked else { return (nil, nil) }
+            guard now <= parked.latest else { return (nil, s.expireParked()) }
+            s.parked = nil
+            return (parked, nil)
+        }
+        if let expired = resumed.1 { perf?.tick(expired) }
+        guard let parked = resumed.0 else { return }
+        select(parked.tick, now: now, latest: parked.latest, refresh: parked.refresh, waited: true)
     }
 
     func flush() {
@@ -371,6 +428,7 @@ final class MetalPipeline: @unchecked Sendable {
         decoder.invalidate()
         state.withLock { s in
             s.queue.flush()
+            s.parked = nil
             s.lastFrame = nil
             s.awaitingKeyFrame = true
             s.presentation.flush()
@@ -392,6 +450,7 @@ final class MetalPipeline: @unchecked Sendable {
         state.withLock { s in
             s.accepting = false
             s.queue.flush()
+            s.parked = nil
             s.lastFrame = nil
             s.presentation.flush()
         }
@@ -404,15 +463,43 @@ final class MetalPipeline: @unchecked Sendable {
     /// drawn and the frames wait in the queue for the next refresh. While the arrival runs the last frame is drawn again
     /// at every refresh with the pose of that refresh's time, and once it ends the last frame is drawn plainly once more,
     /// so a still picture settles too and the stream goes on exactly as without it.
+    ///
+    /// Phase lock: when no frame waits but the next one is safely due before the refresh's latest drawing time
+    /// (``FrameQueue/waitsForFrame(before:)``), the refresh keeps its drawable and draws when that frame is decoded
+    /// (``resumeParked(now:)``). A frame then reaches the screen at the same refresh as one decoded before the callback.
     func tick(_ tick: RefreshTick) {
         drawing.lock()
         defer { drawing.unlock() }
         guard state.withLock({ $0.accepting }) else { return }
-        let size = tick.drawable.map { (width: $0.texture.width, height: $0.texture.height) }
         let now = clock()
-        var report: (UpscalerMode, Bool)?
         var refresh = StreamPerf.Refresh(
             presentation: tick.presentation, lead: tick.presentation - now, budget: tick.deadline.map { $0 - now })
+        guard phaseLocked else {
+            select(tick, now: now, latest: nil, refresh: refresh, waited: false)
+            return
+        }
+        let (expired, latest, parked) = state.withLock { s -> (StreamPerf.Refresh?, Double, Bool) in
+            let expired = s.expireParked()
+            let latest = s.latestDrawing(for: tick, now: now)
+            refresh.margin = s.queue.phaseMargin
+            refresh.window = latest - now
+            guard s.presentation.canDraw, s.arrival == nil, s.queue.waitsForFrame(before: latest) else {
+                return (expired, latest, false)
+            }
+            s.parked = ParkedRefresh(tick: tick, latest: latest, refresh: refresh)
+            return (expired, latest, true)
+        }
+        if let expired { perf?.tick(expired) }
+        guard !parked else { return }
+        select(tick, now: now, latest: latest, refresh: refresh, waited: false)
+    }
+
+    /// Takes this refresh's frame from the queue (or redraws the last one) and draws it. `latest`: phase lock's latest
+    /// drawing time; `waited`: the refresh waited for the frame (``resumeParked(now:)``).
+    private func select(_ tick: RefreshTick, now: Double, latest: Double?, refresh: StreamPerf.Refresh, waited: Bool) {
+        let size = tick.drawable.map { (width: $0.texture.width, height: $0.texture.height) }
+        var report: (UpscalerMode, Bool)?
+        var refresh = refresh
         var skipped = 0
         let work = state.withLock { s -> Work? in
             let pose = s.arrivalPose(at: tick.presentation)
@@ -423,10 +510,11 @@ final class MetalPipeline: @unchecked Sendable {
                 let after = s.queue.counters
                 refresh.selected = after.presented > before.presented
                 refresh.repeated = after.repeatedRefreshes > before.repeatedRefreshes
+                refresh.caught = waited && refresh.selected
                 skipped = after.dropped - before.dropped
             }
             if !s.presentation.canDraw {
-                s.queue.idle()
+                s.queue.idle(at: tick.presentation)
                 if refresh.waiting > 0 {
                     refresh.gpuBusy = true
                     s.gpuBusySkipped += 1
@@ -434,7 +522,7 @@ final class MetalPipeline: @unchecked Sendable {
                 }
                 return nil
             }
-            let taken = s.queue.take(at: tick.presentation, refresh: tick.refresh)
+            let taken = s.queue.take(at: tick.presentation, refresh: tick.refresh, latest: latest)
             func upscale(_ frame: NumberedFrame) -> UpscaleRequest? {
                 guard upscaling else { return nil }
                 return UpscaleRequest(settings: s.upscaler, sequence: frame.sequence, frameTime: frame.arrival)
@@ -462,6 +550,14 @@ final class MetalPipeline: @unchecked Sendable {
         }
         guard let work else { return }
         draw(work, tick: tick, now: now)
+    }
+
+    /// Phase lock: a refresh that waits for its frame ends with its display link (the renderer is detached or attached
+    /// to another display), so no frame is drawn into that link's drawable later.
+    func endWaitingRefresh() {
+        drawing.lock()
+        defer { drawing.unlock() }
+        if let expired = state.withLock({ $0.expireParked() }) { perf?.tick(expired) }
     }
 
     /// Starts the launch scene's arrival now on the renderer's clock; it lasts `duration` seconds (the exit's).
@@ -537,26 +633,28 @@ final class MetalPipeline: @unchecked Sendable {
         }
         nonisolated(unsafe) let parts = work.upscale == nil ? nil : drawer.lastReport.map { ($0.preparation, $0.pass) }
         let mode = work.upscale == nil ? nil : drawer.lastReport?.mode
-        let passes = drawer.lastPasses, timer = drawer.passTimer
+        let passes = drawer.lastPasses, timer = drawer.passTimer, phaseLocked = phaseLocked
         commandBuffer.addCompletedHandler { [weak self, perf] buffer in
             let succeeded = buffer.status == .completed
             let late = succeeded && onDisplay && timing.gpuFinishedLate(at: buffer.gpuEndTime)
-            self?.state.withLock { s in
-                s.presentation.gpuCompleted(ticket: ticket, succeeded: succeeded)
-                if late { s.lateRefreshes += 1 }
-            }
-            guard let perf else { return }
             func seconds(_ part: (any MTLCommandBuffer)?) -> Double {
                 guard let part, part.status == .completed else { return 0 }
                 return part.gpuEndTime - part.gpuStartTime
             }
             let total = buffer.gpuEndTime - buffer.gpuStartTime + seconds(parts?.0) + seconds(parts?.1)
+            self?.state.withLock { s in
+                s.presentation.gpuCompleted(ticket: ticket, succeeded: succeeded)
+                if late { s.lateRefreshes += 1 }
+                if phaseLocked, succeeded { s.gpuTimes.add(total) }
+            }
+            guard let perf else { return }
             perf.gpuFinished(
                 seconds: total, late: late, failed: !succeeded, upscaler: mode,
                 passes: succeeded ? passes.flatMap { timer?.times(of: $0) } : nil)
         }
         commandBuffer.commit()
         let submitted = clock()
+        if phaseLocked { state.withLock { $0.encodeTimes.add(submitted - timing.callback) } }
         perf?.drawingSubmitted(
             seconds: submitted - timing.callback, late: onDisplay && timing.submittedLate(at: submitted))
         if !onDisplay {

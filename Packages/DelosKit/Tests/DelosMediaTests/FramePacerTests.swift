@@ -5,8 +5,9 @@ import Testing
     /// 120 fps: one frame is 8.33 ms.
     let t = 1.0 / 120
 
-    @Test func lowestLatencyShowsEveryFrameAtOnce() {
-        var pacer = FramePacer(pacing: .latency, fps: 120)
+    @Test func phaseLockLeavesTheTimeToTheQueue() {
+        // The display layer shows phase lock's frames at once; the Metal renderer's queue times them (FrameQueue)
+        var pacer = FramePacer(pacing: .phaseLock, fps: 120)
         #expect(pacer.presentationTime(arrival: 1) == nil)
     }
 

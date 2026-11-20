@@ -86,7 +86,7 @@ private final class CountingRenderer: VideoRenderer {
     }
 
     @Test func theMetalRendererGetsALayerOfItsOwnUnderneath() throws {
-        guard let metal = MetalRenderer(pacing: .latency, fps: 60) else { return }
+        guard let metal = MetalRenderer(pacing: .phaseLock, fps: 60) else { return }
         let video = PictureInPictureVideo(wrapping: metal)
         #expect(!video.sharesLayer)
         #expect(video.hostLayer is CAMetalLayer)

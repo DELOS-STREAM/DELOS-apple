@@ -64,7 +64,7 @@ import Testing
         settings.set(.upscalerMode, .text("sharpen"))
         var options = VideoRenderOptions()
         options.upscaler = settings.upscalerSettings
-        let upscaler = RendererUpscaler(renderer: RendererChoice.layer.makeRenderer(pacing: .latency, fps: 60, options: options))
+        let upscaler = RendererUpscaler(renderer: RendererChoice.layer.makeRenderer(pacing: .phaseLock, fps: 60, options: options))
         #expect(!upscaler.available && upscaler.status == .unavailable && upscaler.mode == .sharpen)
         #expect(upscaler.status.pill == L("stream_menu_upscaler_unavailable"))
         upscaler.setSharpness(30)
