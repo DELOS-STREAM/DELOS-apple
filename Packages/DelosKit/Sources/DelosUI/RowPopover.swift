@@ -108,6 +108,8 @@ struct RowPopover: View {
     let anchor: CGRect
     let slider: SliderPopupModel?
     let onPick: (Int) -> Void
+    /// "Reset to profile value" as the options list's last item (a custom app setting); nil: none.
+    var onReset: (() -> Void)?
     let onClose: () -> Void
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
@@ -118,6 +120,7 @@ struct RowPopover: View {
     @State private var layerFrame = CGRect.zero
 
     static func optionID(_ index: Int) -> String { "option-\(index)" }
+    static let resetID = "option-reset"
 
     var body: some View {
         GeometryReader { proxy in
@@ -171,7 +174,7 @@ struct RowPopover: View {
         switch kind {
         case .options:
             let count: Int
-            if case .choice(_, let options, _) = row.value { count = options.count } else { count = 0 }
+            if case .choice(_, let options, _) = row.value { count = options.count + (onReset == nil ? 0 : 1) } else { count = 0 }
             return RowPopoverLayout.options(row: rowRect, count: count, stage: size, top: top, bottom: bottom, side: side)
         case .slider:
             return (RowPopoverLayout.slider(row: rowRect, stage: size, top: top, bottom: bottom, side: side), 0)
@@ -182,7 +185,9 @@ struct RowPopover: View {
         switch kind {
         case .options:
             if case let .choice(_, options, selected) = row.value {
-                OptionsList(title: row.label, options: options, selected: selected, focus: focus, listHeight: listHeight, onPick: onPick)
+                OptionsList(
+                    title: row.label, options: options, selected: selected, focus: focus, listHeight: listHeight, onPick: onPick,
+                    onReset: onReset)
             }
         case .slider:
             if let slider { SliderPopupContent(title: row.label, model: slider, onClose: onClose) }
@@ -199,6 +204,7 @@ private struct OptionsList: View {
     let focus: FocusModel
     let listHeight: Double
     let onPick: (Int) -> Void
+    let onReset: (() -> Void)?
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
 
@@ -221,6 +227,12 @@ private struct OptionsList: View {
                             }
                             .id(RowPopover.optionID(index))
                         }
+                        if let onReset {
+                            FocusItem(id: RowPopover.resetID, model: focus, action: onReset) { focused in
+                                optionView(DelosUI.L("settings_game_reset_menu"), icon: Symbols.reset, current: false, focused: focused)
+                            }
+                            .id(RowPopover.resetID)
+                        }
                     }
                     .padding(.vertical, stage.px(L.listRoom))
                     .focusDrivenScroll()
@@ -239,9 +251,10 @@ private struct OptionsList: View {
     }
 
     /// An option (`.menu-item` of the prototype): the focused one on a tint of the main color with a 3 px ring, the current one
-    /// with a check.
-    private func optionView(_ label: String, current: Bool, focused: Bool) -> some View {
+    /// with a check; [icon] leads an item that is an action (the reset).
+    private func optionView(_ label: String, icon: String? = nil, current: Bool, focused: Bool) -> some View {
         HStack(spacing: stage.px(18)) {
+            if let icon { SymbolView(symbol: icon, size: 30, color: focused ? colors.accent : colors.text2) }
             // Scrolls while focused when it does not fit (RowPicker.kt:299-302)
             MarqueeLabel(text: label, active: focused)
                 .font(DelosFonts.figtree(stage.tpx(23), .semibold))

@@ -160,17 +160,19 @@ import Testing
         var context = ShellHints.Context(screen: .settings)
         context.screenHints.adjustable = true
         #expect(labels(context) == ["Adjust", "Previous tab", "Next tab", "Search", "Change", "Back"])
+        context.screenHints.rowOptions = true
+        #expect(labels(context) == ["Adjust", "Previous tab", "Next tab", "Search", "Change", "Options", "Back"])
         context.screenHints = ScreenHints(settingsSearch: true)
         #expect(labels(context) == ["Select", "Back"])
     }
 
-    @Test func appSettingsOfferTheTabsAndOptionsOnlyOnACustomRow() {
+    @Test func appSettingsOfferOptionsOnlyWhereTheyOpenSomething() {
         var context = ShellHints.Context(screen: .appSettings(hostID: "h", appID: 1))
         context.hasContextMenu = true
         context.screenHints.adjustable = true
         #expect(labels(context) == ["Adjust", "Previous tab", "Next tab", "Change", "Back"])
-        context.screenHints.resetsRow = true
-        #expect(labels(context) == ["Adjust", "Previous tab", "Next tab", "Change", "Reset to profile value", "Options", "Back"])
+        context.screenHints.rowOptions = true
+        #expect(labels(context) == ["Adjust", "Previous tab", "Next tab", "Change", "Options", "Back"])
     }
 
     @Test func theLibraryFilterSheetClosesWithYAndB() {

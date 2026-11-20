@@ -6,8 +6,9 @@ import Foundation
 struct ScreenHints: Equatable, Sendable {
     /// The focused row changes its value with left and right (the adjust hint).
     var adjustable = false
-    /// X resets the focused row to the profile's value (an app setting that is custom).
-    var resetsRow = false
+    /// Options opens something on the focused settings row (``RowOptions``): its list of values, its slider, or the menu of a
+    /// custom app setting.
+    var rowOptions = false
     /// A filter sheet is open (the artwork's or the library's): its own buttons, reset and done or close.
     var sheetOpen = false
     /// The home screen's label for Y ("Filter", "Filter • 2 active"); nil: the library has nothing to filter.
@@ -116,7 +117,8 @@ enum ShellHints {
             return [hint(.south, L("shell_hint_start"))] + filter + [menu] + optionsHint
         case .settings:
             if c.screenHints.settingsSearch { return [select, back] }
-            return adjustHint + tabs + [hint(.north, L("shell_hint_search")), hint(.south, L("shell_hint_change")), back]
+            return adjustHint + tabs + [hint(.north, L("shell_hint_search")), hint(.south, L("shell_hint_change"))]
+                + (c.screenHints.rowOptions ? [options] : []) + [back]
         case .start: return [hint(.south, L("shell_hint_connect")), menu] + optionsHint
         case .boot: return [select] + (c.canGoBack ? [back] : [])
         case .createProfile: return [select, back]
@@ -147,12 +149,7 @@ enum ShellHints {
             // X is the search by name here and resets the filters only inside the sheet, which has its own buttons above
             return tabs + [south, hint(.west, L("shell_hint_search_name"), short: L("shell_hint_search")), hint(.north, L("shell_hint_filter")), back]
         case .appSettings:
-            // Only a custom row has a menu (its reset), as on Android: the rows register a menu closure that returns nil
-            // otherwise, which ``FocusModel/focusedHasMenu`` does not run (it would observe whatever every menu reads)
-            let custom = c.screenHints.resetsRow
-            return adjustHint + tabs + [hint(.south, L("shell_hint_change"))]
-                + (custom ? [hint(.west, L("shell_hint_reset_to_profile"), short: L("shell_hint_reset"))] : [])
-                + (custom ? optionsHint : []) + [back]
+            return adjustHint + tabs + [hint(.south, L("shell_hint_change"))] + (c.screenHints.rowOptions ? [options] : []) + [back]
         case .profile, .devices: return [select, back, menu]
         }
     }

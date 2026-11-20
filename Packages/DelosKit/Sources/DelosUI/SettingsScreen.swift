@@ -187,7 +187,9 @@ struct SettingsScreen: View {
     private func sendHints() {
         let searching = searchFocus != nil
         navigator.setHints(
-            ScreenHints(adjustable: !searching && ShellHints.adjustable(focusedRow), settingsSearch: searching, rowPopup: popup?.kind),
+            ScreenHints(
+                adjustable: !searching && ShellHints.adjustable(focusedRow), rowOptions: !searching && RowOptions.of(focusedRow).opens,
+                settingsSearch: searching, rowPopup: popup?.kind),
             from: focus)
     }
 
@@ -343,7 +345,20 @@ struct SettingsScreen: View {
             guard actions.toasts.current?.action == nil else { return false }
             openSearch()
             return true
-        case .down, .accept, .back, .menu, .options:
+        case .options:
+            // Options opens the focused row's list of values or its slider, the popover a second tap opens
+            guard let row = focusedRow else { return false }
+            switch RowOptions.of(row) {
+            case .popup:
+                feedback?.play(.open)
+                popup = RowPopupState.open(row) { value in slide(row.id, to: value) }
+            case .refuse:
+                feedback?.play(.error)
+            case .menu, .none:
+                return false
+            }
+            return true
+        case .down, .accept, .back, .menu:
             return false
         }
     }
