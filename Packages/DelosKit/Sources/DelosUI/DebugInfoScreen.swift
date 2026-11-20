@@ -50,7 +50,9 @@ struct DebugInfoScreen: View {
             .onAppear {
                 navigator.takeInput(focus) { command in capture(command) }
                 if lab == nil { lab = DebugRumbleLab(profileID: profileID, toasts: actions.toasts) }
-                if focusedRow == nil, let first = rows.first { focus.focus(AnyHashable(first.id)) }
+                // The first row, every time the screen opens (Android's first-row request): the rows register their frames
+                // before this runs, and the first one to report would otherwise keep the focus, possibly far down the list
+                if let first = rows.first { focus.focus(AnyHashable(first.id)) }
             }
             .onDisappear {
                 navigator.releaseInput(focus)
@@ -380,9 +382,11 @@ struct DebugInfoScreen: View {
 }
 
 extension DebugRow {
-    /// The row as the settings draw it.
+    /// The row as the settings draw it: a description of at most 100 characters (Android's limit) is also the line under the
+    /// label; every description stays in the panel.
     var settingRow: SettingRow {
-        SettingRow(id: id, tab: .about, section: section.title, icon: icon, label: label, value: value, help: description, enabled: enabled)
+        SettingRow(id: id, tab: .about, section: section.title, icon: icon, label: label, value: value, help: description, enabled: enabled,
+                   note: description.count <= 100 ? description : nil)
     }
 }
 
@@ -404,13 +408,15 @@ private struct DebugSectionHeading: View {
 }
 
 /// The focused row's icon on an accent disc, its name, its description and its technical details in a monospaced block (the
-/// screen's own text when no row is focused): a glass panel on the right, or the dock under a compact list. Long text scrolls by
-/// itself.
+/// screen's own text when no row is focused): a glass panel on the right as tall as its text (Android's `DetailsPanel`), or the
+/// dock under a compact list. Text longer than the room scrolls by itself.
 private struct DebugDetails: View {
     let row: DebugRow?
     let compact: Bool
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
+    /// The room above and below the text in the panel (stage px), which is also the scrolling text's fade.
+    private static let textInset = 24.0
 
     var body: some View {
         let title = row?.label ?? L("debug_title")
@@ -429,34 +435,47 @@ private struct DebugDetails: View {
                     .foregroundStyle(colors.text.color)
                     .lineLimit(compact ? 1 : nil)
             }
-            AutoScrollingHelp(identity: "\(row?.id ?? "debug"):\(description):\(row?.details ?? "")", edgeFade: compact ? HelpDockLayout.fade : nil) {
-                VStack(alignment: .leading, spacing: stage.px(compact ? HelpDockLayout.rowGap : 18)) {
-                    Text(description)
-                        .font(DelosFonts.figtree(stage.tpx(compact ? 21 : 22)))
-                        .lineSpacing(stage.tpx((compact ? 21 : 22) * 0.45))
-                        .foregroundStyle(colors.text2.color)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if row?.enabled == false {
-                        Text(L("settings_screen_unavailable"))
-                            .font(DelosFonts.figtree(stage.tpx(18)))
-                            .foregroundStyle(colors.text3.color)
-                    }
-                    if let details = row?.details {
-                        Text(details)
-                            .font(.system(size: stage.tpx(16), design: .monospaced))
-                            .lineSpacing(stage.tpx(16 * 0.4))
-                            .foregroundStyle(colors.text3.color)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+            let identity = "\(row?.id ?? "debug"):\(description):\(row?.details ?? "")"
+            if compact {
+                AutoScrollingHelp(identity: identity, edgeFade: HelpDockLayout.fade) { text(description) }
+            } else {
+                // The panel ends under its text; only text taller than the room fills the panel's height and scrolls. Both
+                // keep the same inset, so the text does not move when it starts to scroll
+                ViewThatFits(in: .vertical) {
+                    text(description).padding(.vertical, stage.px(Self.textInset))
+                    AutoScrollingHelp(identity: identity, inset: Self.textInset) { text(description) }
                 }
             }
         }
         .padding(.horizontal, stage.px(compact ? HelpDockLayout.padX : 44))
         .padding(.vertical, stage.px(compact ? HelpDockLayout.padY : 44))
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: compact ? .infinity : nil, alignment: .topLeading)
         .background {
             GlassShape(RoundedRectangle(cornerRadius: stage.px(compact ? 28 : 34)), tint: colors.surface, role: .panel)
                 .overlay(RoundedRectangle(cornerRadius: stage.px(compact ? 28 : 34)).strokeBorder(colors.line.color, lineWidth: stage.px(1)))
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    private func text(_ description: String) -> some View {
+        VStack(alignment: .leading, spacing: stage.px(compact ? HelpDockLayout.rowGap : 18)) {
+            Text(description)
+                .font(DelosFonts.figtree(stage.tpx(compact ? 21 : 22)))
+                .lineSpacing(stage.tpx((compact ? 21 : 22) * 0.45))
+                .foregroundStyle(colors.text2.color)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if row?.enabled == false {
+                Text(L("settings_screen_unavailable"))
+                    .font(DelosFonts.figtree(stage.tpx(18)))
+                    .foregroundStyle(colors.text3.color)
+            }
+            if let details = row?.details {
+                Text(details)
+                    .font(.system(size: stage.tpx(16), design: .monospaced))
+                    .lineSpacing(stage.tpx(16 * 0.4))
+                    .foregroundStyle(colors.text3.color)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 }

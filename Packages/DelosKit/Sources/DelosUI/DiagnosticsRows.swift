@@ -22,7 +22,8 @@ enum DebugSection: CaseIterable, Sendable {
 }
 
 /// A row of the Debug info screen (`DebugRow`): its [value] works like a settings row's (an action runs with A, a toggle
-/// flips, a slider steps with left and right), [description] is the panel's text and [details] the monospaced block under it.
+/// flips, a slider steps with left and right), [description] is the panel's text (and, when short, the line under the label) and
+/// [details] the monospaced block under it.
 struct DebugRow: Identifiable, Equatable {
     let id: String
     let section: DebugSection
