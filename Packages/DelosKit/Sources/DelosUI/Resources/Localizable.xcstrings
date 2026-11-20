@@ -52859,61 +52859,61 @@
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stabilní nízká latence"
+            "value": "Phase Lock"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stabile niedrige Latenz"
+            "value": "Phase Lock"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Steady low latency"
+            "value": "Phase Lock"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Latencia baja estable"
+            "value": "Phase Lock"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Latence faible et stable"
+            "value": "Phase Lock"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "安定した低遅延"
+            "value": "Phase Lock"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "안정적인 저지연"
+            "value": "Phase Lock"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Latência baixa estável"
+            "value": "Phase Lock"
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Стабільна низька затримка"
+            "value": "Phase Lock"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "稳定低延迟"
+            "value": "Phase Lock"
           }
         }
       }
