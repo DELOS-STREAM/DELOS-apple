@@ -100,7 +100,9 @@ group from outside lands on the group's item that had the focus last instead of 
 navigation returns to the cover the focus went up from (on tvOS the system's move into the group is redirected the same way).
 Its `tap` is what a touch does when it is not what A does; it gets whether the item had the focus
 before the tap (a settings row's first tap only focuses it, the second changes it, `RowTouch`); a tap always focuses the item
-first.
+first. `focusingOnFirstTap()` gives an item without its own `tap` the same rule with A's action: the library's covers, whose
+first tap only focuses the game (its background, info and chips follow) and whose second starts or resumes it; a pointer's
+click activates at once, as its hover has focused the item. The top navigation and the other buttons act on the first tap.
 
 ## Navigation
 

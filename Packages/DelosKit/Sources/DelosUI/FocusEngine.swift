@@ -440,6 +440,8 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
     let content: (Bool) -> Content
     /// The item holds a text field (``holdingField()``).
     private var holdsField = false
+    /// A first tap only focuses the item (``focusingOnFirstTap()``).
+    private var firstTapFocuses = false
     @Environment(Layers.self) private var layers: Layers?
     @Environment(\.focusReveal) private var reveal
     @State private var pressed = false
@@ -485,6 +487,15 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
     func holdingField() -> Self {
         var item = self
         item.holdsField = true
+        return item
+    }
+
+    /// Touch: a tap on the item while it has no focus only focuses it (the move cue), a tap on the focused item activates it
+    /// as A does, so a tap meant to look at something never starts it. A pointer's click activates at once (its hover focused
+    /// the item); A, keys and the long press are unchanged.
+    func focusingOnFirstTap() -> Self {
+        var item = self
+        item.firstTapFocuses = true
         return item
     }
 
@@ -614,6 +625,8 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
                 if let tap {
                     pulse()
                     tap(wasFocused)
+                } else if firstTapFocuses && !wasFocused {
+                    layers?.feedback?.play(.move)
                 } else {
                     activate(action)
                 }

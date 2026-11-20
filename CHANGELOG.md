@@ -310,6 +310,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- Touch: a tap on a library cover that does not have the focus only focuses it (the game's background, info and chips
+  show); a tap on the focused cover starts or resumes it, as a settings row's second tap changes it, so a tap meant to
+  look at a game never launches it. A pointer's click still starts the game at once (its hover has focused the cover);
+  A, Return and the long press are unchanged. Not verified on a device.
 - Frame pacing lists Warp Drive and Warp 2 last (Phase Lock, Balanced, Balanced with FPS limit, Smoothest video, Warp
   Drive, Warp 2), and the video codec lists H.264, HEVC, AV1, then PyroWave after Automatic, so the familiar choices
   come first.
