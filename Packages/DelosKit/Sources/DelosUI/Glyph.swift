@@ -18,7 +18,7 @@ enum KeyCap: Hashable, Sendable {
         case .pad(.rightShoulder): .rightBracket
         case .adjust: .arrows
         case .key(let cap): cap
-        case .pad, .tap, .click, .secondaryClick: nil
+        case .pad, .tap, .click, .secondaryClick, .pair: nil
         }
     }
 
@@ -48,6 +48,8 @@ enum HintButton: Hashable, Sendable {
     case click
     case secondaryClick
     case key(KeyCap)
+    /// Two buttons that share one label (L1 and R1: browse), each drawn as itself.
+    case pair(GlyphRole, GlyphRole)
 }
 
 /// A hint of the hint bar (`Hint` of DELOS for Android's `shell/ui/Bars.kt`). `shortLabel` is the label a cramped (compact)
@@ -206,6 +208,11 @@ struct GlyphButton: View {
                 fontCap(Self.click, side: side)
             case .secondaryClick:
                 fontCap(Self.secondaryClick, side: side)
+            case .pair(let first, let second):
+                HStack(spacing: stage.px(6 * k)) {
+                    GlyphButton(button: .pad(first), size: size, disc: disc, ink: self.ink)
+                    GlyphButton(button: .pad(second), size: size, disc: disc, ink: self.ink)
+                }
             default:
                 nonPadMark(k: k, ink: ink)
                     .frame(width: side, height: side)
@@ -236,7 +243,7 @@ struct GlyphButton: View {
         switch button {
         case .tap: SymbolView(symbol: Symbols.touchApp, size: GlyphLook.icon * GlyphLook.tapScale * k, color: ink, filled: true)
         case .adjust: SymbolView(symbol: Symbols.swapHoriz, size: GlyphLook.icon * GlyphLook.adjustScale * k, color: ink, filled: true)
-        case .pad, .key, .click, .secondaryClick: EmptyView()
+        case .pad, .key, .click, .secondaryClick, .pair: EmptyView()
         }
     }
 }

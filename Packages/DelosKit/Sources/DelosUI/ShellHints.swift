@@ -129,13 +129,16 @@ enum ShellHints {
                 ]
             }
             if let viewer = c.screenHints.overviewViewer {
-                // The viewer: a video that plays seeks, plays or pauses, mutes and browses with L1 and R1; else it browses
-                guard case .video(let playing, let muted) = viewer else { return [Hint(button: .adjust, label: L("overview_hint_browse")), back] }
+                // The viewer: on a video that plays the D-pad seeks on the timeline (the volume on its slider), A plays or
+                // pauses there (selects on the other buttons), Y mutes; L1 and R1 browse everywhere
+                let browse = Hint(button: .pair(.leftShoulder, .rightShoulder), label: L("overview_hint_browse"))
+                guard case .video(let playing, let muted, let focus) = viewer else { return [select, browse, back] }
+                let onTransport = focus == .timeline || focus == .play
                 return [
-                    Hint(button: .adjust, label: L("overview_hint_seek")),
-                    hint(.south, playing ? L("overview_hint_pause") : L("overview_hint_play")),
+                    Hint(button: .adjust, label: focus == .volume ? L("overview_video_volume") : L("overview_hint_seek")),
+                    onTransport ? hint(.south, playing ? L("overview_hint_pause") : L("overview_hint_play")) : select,
                     hint(.north, muted ? L("overview_hint_unmute") : L("overview_hint_mute")),
-                    hint(.leftShoulder, L("overview_previous")), hint(.rightShoulder, L("overview_next")), back,
+                    browse, back,
                 ]
             }
             if c.screenHints.overview { return [select, back] }

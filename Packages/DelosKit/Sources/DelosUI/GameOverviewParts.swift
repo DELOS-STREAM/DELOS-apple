@@ -373,7 +373,7 @@ enum OverviewImageSizes {
 
     static func full(_ media: OverviewContent.Media, tall: Bool) -> URL? {
         switch media.kind {
-        case .video: IGDBImage.videoThumbnail(media.id)
+        case .video: IGDBImage.videoThumbnailMax(media.id)
         case .screenshot: IGDBImage.url(media.id, size: tall ? .full : .screenshotHuge)
         }
     }

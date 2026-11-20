@@ -73,6 +73,7 @@ import Testing
         #expect(IGDBImage.url("co1abc", size: .coverBig, retina: true)?.absoluteString == "https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co1abc.jpg")
         #expect(IGDBImage.url("../etc", size: .full) == nil)
         #expect(IGDBImage.videoThumbnail("dQw4w9WgXcQ")?.absoluteString == "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg")
+        #expect(IGDBImage.videoThumbnailMax("dQw4w9WgXcQ")?.absoluteString == "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg")
     }
 
     @Test func youTubeEmbedCheck() {

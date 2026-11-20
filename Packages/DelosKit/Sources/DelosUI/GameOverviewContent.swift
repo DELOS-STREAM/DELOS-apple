@@ -185,10 +185,10 @@ struct OverviewContent: Equatable {
 }
 
 /// What the overview's viewer shows, for the hint bar: a screenshot, a video that plays (and whether it is playing and
-/// muted), or a video that cannot play (it browses like a screenshot).
+/// muted, and the dock's focus), or a video that cannot play (it browses like a screenshot).
 enum OverviewViewerItem: Equatable, Sendable {
     case screenshot
-    case video(playing: Bool, muted: Bool)
+    case video(playing: Bool, muted: Bool, focus: OverviewDockFocus = .timeline)
     case unplayable
 }
 

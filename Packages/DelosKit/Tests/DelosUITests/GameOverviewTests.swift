@@ -3,6 +3,7 @@ import CoreGraphics
 import DelosHost
 import DelosInput
 import Foundation
+import SwiftUI
 import Testing
 @testable import DelosUI
 
@@ -201,15 +202,107 @@ import Testing
         player(media[1].id)
         session.video.receive(#"{"type":"error","code":150}"#)
         #expect(session.video.error == 150 && OverviewVideos.shared.unplayable.contains(media[1].id))
+        // Only L1 and R1 browse: there the D-pad walks the dock (previous, next; next first) and A presses the focused one
         let count = sent.count
+        OverviewViewer.handle(.right, session: session, media: media)
+        #expect(session.viewer == 1 && session.video.controls.focus == .next)
         OverviewViewer.handle(.accept, session: session, media: media)
-        #expect(sent.count == count)
-        OverviewViewer.handle(.right, session: session, media: media)
-        #expect(session.viewer == 2)
-        OverviewViewer.handle(.right, session: session, media: media)
+        #expect(sent.count == count && session.viewer == 2 && session.video.controls.focus == .next)
+        OverviewViewer.handle(.nextTab, session: session, media: media)
         #expect(session.viewer == 3)
+        OverviewViewer.handle(.left, session: session, media: media)
+        #expect(session.viewer == 3 && session.video.controls.focus == .previous)
+        OverviewViewer.handle(.accept, session: session, media: media)
+        #expect(session.viewer == 2)
         OverviewViewer.handle(.back, session: session, media: media)
         #expect(session.viewerClosing)
+    }
+
+    @Test func viewerDockFocusAndSeekFlash() {
+        let session = OverviewSession(hostID: "h", app: HostApp(id: 1, title: "G"), coverID: AnyHashable("app-1"), source: .zero, details: complete)
+        let media = OverviewContent(details: complete, library: [], region: nil).media
+        session.viewer = 0
+        session.video.reset(media[0].id)
+        var sent: [String] = []
+        session.video.run = { sent.append($0) }
+        let controls = session.video.controls
+        // The timeline first; Down reaches play, Right walks to the sound, Up goes back, Up again reaches close
+        OverviewViewer.handle(.down, session: session, media: media)
+        #expect(controls.focus == .play)
+        for _ in 0..<4 { OverviewViewer.handle(.right, session: session, media: media) }
+        #expect(controls.focus == .volume)
+        OverviewViewer.handle(.left, session: session, media: media)
+        #expect(controls.focus == .volume && sent.last?.contains("player.setVolume(90)") == true)
+        OverviewViewer.handle(.up, session: session, media: media)
+        OverviewViewer.handle(.up, session: session, media: media)
+        #expect(controls.focus == .close)
+        OverviewViewer.handle(.down, session: session, media: media)
+        #expect(controls.focus == .timeline)
+        // Repeated seeks in one direction count up; the other direction starts over
+        let start = ContinuousClock.now
+        controls.seekFlash(1, at: start)
+        controls.seekFlash(1, at: start + .milliseconds(400))
+        #expect(controls.flash?.total == 20 && controls.flash?.direction == 1)
+        controls.seekFlash(-1, at: start + .milliseconds(500))
+        #expect(controls.flash?.total == 10 && controls.flash?.direction == -1)
+        controls.seekFlash(-1, at: start + .seconds(2))
+        #expect(controls.flash?.total == 10)
+        // Paused or dragging: the overlay stays
+        controls.paused = true
+        controls.hideIfIdle(at: .now + .seconds(10))
+        #expect(controls.visible)
+        controls.paused = false
+        controls.hideIfIdle(at: .now + .seconds(20))
+        #expect(!controls.visible)
+        // A press while hidden brings the focus home
+        controls.focus = .mute
+        OverviewViewer.handle(.down, session: session, media: media)
+        #expect(controls.visible && controls.focus == .play)
+    }
+
+    /// The owner's measure: every dock glyph's ink bounds centre equals its button's centre within 1 px; play's ink centroid.
+    @Test func dockGlyphsAreCentred() throws {
+        _ = DelosFonts.register()
+        let cases: [(String, Double, Bool)] = [
+            (Symbols.playerPlay, 124, true), (Symbols.playerPause, 124, true), (Symbols.playerSeekBack, 92, false),
+            (Symbols.playerSeekForward, 92, false), (Symbols.playerPrevious, 76, false), (Symbols.playerNext, 76, false),
+            (Symbols.playerSound, 76, false), (Symbols.playerMuted, 76, false), (Symbols.playerVolumeLow, 76, false),
+            (Symbols.playerVolumeNone, 76, false), (Symbols.close, 72, false),
+        ]
+        for (symbol, size, filled) in cases {
+            let play = symbol == Symbols.playerPlay
+            let view = InkSymbol(symbol: symbol, size: DockButton.glyph(size), color: RGBA(red: 1, green: 1, blue: 1), filled: filled, centroid: play)
+                .frame(width: size, height: size)
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 1
+            let image = try #require(renderer.cgImage)
+            let ink = try #require(Self.ink(image))
+            let centre = play ? ink.centroid : CGPoint(x: ink.bounds.midX, y: ink.bounds.midY)
+            #expect(abs(centre.x - size / 2) <= 1 && abs(centre.y - size / 2) <= 1, "\(symbol.unicodeScalars.first!.value): \(centre) in \(size)")
+        }
+    }
+
+    /// The alpha-weighted centroid and the bounds of [image]'s ink, pixels.
+    private static func ink(_ image: CGImage) -> (bounds: CGRect, centroid: CGPoint)? {
+        let w = image.width, h = image.height
+        var data = [UInt8](repeating: 0, count: w * h)
+        guard let context = CGContext(data: &data, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w, space: CGColorSpaceCreateDeviceGray(),
+                                      bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue) else { return nil }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        var minX = w, minY = h, maxX = -1, maxY = -1
+        var sum = 0.0, sx = 0.0, sy = 0.0
+        for y in 0..<h {
+            for x in 0..<w {
+                let a = Double(data[y * w + x]) / 255
+                guard a > 0 else { continue }
+                sum += a
+                sx += a * (Double(x) + 0.5)
+                sy += a * (Double(y) + 0.5)
+                if a > 0.25 { minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y) }
+            }
+        }
+        guard sum > 0, maxX >= 0 else { return nil }
+        return (CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1), CGPoint(x: sx / sum, y: sy / sum))
     }
 
     @Test func playerErrorsAndClock() {
@@ -260,13 +353,16 @@ import Testing
             hints.overviewViewer = item
             return ShellHints.hints(ShellHints.Context(screen: .home(hostID: "h"), screenHints: hints), kind: .controller)
         }
-        let browse = [Hint(button: .adjust, label: L("overview_hint_browse")), Hint(button: .pad(.east), label: L("shell_hint_back"))]
+        let pair = Hint(button: .pair(.leftShoulder, .rightShoulder), label: L("overview_hint_browse"))
+        let browse = [Hint(button: .pad(.south), label: L("shell_hint_select")), pair, Hint(button: .pad(.east), label: L("shell_hint_back"))]
         #expect(shown(.screenshot) == browse)
         #expect(shown(.unplayable) == browse)
         let playing = shown(.video(playing: true, muted: false))
-        #expect(playing.map(\Hint.button) == [.adjust, .pad(.south), .pad(.north), .pad(.leftShoulder), .pad(.rightShoulder), .pad(.east)])
-        #expect(playing.map(\.label) == [L("overview_hint_seek"), L("overview_hint_pause"), L("overview_hint_mute"), L("overview_previous"),
-                                         L("overview_next"), L("shell_hint_back")])
+        #expect(playing.map(\Hint.button) == [.adjust, .pad(.south), .pad(.north), .pair(.leftShoulder, .rightShoulder), .pad(.east)])
+        #expect(playing.map(\.label) == [L("overview_hint_seek"), L("overview_hint_pause"), L("overview_hint_mute"), L("overview_hint_browse"),
+                                         L("shell_hint_back")])
+        let onVolume = shown(.video(playing: true, muted: false, focus: .volume))
+        #expect(onVolume[0].label == L("overview_video_volume") && onVolume[1].label == L("shell_hint_select"))
         let paused = shown(.video(playing: false, muted: true))
         #expect(paused[1].label == L("overview_hint_play") && paused[2].label == L("overview_hint_unmute"))
     }

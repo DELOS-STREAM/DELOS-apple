@@ -227,7 +227,7 @@ struct HomeScreen: View {
     private var viewerItem: OverviewViewerItem? {
         guard let session = overview, let index = session.viewer, session.viewerMedia.indices.contains(index) else { return nil }
         guard session.viewerMedia[index].kind == .video else { return .screenshot }
-        return session.video.error == nil ? .video(playing: session.video.playing, muted: session.video.muted) : .unplayable
+        return session.video.error == nil ? .video(playing: session.video.playing, muted: session.video.muted, focus: session.video.controls.focus) : .unplayable
     }
 
     // MARK: Game overview

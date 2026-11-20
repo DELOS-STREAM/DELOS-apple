@@ -224,6 +224,13 @@ public enum IGDBImage {
         return URL(string: "https://i.ytimg.com/vi/\(videoID)/hqdefault.jpg")
     }
 
+    /// The video's largest thumbnail (1280 × 720, `maxresdefault`); not every video has one (YouTube answers 404 with a
+    /// 120 × 90 placeholder), so ``videoThumbnail(_:)`` stays the fallback.
+    public static func videoThumbnailMax(_ videoID: String) -> URL? {
+        guard validID.firstMatch(in: videoID, range: NSRange(videoID.startIndex..., in: videoID)) != nil else { return nil }
+        return URL(string: "https://i.ytimg.com/vi/\(videoID)/maxresdefault.jpg")
+    }
+
     /// Whether [id] is safe to put in a URL path or a query: letters, digits, `_` and `-` only.
     public static func validVideoID(_ id: String) -> Bool {
         validID.firstMatch(in: id, range: NSRange(id.startIndex..., in: id)) != nil

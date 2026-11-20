@@ -58,6 +58,10 @@ final class OverviewVideo {
     private(set) var time = 0.0
     private(set) var duration = 0.0
     private(set) var muted = false
+    /// The share of the video the player has loaded (`getVideoLoadedFraction`), 0…1.
+    private(set) var loaded = 0.0
+    /// The player's volume (`getVolume`), 0…100.
+    private(set) var volume = 100.0
     /// The player has played once: the web view shows instead of the thumbnail.
     private(set) var started = false
     /// The player's error code (-1: it did not load).
@@ -108,6 +112,8 @@ final class OverviewVideo {
         time = 0
         duration = 0
         muted = false
+        loaded = 0
+        volume = 100
         started = false
         error = nil
         reported = false
@@ -121,6 +127,8 @@ final class OverviewVideo {
         var time: Double?
         var duration: Double?
         var muted: Bool?
+        var loaded: Double?
+        var volume: Double?
         var code: Int?
     }
 
@@ -140,6 +148,8 @@ final class OverviewVideo {
             if let value = message.time, value != time { time = value }
             if let value = message.duration, value != duration { duration = value }
             if let value = message.muted, value != muted { muted = value }
+            if let value = message.loaded, value != loaded { loaded = min(max(value, 0), 1) }
+            if let value = message.volume, value != volume { volume = min(max(value, 0), 100) }
             if state == 1, !started { started = true }
         case "error":
             fail(message.code ?? -1)
@@ -177,6 +187,14 @@ final class OverviewVideo {
 
     func toggleMute() { send(muted ? "player.unMute()" : "player.mute()") }
 
+    /// Sets the volume to [value] (0…100); a volume above 0 turns the sound on.
+    func setVolume(_ value: Double) {
+        let v = min(max(value.rounded(), 0), 100)
+        guard error == nil, run != nil else { return }
+        volume = v
+        send("player.setVolume(\(Int(v)))" + (v > 0 ? ";player.unMute()" : ""))
+    }
+
     private func send(_ command: String) {
         guard error == nil else { return }
         run?("if(window.playbackAllowed&&player&&player.getPlayerState){\(command);status();}")
@@ -192,6 +210,11 @@ final class OverviewVideo {
 struct OverviewVideoPlayer {
     let videoID: String
     let video: OverviewVideo
+    /// The page takes touches and clicks (YouTube's own surface, such as an ad's Skip): only while the viewer's overlay is
+    /// hidden. Otherwise the overlay's tap layer takes them.
+    var interactive = false
+    /// A tap that reached the page (while [interactive]): the viewer shows its overlay; the page still gets the tap.
+    var onTap: @MainActor () -> Void = {}
 
     /// The page's origin: `https://` and the bundle id.
     static var origin: String { "https://" + (Bundle.main.bundleIdentifier ?? "delos").lowercased() }
@@ -203,7 +226,7 @@ struct OverviewVideoPlayer {
         <body><div id="p"></div><script>
         var player,timer,ready=false,playbackAllowed=false;
         function post(o){webkit.messageHandlers.delos.postMessage(JSON.stringify(o));}
-        function status(){ if(!ready||!player.getPlayerState)return; post({type:'status',state:player.getPlayerState(),time:player.getCurrentTime()||0,duration:player.getDuration()||0,muted:player.isMuted()}); }
+        function status(){ if(!ready||!player.getPlayerState)return; post({type:'status',state:player.getPlayerState(),time:player.getCurrentTime()||0,duration:player.getDuration()||0,muted:player.isMuted(),loaded:player.getVideoLoadedFraction()||0,volume:player.getVolume()}); }
         function setPlaybackAllowed(allowed,wanted){playbackAllowed=allowed;if(!ready)return;if(allowed&&wanted)player.playVideo();else player.pauseVideo();}
         function onYouTubeIframeAPIReady(){
          player=new YT.Player('p',{host:'https://www.youtube-nocookie.com',videoId:'\(videoID)',
@@ -229,6 +252,7 @@ struct OverviewVideoPlayer {
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         let video: OverviewVideo
+        var onTap: @MainActor () -> Void = {}
         let generation: Int
         private(set) var attached = true
         var firstLoad = true
@@ -275,6 +299,8 @@ struct OverviewVideoPlayer {
 
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { if current { video.fail(-1) } }
 
+        @objc func tapped() { onTap() }
+
         func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction,
                      windowFeatures: WKWindowFeatures) -> WKWebView? { nil }
     }
@@ -311,8 +337,13 @@ struct OverviewVideoPlayer {
         web.scrollView.backgroundColor = .black
         web.scrollView.isScrollEnabled = false
         web.scrollView.contentInsetAdjustmentBehavior = .never
-        web.isUserInteractionEnabled = false
+        web.isUserInteractionEnabled = interactive
         web.accessibilityElementsHidden = true
+        // Sees the page's taps without taking them from it
+        let tap = UITapGestureRecognizer(target: coordinator, action: #selector(Coordinator.tapped))
+        tap.cancelsTouchesInView = false
+        tap.delegate = coordinator
+        web.addGestureRecognizer(tap)
         #else
         web.underPageBackgroundColor = .black
         #endif
@@ -343,9 +374,20 @@ struct OverviewVideoPlayer {
 
 #if os(iOS)
 extension OverviewVideoPlayer: UIViewRepresentable {
-    func makeUIView(context: Context) -> WKWebView { make(context.coordinator) }
-    func updateUIView(_ view: WKWebView, context: Context) {}
+    func makeUIView(context: Context) -> WKWebView {
+        context.coordinator.onTap = onTap
+        return make(context.coordinator)
+    }
+    func updateUIView(_ view: WKWebView, context: Context) {
+        context.coordinator.onTap = onTap
+        if view.isUserInteractionEnabled != interactive { view.isUserInteractionEnabled = interactive }
+    }
     static func dismantleUIView(_ view: WKWebView, coordinator: Coordinator) { dismantle(view, coordinator) }
+}
+
+extension OverviewVideoPlayer.Coordinator: UIGestureRecognizerDelegate {
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
 }
 #else
 extension OverviewVideoPlayer: NSViewRepresentable {
@@ -354,60 +396,6 @@ extension OverviewVideoPlayer: NSViewRepresentable {
     static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) { dismantle(view, coordinator) }
 }
 #endif
-
-/// The viewer's overlay controls: back/forward, playback, elapsed time, seek, duration and mute.
-struct OverviewVideoBar: View {
-    let video: OverviewVideo
-    @Environment(\.stage) private var stage
-    @Environment(\.delosColors) private var colors
-
-    var body: some View {
-        HStack(spacing: stage.px(14)) {
-            button(Symbols.playerBack, label: L("overview_video_back")) { video.seek(by: -10) }
-            Button { video.toggle() } label: {
-                SymbolView(symbol: video.playing ? Symbols.playerPause : Symbols.playerPlay, size: 30, color: colors.onAccent, filled: true)
-                    .frame(width: stage.px(56), height: stage.px(56))
-                    .background(Circle().fill(colors.accent.color))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(video.playing ? L("overview_hint_pause") : L("overview_hint_play"))
-            button(Symbols.playerForward, label: L("overview_video_forward")) { video.seek(by: 10) }
-            Text(OverviewVideo.clock(video.time)).font(DelosFonts.figtree(stage.tpx(20), .bold)).foregroundStyle(colors.text.color)
-                .padding(.leading, stage.px(6))
-            GeometryReader { proxy in
-                let fraction = video.duration > 0 ? min(max(video.time / video.duration, 0), 1) : 0
-                ZStack(alignment: .leading) {
-                    Capsule().fill(colors.text.color.opacity(0.18))
-                    Capsule().fill(colors.accent.color).frame(width: proxy.size.width * fraction)
-                }
-                .frame(height: stage.px(6))
-                .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .onTapGesture(coordinateSpace: .local) { point in
-                    if proxy.size.width > 0 { video.seek(to: point.x / proxy.size.width) }
-                }
-            }
-            Text(OverviewVideo.clock(video.duration)).font(DelosFonts.figtree(stage.tpx(20), .bold)).foregroundStyle(colors.text2.color)
-            button(video.muted ? Symbols.playerMuted : Symbols.playerSound, label: video.muted ? L("overview_hint_unmute") : L("overview_hint_mute")) {
-                video.toggleMute()
-            }
-        }
-        .monospacedDigit()
-        .padding(.horizontal, stage.px(10))
-        .frame(height: stage.px(72))
-        .background(GlassShape(Capsule(), tint: colors.surface))
-    }
-
-    private func button(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            SymbolView(symbol: icon, size: 28, color: colors.text)
-                .frame(width: stage.px(52), height: stage.px(52))
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
-    }
-}
 #endif
 
 /// In place of a video that cannot play: the thumbnail dimmed, a warning and why.
