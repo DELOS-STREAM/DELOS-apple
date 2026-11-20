@@ -39,7 +39,9 @@ enum ContextMenuLayout {
     static let fallbackY = 300.0
 
     static let rowHeight = 64.0
-    static let rowGap = 4.0
+    /// The gap between two rows (``FocusSpacing``): the focused row's plate and ring lie inside it and it does not grow,
+    /// so only the clearance is needed.
+    static let rowGap = FocusSpacing.clearance
     static let rowRadius = 28.0
     static let rowRing = 3.0
 }

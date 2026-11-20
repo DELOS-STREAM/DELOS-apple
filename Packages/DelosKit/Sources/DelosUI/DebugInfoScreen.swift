@@ -333,7 +333,7 @@ struct DebugInfoScreen: View {
     private var list: some View {
         let rows = rows
         return ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: stage.px(10)) {
+            VStack(alignment: .leading, spacing: stage.px(SettingsLayout.rowGap)) {
                 ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                     if index == 0 || rows[index - 1].section != row.section {
                         DebugSectionHeading(label: row.section.title)

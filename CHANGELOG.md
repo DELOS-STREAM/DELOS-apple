@@ -332,6 +332,9 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- Up and Down land on the first item of the new row (its leftmost item on screen) instead of the nearest one; going back
+  to the dashboard's covers still returns to the cover the focus left, and the artwork picker, the avatars and the
+  search letters keep the column.
 - The changelog and the README describe DELOS for Apple on its own; `tools/docs/check_platform.py`, run by
   `tools/test.sh`, fails when either names another platform.
 - The library filter takes several values in every row (for example two genres, a theme and Native HDR): a chip toggles
@@ -441,6 +444,14 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- A focused item's ring and growth no longer touch the next item anywhere in the app (docs/ENGINEERING_RULES.md, "Focus
+  never touches the neighbour"): the gaps of the overview's screenshots and videos, Similar games, links, Play and App
+  settings, the dashboard's covers, the artwork grid, chips and pills, dialogs, settings rows and search, menus, the
+  dock, the top navigation, the PC circles and the keyboards follow one rule, checked by tests.
+- The overview's focus ring stands exactly on the focused item and glides smoothly, with the pointer's hover as with a
+  controller. It read the item's bounds inside the item's focus scale, so it stood the growth too far out and every
+  frame of the growth restarted the glide; it now reads the layout bounds and glides by a carry that runs out on the
+  glide curve, drawn from the time, while the item's row may scroll under it.
 - A finger's tap on the iPad no longer counts as the pointer's secondary click: a first tap on a library cover again only
   focuses it (the second starts it), and a tap on a PC's circle on the start screen connects instead of opening its
   context menu now and then. The window's recognizer of the right click and the trackpad's two-finger click took every

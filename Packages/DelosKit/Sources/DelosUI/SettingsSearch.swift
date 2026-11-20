@@ -114,12 +114,27 @@ enum SettingsSearchText {
 /// The geometry of the on-screen letter picker (`LetterPicker`): nine keys to a row, and more columns of slightly smaller keys
 /// when six rows are not enough. The compact stage does not squeeze that grid: its keys keep the 64 px target in two rows that
 /// scroll sideways together.
+///
+/// The keys are a dense grid (``FocusSpacing``): a focused key does not grow and its ring lies inside its edge, so it reaches
+/// nothing beyond the key and any gap of ``FocusSpacing/clearance`` or more keeps the focus off its neighbours.
 enum LetterPicker {
     static let columns = 9, maxRows = 6, key = 74.0, gap = 12.0, width = 820.0
     static let compactRows = 2, compactKey = 64.0
-    /// Between two compact keys (and to the Delete / Clear circles): the focused key's growth (64 × 0.06), its ring (8) and 12 px.
+    /// The focused key's ring, inside its edge, wide and compact.
+    static let ring = 5.0, compactRing = 4.0
+    /// Between two compact keys, and from the keys to the Delete / Clear circles: the circle's reach (64 px growing by 8 % with
+    /// its 4 px ring 4 px out, inside its scale: 11.2) and the clearance.
     static let compactGap = 26.0
-    /// The faded ends of the compact picker's scrolling layer, and its room above and below the keys for a focused key's ring.
+    /// Between the compact Delete and Clear circles, one above the other: twice the circle's reach and the clearance.
+    static let compactCircleGap = 32.0
+    /// The wide picker's field above the keys: the field's reach (84 px growing by 5 % with its 4 px ring 4 px out, inside its
+    /// scale: 10.5) and the clearance.
+    static let fieldGap = 34.0
+    /// The wide picker's keys above the Space, Delete and Clear pills: a pill's reach (``FocusSpacing/pillHeight`` growing by
+    /// ``FocusSpacing/pillScale``, its ring inside the scale: 11.68) and the clearance; the pills stand ``FocusSpacing/pillGap``
+    /// apart. Six rows of keys still fit above the hint bar on a 1080 px stage.
+    static let pillsGap = 20.0
+    /// The faded ends of the compact picker's scrolling layer, and its room above and below the keys.
     static let compactEdge = 24.0, compactRingRoom = 12.0
 
     static func columns(keys: Int) -> Int { keys <= columns * maxRows ? columns : (keys + maxRows - 1) / maxRows }
@@ -238,6 +253,11 @@ struct SettingsSearchView: View {
         .padding(.bottom, stage.px(bottom))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onChange(of: typing) { _, now in navigator.textEditing(now) }
+        // The letters are a 2-D grid (with the compact layout's Space key in it): Up and Down keep the column
+        .onChange(of: [letters.count, compact ? 1 : 0], initial: true) { _, now in
+            let keys = (0..<now[0]).map { AnyHashable(Self.letterID($0)) }
+            focus.keepColumn(in: "search-letters", items: now[1] == 1 ? keys + [AnyHashable(Self.spaceID)] : keys)
+        }
         .onChange(of: navigator.isEditingText) { _, now in if !now { typing = false } }
         .onDisappear { if typing { navigator.isEditingText = false } }
     }
@@ -258,7 +278,7 @@ struct SettingsSearchView: View {
                 .padding(.top, stage.px(14))
                 .padding(.bottom, stage.px(32))
             HStack(alignment: .top, spacing: stage.px(70)) {
-                VStack(alignment: .leading, spacing: stage.px(18)) {
+                VStack(alignment: .leading, spacing: 0) {
                     field(width: 790)
                     VStack(alignment: .leading, spacing: stage.px(LetterPicker.gap)) {
                         ForEach(Array(stride(from: 0, to: keys.count, by: columns)), id: \.self) { start in
@@ -269,8 +289,8 @@ struct SettingsSearchView: View {
                             }
                         }
                     }
-                    .padding(.top, stage.px(16))
-                    HStack(spacing: stage.px(14)) {
+                    .padding(.top, stage.px(LetterPicker.fieldGap))
+                    HStack(spacing: stage.px(FocusSpacing.pillGap)) {
                         FocusItem(id: Self.spaceID, model: focus, action: { type(" ") }) { focused in
                             PillButton(label: L("settings_screen_search_space"), focused: focused)
                         }
@@ -281,6 +301,7 @@ struct SettingsSearchView: View {
                             PillButton(label: L("settings_screen_search_clear"), icon: Symbols.clear, focused: focused)
                         }
                     }
+                    .padding(.top, stage.px(LetterPicker.pillsGap))
                 }
                 .frame(width: stage.px(820), alignment: .topLeading)
                 VStack(alignment: .leading, spacing: 0) {
@@ -331,7 +352,7 @@ struct SettingsSearchView: View {
                 .scrollClipDisabled()
                 // Both ends of the scrolling layer always fade, as Android's `fadeMask` does
                 .scrollEdgeFade(.horizontal, FadeEdges(LetterPicker.compactEdge), growth: .always)
-                VStack(spacing: stage.px(gap)) {
+                VStack(spacing: stage.px(LetterPicker.compactCircleGap)) {
                     FocusItem(id: Self.deleteID, model: focus, action: delete) { focused in
                         circle(Symbols.backspace, focused: focused, size: key)
                     }
@@ -364,8 +385,7 @@ struct SettingsSearchView: View {
                 .foregroundStyle((focused ? colors.accent : colors.text).color)
                 .lineLimit(1)
                 .frame(width: stage.px(size), height: stage.px(size))
-                .background(RoundedRectangle(cornerRadius: stage.px(18)).fill((focused ? colors.surface2 : colors.surface).color))
-                .focusLook(focused, scale: 1.06, ring: hosted ? 4 : 5, glowBlur: hosted ? 0 : 80, glowY: hosted ? 0 : 30, corner: 18)
+                .background(keyFace(focused, ring: hosted ? LetterPicker.compactRing : LetterPicker.ring))
         }
     }
 
@@ -376,8 +396,18 @@ struct SettingsSearchView: View {
             .lineLimit(1)
             .padding(.horizontal, stage.px(24))
             .frame(minWidth: stage.px(size), minHeight: stage.px(size), maxHeight: stage.px(size))
-            .background(RoundedRectangle(cornerRadius: stage.px(18)).fill((focused ? colors.surface2 : colors.surface).color))
-            .focusLook(focused, scale: 1.06, ring: 4, glowBlur: 0, glowY: 0, corner: 18)
+            .background(keyFace(focused, ring: LetterPicker.compactRing))
+    }
+
+    /// A key of the dense grid (``LetterPicker``): its plate, and when focused its ring in the main color inside its edge; it
+    /// neither grows nor glows, so nothing of the focus reaches the next key.
+    private func keyFace(_ focused: Bool, ring: Double) -> some View {
+        let shape = RoundedRectangle(cornerRadius: stage.px(18))
+        return GlassShape(shape, tint: focused ? colors.surface2 : colors.surface)
+            .overlay(
+                shape.strokeBorder(colors.accent.color, lineWidth: stage.px(ring))
+                    .opacity(focused ? 1 : 0)
+                    .animation(.focusRing(focused: focused), value: focused))
     }
 
     private func circle(_ icon: String, focused: Bool, size: Double) -> some View {
@@ -418,7 +448,7 @@ struct SettingsSearchView: View {
         let found = results
         return ScrollViewReader { proxy in
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: stage.px(10)) {
+                VStack(alignment: .leading, spacing: stage.px(SettingsLayout.rowGap)) {
                     if found.isEmpty {
                         Text(L("settings_screen_search_none"))
                             .font(DelosFonts.figtree(stage.tpx(26)))

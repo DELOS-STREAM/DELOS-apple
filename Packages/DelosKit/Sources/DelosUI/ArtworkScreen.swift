@@ -632,6 +632,10 @@ private struct ArtworkGridView: View {
                         .padding(.trailing, stage.px(right))
                         .padding(.top, stage.px(46))
                         .padding(.bottom, stage.px(96))
+                        // A 2-D grid: Up and Down keep the column
+                        .onChange(of: all, initial: true) { _, now in
+                            focus.keepColumn(in: "artwork-grid", items: now.map { AnyHashable($0.image.map { ArtworkScreen.tileID($0.id) } ?? ArtworkScreen.noneID) })
+                        }
                     }
                     .focusable(false)
                     .scrollClipDisabled()

@@ -121,6 +121,33 @@ import Testing
         #expect(LetterPicker.compactColumns(keys: 37) == 19)
     }
 
+    @Test func aFocusedSettingsItemNeverReachesItsNeighbour() {
+        // Rows: the plate is the row grown by 1 % a side and the content lifts by 2 %
+        let row = FocusSpacing.reach(size: SettingsLayout.rowMaxHeight, scale: 1.02, outset: 0, ring: 0, ringScales: false)
+        #expect(SettingsLayout.rowGap >= FocusSpacing.gap(reach: row))
+        // tvOS tabs side by side, and under the Search pill
+        #expect(TabRowLayout.tvTabGap >= FocusSpacing.focusLookGap(size: TabRowLayout.tabMaxWidth, scale: TabRowLayout.tabScale, ring: TabRowLayout.tabRing))
+        let pill = FocusSpacing.reach(
+            size: FocusSpacing.pillHeight, scale: FocusSpacing.pillScale, outset: FocusSpacing.pillRing, ring: FocusSpacing.pillRing, ringScales: true)
+        let tab = FocusSpacing.reach(
+            size: SettingsLayout.tabsHeight, scale: TabRowLayout.tabScale, outset: TabRowLayout.tabRing, ring: TabRowLayout.tabRing, ringScales: true)
+        #expect(SettingsLayout.searchTabsGap >= pill + tab + FocusSpacing.clearance)
+        #expect(SettingsLayout.listTop + 14 - (SettingsLayout.tvTabsY + SettingsLayout.tabsHeight) >= 2 * tab + FocusSpacing.clearance)
+        // The letter picker: dense keys (no growth, ring inside) reach nothing
+        #expect(LetterPicker.gap >= FocusSpacing.gap(reach: 0))
+        #expect(LetterPicker.compactGap >= FocusSpacing.gap(reach: 0))
+        let circle = FocusSpacing.reach(size: LetterPicker.compactKey, scale: 1.08, outset: 4, ring: 4, ringScales: true)
+        #expect(LetterPicker.compactGap >= circle + FocusSpacing.clearance)
+        #expect(LetterPicker.compactCircleGap >= FocusSpacing.gap(reach: circle))
+        let field = FocusSpacing.reach(size: 84, scale: 1.05, outset: 4, ring: 4, ringScales: true)
+        #expect(LetterPicker.fieldGap >= field + FocusSpacing.clearance)
+        #expect(LetterPicker.pillsGap >= pill + FocusSpacing.clearance)
+        // Nine wide keys fit the picker; six rows of them, the field and the pills fit above the hint bar at 1080
+        #expect(Double(LetterPicker.columns) * LetterPicker.key + Double(LetterPicker.columns - 1) * LetterPicker.gap <= LetterPicker.width)
+        let column = 84 + LetterPicker.fieldGap + 6 * LetterPicker.key + 5 * LetterPicker.gap + LetterPicker.pillsGap + FocusSpacing.pillHeight
+        #expect(column <= 1080 - 130 - SettingsLayout.bottom(scale: 1) - 129.44)
+    }
+
     @Test func everyWordOfTheQueryMustMatchInAnyOrder() {
         let rows = [
             SettingRow(id: "a", tab: .stream, section: "Video", icon: "", label: "Resolution", value: .toggle(false), help: "How sharp the picture is"),

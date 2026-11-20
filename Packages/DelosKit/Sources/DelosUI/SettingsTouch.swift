@@ -202,6 +202,9 @@ enum RowPopoverLayout {
     /// The options list card.
     static let optionsWidth = 560.0
     static let pad = 20.0, title = 36.0, option = 64.0, gap = 4.0, listRoom = 3.0
+    /// The gap between two options (``FocusSpacing``): the focused option's tint and 3 px ring lie inside it and it does
+    /// not grow, so only the clearance is needed.
+    static let optionGap = FocusSpacing.clearance
     /// The slider card: 1040 × 300, its parts sized for a finger (96 high buttons and track, an 88 high field).
     static let sliderWidth = 1040.0
     static let sliderPad = 28.0, sliderTitle = 36.0, sliderGap = 12.0, touch = 96.0, fieldHeight = 88.0, controlGap = 20.0
@@ -226,7 +229,7 @@ enum RowPopoverLayout {
     /// What the options card has besides its list: padding, the title and its gap.
     static let chrome = 2 * pad + title + 2 * gap
 
-    static func listHeight(count: Int) -> Double { count <= 0 ? 0 : Double(count) * (option + gap) + 2 * listRoom }
+    static func listHeight(count: Int) -> Double { count <= 0 ? 0 : Double(count) * (option + optionGap) + 2 * listRoom }
 
     /// The card of an options list: [count] options, the card as tall as they need within the room.
     static func options(row: CGRect, count: Int, stage: CGSize, top: Double = topMargin, bottom: Double = bottomMargin, side: Double = sideMargin)

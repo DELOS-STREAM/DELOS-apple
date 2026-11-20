@@ -164,12 +164,12 @@ enum ArtworkTab: CaseIterable, Hashable {
     }
 }
 
-/// Where the grid's tiles stand (`ArtGridLayout` of DELOS for Android), stage pixels: the focused tile grows by 6 %, its
-/// 4 + 4 px ring and 12 px of air have to fit between two tiles.
+/// Where the grid's tiles stand (`ArtGridLayout` of DELOS for Android), stage pixels: the focused tile grows by 6 % and
+/// wears a 4 px ring 4 px out (``ring`` is the band of both) inside its scale; two tiles keep the focus spacing rule's
+/// room for that between them (``FocusSpacing``), side by side by their width and one above the other by their height.
 struct ArtworkGrid: Equatable {
     static let focusScale = 1.06
     static let ring = 8.0
-    static let clearance = 12.0
     static let minGap = 28.0
 
     let columns: Int
@@ -178,13 +178,17 @@ struct ArtworkGrid: Equatable {
     let gapX: Double
     let gapY: Double
 
-    /// The room between two tiles of width [tile].
-    static func gap(_ tile: Double) -> Double { max(minGap, tile * (focusScale - 1) + ring + clearance) }
+    /// The room between two tiles [size] long on the axis they neighbour on.
+    static func gap(_ size: Double) -> Double {
+        max(minGap, FocusSpacing.gap(reach: size * (focusScale - 1) / 2 + ring * focusScale))
+    }
 
     /// The tile width that [columns] tiles and their gaps fill [width] with.
     static func tileWidth(width: Double, columns: Int) -> Double {
         guard columns > 1 else { return width }
-        let byRule = (width - Double(columns - 1) * (ring + clearance)) / (Double(columns) + Double(columns - 1) * (focusScale - 1))
+        // Above the floor a gap is tile × (focusScale − 1) + base
+        let base = 2 * ring * focusScale + FocusSpacing.clearance
+        let byRule = (width - Double(columns - 1) * base) / (Double(columns) + Double(columns - 1) * (focusScale - 1))
         return gap(byRule) > minGap ? byRule : (width - Double(columns - 1) * minGap) / Double(columns)
     }
 
@@ -195,7 +199,7 @@ struct ArtworkGrid: Equatable {
         tileWidth = tile
         tileHeight = tile / ratio
         gapX = columns > 1 ? (width - Double(columns) * tile) / Double(columns - 1) : Self.gap(tile)
-        gapY = Self.gap(tile)
+        gapY = Self.gap(tileHeight)
     }
 }
 

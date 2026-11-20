@@ -13,8 +13,9 @@ struct CoverGeometry: Equatable {
 
     var tile: Double { Self.prototypeTile * scale }
     var height: Double { Self.prototypeHeight * scale }
-    /// Between two covers: the prototype's 44 scaled, on a compact stage at least the room a focused cover needs.
-    var gap: Double { scale < 1 ? HomeCompact.coverGap(scale) : Self.prototypeGap }
+    /// Between two covers: the prototype's 44 scaled, but at least the focus spacing rule's room for a focused cover
+    /// (``HomeCompact/coverGap(_:)``: 45.6 at scale 1). The wide first cover keeps the prototype's 44 inside it.
+    var gap: Double { HomeCompact.coverGap(scale) }
     var wide: Double { 3 * tile + 2 * Self.prototypeGap * scale }
     var corner: Double { Self.prototypeCorner * scale }
 

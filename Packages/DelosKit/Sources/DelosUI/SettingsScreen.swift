@@ -210,7 +210,7 @@ struct SettingsScreen: View {
                 FocusItem(id: Self.searchID, model: focus, clickCue: nil, action: openSearch) { focused in
                     PillButton(label: L("settings_screen_search"), icon: Symbols.search, focused: focused)
                 }
-                .offset(x: stage.px(stage.width - 390 - stage.safe.trailing), y: stage.px(122 + stage.safe.top))
+                .offset(x: stage.px(stage.width - 390 - stage.safe.trailing), y: stage.px(SettingsLayout.searchY + stage.safe.top))
             }
             SettingsTabs(
                 selected: tab, focus: focus, collapse: compact || stage.width < SettingsLayout.fullTabsMinWidth,
@@ -222,7 +222,7 @@ struct SettingsScreen: View {
                 .frame(height: stage.targetPx(66))
                 .frame(maxWidth: .infinity)
                 .tvFocusSection()
-                .offset(y: stage.px((compact ? SettingsLayout.compactTabsY : SettingsLayout.tabsY) + stage.safe.top))
+                .offset(y: stage.px((compact ? SettingsLayout.compactTabsY : SettingsLayout.wideTabsY) + stage.safe.top))
             if compact {
                 // The search is a glass circle flush with the content's right edge, level with the tabs
                 FocusItem(id: Self.searchID, model: focus, clickCue: nil, action: openSearch) { focused in
@@ -268,7 +268,7 @@ struct SettingsScreen: View {
 
     private var list: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: stage.px(10)) {
+            VStack(alignment: .leading, spacing: stage.px(SettingsLayout.rowGap)) {
                 ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                     if index == 0 || rows[index - 1].section != row.section {
                         SectionHeading(label: row.section)
@@ -1026,6 +1026,28 @@ enum SettingsLayout {
     /// The tab row's height, the room between its R1 badge and the compact search circle (the circle's focus growth, its ring and
     /// 12 px), and what the compact search keeps at the right of its field for the count of the results.
     static let tabsHeight = 66.0, searchGap = 26.0, searchCountRoom = 300.0
+    /// The Search pill's top, level with the title.
+    static let searchY = 122.0
+    /// On tvOS the tabs are items of the focus right under the Search pill (``FocusSpacing``): between the pill's reach
+    /// (76 px growing by 8 % with its 4 px ring 4 px out, inside its scale: 11.68) and a tab's (66 px growing by 6 % with its
+    /// 3 px ring 3 px out, inside its scale: 8.34) there is the clearance, so the row comes down to ``tvTabsY`` there; the
+    /// list's first row (at ``listTop`` and 14 px of padding) still clears the tabs' reach. Elsewhere the tabs are never
+    /// focused and stay at ``tabsY``.
+    static let searchTabsGap = 30.0
+    static let tvTabsY = searchY + FocusSpacing.pillHeight + searchTabsGap
+    /// Where the tab row of a stage that is not compact goes on this platform.
+    static var wideTabsY: Double {
+        #if os(tvOS)
+        tvTabsY
+        #else
+        tabsY
+        #endif
+    }
+    /// The gap between two rows of a settings list (Settings, the per-app settings, the debug info, the search's results, the
+    /// side menu), ``FocusSpacing``: the focused row's plate is the row grown by 1 % on every side
+    /// (``SettingsPlateGeometry``) and its content lifts by 2 %, for rows up to ``rowMaxHeight`` (impact chips, or a note on
+    /// two lines, at the 130 % interface scale).
+    static let rowMaxHeight = 190.0, rowGap = 12.0
 
     /// The compact search circle: the tab row's height scaled, a 64 px target at least.
     static func searchSize(_ stage: Stage) -> Double { max(tabsHeight * stage.compactScale, 64) }
@@ -1060,10 +1082,10 @@ enum HelpDockLayout {
     /// rows and a peek of the third, down to ``shortMinHeight``).
     static func height(stageHeight: Double, rowsTop: Double, bottom: Double, rowHeight: Double) -> Double {
         if stageHeight < shortStage {
-            let twoRowsAndPeek = 2 * rowHeight + 2 * rowGap + rowPeek
+            let twoRowsAndPeek = 2 * rowHeight + 2 * SettingsLayout.rowGap + rowPeek
             return max(min(height(stageHeight: stageHeight), stageHeight - rowsTop - bottom - listGap - twoRowsAndPeek), shortMinHeight)
         }
-        let threeRows = 3 * rowHeight + 2 * rowGap
+        let threeRows = 3 * rowHeight + 2 * SettingsLayout.rowGap
         return max(min(height(stageHeight: stageHeight), stageHeight - rowsTop - bottom - listGap - threeRows), minHeight)
     }
 }

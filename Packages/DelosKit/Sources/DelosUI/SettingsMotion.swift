@@ -266,6 +266,12 @@ enum TabRowLayout {
     static let overhang = 12.0
     /// Half a pixel of the row's own rounding does not push a centred row out of the content.
     private static let rounding = 0.5
+    /// A tab focused on tvOS (where the tabs are items of the focus) grows by ``tabScale`` with its ``tabRing`` px ring as far
+    /// out, inside its scale; tabs are up to ``tabMaxWidth`` wide in any language (a label of about 18 characters, or a label
+    /// and its count of custom settings). ``tvTabGap`` between two tabs is twice that reach and the clearance
+    /// (``FocusSpacing``). The other platforms never focus a tab and keep ``tabGap``, scaled with the compact stage there.
+    static let tabScale = 1.06, tabRing = 3.0, tabMaxWidth = 340.0
+    static let tvTabGap = 42.0, tabGap = 10.0, compactTabGap = 6.0
 
     /// Where a row goes: its [x], the [width] it is given (the room between the edges when it [scrolls]).
     struct Placement: Equatable {

@@ -81,10 +81,10 @@ struct StreamMenuModelTests {
 
     @Test func aRowOfTilesThatFitsIsCenteredAndOneThatDoesNotScrolls() {
         let roomy = DockGeometry(count: 7, width: 1920)
-        #expect(!roomy.scrolls && roomy.tilesLeft == 315 && roomy.rowWidth == 1290)
-        #expect(roomy.tileCenter(0) == 390)
+        #expect(!roomy.scrolls && roomy.tilesLeft == 303 && roomy.rowWidth == 1314)
+        #expect(roomy.tileCenter(0) == 378)
         let narrow = DockGeometry(count: 7, width: 1200)
-        #expect(narrow.scrolls && narrow.tilesLeft == 80 && narrow.contentWidth == 1450)
-        #expect(narrow.tileCenter(1) == 80 + 190 + 75)
+        #expect(narrow.scrolls && narrow.tilesLeft == 80 && narrow.contentWidth == 1474)
+        #expect(narrow.tileCenter(1) == 80 + 194 + 75)
     }
 }

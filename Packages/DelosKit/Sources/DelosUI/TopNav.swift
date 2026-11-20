@@ -12,14 +12,13 @@ struct NavButton: Identifiable {
 }
 
 /// The top navigation in the middle of the status bar (`TopNav` of DELOS for Android): round buttons [buttonSize] wide
-/// (64 px; 56 on a compact stage) and [gap] apart (14 px, 6 when the compact bar is tight), in a glass capsule. The
-/// focused button lies on the main color, grows by 12 % and shows its name under it; the current screen's button has its
-/// icon in the main color and a small dot. The buttons are Settings, Profile and Devices, in Android's order.
+/// (64 px; 56 on a compact stage) and ``StatusBarLayout/navGap`` apart, in a glass capsule. The focused button lies on
+/// the main color, grows by 12 % and shows its name under it; the current screen's button has its icon in the main color
+/// and a small dot. The buttons are Settings, Profile and Devices, in Android's order.
 struct TopNav: View {
     let buttons: [NavButton]
     let focus: FocusModel
     var buttonSize = 64.0
-    var gap = StatusBarLayout.navGap
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
@@ -57,7 +56,7 @@ struct TopNav: View {
     }
 
     var body: some View {
-        HStack(spacing: stage.px(gap)) {
+        HStack(spacing: stage.px(StatusBarLayout.navGap)) {
             ForEach(Array(buttons.enumerated()), id: \.element.id) { index, button in
                 FocusItem(id: button.id, model: focus, moves: Self.wrap(index, of: buttons.map(\.id)), action: button.action) { focused in
                     buttonView(button, focused: focused)
@@ -300,7 +299,7 @@ struct SideMenu: View {
                 FocusScroll(axis: .vertical, fades: FadeEdges(
                     start: FadeEdge(solid: Self.glowVertical + 16, clear: Self.glowVertical),
                     end: FadeEdge(solid: Self.glowVertical + 40, clear: Self.glowVertical))) {
-                    VStack(alignment: .leading, spacing: stage.px(10)) {
+                    VStack(alignment: .leading, spacing: stage.px(SettingsLayout.rowGap)) {
                         let quick = QuickSettings.rows(appearance)
                         ForEach(Array(quick.enumerated()), id: \.element.id) { index, row in
                             sideRow(row, place: index + 1) { onStep(row.id, 1) }

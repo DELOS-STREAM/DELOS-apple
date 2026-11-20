@@ -188,6 +188,8 @@ struct CreateProfileScreen: View {
                 }
             }
         }
+        // A 2-D grid: Up and Down keep the column
+        .onAppear { focus.keepColumn(in: "avatar-grid", items: all.map { Self.avatarID($0.index) }) }
         if stage.compact { return AnyView(grid.glideRingHost(focusScale: 1.16)) }
         // Both rows scroll together (a column stays a column) when the stage is narrower than the eight cells, which keep
         // AVATAR_MARGIN (52) at each end; the focused avatar scrolls into view with the next one peeking in

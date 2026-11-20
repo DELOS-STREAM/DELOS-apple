@@ -240,7 +240,7 @@ private struct PopoverContent: View {
                     .padding(.vertical, stage.px(16))
             } else {
                 FocusScroll(axis: .horizontal) {
-                    HStack(spacing: stage.px(14)) {
+                    HStack(spacing: stage.px(M.pillGap)) {
                         ForEach(Array(pills.enumerated()), id: \.element.id) { index, pill in
                             FocusItem(
                                 id: StreamMenuState.pillID(pill.id), model: menu.focus,

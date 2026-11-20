@@ -356,7 +356,8 @@ import Testing
 
     @Test func theBarIsAboutHalfTheScreenAtSixteenByNine() {
         let bar = KeyboardMetrics.metrics(screenWidth: 1920, prefs: KeyboardPrefs(), dpPerPx: 0.444).barHeight
-        #expect(abs(bar - 532) <= 1)
+        #expect(abs(bar - 543) <= 1)
+        #expect(KeyboardMetrics.gap >= FocusSpacing.gap(reach: 0))
     }
 
     @Test func theSizeSettingsApplyOnlyWithTheAutomaticFitOff() {

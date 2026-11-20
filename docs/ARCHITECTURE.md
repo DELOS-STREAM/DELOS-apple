@@ -105,6 +105,18 @@ first tap only focuses the game (its background, info and chips follow) and whos
 click activates at once, as its hover has focused the item (`ItemTouch.of`). The top navigation and the other buttons act on
 the first tap.
 
+Every focusable group keeps the focus spacing rule (docs/ENGINEERING_RULES.md, "Focus never touches the neighbour"):
+`FocusSpacing` computes a focused item's reach (growth, ring outset and width, scaled with the item when the ring is drawn
+inside its scale) and the least gap, `2 × reach + 8`; the layouts' gap constants are checked against it by
+`FocusSpacingTests`. A gliding ring (the overview's `OverviewRing`, the chips' `ChipGlideHost`) reads its item's layout
+bounds outside the item's focus scale and grows them itself, and glides by a carry (`RingGlide`) that runs out on the glide
+curve, computed from the time in the draw: a row that scrolls under the ring takes it along, and nothing is written per frame.
+
+Up and Down land on the first item of the new row (docs/ENGINEERING_RULES.md, "A new row starts at its first item"):
+`FocusGeometry.next` finds the nearest item that way, takes the row of items whose vertical centres lie within its frame
+and returns that row's leftmost item on screen; a restoring group then redirects as before, and inside a 2-D grid
+(`FocusModel.keepColumn`) the nearest item stays. On tvOS the system focus engine moves the focus and keeps its own choice.
+
 ## Navigation
 
 `Navigator` (DelosUI) is the screen router: an `@Observable` back stack of `Screen` values (`boot`, `createProfile`,

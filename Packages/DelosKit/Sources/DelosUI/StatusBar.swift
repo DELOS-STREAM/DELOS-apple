@@ -214,12 +214,12 @@ enum StatusBarLayout {
     static let height = 104.0
     static let side = 72.0
     static let minGap = 24.0
-    /// A navigation button on a compact stage (64 elsewhere), the pill's padding and the gap between the buttons
-    /// (normal, tight).
+    /// A navigation button on a compact stage (64 elsewhere) and the pill's padding.
     static let navButton = 56.0
     static let navPadding = 8.0
-    static let navGap = 14.0
-    static let navGapTight = 6.0
+    /// The gap between the navigation's buttons, also on a tight compact bar (``FocusSpacing``): a focused 64 px button
+    /// grows by 12 % (3.84 px a side) and has no ring, so two neighbours need 2 × 3.84 + 8 = 15.68.
+    static let navGap = 16.0
     /// The gap between Wi-Fi, battery and clock and the one between the battery and its percentage (normal, tight).
     static let statusGap = 28.0
     static let statusGapTight = 16.0
@@ -262,7 +262,8 @@ enum StatusBarLayout {
     }
 }
 
-/// What the compact status bar gives up, in this order: nothing, the inner gaps, then also the battery's percentage.
+/// What the compact status bar gives up, in this order: nothing, the status cluster's inner gaps, then also the battery's
+/// percentage. The navigation's gap never tightens (``StatusBarLayout/navGap``).
 enum StatusBarStep: CaseIterable, Sendable {
     case full, tight, noPercent
 
@@ -385,17 +386,13 @@ private struct CompactStatusBar: View {
         let fit = StatusBarLayout.fit(width: stage.width, sideLeft: sideLeft, sideRight: sideRight) { step in
             StatusBarWidths(
                 left: widths["left"] ?? 0,
-                nav: StatusBarLayout.navWidth(
-                    buttons: buttons, button: StatusBarLayout.navButton,
-                    gap: step.tight ? StatusBarLayout.navGapTight : StatusBarLayout.navGap),
+                nav: StatusBarLayout.navWidth(buttons: buttons, button: StatusBarLayout.navButton, gap: StatusBarLayout.navGap),
                 right: widths[Self.key(step)] ?? 0)
         }
         ZStack {
             left.frame(maxWidth: .infinity, alignment: .leading).padding(.leading, stage.px(sideLeft))
             if let navigation = bar.navigation {
-                TopNav(
-                    buttons: navigation.buttons, focus: navigation.focus, buttonSize: StatusBarLayout.navButton,
-                    gap: fit.step.tight ? StatusBarLayout.navGapTight : StatusBarLayout.navGap)
+                TopNav(buttons: navigation.buttons, focus: navigation.focus, buttonSize: StatusBarLayout.navButton)
                     .padding(.leading, stage.px(fit.navX))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

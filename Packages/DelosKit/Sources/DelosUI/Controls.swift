@@ -34,7 +34,7 @@ struct PillButton: View {
                     .overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
             }
         }
-        .focusLook(focused, scale: 1.08, ring: 4, glowBlur: 50, glowY: 18, sweep: primary)
+        .focusLook(focused, scale: FocusSpacing.pillScale, ring: FocusSpacing.pillRing, glowBlur: 50, glowY: 18, sweep: primary)
     }
 }
 

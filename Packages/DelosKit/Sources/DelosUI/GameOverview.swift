@@ -347,7 +347,7 @@ struct GameOverview: View {
                             .font(DelosFonts.figtree(stage.tpx(22))).foregroundStyle(colors.text3.color)
                             .modifier(Rise(index: 2, delay: 260, shown: session.shown))
                     }
-                    HStack(spacing: stage.px(20)) {
+                    HStack(spacing: stage.px(OverviewSpacing.buttonGap)) {
                         OverviewButton(id: OverviewNavigation.play, focus: session.focus, icon: Symbols.playArrow, label: L("overview_play"), primary: true,
                                        active: session.buttonsVisible && session.shown && session.viewer == nil, ringNamespace: buttonRing) {
                             actions.activate(hostID: session.hostID, app: session.app, focus: libraryFocus)
@@ -475,7 +475,7 @@ struct GameOverview: View {
         HStack(alignment: .top, spacing: stage.px(56)) {
             VStack(alignment: .leading, spacing: 0) {
                 if let summary = content.details.summary {
-                    OverviewFocusable(id: OverviewNavigation.summary, focus: session.focus, corner: 18, pad: 14, scale: 1) {
+                    OverviewFocusable(id: OverviewNavigation.summary, focus: session.focus, corner: 18, pad: OverviewSpacing.summaryPad, scale: 1) {
                         Text(summary).font(DelosFonts.figtree(stage.tpx(28))).lineSpacing(stage.px(28 * 0.5) - stage.px(6))
                             .foregroundStyle(colors.text.color)
                             .fixedSize(horizontal: false, vertical: true)
@@ -489,7 +489,7 @@ struct GameOverview: View {
                         .frame(height: session.storyOpen ? nil : 0, alignment: .top)
                         .clipped()
                         .opacity(session.storyOpen ? 1 : 0)
-                    OverviewFocusable(id: OverviewNavigation.story, focus: session.focus, corner: 26, pad: 0, scale: 1.06) {
+                    OverviewFocusable(id: OverviewNavigation.story, focus: session.focus, corner: 26, pad: 0, scale: OverviewSpacing.storyScale) {
                         HStack(spacing: stage.px(10)) {
                             SymbolView(symbol: Symbols.expandMore, size: 24, color: colors.text)
                                 .rotationEffect(.degrees(session.storyOpen ? 180 : 0))
@@ -502,7 +502,7 @@ struct GameOverview: View {
                     } action: {
                         withAnimation(reduced ? .easeOut(duration: 0.28) : .timingCurve(0.16, 1, 0.3, 1, duration: 0.6)) { session.storyOpen.toggle() }
                     }
-                    .padding(.top, stage.px(26))
+                    .padding(.top, stage.px(OverviewSpacing.storyGap))
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -637,9 +637,9 @@ struct GameOverview: View {
     }
 
     private func links(_ content: OverviewContent) -> some View {
-        WrapLayout(spacing: stage.px(18), lineSpacing: stage.px(18)) {
+        WrapLayout(spacing: stage.px(OverviewSpacing.linkGap), lineSpacing: stage.px(OverviewSpacing.linkLineGap)) {
             ForEach(Array(content.links.enumerated()), id: \.element.id) { index, link in
-                OverviewFocusable(id: OverviewNavigation.link(index), focus: session.focus, corner: 32, pad: 0, scale: 1.05) {
+                OverviewFocusable(id: OverviewNavigation.link(index), focus: session.focus, corner: 32, pad: 0, scale: OverviewSpacing.linkScale) {
                     HStack(spacing: stage.px(14)) {
                         SymbolView(symbol: linkIcon(link.kind), size: 28, color: colors.accent2)
                         Text(linkName(link)).font(DelosFonts.figtree(stage.tpx(21), .semibold)).foregroundStyle(colors.text.color)
@@ -683,9 +683,9 @@ struct GameOverview: View {
     private func similar(_ content: OverviewContent) -> some View {
         let side = 150 + stage.safe.leading
         return ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: stage.px(30)) {
+            HStack(spacing: stage.px(OverviewSpacing.similarGap)) {
                 ForEach(Array(content.similar.enumerated()), id: \.element.id) { index, game in
-                    OverviewFocusable(id: OverviewNavigation.similar(index), focus: session.focus, corner: SimilarCover.corner, pad: 0, scale: 1.06) {
+                    OverviewFocusable(id: OverviewNavigation.similar(index), focus: session.focus, corner: SimilarCover.corner, pad: 0, scale: OverviewSpacing.similarScale) {
                         SimilarCover(hostID: session.hostID, game: game)
                     } action: {
                         if let app = game.app { onJump(app) } else { actions.toasts.show(L("overview_not_in_library", game.name), icon: Symbols.info) }
@@ -704,7 +704,7 @@ struct GameOverview: View {
             guard kind != .pointer, kind != .touch, !session.focus.pointerMoved,
                   let id = now as? String, id.hasPrefix("ov-similar-"),
                   let index = Int(id.dropFirst("ov-similar-".count)) else { return }
-            OverviewAnchorRow.step(position: $similarPosition, x: stage.px(Double(index) * (SimilarCover.width + 30)), reduced: reduced)
+            OverviewAnchorRow.step(position: $similarPosition, x: stage.px(Double(index) * (SimilarCover.width + OverviewSpacing.similarGap)), reduced: reduced)
         }
     }
 
@@ -783,8 +783,9 @@ private struct OverviewFocusLook<Content: View>: View {
 
     var body: some View {
         content()
-            .overviewRingTarget(focused: focused, corner: corner, pad: pad, scale: scale)
             .scaleEffect(focusScale(focused: focused && scale > 1, pressed: pressed, focus: scale))
+            // Outside the scale: the ring reads the layout bounds and grows them itself
+            .overviewRingTarget(focused: focused, corner: corner, pad: pad, scale: scale)
             .brightness(hovered && !focused ? 0.04 : 0)
             .animation(.focusScale(pressed: pressed, reduced: reduced), value: focused)
             .animation(.focusScale(pressed: pressed, reduced: reduced), value: pressed)
@@ -824,7 +825,7 @@ private struct OverviewButton: View {
                 // The ring only once the pill itself has risen in (``Rise`` index 3), never ahead of it
                 if focused && active {
                     // A 4 px band 2–6 px outside the pill, the pill's own capsule
-                    Capsule().strokeBorder(colors.accent.color, lineWidth: stage.px(4)).padding(-stage.px(6))
+                    Capsule().strokeBorder(colors.accent.color, lineWidth: stage.px(4)).padding(-stage.px(OverviewSpacing.buttonRingOut))
                         .shadow(color: colors.glow.color, radius: stage.px(primary && reduced ? 22 : 15))
                         .matchedGeometryEffect(id: "overview-button-ring", in: ringNamespace)
                         .animation(.timingCurve(0.3, 1.22, 0.42, 1, duration: 0.56), value: focused)
@@ -844,7 +845,7 @@ private struct OverviewPillTransform: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .scaleEffect(focusScale(focused: focused, pressed: pressed, focus: 1.06))
+            .scaleEffect(focusScale(focused: focused, pressed: pressed, focus: OverviewSpacing.buttonScale))
             .animation(.focusScale(pressed: pressed, reduced: reduced), value: focused)
             .animation(.focusScale(pressed: pressed, reduced: reduced), value: pressed)
     }
@@ -878,7 +879,7 @@ private struct PlayPerimeterSweep: View {
         }
         // `.sweep-mask`: a 4 px band 11 px outside the pill
         .mask(Capsule().strokeBorder(lineWidth: stage.px(4)))
-        .padding(-stage.px(11))
+        .padding(-stage.px(OverviewSpacing.playReachOut))
         .allowsHitTesting(false)
         .onAppear { withAnimation(.linear(duration: 5.8).repeatForever(autoreverses: false)) { turned = true } }
     }
@@ -1173,9 +1174,9 @@ private struct OverviewCarousel: View {
         let tall = stage.height > 1200
         ScrollView(.horizontal, showsIndicators: false) {
             // Not lazy: every thumbnail is registered, so the arrows can walk to one past the edge and the row follows
-            HStack(spacing: stage.px(26)) {
+            HStack(spacing: stage.px(OverviewSpacing.mediaGap)) {
                 ForEach(Array(media.enumerated()), id: \.offset) { index, item in
-                    OverviewFocusable(id: OverviewNavigation.media(index), focus: session.focus, corner: 22, pad: 0, scale: 1.06) {
+                    OverviewFocusable(id: OverviewNavigation.media(index), focus: session.focus, corner: 22, pad: 0, scale: OverviewSpacing.mediaScale) {
                         thumb(item, tall: tall)
                             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { session.thumbFrames[item.id] = $0 }
                     } action: {
@@ -1213,7 +1214,7 @@ private struct OverviewCarousel: View {
     /// The focused thumbnail glides to the row's start (150 px in, the previous one peeking into the fade), as the
     /// dashboard's covers do; the row clamps at its end.
     private func reveal(_ index: Int, animated: Bool = true) {
-        OverviewAnchorRow.step(position: $position, x: stage.px(Double(index) * (520 + 26)), reduced: reduced || !animated)
+        OverviewAnchorRow.step(position: $position, x: stage.px(Double(index) * (OverviewSpacing.mediaWidth + OverviewSpacing.mediaGap)), reduced: reduced || !animated)
     }
 
     private func thumb(_ item: OverviewContent.Media, tall: Bool) -> some View {

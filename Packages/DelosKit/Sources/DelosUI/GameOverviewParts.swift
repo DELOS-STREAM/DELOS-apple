@@ -8,6 +8,11 @@ import SwiftUI
 /// The overview's one focus ring (the prototype's `.ring`): a gold rounded outline with a glow that glides between the
 /// focused elements (560 ms, `--ease-glide`), drawn over the page so it scrolls with it. Elements mark themselves with
 /// ``View/overviewRingTarget(focused:corner:pad:scale:)``. Hidden for touch, whose focus is not shown.
+///
+/// The ring stands on the focused element's live bounds ([target], updated without animation when its row scrolls) plus
+/// a carry that runs out on the glide curve (``RingGlide``): a row that scrolls while the ring glides takes the ring
+/// along instead of restarting or fighting the glide, and at rest the ring is exactly on the element. The glide is
+/// computed from the time in the draw (``OverviewRingHost``'s timeline): nothing is written per frame.
 @MainActor
 @Observable
 final class OverviewRing {
@@ -16,28 +21,56 @@ final class OverviewRing {
         var frame: CGRect
         var corner: Double
     }
-    private(set) var shown: Target?
+    /// Where the focused element's ring stands at rest.
+    private(set) var target: Target?
+    private(set) var glide = RingGlide()
+    /// What the ring's corner still differs from the target's by when the glide starts.
+    private(set) var cornerCarry = 0.0
+    /// A glide is running: the host's timeline draws every frame until it is over.
+    private(set) var gliding = false
     private(set) var alpha = 0.0
     @ObservationIgnored private var holder: AnyHashable?
+    @ObservationIgnored private var glides = 0
     @ObservationIgnored var reduced = false
 
-    func focus(_ key: AnyHashable, _ target: Target) {
+    static let duration = Motion.ring / 1000
+
+    /// Where the ring is drawn at [time] (seconds since the reference date).
+    func shown(at time: Double) -> Target? {
+        guard let target else { return nil }
+        guard gliding else { return target }
+        return Target(frame: glide.rect(on: target.frame, at: time), corner: target.corner + cornerCarry * glide.rest(at: time))
+    }
+
+    func focus(_ key: AnyHashable, _ next: Target) {
         holder = key
-        guard target.frame != .zero else { return }
-        if alpha > 0, shown != nil, !reduced {
-            withAnimation(.timingCurve(0.3, 1.22, 0.42, 1, duration: Motion.ring / 1000)) { shown = target }
+        guard next.frame != .zero else { return }
+        let now = Date.timeIntervalSinceReferenceDate
+        if alpha > 0, !reduced, let from = shown(at: now), from != next {
+            // From where the ring is drawn now (mid-glide too) to the new element
+            glide = RingGlide(from: from.frame, to: next.frame, at: now, duration: Self.duration)
+            cornerCarry = from.corner - next.corner
+            gliding = true
+            glides += 1
+            let glide = glides
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(Self.duration))
+                if glides == glide { gliding = false }
+            }
         } else {
-            shown = target
+            glide = RingGlide()
+            cornerCarry = 0
+            gliding = false
         }
+        target = next
         withAnimation(.easeOut(duration: 0.2)) { alpha = 1 }
     }
 
-    func moved(_ key: AnyHashable, _ target: Target) {
-        guard holder == key, target.frame != .zero, target != shown else { return }
-        if shown == nil || alpha == 0 { focus(key, target); return }
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) { shown = target }
+    /// The focused element moved (its row scrolled): the ring stays on it, the glide runs on.
+    func moved(_ key: AnyHashable, _ next: Target) {
+        guard holder == key, next.frame != .zero, next != target else { return }
+        if target == nil || alpha == 0 { focus(key, next); return }
+        target = next
     }
 
     func blur(_ key: AnyHashable) {
@@ -92,7 +125,9 @@ private struct OverviewRingTarget: ViewModifier {
 
 extension View {
     /// Marks an overview element the ring goes to while it is [focused]: [corner] its corner radius, [pad] how far outside
-    /// it the ring stands, [scale] its focus scale (stage pixels).
+    /// it the ring stands, [scale] its focus scale (stage pixels). Put it outside the element's focus scale: the ring reads
+    /// the layout bounds and grows them by [scale] itself (inside the scale the bounds grew with the spring, every frame of
+    /// it a new target, and at rest the ring stood the growth too far out).
     func overviewRingTarget(focused: Bool, corner: Double, pad: Double = 0, scale: Double = 1) -> some View {
         modifier(OverviewRingTarget(focused: focused, corner: corner, pad: pad, scale: scale))
     }
@@ -115,18 +150,32 @@ private struct OverviewRingHost: ViewModifier {
         return content
             .coordinateSpace(name: OverviewRing.space)
             .environment(\.overviewRing, ring)
-            .overlay(alignment: .topLeading) {
-                if let shown = ring.shown, ring.alpha > 0, !hidden {
-                    let w = stage.px(4)
-                    RoundedRectangle(cornerRadius: shown.corner + w, style: .continuous)
-                        .strokeBorder(colors.accent.color, lineWidth: w)
-                        .shadow(color: colors.glow.color, radius: stage.px(15))
-                        .frame(width: shown.frame.width + 2 * w, height: shown.frame.height + 2 * w)
-                        .offset(x: shown.frame.minX - w, y: shown.frame.minY - w)
-                        .opacity(ring.alpha)
-                        .allowsHitTesting(false)
+            .overlay {
+                if ring.target != nil, ring.alpha > 0, !hidden {
+                    // One layer as large as the page: only its path changes while the ring glides, nothing is laid out
+                    TimelineView(.animation(paused: !ring.gliding)) { context in
+                        if let shown = ring.shown(at: context.date.timeIntervalSinceReferenceDate) {
+                            OverviewRingShape(frame: shown.frame, corner: shown.corner, width: stage.px(OverviewSpacing.ring))
+                                .stroke(colors.accent.color, lineWidth: stage.px(OverviewSpacing.ring))
+                        }
+                    }
+                    .shadow(color: colors.glow.color, radius: stage.px(15))
+                    .opacity(ring.alpha)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
                 }
             }
+    }
+}
+
+/// The ring's outline: a band [width] wide around [frame] (in the host's space), its inner corner [corner].
+private struct OverviewRingShape: Shape {
+    let frame: CGRect
+    let corner: Double
+    let width: Double
+
+    func path(in _: CGRect) -> Path {
+        RoundedRectangle(cornerRadius: corner + width / 2, style: .continuous).path(in: frame.insetBy(dx: -width / 2, dy: -width / 2))
     }
 }
 

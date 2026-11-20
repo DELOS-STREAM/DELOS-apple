@@ -233,7 +233,12 @@ enum StreamMenuLayout {
     // The rows
     static let rowHeight = 72.0
     static let rowRadius = 28.0
-    static let rowGap = 8.0
+    /// The gap between two rows (``FocusSpacing``): the focus plate and its ring lie inside the row, which does not grow,
+    /// so only the clearance is needed.
+    static let rowGap = FocusSpacing.clearance
+    /// The gap between two pills of Send keys and Commands: like the rows, their plate lies inside them and they do not
+    /// grow, so the clearance is enough; 14 keeps the prototype's look.
+    static let pillGap = 14.0
     static let rowSize = 24.0
     static let rowIcon = 32.0
     static let rowIconColumn = 56.0
