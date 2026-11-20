@@ -10,10 +10,11 @@ import SwiftUI
 /// CUSTOM badge and the profile's value and resets with X (or its round button on touch). Changes are stored at once and
 /// apply to the next stream. Android's Display tab has no counterpart here, so there are no tabs.
 struct GameSettingsScreen: View {
-    /// What the hint bar's adjust and reset hints depend on.
+    /// What the hint bar's adjust, reset and popover hints depend on.
     private struct HintKey: Equatable {
         let focus: AnyHashable?
         let custom: Int
+        let popup: RowPopupKind?
     }
 
     let hostID: String
@@ -111,9 +112,10 @@ struct GameSettingsScreen: View {
             if focusedRow == nil { focus.focus(Self.firstFocus()) }
         }
         .onDisappear { navigator.releaseInput(focus) }
-        .onChange(of: HintKey(focus: focus.focused, custom: model.overrides.count), initial: true) {
+        .onChange(of: HintKey(focus: focus.focused, custom: model.overrides.count, popup: popup?.kind), initial: true) {
             navigator.setHints(ScreenHints(
-                adjustable: ShellHints.adjustable(focusedRow), resetsRow: focusedRow.map { model.isCustom($0.id) } ?? false), from: focus)
+                adjustable: ShellHints.adjustable(focusedRow), resetsRow: focusedRow.map { model.isCustom($0.id) } ?? false,
+                rowPopup: popup?.kind), from: focus)
         }
         .onChange(of: focus.focused) { _, now in
             if let id = now as? String, rows.contains(where: { $0.id == id }) { lastRow = id }
