@@ -264,22 +264,30 @@ enum OverviewNavigation {
     }
 }
 
-/// The overview's motion numbers (stage pixels and milliseconds; the prototype's a.js and core.css).
+/// The overview's motion numbers (stage pixels and milliseconds; the springs are in ``OverviewMotion/flightOpenSpring``
+/// and its siblings). The timeline runs at 0.75 times the prototype's, matching the faster spring flight.
 enum OverviewMotion {
-    /// The cover's flight from the card to the header and back.
-    static let flight = 780.0, flightBack = 640.0
-    /// The flight's easing (`EASE.flight`) and the way back's (`EASE.inOut`).
-    static let flightCurve = CubicBezier(0.2, 0.9, 0.25, 1)
-    static let inOutCurve = CubicBezier(0.65, 0, 0.35, 1)
+    /// How long the cover's flight takes to look landed out to the header and back (the springs' perceived length): the
+    /// title's crossfade is timed by it (out over its first 40 %, in over its last 50 %).
+    static let flight = 585.0, flightBack = 480.0
     /// The flight rises this far above the straight line at its middle and grows by this much.
     static let arc = 30.0, midScale = 1.04
     /// The page rises from this far below with the flight, and sinks back there over [pageSink] ms as it closes.
-    static let pageRise = 120.0, pageSink = 560.0
-    /// The other covers lift away: 160 px plus 30 per cover of distance, to 92 %, 45 ms apart; the info row rises 90 px.
+    static let pageRise = 120.0, pageSink = 420.0
+    /// The header's parts rise one after another, [headerStagger] ms apart from [headerDelay] (the cue from [cueDelay]).
+    static let headerDelay = 195.0, cueDelay = 375.0, headerStagger = 36.0
+    /// The hero fades in over [heroIn] ms and out over [heroOut] ms; the header's buttons take input after [buttonsDelay].
+    static let heroIn = 675.0, heroOut = 480.0, buttonsDelay = 300.0
+    /// The other covers lift away: 160 px plus 30 per cover of distance, to 92 %, 34 ms apart; the info row rises 90 px.
     static func coverLift(distance: Int) -> Double { -160 - Double(distance) * 30 }
-    static let coverLiftScale = 0.92, coverLiftStagger = 45.0, homeOut = 620.0, infoLift = -90.0
-    /// The ratings fill and count up over this long, starting this long after the opening.
-    static let ratings = 1300.0, ratingsDelay = 380.0
+    static let coverLiftScale = 0.92, coverLiftStagger = 34.0, infoLift = -90.0
+    /// The streaming card's count-up and bars run over this long; the ratings start this long after the opening, the
+    /// second ring [ratingStagger] ms after the first.
+    static let ratings = 1300.0, ratingsDelay = 285.0, ratingStagger = 90.0
+    /// A ring's overshoot is softly capped near this share of its target (tanh: about 5.5 % at most).
+    static let ratingOvershoot = 0.06
+    /// The ring and its number grow from this scale; a chip pops from [chipFrom].
+    static let ratingFrom = 0.92, chipFrom = 0.9
     /// The hero blurs fully over this much scroll, drifts at 10 % of it (up to 700 px) and zooms by 1/9000 per pixel.
     static let deepBlurScroll = 520.0
     static func heroDrift(_ scroll: Double) -> Double { -min(scroll, 700) * 0.1 }
@@ -299,14 +307,39 @@ enum OverviewMotion {
 
     /// The flying cover's frame at [progress] (0 at the card, 1 at the header slot): its size runs from the card's to the
     /// slot's and grows a little at the middle, its centre runs along a slight arc [lift] points high. [from], [to]: the
-    /// card's and the slot's frames.
-    static func flightFrame(from: CGRect, to: CGRect, progress t: Double, lift: Double) -> CGRect {
+    /// card's and the slot's frames. The spring's overshoot past either end only grows the frame around that end's centre
+    /// (by the overshoot), so it never uncovers the slot's or the card's edge.
+    static func flightFrame(from: CGRect, to: CGRect, progress: Double, lift: Double) -> CGRect {
+        let t = min(max(progress, 0), 1)
+        let over = 1 + max(progress - 1, -progress, 0)
         // A quadratic through the start, the lifted middle and the end
         let u = 1 - t
-        let grow = 1 + (midScale - 1) * 4 * t * u
+        let grow = (1 + (midScale - 1) * 4 * t * u) * over
         let width = (from.width * u + to.width * t) * grow, height = (from.height * u + to.height * t) * grow
         let x = from.midX * u + to.midX * t, y = from.midY * u + to.midY * t - lift * 4 * t * u
         return CGRect(x: x - width / 2, y: y - height / 2, width: width, height: height)
+    }
+
+    /// The ratings' spring: response 0.7 s, damping 0.6, run over [ratingRun] ms (a ring's own clock, from its start).
+    static let ratingResponse = 0.7, ratingDamping = 0.6, ratingRun = 1300.0
+
+    /// A rating ring's fill at [ms] into its spring, 1 being its target: the spring's step response up to its peak
+    /// (π/ωd ≈ 438 ms), then the peak's overshoot decays as (1 + x)·e^(−x), x = (t − peak)·ω, with no second bounce; an
+    /// overshoot is softly capped by 1 + 0.06·tanh(over / 0.06) (about 5.5 % at most).
+    static func ratingFill(ms: Double) -> Double {
+        guard ms > 0 else { return 0 }
+        guard ms < ratingRun else { return 1 }
+        let t = ms / 1000, zeta = ratingDamping, omega = 2 * Double.pi / ratingResponse
+        let root = (1 - zeta * zeta).squareRoot(), damped = omega * root, peak = Double.pi / damped
+        func step(_ t: Double) -> Double { 1 - exp(-zeta * omega * t) * (cos(damped * t) + zeta / root * sin(damped * t)) }
+        let over: Double
+        if t < peak {
+            over = step(t) - 1
+        } else {
+            let x = (t - peak) * omega
+            over = (step(peak) - 1) * (1 + x) * exp(-x)
+        }
+        return over > 0 ? 1 + ratingOvershoot * tanh(over / ratingOvershoot) : 1 + over
     }
 
     /// A picture of [aspect] (width / height) filling [frame] as `scaledToFill` does, centred: drawn at [base] (its size

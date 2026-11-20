@@ -1301,6 +1301,29 @@ dashboard's, with the profile's blur, playing when animated) under a deeper blur
 scrolls. The flying cover takes the frame the card's or the header's animation shows as it starts (`AnimatedFrames`, the
 last frame each playing layer drew), so it neither restarts nor falls back to the first frame.
 
+The overview's motion (`OverviewMotion`) is a family of springs, interruptible from their position and velocity: the
+cover flies out with response 0.42 s and damping 0.72 (it passes the header slot by about 3.8 % and settles once) and
+back with 0.36 s and 0.80. `OverviewMotion.flightFrame` turns the overshoot past either end into growth around that
+end's centre only, so neither the slot's nor the card's edge shows; the corner radius, the shadow and the crossfades
+use the clamped progress. The page, the header's parts (`Rise`, 36 ms apart from 195 ms, the cue from 375 ms), the
+dashboard's info row and the other covers (34 ms apart) land with `OverviewMotion.settle` (0.45 s, 0.78); the dashboard's
+parts come back together with the closing flight's spring, and the header's parts leave with a 180 ms ease-in. An
+opacity a spring drives is clamped to 0…1, so it never overshoots. The title crossfade takes the first 40 % and the
+last 50 % of the flight (585 ms opening, 480 ms closing), the hero fades in over 675 ms and out over 480 ms. Each
+rating ring runs its own linear clock over 1.3 s, 90 ms apart, read in the drawing only (the arc is an animatable
+`Shape`, the scale a `GeometryEffect`, the number an animatable text); `OverviewMotion.ratingFill(ms:)` is the step
+response of a 0.7 s, 0.6 spring up to its peak (about 438 ms), then the peak's overshoot decays without a second
+bounce, softly capped by 1 + 0.06·tanh(over / 0.06) (about 5.5 %); the number never shows more than 100 and the ring
+grows from 92 % with the fill. The tags pop from 90 % (0.4 s, 0.7) 36 ms apart after their row starts, the age rating
+180 ms after the first ring. Reduced motion has no springs: 280 ms fades, the header's parts from their stagger start.
+During the flight nothing is laid out below the fold: the sections are composed once it lands
+(`OverviewSession.belowFold`), the flying cover's shadow keeps one radius (an animated radius re-blurs it every frame),
+and the pictures are in memory before it starts. Debug builds log the frame times of each opening and closing under
+the os_log category `OverviewMotion` (`OverviewFrameLog`: frames, mean, 95th percentile, longest, frames over 1.5 times
+the display's frame). The storyline opens by its height (`StoryReveal`), its clipped bottom fading over 90 px while
+text continues below it. A finger or pointer scroll of the page drops the focused-screenshot backdrop
+(`OverviewSession.pageScrollBegan`), so the header's backdrop returns as the page scrolls back up.
+
 `AnimatedArtBenchmark` (DelosUITests, `DELOS_ART_BENCH=1` or `DELOS_ART_BENCH=<file>:<file>`) plays animated files through
 these players in real time at 120 Hz for 2 s, with the main thread idle and busy, and prints the frames presented
 against the file's timing and what a frame costs to decode and render. On a device, debug builds log each playing

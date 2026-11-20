@@ -201,36 +201,113 @@ struct CountUpText: View, Animatable {
     }
 }
 
-/// The rating ring (`.rring`): the arc fills to the rating and the number counts up, both over 1.3 s (`--ease-out`), once
-/// [active]; without a rating a dash in an empty track.
+/// The rating ring (`.rring`): once [active] (after [delay] ms), the ring's clock runs linearly over
+/// ``OverviewMotion/ratingRun`` ms and everything follows ``OverviewMotion/ratingFill(ms:)``: the arc fills past the
+/// rating by about 5.5 % at most and settles back without a second bounce, the number counts with it (never past 100)
+/// and both grow from 92 %. Reduced motion fades them in at their values over 280 ms. Without a rating a dash in an
+/// empty track. The clock is read in the drawing only (the arc's path, the scale's transform, the number's text).
 struct RatingRing: View {
     let value: Double?
     let size: Double
     let color: RGBA
     let active: Bool
+    var delay = 0.0
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduced
 
     var body: some View {
         let side = stage.px(size), line = stage.px(8)
-        let shown = active ? (value ?? 0) : 0
-        let animation: Animation? = reduced ? nil : .timingCurve(0.16, 1, 0.3, 1, duration: OverviewMotion.ratings / 1000)
+        let clock = active || reduced ? OverviewMotion.ratingRun : 0
+        let run: Animation? = reduced ? nil : .linear(duration: OverviewMotion.ratingRun / 1000).delay(delay / 1000)
         ZStack {
             Circle().inset(by: line / 2).stroke(Color.white.opacity(0.1), lineWidth: line)
             if let value {
-                Circle().inset(by: line / 2)
-                    .trim(from: 0, to: active ? value / 100 : 0)
-                    .stroke(color.color, style: StrokeStyle(lineWidth: line, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .animation(animation, value: active)
-                CountUpText(value: shown, decimals: 0, font: DelosFonts.unbounded(stage.tpx(size * 0.3), .bold), color: colors.text.color)
-                    .animation(animation, value: active)
+                ZStack {
+                    RingArc(target: value, clock: clock, inset: line / 2)
+                        .stroke(color.color, style: StrokeStyle(lineWidth: line, lineCap: .round))
+                    RingNumber(target: value, clock: clock, font: DelosFonts.unbounded(stage.tpx(size * 0.3), .bold), color: colors.text.color)
+                }
+                .modifier(RingScale(clock: clock))
+                .animation(run, value: active)
+                .animation(reduced ? OverviewMotion.reducedFade : nil) { $0.opacity(reduced && !active ? 0 : 1) }
             } else {
                 Text("—").font(DelosFonts.unbounded(stage.tpx(size * 0.2), .bold)).foregroundStyle(colors.text3.color)
             }
         }
         .frame(width: side, height: side)
+    }
+}
+
+/// The ring's arc from the top, clockwise, to the rating times ``OverviewMotion/ratingFill(ms:)`` (at most the full ring).
+private struct RingArc: Shape {
+    let target: Double
+    var clock: Double
+    let inset: Double
+
+    nonisolated var animatableData: Double {
+        get { clock }
+        set { clock = newValue }
+    }
+
+    nonisolated func path(in rect: CGRect) -> Path {
+        let fill = min(1, target / 100 * OverviewMotion.ratingFill(ms: clock))
+        let box = rect.insetBy(dx: inset, dy: inset)
+        var path = Path()
+        guard fill > 0 else { return path }
+        path.addArc(center: CGPoint(x: box.midX, y: box.midY), radius: min(box.width, box.height) / 2,
+                    startAngle: .degrees(-90), endAngle: .degrees(-90 + 360 * fill), clockwise: false)
+        return path
+    }
+}
+
+/// The ring and its number grow from ``OverviewMotion/ratingFrom`` with the ring's fill.
+private struct RingScale: GeometryEffect {
+    var clock: Double
+
+    nonisolated var animatableData: Double {
+        get { clock }
+        set { clock = newValue }
+    }
+
+    nonisolated func effectValue(size: CGSize) -> ProjectionTransform {
+        let scale = Motion.lerp(OverviewMotion.ratingFrom, 1, OverviewMotion.ratingFill(ms: clock))
+        let shift = CGAffineTransform(translationX: size.width / 2, y: size.height / 2)
+        return ProjectionTransform(shift.scaledBy(x: scale, y: scale).translatedBy(x: -size.width / 2, y: -size.height / 2))
+    }
+}
+
+/// The ring's number: the rating times the arc's fill, rounded (so it passes the rating and returns with it, never past 100).
+private struct RingNumber: View, Animatable {
+    let target: Double
+    var clock: Double
+    let font: Font
+    let color: Color
+
+    nonisolated var animatableData: Double {
+        get { clock }
+        set { clock = newValue }
+    }
+
+    var body: some View {
+        Text(min(100, (target * OverviewMotion.ratingFill(ms: clock)).rounded()).formatted(.number.precision(.fractionLength(0))))
+            .font(font)
+            .monospacedDigit()
+            .foregroundStyle(color)
+    }
+}
+
+/// A chip's spring pop (``OverviewMotion/chipSpring``): it grows from 90 % once [active], after [delay] ms; reduced
+/// motion keeps it still.
+struct ChipPop: ViewModifier {
+    let active: Bool
+    var delay = 0.0
+    @Environment(\.reducedMotion) private var reduced
+
+    func body(content: Content) -> some View {
+        content.animation(reduced ? nil : OverviewMotion.chipSpring.delay(delay / 1000)) {
+            $0.scaleEffect(active || reduced ? 1 : OverviewMotion.chipFrom)
+        }
     }
 }
 
