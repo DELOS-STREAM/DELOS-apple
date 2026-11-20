@@ -93,6 +93,44 @@ import Testing
         #expect(middle.midY < (from.midY + to.midY) / 2 - 29 && middle.width > (from.width + to.width) / 2)
     }
 
+    /// The open spring's overshoot only grows the cover around the slot, so the slot's edge never shows; the close
+    /// spring's does the same around the card.
+    @Test func flightOvershootOnlyGrowsAroundTheEnds() {
+        let from = CGRect(x: 150, y: 520, width: 316.5, height: 474.75), to = CGRect(x: 150, y: 150, width: 340, height: 510)
+        let past = OverviewMotion.flightFrame(from: from, to: to, progress: 1.04, lift: 30)
+        #expect(past.contains(to) && abs(past.midX - to.midX) < 0.001 && abs(past.midY - to.midY) < 0.001)
+        #expect(abs(past.width - to.width * 1.04) < 0.001)
+        let before = OverviewMotion.flightFrame(from: from, to: to, progress: -0.015, lift: 30)
+        #expect(before.contains(from) && abs(before.midY - from.midY) < 0.001)
+    }
+
+    @Test func ratingRingOvershootIsLimited() {
+        #expect(OverviewMotion.ratingFill(ms: 0) == 0)
+        #expect(OverviewMotion.ratingFill(ms: OverviewMotion.ratingRun) == 1)
+        let samples = stride(from: 0.0, through: OverviewMotion.ratingRun, by: 4).map(OverviewMotion.ratingFill(ms:))
+        // About 5.5 % past the target at most, reached near the spring's peak (≈ 438 ms)
+        let peak = samples.max() ?? 0
+        #expect(peak > 1.04 && peak < 1.06)
+        // No second bounce: once past its peak it only comes down, never below the target
+        let index = samples.firstIndex(of: peak) ?? 0
+        #expect(abs(Double(index) * 4 - 438) < 12)
+        for (a, b) in zip(samples[index...], samples[(index + 1)...]) { #expect(b <= a + 1e-9 && b >= 1) }
+    }
+
+    /// Regression: a touch's first tap focused a thumbnail (the focused-screenshot backdrop), the viewer opened and
+    /// closed, and a finger scrolled back to the header: the backdrop stayed darker and shrank with the scroll.
+    @Test func touchScrollLeavesTheFocusedScreenshotBackdrop() {
+        let session = OverviewSession(hostID: "h", app: HostApp(id: 1, title: "G"), coverID: AnyHashable("app-1"), source: .zero, details: nil)
+        let header = (deep: session.backdropDeep(scroll: 0), zoom: OverviewMotion.heroZoom(0))
+        session.scroll = 1400
+        session.mediaFocus = 2
+        #expect(session.backdropDeep(scroll: 1400) == 1)
+        session.pageScrollBegan()
+        session.scroll = 0
+        #expect(session.mediaFocus == nil)
+        #expect(session.backdropDeep(scroll: 0) == header.deep && OverviewMotion.heroZoom(0) == header.zoom)
+    }
+
     /// Regression (#23): flying back into the wide first cover stretched the portrait art to the landscape frame; the
     /// frame now changes its shape while the picture keeps one scale for both axes, filling it.
     @Test func wideFlightKeepsThePictureUnstretched() {

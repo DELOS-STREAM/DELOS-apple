@@ -332,6 +332,14 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- The game overview opens and closes faster and lands with a gentle spring: the cover flies out with a small overshoot
+  that settles once (the slot's edge never shows) and back slightly quicker; the page, the header's parts, the
+  dashboard's info row and the other covers follow at three quarters of the former timing and settle with the same
+  spring, their opacity never overshooting. The rating rings fill past their score by about 5.5 % at most and settle
+  back without a second bounce as the number counts up with them (never past 100), 90 ms apart; the tags and the age
+  rating pop in. The motion is smoother: nothing below the header is laid out while the cover flies and the flying
+  cover's shadow is no longer re-blurred every frame. With reduced motion everything only fades. Opening "Read the
+  story" fades the text out at its edge while more of it continues below.
 - The changelog and the README describe DELOS for Apple on its own; `tools/docs/check_platform.py`, run by
   `tools/test.sh`, fails when either names another platform.
 - The library filter takes several values in every row (for example two genres, a theme and Native HDR): a chip toggles
@@ -441,6 +449,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- The game overview's backdrop no longer stays darker and shrinks while the page is scrolled back up by touch or the
+  pointer after a screenshot or video was tapped (or opened and closed in the viewer).
 - A finger's tap on the iPad no longer counts as the pointer's secondary click: a first tap on a library cover again only
   focuses it (the second starts it), and a tap on a PC's circle on the start screen connects instead of opening its
   context menu now and then. The window's recognizer of the right click and the trackpad's two-finger click took every

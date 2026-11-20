@@ -304,11 +304,19 @@ struct HomeScreen: View {
             // The flight starts on the next frame, from the card's place; a spring, so a Back mid-flight turns it around
             // from where it is, at its speed
             try? await Task.sleep(for: .milliseconds(16))
-            withAnimation(reducedMotion ? .easeOut(duration: 0.28) : OverviewMotion.flightOpenSpring, completionCriteria: .logicallyComplete) {
+            #if DEBUG && canImport(UIKit)
+            OverviewFrameLog.shared.start("open")
+            #endif
+            // Landed only once the overshoot has settled (the header's cover takes the flying one's place exactly)
+            withAnimation(reducedMotion ? .easeOut(duration: 0.28) : OverviewMotion.flightOpenSpring, completionCriteria: .removed) {
                 session.flight = 1
             } completion: {
+                #if DEBUG && canImport(UIKit)
+                OverviewFrameLog.shared.stop()
+                #endif
                 guard overview === session, session.phase == .opening else { return }
                 session.landed = true
+                session.belowFold = true
                 session.phase = .open
             }
             session.shown = true
@@ -339,9 +347,15 @@ struct HomeScreen: View {
                 session.flightFrom = art.cachedCard(hostID: hostID, app: session.app, wide: session.wide)
             }
             session.landed = false
+            #if DEBUG && canImport(UIKit)
+            OverviewFrameLog.shared.start("close")
+            #endif
             withAnimation(reducedMotion ? .easeIn(duration: 0.24) : OverviewMotion.flightCloseSpring, completionCriteria: .logicallyComplete) {
                 session.flight = 0
             } completion: {
+                #if DEBUG && canImport(UIKit)
+                OverviewFrameLog.shared.stop()
+                #endif
                 finishClose(session)
             }
             session.shown = false
@@ -679,10 +693,11 @@ struct GameLibrary: View {
                 // Behind an open context menu the info block dims to 40 %
                 .opacity(CoverTone.info(menuOpen: menuOpen))
                 .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: menuOpen)
-                // The overview opens: the info row rises out and the title leaves at once (it flies into the header)
+                // The overview opens: the info row rises out with the settle spring and the title leaves at once (it
+                // flies into the header); it comes back with the closing flight's spring
                 .offset(y: descent.active && !reduceMotion ? stage.px(OverviewMotion.infoLift) : 0)
                 .opacity(descent.active ? 0 : 1)
-                .animation(descent.active ? Motion.out(OverviewMotion.homeOut) : .timingCurve(0.7, 0, 0.84, 0, duration: OverviewMotion.homeOut / 1000),
+                .animation(reduceMotion ? OverviewMotion.reducedFade : descent.active ? OverviewMotion.settle : OverviewMotion.flightCloseSpring,
                            value: descent.active)
             ScrollView(.horizontal, showsIndicators: false) {
                 LibraryCovers(

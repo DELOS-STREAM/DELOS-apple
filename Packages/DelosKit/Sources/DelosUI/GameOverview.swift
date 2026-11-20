@@ -35,6 +35,9 @@ final class OverviewSession {
     @ObservationIgnored var flightTo: CGImage?
     /// The ratings fill and count up.
     var ratingsOn = false
+    /// The sections below the header are composed: from the flight's landing on (nothing below the fold is laid out
+    /// while the cover flies), then for the rest of the session.
+    var belowFold = false
     /// The details' lookup has finished (the page says "not available" instead of "loading" when none came).
     var detailsSettled = false
     /// The viewer's last step: 1 to the next item, -1 to the previous one (the side the new picture comes from).
@@ -66,6 +69,20 @@ final class OverviewSession {
     var position = ScrollPosition(y: 0)
     /// The focused screenshot or video, for the backdrop.
     var mediaFocus: Int?
+
+    /// The backdrop's deep layer share at the page's [scroll] (stage pixels): full on a focused screenshot or video,
+    /// else growing with the scroll.
+    func backdropDeep(scroll: Double) -> Double {
+        mediaFocus != nil ? 1 : min(1, max(scroll, 0) / OverviewMotion.deepBlurScroll)
+    }
+
+    /// A finger or the pointer starts scrolling the page: the focused-screenshot backdrop goes (a touch's first tap
+    /// focused a thumbnail and nothing moved the focus off it, so it stayed up to the header); a controller's next
+    /// focus change sets it again.
+    func pageScrollBegan() {
+        if mediaFocus != nil { mediaFocus = nil }
+    }
+
     /// Frames (in the page's space) of the sections and items, for the focus scroll.
     @ObservationIgnored var sectionFrames: [String: CGRect] = [:]
     /// The thumbnails' frames in the home's space by media id, for the viewer's zoom.
@@ -164,10 +181,10 @@ struct GameOverview: View {
                            fromArt: session.flightFrom, toArt: session.flightTo, wide: session.wide, coverScale: covers.scale,
                            progress: session.flight)
                 .opacity(session.landed ? 0 : 1)
-            // The page rises with the flight and sinks back as it closes (`page.animate`), transforms only; its parts fade
-            // in and out on their own (``Rise``), the title flies and the cover lands
+            // The page rises with the flight (the settle spring) and sinks back as it closes (`page.animate`), transforms
+            // only; its parts fade in and out on their own (``Rise``), the title flies and the cover lands
             page(content)
-                .animation(session.shown ? .timingCurve(0.2, 0.9, 0.25, 1, duration: OverviewMotion.flight / 1000)
+                .animation(session.shown ? OverviewMotion.settle
                            : .timingCurve(0.65, 0, 0.35, 1, duration: OverviewMotion.pageSink / 1000)) {
                     $0.offset(y: session.shown || reduced ? 0 : stage.px(OverviewMotion.pageRise))
                 }
@@ -180,7 +197,7 @@ struct GameOverview: View {
             session.buttonsVisible = false
             guard session.shown else { return }
             if !reduced {
-                do { try await Task.sleep(for: .milliseconds(398)) } catch { return }
+                do { try await Task.sleep(for: .milliseconds(Int(OverviewMotion.buttonsDelay))) } catch { return }
             }
             guard !Task.isCancelled else { return }
             session.buttonsVisible = true
@@ -212,7 +229,7 @@ struct GameOverview: View {
         return ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
                 header(content)
-                if let content {
+                if let content, session.belowFold {
                     ForEach(content.sections, id: \.self) { section in
                         sectionView(section, content: content)
                             .padding(.top, stage.px(70))
@@ -238,6 +255,7 @@ struct GameOverview: View {
             if pull != session.pull { session.pull = pull }
         }
         .onScrollPhaseChange { old, now in
+            if now == .interacting { session.pageScrollBegan() }
             // Pulling the page down at its top closes the overview
             if old == .interacting, now != .interacting, -session.scroll > stage.px(OverviewMotion.pullClose) { onClose() }
         }
@@ -317,35 +335,48 @@ struct GameOverview: View {
                         Text(eyebrow.uppercased())
                             .font(DelosFonts.figtree(stage.tpx(15), .bold)).tracking(stage.px(15 * 0.16))
                             .foregroundStyle(colors.accent.color)
-                            .modifier(Rise(index: 0, delay: 260, shown: session.shown))
+                            .modifier(Rise(index: 0, delay: OverviewMotion.headerDelay, shown: session.shown))
                     }
                     OverviewTitle(session: session, logo: art.cachedLogo(hostID: session.hostID, app: session.app))
+                    // The tags pop one after another with their row (its Rise start, then 36 ms apart)
+                    let genreTags = Array(genres.prefix(2)), themeTags = Array(themes.prefix(2))
+                    let tagStart = OverviewMotion.headerDelay + OverviewMotion.headerStagger
                     WrapLayout(spacing: stage.px(10), lineSpacing: stage.px(10)) {
-                        ForEach(genres.prefix(2), id: \.id) { OverviewTag(icon: TagLook.genreIcon($0.id), label: TagLook.genreName($0), genre: true) }
-                        ForEach(themes.prefix(2), id: \.id) { OverviewTag(icon: TagLook.themeIcon($0.id), label: TagLook.themeName($0)) }
-                        switch data?.hdrBadge {
-                        case .hdr?: NativeHDRChip()
-                        case .sdr?: InfoChip(icon: Symbols.sdr, label: "SDR")
-                        case .unknown?: InfoChip(icon: Symbols.hdrUnknown, label: L("metadata_hdr_unverified"))
-                        case nil: EmptyView()
+                        ForEach(Array(genreTags.enumerated()), id: \.element.id) { index, genre in
+                            OverviewTag(icon: TagLook.genreIcon(genre.id), label: TagLook.genreName(genre), genre: true)
+                                .modifier(ChipPop(active: session.shown, delay: tagStart + Double(index) * OverviewMotion.headerStagger))
                         }
+                        ForEach(Array(themeTags.enumerated()), id: \.element.id) { index, theme in
+                            OverviewTag(icon: TagLook.themeIcon(theme.id), label: TagLook.themeName(theme))
+                                .modifier(ChipPop(active: session.shown, delay: tagStart + Double(genreTags.count + index) * OverviewMotion.headerStagger))
+                        }
+                        Group {
+                            switch data?.hdrBadge {
+                            case .hdr?: NativeHDRChip()
+                            case .sdr?: InfoChip(icon: Symbols.sdr, label: "SDR")
+                            case .unknown?: InfoChip(icon: Symbols.hdrUnknown, label: L("metadata_hdr_unverified"))
+                            case nil: EmptyView()
+                            }
+                        }
+                        .modifier(ChipPop(active: session.shown, delay: tagStart + Double(genreTags.count + themeTags.count) * OverviewMotion.headerStagger))
                     }
-                    .modifier(Rise(index: 1, delay: 260, shown: session.shown))
+                    .modifier(Rise(index: 1, delay: OverviewMotion.headerDelay, shown: session.shown))
                     if let content {
                         HStack(spacing: stage.px(46)) {
-                            rating(content.critics, label: L("overview_critics"), color: colors.accent,
+                            rating(content.critics, label: L("overview_critics"), color: colors.accent, delay: 0,
                                    sub: content.critics.value == nil ? L("overview_no_critics") : LPlural("overview_reviews", content.critics.count, content.critics.count.formatted()))
-                            rating(content.players, label: L("overview_players"), color: colors.accent2,
+                            rating(content.players, label: L("overview_players"), color: colors.accent2, delay: OverviewMotion.ratingStagger,
                                    sub: content.players.value == nil ? L("overview_not_rated_yet")
                                        : content.details.fewRatings ? LPlural("overview_ratings_few", content.players.count, content.players.count.formatted())
                                        : LPlural("overview_ratings", content.players.count, content.players.count.formatted()))
                             AgeBadge(rating: ages.first)
+                                .modifier(ChipPop(active: session.ratingsOn, delay: OverviewMotion.ratingStagger * 2))
                         }
-                        .modifier(Rise(index: 2, delay: 260, shown: session.shown))
+                        .modifier(Rise(index: 2, delay: OverviewMotion.headerDelay, shown: session.shown))
                     } else {
                         Text(session.detailsSettled ? L("overview_unavailable") : L("overview_loading"))
                             .font(DelosFonts.figtree(stage.tpx(22))).foregroundStyle(colors.text3.color)
-                            .modifier(Rise(index: 2, delay: 260, shown: session.shown))
+                            .modifier(Rise(index: 2, delay: OverviewMotion.headerDelay, shown: session.shown))
                     }
                     HStack(spacing: stage.px(20)) {
                         OverviewButton(id: OverviewNavigation.play, focus: session.focus, icon: Symbols.playArrow, label: L("overview_play"), primary: true,
@@ -357,7 +388,7 @@ struct GameOverview: View {
                             actions.navigator.push(.appSettings(hostID: session.hostID, appID: session.app.id), focus: GameSettingsScreen.firstFocus())
                         }
                     }
-                    .modifier(Rise(index: 3, delay: 260, shown: session.shown))
+                    .modifier(Rise(index: 3, delay: OverviewMotion.headerDelay, shown: session.shown))
                     HStack(spacing: stage.px(36)) {
                         statColumn(eyebrow: texts.eyebrowTime, accent: true) {
                             HStack(alignment: .firstTextBaseline, spacing: stage.px(8)) {
@@ -377,7 +408,7 @@ struct GameOverview: View {
                         }
                     }
                     .shadow(color: .black.opacity(0.6), radius: stage.px(4), y: stage.px(2))
-                    .modifier(Rise(index: 4, delay: 260, shown: session.shown))
+                    .modifier(Rise(index: 4, delay: OverviewMotion.headerDelay, shown: session.shown))
                 }
                 .padding(.top, stage.px(4))
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -400,7 +431,7 @@ struct GameOverview: View {
                         .foregroundStyle(colors.text3.color)
                 }
                 .padding(.bottom, stage.px(18))
-                .modifier(Rise(index: 5, delay: 500, shown: session.shown))
+                .modifier(Rise(index: 5, delay: OverviewMotion.cueDelay, shown: session.shown))
             }
         }
         .frame(height: stage.px(stage.height - 160))
@@ -415,9 +446,9 @@ struct GameOverview: View {
         }
     }
 
-    private func rating(_ rating: OverviewContent.Rating, label: String, color: RGBA, sub: String) -> some View {
+    private func rating(_ rating: OverviewContent.Rating, label: String, color: RGBA, delay: Double, sub: String) -> some View {
         HStack(spacing: stage.px(18)) {
-            RatingRing(value: rating.value, size: 104, color: color, active: session.ratingsOn)
+            RatingRing(value: rating.value, size: 104, color: color, active: session.ratingsOn, delay: delay)
             VStack(alignment: .leading, spacing: stage.px(4)) {
                 Text(label).font(DelosFonts.figtree(stage.tpx(22), .bold)).foregroundStyle(colors.text.color)
                 Text(sub).font(DelosFonts.figtree(stage.tpx(18))).foregroundStyle(colors.text3.color)
@@ -486,8 +517,7 @@ struct GameOverview: View {
                         .foregroundStyle(colors.text2.color)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, stage.px(22))
-                        .frame(height: session.storyOpen ? nil : 0, alignment: .top)
-                        .clipped()
+                        .modifier(StoryReveal(open: session.storyOpen ? 1 : 0, fade: stage.px(StoryReveal.fade)))
                         .opacity(session.storyOpen ? 1 : 0)
                     OverviewFocusable(id: OverviewNavigation.story, focus: session.focus, corner: 26, pad: 0, scale: 1.06) {
                         HStack(spacing: stage.px(10)) {
@@ -884,8 +914,9 @@ private struct PlayPerimeterSweep: View {
     }
 }
 
-/// The staggered entrance (`.st`): 18 px up and in over 420 ms, 46 ms apart (at most 8 steps) after [delay]; leaving, it
-/// fades in 240 ms. Reduced motion keeps the fade only.
+/// The staggered entrance (`.st`): 18 px up and in with the settle spring (``OverviewMotion/settle``),
+/// ``OverviewMotion/headerStagger`` ms apart (at most 8 steps) after [delay]; leaving, it fades in 180 ms
+/// (``OverviewMotion/leave``). Reduced motion fades it in over 280 ms from its stagger start.
 struct Rise: ViewModifier {
     let index: Int
     let delay: Double
@@ -896,13 +927,43 @@ struct Rise: ViewModifier {
     private var sessionExitOffset: Double { hasEntered ? Motion.rise * 0.6 : Motion.rise }
 
     func body(content: Content) -> some View {
-        let wait = (delay + Double(min(index, Motion.staggerCap)) * 46) / 1000
+        let wait = (delay + Double(min(index, Motion.staggerCap)) * OverviewMotion.headerStagger) / 1000
         content
             .opacity(shown ? 1 : 0)
             .offset(y: shown || reduced ? 0 : stage.px(sessionExitOffset))
-            .animation(shown ? .timingCurve(0.16, 1, 0.3, 1, duration: Motion.rowIn / 1000).delay(reduced ? 0 : wait)
-                : .timingCurve(0.5, 0, 0.75, 0, duration: Motion.exit / 1000), value: shown)
+            .animation(!shown ? OverviewMotion.leave : reduced ? OverviewMotion.reducedFade.delay(wait) : OverviewMotion.settle.delay(wait), value: shown)
             .onChange(of: shown) { _, now in if now { hasEntered = true } }
+    }
+}
+
+/// The storyline opening and closing ("Read the story"): its height runs from 0 to the text's by [open], and while
+/// text continues below the clipped edge the last [fade] points fade out (as the dashboard row's ends do); fully open,
+/// nothing is masked.
+struct StoryReveal: ViewModifier, Animatable {
+    /// The fade's height, stage pixels.
+    static let fade = 90.0
+    var open: Double
+    let fade: Double
+    @State private var full = 0.0
+
+    nonisolated var animatableData: Double {
+        get { open }
+        set { open = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let shown = full * min(max(open, 0), 1)
+        let edge = shown < full - 0.5 ? min(fade, shown) : 0
+        content
+            .onGeometryChange(for: Double.self) { $0.size.height } action: { full = $0 }
+            .frame(height: shown, alignment: .top)
+            .clipped()
+            .mask(alignment: .top) {
+                VStack(spacing: 0) {
+                    Rectangle()
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: edge)
+                }
+            }
     }
 }
 
@@ -1085,7 +1146,7 @@ struct TitleCrossfade: ViewModifier {
 
     func body(content: Content) -> some View {
         let visible = here == shown
-        // Opening: 780 ms, closing: 640 ms
+        // Out over the first 40 % of the flight, in over its last 50 % (585 ms opening, 480 ms closing)
         let flight = (shown ? OverviewMotion.flight : OverviewMotion.flightBack) / 1000
         content
             .opacity(visible ? 1 : 0)
@@ -1116,7 +1177,7 @@ private struct OverviewBackdrop: View {
 
     var body: some View {
         let scroll = max(session.scroll, 0) / stage.scale
-        let deep = session.mediaFocus != nil ? 1 : min(1, scroll / OverviewMotion.deepBlurScroll)
+        let deep = session.backdropDeep(scroll: scroll)
         let media = session.mediaFocus.flatMap { content?.media.indices.contains($0) == true ? content?.media[$0] : nil }
         let area = HeroArea.of(stageWidth: stage.width, stageHeight: stage.height)
         // Sized by the screen, never by the pictures (filled pictures are larger than it)
@@ -1144,7 +1205,8 @@ private struct OverviewBackdrop: View {
         .offset(y: reduced ? 0 : stage.px(OverviewMotion.heroDrift(scroll)))
         .animation(.easeInOut(duration: 0.8), value: media?.id)
         .opacity(session.shown ? 1 : 0)
-        .animation(session.shown ? Motion.out(900) : .timingCurve(0.65, 0, 0.35, 1, duration: 0.64), value: session.shown)
+        .animation(session.shown ? Motion.out(OverviewMotion.heroIn)
+                   : .timingCurve(0.65, 0, 0.35, 1, duration: OverviewMotion.heroOut / 1000), value: session.shown)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
         .allowsHitTesting(false)
@@ -1272,10 +1334,11 @@ struct OverviewFlight: View {
     var body: some View {
         let path = FlightPath(from: from, to: to, lift: stage.px(OverviewMotion.arc))
         let clip = FlightClip(path: path, fromCorner: fromCorner, toCorner: toCorner, progress: progress)
+        let p = min(max(progress, 0), 1)
         ZStack(alignment: .topLeading) {
+            // One shadow radius for the whole flight (an animated radius would re-blur it on every frame)
             clip.fill(Color.black)
-                .shadow(color: .black.opacity(Motion.lerp(0.5, 0.7, progress)), radius: stage.px(Motion.lerp(40, 60, progress)),
-                        y: stage.px(Motion.lerp(30, 50, progress)))
+                .shadow(color: .black.opacity(Motion.lerp(0.5, 0.7, p)), radius: stage.px(50), y: stage.px(Motion.lerp(30, 50, p)))
             ZStack(alignment: .topLeading) {
                 card(path)
                 if fromArt == nil || toArt == nil || fromArt !== toArt {
@@ -1285,8 +1348,8 @@ struct OverviewFlight: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .clipShape(clip)
             clip.stroke(colors.accent.color, lineWidth: stage.px(5))
-                .shadow(color: colors.glow.color.opacity(1 - progress), radius: stage.px(30))
-                .opacity(1 - progress)
+                .shadow(color: colors.glow.color.opacity(1 - p), radius: stage.px(30))
+                .opacity(1 - p)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .allowsHitTesting(false)
@@ -1393,9 +1456,10 @@ private struct FlightFill: GeometryEffect {
 }
 
 /// A cover of the dashboard's row while the overview opens or closes (`homeOut` of the prototype): the others lift away
-/// one after another (up by 160 px plus 30 per cover of distance, to 92 %, 45 ms apart), the one in the overview hides
-/// while its card flies and shows again at once when the flight lands; with reduced motion they only fade. The focused
-/// cover follows a finger swiping it up.
+/// one after another with the settle spring (``OverviewMotion/settle``; up by 160 px plus 30 per cover of distance, to
+/// 92 %, 34 ms apart) and come back together with the closing flight's spring; the one in the overview hides while its
+/// card flies and shows again at once when the flight lands; with reduced motion they only fade. The focused cover
+/// follows a finger swiping it up.
 struct CoverDescent: ViewModifier {
     let app: HostApp
     let distance: Int
@@ -1408,14 +1472,14 @@ struct CoverDescent: ViewModifier {
         let mine = descent.appID == app.id
         let lift = descent.active && !mine && !reduced
         let dragged = launcher?.dragApp == app.id ? launcher?.dragOffset ?? 0 : 0
-        let returnDelay = reduced ? 0 : min(Double(max(descent.visibleCoverDistance - distance, 0)) * OverviewMotion.coverLiftStagger, 300)
+        // Away with the settle spring, 34 ms apart; back all together with the closing flight's spring
+        let motion = reduced ? OverviewMotion.reducedFade
+            : descent.active ? OverviewMotion.settle.delay(Double(distance) * OverviewMotion.coverLiftStagger / 1000) : OverviewMotion.flightCloseSpring
         content
             .offset(y: lift ? stage.px(OverviewMotion.coverLift(distance: distance)) : 0)
             .scaleEffect(lift ? OverviewMotion.coverLiftScale : 1)
             .opacity(descent.active ? 0 : 1)
-            .animation(descent.active
-                ? Motion.out(OverviewMotion.homeOut).delay(reduced ? 0 : Double(distance) * OverviewMotion.coverLiftStagger / 1000)
-                : .timingCurve(0.7, 0, 0.84, 0, duration: (OverviewMotion.homeOut - returnDelay) / 1000).delay(returnDelay / 1000), value: descent.active)
+            .animation(motion, value: descent.active)
             .animation(nil) { $0.opacity(mine ? 0 : 1) }
             .offset(y: dragged)
             #if os(iOS)
@@ -1428,9 +1492,20 @@ struct CoverDescent: ViewModifier {
 
 extension OverviewMotion {
     /// The cover's flight is a spring (interruptible: Back mid-flight turns it around from where it is, at its speed):
-    /// response 0.55 s, damping 0.86 out to the header; 0.45 s, 0.90 back to the card (Android: stiffness 130.5 and 195).
-    static let flightOpenSpring = Animation.spring(response: 0.55, dampingFraction: 0.86)
-    static let flightCloseSpring = Animation.spring(response: 0.45, dampingFraction: 0.9)
+    /// response 0.42 s, damping 0.72 out to the header (it overshoots by about 3.8 % and settles once); 0.36 s, 0.80
+    /// back to the card (about 1.5 %). The overshoot only grows the cover (``flightFrame(from:to:progress:lift:)``);
+    /// the corners and the crossfades are clamped.
+    static let flightOpenSpring = Animation.spring(response: 0.42, dampingFraction: 0.72)
+    static let flightCloseSpring = Animation.spring(response: 0.36, dampingFraction: 0.8)
+    /// The page and its parts land with the same family: response 0.45 s, damping 0.78. An opacity it drives is
+    /// clamped to 0…1 by the renderer, so it never overshoots.
+    static let settle = Animation.spring(response: 0.45, dampingFraction: 0.78)
+    /// The chips beside the ratings pop with response 0.4 s, damping 0.7.
+    static let chipSpring = Animation.spring(response: 0.4, dampingFraction: 0.7)
+    /// The header's parts leave with an ease-in over 180 ms.
+    static let leave = Animation.timingCurve(0.5, 0, 0.75, 0, duration: 0.18)
+    /// Reduced motion: no springs, 280 ms fades.
+    static let reducedFade = Animation.easeOut(duration: 0.28)
 }
 
 /// The overview's horizontal rows (Screenshots and videos, Similar games) move like the dashboard's covers: each step of
