@@ -134,6 +134,11 @@ enum LetterPicker {
 enum SettingsSearch {
     static let maxLength = 80
 
+    /// The order of Android's `nativeSettings`, which the results keep (they are not sorted by tab): the appearance form's rows
+    /// of these tabs first (Theme … Animations, Haptics, Sounds), then the shell's other rows of these tabs, then the catalog.
+    static let appearanceOrder: [SettingsTab] = [.appearance, .controls, .audio]
+    static let shellOrder: [SettingsTab] = [.controls, .display, .devices, .covers, .about, .stream, .audio, .appearance]
+
     /// The extra words a row can be found by besides its own texts (`SearchAliases`): the English words (earlier names and the
     /// terms gamers search for in any language; data, not interface text) and the localized synonyms, which are never shown.
     static func aliases(_ id: String) -> String {
@@ -200,6 +205,15 @@ struct SettingsSearchView: View {
     static let deleteID = "search-delete"
     static let clearID = "search-clear"
     static func letterID(_ index: Int) -> String { "search-letter-\(index)" }
+    /// Where the focus starts: the field, as on Android. On tvOS the field is the system's own text field, not an item of the
+    /// focus, so the first letter.
+    static var initialFocus: String {
+        #if os(tvOS)
+        letterID(0)
+        #else
+        fieldID
+        #endif
+    }
     static func resultID(_ id: String) -> String { "search-result-\(id)" }
 
     private var results: [SettingRow] { SettingsSearch.results(rows, query: query, language: SettingsSearch.language) }
@@ -315,8 +329,8 @@ struct SettingsSearchView: View {
                 }
                 .focusable(false)
                 .scrollClipDisabled()
-                // The ends of the scrolling layer fade where keys go on behind them
-                .scrollEdgeFade(.horizontal, FadeEdges(LetterPicker.compactEdge))
+                // Both ends of the scrolling layer always fade, as Android's `fadeMask` does
+                .scrollEdgeFade(.horizontal, FadeEdges(LetterPicker.compactEdge), growth: .always)
                 VStack(spacing: stage.px(gap)) {
                     FocusItem(id: Self.deleteID, model: focus, action: delete) { focused in
                         circle(Symbols.backspace, focused: focused, size: key)

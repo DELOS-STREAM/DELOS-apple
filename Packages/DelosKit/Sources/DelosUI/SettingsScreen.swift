@@ -46,6 +46,8 @@ struct SettingsScreen: View {
     /// The focus of the search while it is open, and what it looks for.
     @State private var searchFocus: FocusModel?
     @State private var query = ""
+    /// The row that was focused when the search opened: B returns to it (`shell.settingsFocus`).
+    @State private var focusBeforeSearch: AnyHashable?
     /// The file picker of Import Custom Keys is open.
     @State private var importingSpecialKeys = false
     /// "Keep diagnostic logs" (device-wide, ``DiagLog``).
@@ -100,12 +102,21 @@ struct SettingsScreen: View {
     /// The rows of [tab] in Android's order (`nativeSettings` + the catalog), each section's rows together; the link
     /// guidance's rows follow the bitrate row.
     private func rows(for tab: SettingsTab) -> [SettingRow] {
-        let catalog = LinkGuidanceRows.apply(
+        (appearanceForm.rows(tab) + shellRows(for: tab) + catalogRows(for: tab)).groupedBySection()
+    }
+
+    /// The shell's own rows of [tab] besides the appearance (the rest of `nativeSettings`).
+    private func shellRows(for tab: SettingsTab) -> [SettingRow] {
+        form.nativeRows(tab) + startupSetting.rows(tab) + DevicesSetting.rows(tab) + coversForm.rows(tab)
+            + AboutSetting.rows(tab, diagnosticLogs: diagnosticLogs) + GameDataSetting.rows(tab)
+    }
+
+    /// The stream settings' rows of [tab] (the catalog), with the link guidance's rows after the bitrate row.
+    private func catalogRows(for tab: SettingsTab) -> [SettingRow] {
+        LinkGuidanceRows.apply(
             form.catalogRows(tab), guidance: linkGuidance, host: linkHost, form: form,
             nowMs: Int64((Date().timeIntervalSince1970 * 1000).rounded()), transport: .current)
-        return (appearanceForm.rows(tab) + form.nativeRows(tab) + startupSetting.rows(tab)
-            + DevicesSetting.rows(tab) + coversForm.rows(tab) + AboutSetting.rows(tab, diagnosticLogs: diagnosticLogs) + GameDataSetting.rows(tab)
-            + catalog + AppLanguageSetting.rows(tab) + DebugInfoSetting.rows(tab)).groupedBySection()
+            + AppLanguageSetting.rows(tab) + DebugInfoSetting.rows(tab)
     }
 
     /// The PC the link guidance talks about, and the guidance for it and the profile's stream.
@@ -129,8 +140,13 @@ struct SettingsScreen: View {
         actions.toasts.show(L("link_use_done_toast", linkMbps(kbps)), icon: Symbols.checkCircle)
     }
 
-    /// The rows of every tab, which the search looks through.
-    private var searchableRows: [SettingRow] { SettingsTab.availableCases.flatMap { rows(for: $0) } }
+    /// The rows of every tab, which the search looks through, in the order of Android's list (`nativeSettings` + the catalog,
+    /// not sorted by tab): the appearance rows first, then the shell's other rows, then the stream settings.
+    private var searchableRows: [SettingRow] {
+        SettingsSearch.appearanceOrder.flatMap { appearanceForm.rows($0) }
+            + SettingsSearch.shellOrder.flatMap { shellRows(for: $0) }
+            + SettingsTab.availableCases.flatMap { catalogRows(for: $0) }
+    }
     private var focusedRow: SettingRow? { rows.first { focus.focused == AnyHashable($0.id) } }
 
     static let searchID = "settings-search"
@@ -161,7 +177,18 @@ struct SettingsScreen: View {
         }
         #endif
         .onChange(of: tab) { _, next in SettingsSession.shared.tab = next }
-        .onChange(of: focus.focused, initial: true) { navigator.setHints(ScreenHints(adjustable: ShellHints.adjustable(focusedRow)), from: focus) }
+        .onChange(of: focus.focused, initial: true) { sendHints() }
+        .onChange(of: searchFocus == nil) { sendHints() }
+        .onChange(of: popup?.kind) { sendHints() }
+    }
+
+    /// The hint bar: the search's own set while it is open (`Screen.SettingsSearch`), a row popover's while one is open, else
+    /// the focused row's.
+    private func sendHints() {
+        let searching = searchFocus != nil
+        navigator.setHints(
+            ScreenHints(adjustable: !searching && ShellHints.adjustable(focusedRow), settingsSearch: searching, rowPopup: popup?.kind),
+            from: focus)
     }
 
     private var content: some View {
@@ -544,12 +571,13 @@ struct SettingsScreen: View {
 
     // MARK: Search
 
-    /// Y, or the search button: the letter picker and the results of every tab (`Screen.SettingsSearch`); the focus starts on the
-    /// first letter.
+    /// Y, or the search button: the field, the letter picker and the results of every tab (`Screen.SettingsSearch`); the
+    /// focus starts where Android's does (``SettingsSearchView/initialFocus``), and the row focused now is kept for the way back.
     private func openSearch() {
         feedback?.play(.open)
         query = ""
-        searchFocus = FocusModel(initial: AnyHashable(SettingsSearchView.letterID(0)))
+        focusBeforeSearch = focus.focused
+        searchFocus = FocusModel(initial: AnyHashable(SettingsSearchView.initialFocus))
     }
 
     /// The commands while the search is open: B goes back to the settings, the focus has the rest; typing in the field takes the keys.
@@ -562,6 +590,7 @@ struct SettingsScreen: View {
         case .back:
             feedback?.play(.back)
             self.searchFocus = nil
+            if let row = focusBeforeSearch { focus.focus(row) }
         case .accept:
             guard !navigator.swallowsAccept() else { break }
             if let feedback { feedback.activate(searchFocus.acceptCue) { searchFocus.handle(.accept) } } else { searchFocus.handle(.accept) }

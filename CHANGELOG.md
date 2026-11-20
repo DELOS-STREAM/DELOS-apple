@@ -389,6 +389,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   CoreGraphics and Accelerate do it now, about 3 ms, and real SteamGridDB backgrounds of 10 to 60 frames a second play
   every frame (`AnimatedArtBenchmark`). Animations also decode two frames ahead instead of one, so Dredge's 62.5 fps
   cover keeps its pace while the main thread is busy. Not verified on a device.
+- Settings search is a screen of its own, as on Android: the top navigation and the PC pill are hidden while it is open
+  (the Settings button no longer takes the focus and shows its name), the hints are A Select and B Back, the focus starts
+  on the field, the results keep Android's order (Appearance first), and B returns to the row that was focused. The back
+  arrow closes the search instead of leaving Settings.
 - Latency presentation preserves a bounded one-frame jitter reserve instead of discarding paired arrivals. Metal's
   shown FPS now uses actual drawable presentation feedback, not selection or submission; CPU submission and GPU
   deadlines are reported separately. Sustained 120 FPS on physical devices is not verified for this change.
