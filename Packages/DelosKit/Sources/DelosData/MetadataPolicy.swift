@@ -12,6 +12,12 @@ public enum MetadataPolicy {
     public static func isBackedOff(_ time: Int64, now: Int64) -> Bool {
         isFresh(time, maximumAge: failureBackoff, now: now)
     }
+    /// Whether the overview's details of a matched game are due: never fetched or older than ``maximumAge``, and no failed
+    /// fetch within ``failureBackoff``.
+    public static func detailsDue(_ data: GameMetadata, now: Int64) -> Bool {
+        guard data.candidate != nil, !isBackedOff(data.detailsFailedAt, now: now) else { return false }
+        return !isFresh(data.detailsUpdatedAt, maximumAge: maximumAge, now: now)
+    }
     public static func refreshDue(_ data: GameMetadata?, now: Int64) -> Bool {
         guard let data else { return true }
         let failures = [data.igdbFailedAt, data.pcgwFailedAt, data.hltbFailedAt, data.steamFailedAt].filter { $0 > 0 }

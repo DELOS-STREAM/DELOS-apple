@@ -23,9 +23,34 @@ final class GameMetadataModel {
     /// The time the refresh policy is checked at, in milliseconds (the store's clock).
     @ObservationIgnored var now: @MainActor () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
 
-    init(store: MetadataStore = MetadataStore()) {
+    /// The overview's images from IGDB (screenshots, similar games' covers), on disk.
+    @ObservationIgnored let images: IGDBImageStore
+
+    init(store: MetadataStore = MetadataStore(), images: IGDBImageStore = IGDBImageStore()) {
         self.store = store
+        self.images = images
         enabled = store.available
+    }
+
+    /// Whether [app] has an overview to open: a matched game (its details come when it opens).
+    func hasOverview(_ app: HostApp) -> Bool { offers(app) && data(for: app)?.candidate != nil }
+
+    /// The overview's details of [app] already at hand (the record's).
+    func details(for app: HostApp) -> GameDetails? { data(for: app)?.details }
+
+    /// The overview's details of [app]: the cached ones, fetched first when due (the store's 7-day refresh and backoff);
+    /// the record published here gets them too.
+    @discardableResult
+    func loadDetails(_ app: HostApp) async -> GameDetails? {
+        guard hasOverview(app) else { return nil }
+        let details = await store.details(title: app.title)
+        let key = Self.key(app.title)
+        if var state = states[key], var data = state.data, data.details != details {
+            data.details = details
+            state.data = data
+            states[key] = state
+        }
+        return details
     }
 
     static func key(_ title: String) -> String { MetadataPolicy.literalKey(title) }

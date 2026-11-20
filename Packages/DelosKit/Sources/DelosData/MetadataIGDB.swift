@@ -22,6 +22,24 @@ public struct IGDBMetadataClient: Sendable {
         return try await games(parameter: "id", value: String(id)).first
     }
 
+    /// The overview's details of game [id] (`/v1/igdb/game-details`); nil when the Worker knows no such game (404).
+    public func details(_ id: Int64) async throws -> GameDetails? {
+        guard id > 0 else { throw MetadataError.invalidRequest }
+        guard let url = MetadataProxy.url(baseURL: baseURL, path: "v1/igdb/game-details",
+                                          parameters: [URLQueryItem(name: "id", value: String(id))]) else {
+            throw MetadataError.unavailable
+        }
+        try await pacer.wait()
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        do {
+            return try GameDetails.parse(await http.send(request))
+        } catch MetadataError.httpStatus(404) {
+            return nil
+        }
+    }
+
     private func games(parameter: String, value: String) async throws -> [MetadataCandidate] {
         guard let url = MetadataProxy.url(
             baseURL: baseURL,

@@ -57,6 +57,11 @@ class PluralTest(unittest.TestCase):
         substitution = entry["substitutions"]["count"]
         self.assertEqual(substitution["variations"]["plural"]["other"]["stringUnit"]["value"], "%2$@ Hours")
 
+    def test_an_unnumbered_text_is_numbered_after_the_count(self):
+        entry = import_android.plural({"one": "%@ rating", "other": "%@ ratings"})
+        substitution = entry["substitutions"]["count"]
+        self.assertEqual(substitution["variations"]["plural"]["other"]["stringUnit"]["value"], "%2$@ ratings")
+
 
 class CheckUsageTest(unittest.TestCase):
     catalog = {"strings": {

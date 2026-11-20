@@ -63,11 +63,19 @@ enum DemoHarness {
             CompletionTime(id: 1, name: name, seconds: Int64(name.count) * 3600, url: "")
         }
         func steamTags(_ steamAppIDs: [Int64]) async throws -> [String] { [] }
+        func details(_ id: Int64) async throws -> GameDetails? { DemoOverview.details(id: id) }
     }
 
     static func metadataStore() -> MetadataStore {
         let dir = FileManager.default.temporaryDirectory.appending(path: "delos-demo-meta-\(UUID().uuidString)", directoryHint: .isDirectory)
         return MetadataStore(providers: Providers(), cache: DiskCache(directory: dir, budget: 1 << 20, maxEntryBytes: 1 << 16))
+    }
+
+    /// The overview's images: generated pictures for IGDB's and YouTube's image URLs, in a temporary cache.
+    static func imageStore() -> IGDBImageStore {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "delos-demo-igdb-\(UUID().uuidString)", directoryHint: .isDirectory)
+        return IGDBImageStore(cache: DiskCache(directory: dir, budget: 64 << 20, maxEntryBytes: 8 << 20),
+                              http: MetadataHTTP(transport: DemoOverview.ImageTransport()))
     }
 
     /// The separate suite the demo's profiles and PCs live in: the app's own data is never read or written.
@@ -268,7 +276,7 @@ enum DemoHarness {
     }
 
     private static func frame(seed: Int, kind: String, phase: Double) -> CGImage {
-        let (w, h) = kind == "hero" ? (960, 310) : kind == "logo" ? (500, 250) : (400, 600)
+        let (w, h) = kind == "hero" ? (960, 310) : kind == "logo" ? (500, 250) : kind == "shot" ? (960, 540) : (400, 600)
         let space = CGColorSpaceCreateDeviceRGB()
         let context = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: space,
                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!

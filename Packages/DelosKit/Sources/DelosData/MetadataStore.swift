@@ -4,6 +4,9 @@ import Foundation
 /// No host refresh, artwork fetch or UI work is started by constructing it.
 public actor MetadataStore {
     private struct Record: Codable { let schema: Int; let data: GameMetadata }
+    /// The record format written now, and the ones still read.
+    static let schema = 7
+    static let readableSchemas: Set<Int> = [6, 7]
     private struct Pending { let id: UUID; let task: Task<GameMetadataState, Error> }
     private let providers: any MetadataProviders
     private let cache: DiskCache
@@ -43,7 +46,8 @@ public actor MetadataStore {
         let bytes = await cache.data(for: key)
         if let state = states[key] { return state }
         let record = bytes.flatMap { try? JSONDecoder().decode(Record.self, from: $0) }
-        let data = record?.schema == 6 ? record?.data : nil
+        // Schema 7 added the overview's details; a schema 6 record is the same record without them
+        let data = record.map { Self.readableSchemas.contains($0.schema) } == true ? record?.data : nil
         let state = GameMetadataState(data: data, resolved: data != nil, error: Self.problem(data))
         states[key] = state
         return state
@@ -84,6 +88,31 @@ public actor MetadataStore {
     private static func isBuiltIn(_ title: String) -> Bool {
         ["desktop", "remoteinput", "remotemonitor", "steambigpicture"].contains(key(title))
     }
+    /// The overview's details of [title]'s matched game: the cached ones, fetched first when they are due (none yet, older
+    /// than 7 days, or a failed fetch outside its backoff). A failure keeps what was cached and starts the backoff; a game
+    /// IGDB does not know is stored as "no details" until the next refresh. Nil without a matched game.
+    public func details(title: String) async -> GameDetails? {
+        let key = Self.key(title)
+        let initial = await state(for: title)
+        guard var data = initial.data, let candidate = data.candidate else { return nil }
+        guard providers.available, MetadataPolicy.detailsDue(data, now: now()) else { return data.details }
+        do {
+            let fetched = try await network.withPermit { try await self.providers.details(candidate.id) }
+            // The game may have been matched again meanwhile: the details are only kept for the same one
+            guard var current = states[key]?.data, current.candidate?.id == candidate.id else { return data.details }
+            current.details = fetched?.id == candidate.id ? fetched : nil
+            current.detailsUpdatedAt = now(); current.detailsFailedAt = 0
+            data = current
+        } catch {
+            guard !Task.isCancelled, var current = states[key]?.data, current.candidate?.id == candidate.id else { return data.details }
+            current.detailsFailedAt = now()
+            data = current
+        }
+        try? await persist(data, title: title)
+        states[key]?.data = data
+        return data.details
+    }
+
     private func unavailable(title: String) async -> GameMetadataState {
         var state = await state(for: title)
         state.loading = false; state.resolved = true; state.error = .unavailable
@@ -204,7 +233,7 @@ public actor MetadataStore {
         return try await save(result, title: title)
     }
     private func persist(_ data: GameMetadata, title: String) async throws {
-        try await cache.store(JSONEncoder().encode(Record(schema: 6, data: data)), for: Self.key(title))
+        try await cache.store(JSONEncoder().encode(Record(schema: Self.schema, data: data)), for: Self.key(title))
     }
     private func save(_ data: GameMetadata, title: String) async throws -> GameMetadataState {
         try await persist(data, title: title)
