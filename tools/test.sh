@@ -23,6 +23,7 @@ DELOS_MAC_DERIVED_DATA="$dd-mac" sh tools/mac.sh build
 
 echo "== repository tools"
 python3 tools/docs/check_links.py
+python3 tools/docs/check_platform.py
 python3 -m unittest discover -s tools/docs 2>&1 | tail -n 1
 python3 -m unittest discover -s tools/l10n 2>&1 | tail -n 1
 python3 tools/l10n/check_usage.py
