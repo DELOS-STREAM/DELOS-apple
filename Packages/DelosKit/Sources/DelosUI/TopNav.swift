@@ -319,6 +319,9 @@ struct SideMenu: View {
                         GeometryReader { proxy in
                             let anchor = (focus.focused as? String).flatMap { anchors[$0] }
                             SettingsFocusPlate(target: anchor.map { SettingsPlateGeometry.target(proxy[$0]) })
+                                // The ring shows together with the row it first lies on: it fades in at that row's place of the
+                                // entrance, on the row's delay and curve (the owner's choice; Android shows it from the first frame)
+                                .staggerEntrance(index: entrancePlace(of: focus.focused as? String), rises: false)
                         }
                     }
                     .padding(.horizontal, stage.px(14 + Self.glowSide))
@@ -405,12 +408,28 @@ struct SideMenu: View {
 
     /// A quick-setting row: focusable, on the shared plate, its content rising in at [place] of the entrance. Only the content
     /// enters (`SettingRow`'s `staggerEntrance` of DELOS for Android): the row and its anchor keep their place, so the plate is
-    /// on the row from its first frame and never moves while the row arrives.
+    /// on the row's place from its first frame and never moves while the row arrives.
     private func sideRow(_ row: SettingRow, place: Int, action: @escaping @MainActor () -> Void) -> some View {
         FocusItem(id: row.id, model: focus, action: action) { focused in
             SettingRowView(row: row, focused: focused, compact: true, hostedPlate: true, entrance: min(place, Motion.staggerCap))
         }
         .anchorPreference(key: SettingsRowAnchors.self, value: .bounds) { [row.id: $0] }
+    }
+
+    /// The place in the entrance of the row [id] (the header has 0), as ``sideRow(_:place:action:)`` hands them out; nil for
+    /// no row.
+    private func entrancePlace(of id: String?) -> Int? {
+        let quick = QuickSettings.rows(appearance)
+        let index: Int? = if let i = quick.firstIndex(where: { $0.id == id }) {
+            i + 1
+        } else if id == Self.settingsID {
+            quick.count + 1
+        } else if id == Self.hiddenID, hidden != nil {
+            quick.count + 2
+        } else {
+            nil
+        }
+        return index.map { min($0, Motion.staggerCap) }
     }
 
     private static func fade(_ ms: Double) -> AnyTransition {

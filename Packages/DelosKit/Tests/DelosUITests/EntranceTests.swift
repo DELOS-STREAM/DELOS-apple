@@ -1,31 +1,20 @@
 import Testing
 @testable import DelosUI
 
-@MainActor @Suite struct EntranceStaggerTests {
+@MainActor @Suite struct EntranceWindowTests {
     /// A clock the test moves.
     final class Clock {
         var now = 1000.0
     }
 
-    @Test func placesAreHandedOutInOrderUpToTheCap() {
-        let clock = Clock()
-        let stagger = EntranceStagger(cap: 3, lateAfterMs: 700) { clock.now }
-        #expect((0..<6).map { _ in stagger.take() } == [0, 1, 2, 3, 3, 3])
-    }
-
     @Test func anElementThatAppearsLateIsNotPartOfTheEntrance() {
         let clock = Clock()
-        let stagger = EntranceStagger(cap: 8, lateAfterMs: 700) { clock.now }
-        #expect(stagger.take() == 0)
+        let window = EntranceWindow(lateAfterMs: 700) { clock.now }
+        #expect(window.isOpen)
         clock.now += 700
-        #expect(stagger.isEarly)
-        #expect(stagger.take() == 1)
+        #expect(window.isOpen)
         clock.now += 1
-        #expect(!stagger.isEarly)
-        #expect(stagger.take() == nil)
-        // A late element does not use up a place
-        clock.now -= 1
-        #expect(stagger.take() == 2)
+        #expect(!window.isOpen)
     }
 
     @Test func theDefaultsAreTheSharedContract() {

@@ -218,8 +218,10 @@ enum RowPopoverLayout {
     static let valueInset = 360.0
     /// The tip never comes closer than this to the row's left edge, and a flipped card's tip lies this far inside the row's right edge.
     static let minTipInset = 120.0, flipTipInset = 120.0
-    /// The gap the card keeps to the stage's sides and bottom, and under the status bar.
-    static let sideMargin = 24.0, topMargin = 104.0, bottomMargin = 24.0
+    /// The gap the card keeps to the stage's sides and bottom; at the top it stays below the top bar (104) and the name that
+    /// hangs under its focused button (to about 136), so a long list starts under them and scrolls (Android's 104 clears only
+    /// the bar).
+    static let sideMargin = 24.0, topMargin = 148.0, bottomMargin = 24.0
 
     /// What the options card has besides its list: padding, the title and its gap.
     static let chrome = 2 * pad + title + 2 * gap

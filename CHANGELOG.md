@@ -409,11 +409,19 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 ### Fixed
 
 - The side menu's rows enter as on Android: top-down after the header (they rose bottom-up, in the order SwiftUI made
-  them appear), and only their icon, label and value rise; the row keeps its place, so the focus ring is on the first row
-  from its first frame and no longer sits 18 px low until the row has landed and then jumps up. Every staggered entrance
+  them appear), and only their icon, label and value rise; the row keeps its place, so the focus ring no longer sits
+  18 px low until the row has landed and then jumps up: it fades in together with its row's content, on the row's delay
+  and curve (Android shows it from the first frame; the owner prefers it with its row). Every staggered entrance
   is now a render effect (opacity and offset where the view is drawn, Android's graphics layer): no body is evaluated
   and nothing is laid out again on each frame of a rise. The context menu's plate enters with the row it lies on, and the
   stream menu popover's rows take Android's timing (120 ms, then 46 ms a row). Not verified on a device.
+- The start, home, devices, pairing, profile and avatar screens' entrances run top-down and left to right as on Android
+  (the headline first, then the circles or covers in order): each element has its place instead of taking the next one
+  as it appeared, which SwiftUI often did from the last element up. An element that appears more than 700 ms after its
+  screen (a PC found later, a settings row a switch reveals) is just there, as on Android. The stream menu's Send keys
+  and Commands pills rise in one after the other from the left, each with its focus plate. Not verified on a device.
+- A long list of values that a tap on a settings row opens (Video resolution) starts below the top bar and the name
+  under its focused button and scrolls, instead of running up under them.
 - The animated game background on the home screen plays at its file's own frame rate, also in a debug build. Each frame
   was saturated, faded and laid over its extension by loops over the pixels in Swift, about 105 ms a frame unoptimized on
   an M6 Mac (Dredge's 24 fps background played at 9 frames a second there, about 4 on the owner's iPad Pro);
