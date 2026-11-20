@@ -31,8 +31,8 @@ from verified sources; the licence files are next to them in `Packages/DelosKit/
 |---|---|---|---|---|
 | `unbounded.ttf` | [google/fonts](https://github.com/google/fonts) `ofl/unbounded` | commit `e7db6ca603fd4862010383ff17ffd6cc4ffac1c0` | OFL-1.1 | `af82d541d5007a370b0fd6e05d573ae7214fb0b5c1ece3327c17ebd971bf19d1` |
 | `figtree.ttf` | google/fonts `ofl/figtree` | same commit | OFL-1.1 | `723c2843a782299a5473cbbe9ad44b685fe0994d17a4b7dc75e4644ae695e962` |
-| `phosphor_regular.ttf` (subset with input glyphs) | [phosphor-icons/web](https://github.com/phosphor-icons/web), original input artwork | `v2.1.2` plus approved local SVGs | MIT base, OFL-1.1 lettering, CC0-1.0 brand paths | `af20a190ec982e12b36264aabc8e537734fe2b9931c39cc85544c114a1804efd` |
-| `phosphor_fill.ttf` (subset with input glyphs) | same sources | same versions | same component licences | `8a20a3e389a3736c2697b1434b84ffc73e4a7d2757a8ea102c2bf3727f956cb9` |
+| `phosphor_regular.ttf` (subset with input glyphs) | [phosphor-icons/web](https://github.com/phosphor-icons/web), original input artwork | `v2.1.2` plus approved local SVGs | MIT base, OFL-1.1 lettering, CC0-1.0 brand paths | `6df027230505c89b98f42f06b642f54f979c178ec48ad885610f5ea1e10d9002` |
+| `phosphor_fill.ttf` (subset with input glyphs) | same sources | same versions | same component licences | `bc536083b864815c6eb19f89c568d1a4d8d7c566e6a18aaabfd616a47061f925` |
 
 The icon subsets add the approved Xbox, DualSense, DualShock 4, Joy-Con and Mac input controls
 from Android's `tools/fonts/controller/` and `tools/fonts/mac/`. Figtree-derived lettering retains
@@ -132,6 +132,12 @@ The game overview's details come through the same Worker (`/v1/igdb/game-details
 similar games outside the library load directly from IGDB's public image server (`images.igdb.com`), and video
 thumbnails from YouTube's (`i.ytimg.com`), without credentials: those servers see the device's IP address, as
 HowLongToBeat does. The images are kept in a 150 MB cache under Caches/igdb-images.
+YouTube (`i.ytimg.com`, `youtube.com`, `youtube-nocookie.com`) sees the device's IP address and the video ids of the
+overview's thumbnails; the app asks YouTube's oEmbed endpoint (`youtube.com/oembed`, no cookies, no cache) once per video
+id and process whether the video may be embedded. When a video plays, the in-app player (the YouTube IFrame player in a
+web view of the app, on iPhone, iPad and the Mac) loads from `youtube-nocookie.com` in privacy-enhanced mode: no cookies
+until playback starts; once it plays, YouTube may set cookies and local storage on the device, in the app's web view,
+and YouTube plays its ads. The app never opens a browser or the YouTube app.
 
 The HLTB search flow and payload derive from [howlongtobeatpy](https://github.com/ScrappyCocco/HowLongToBeat-PythonAPI)
 1.0.24, `HTMLRequests.py`, commit `4275a452b9ccd230b7c2a82b8d1a5d851285eb14`, MIT, Copyright (c) 2018 Michele.

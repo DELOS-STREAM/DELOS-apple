@@ -1339,6 +1339,45 @@ available, and reports only `comp_all` seconds with a positive sample count. A m
 Main Story time. Parsing, pacing, matching, provider backoff and persistence have offline fixture tests; live provider
 access and physical-device integration are not verified.
 
+### The overview's screenshots and videos
+
+The overview's Screenshots and videos carousel lists the videos first, then the screenshots. `OverviewViewer` opens on a
+snapshot of that list (`OverviewSession.viewerMedia`), so its indices never shift while it is open. A screenshot fits
+16:9 in the stage less 280 × 300; a video 16:9 in the stage less 280 × 440, centred and 70 px higher, so that its
+controls fit under it (1920 × 1080: 1137.8 × 640 at 391, 150). The thumbnail zooms into the item's own rectangle.
+
+Videos play in the app, never in a browser or the YouTube app. Once the viewer has settled on a video (the opening zoom
+done, no browse running, not closing), `OverviewVideoPlayer` puts a `WKWebView` exactly on the video rectangle: it loads
+the YouTube IFrame player (`youtube-nocookie.com`, no YouTube controls, autoplay with sound) from an HTML string whose base
+URL and player `origin` are `https://` and the bundle id in lower case (the Referer YouTube requires). The page reports
+the player's state, time, duration, mute and errors through the `delos` script message handler (a weak proxy, so the
+web view does not keep the coordinator alive) to `OverviewVideo`; DELOS's commands go back with `evaluateJavaScript`. The
+web view stays invisible, with the thumbnail showing, until the player first plays. Every main-frame navigation except
+the page's own first load and `about:` pages is cancelled (the player's frame loads freely), new windows are never made
+(`createWebViewWith` returns nil), and the video pauses when the app goes to the background. The player goes when the
+viewer browses away or starts closing. Apple TV has no WebKit: there the overview lists no videos.
+
+Nothing of DELOS lies over the player. Its controls are a glass pill 22 px under the video, as wide as it: back 10 s,
+play or pause, forward 10 s, the elapsed time, the progress (a tap or a click seeks there), the duration and the sound.
+
+| Input | Screenshot, or a video that cannot play | A video that plays |
+|---|---|---|
+| Left / Right | previous / next item | seek -10 / +10 s |
+| L1 / R1 (`[` `]`) | previous / next item | previous / next item |
+| A (Return, Space) | nothing | play / pause (at the end: from the start) |
+| Y (F) | nothing | mute / sound on |
+| B (Esc) | close | close |
+
+Touch swipes sideways to browse and down to close; the pointer has the side arrows and the close button. The hint bar
+follows: Browse and Back on a screenshot; Seek, Play or Pause, Mute or Sound on, L1, R1 and Back on a video that plays.
+
+A video that cannot play shows its thumbnail dimmed with a warning, "This video can't be played" and why (its owner does
+not allow other apps for the player's errors 101 and 150, YouTube couldn't load it for the rest); its controls hide.
+Videos that never can are skipped: when the details are known, every video id not yet asked about in this process is
+checked with YouTube's oEmbed endpoint (`YouTubeEmbed`, an ephemeral session without cookies or cache): 400, 401, 403 and
+404 mean not embeddable, anything else or no answer keeps the video. The player's errors 100, 101 and 150 add to the
+same set (`OverviewVideos`); the carousel leaves those videos out at once, the open viewer keeps its snapshot.
+
 ## PCs and stream plans
 
 `HostStore` (DelosData) is the app's list of PCs: discovery and typed addresses add them (`ask`), `refresh` asks a

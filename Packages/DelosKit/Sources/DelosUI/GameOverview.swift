@@ -38,8 +38,13 @@ final class OverviewSession {
     @ObservationIgnored var closeWhenOpen = false
     let focus = FocusModel(initial: OverviewNavigation.initialFocus)
     let ring = OverviewRing()
-    /// The screenshot viewer's item, nil when it is closed.
+    /// The viewer's item, nil when it is closed: an index into [viewerMedia].
     var viewer: Int?
+    /// The screenshots and videos as they were when the viewer opened: its indices stay put while it is open, even when
+    /// the carousel leaves out a video that turned out not to play.
+    var viewerMedia: [OverviewContent.Media] = []
+    /// The viewer's video player.
+    let video = OverviewVideo()
     /// The page's scroll position (page pixels, points) and the request to scroll it.
     var scroll = 0.0
     var position = ScrollPosition(y: 0)
@@ -47,8 +52,8 @@ final class OverviewSession {
     var mediaFocus: Int?
     /// Frames (in the page's space) of the sections and items, for the focus scroll.
     @ObservationIgnored var sectionFrames: [String: CGRect] = [:]
-    /// The thumbnails' frames in the home's space, for the viewer's zoom.
-    @ObservationIgnored var thumbFrames: [Int: CGRect] = [:]
+    /// The thumbnails' frames in the home's space by media id, for the viewer's zoom.
+    @ObservationIgnored var thumbFrames: [String: CGRect] = [:]
     var storyOpen = false
 
     init(hostID: String, app: HostApp, coverID: AnyHashable, source: CGRect, details: GameDetails?) {
@@ -129,7 +134,9 @@ struct GameOverview: View {
     private var kind: InputKind { ControllerGlyphs.shared.kind }
 
     var body: some View {
-        let content = session.details.map { OverviewContent(details: $0, library: library, region: Locale.current.region?.identifier) }
+        let content = session.details.map {
+            OverviewContent(details: $0, library: library, region: Locale.current.region?.identifier, unplayable: OverviewVideos.shared.unplayable)
+        }
         ZStack(alignment: .topLeading) {
             OverviewBackdrop(session: session, content: content)
             page(content)
@@ -147,6 +154,8 @@ struct GameOverview: View {
                 withAnimation(.easeOut(duration: 0.3)) { session.details = details }
             }
             session.detailsSettled = true
+            // Meanwhile YouTube is asked which videos it lets play in the app
+            async let checked: Void = OverviewVideos.shared.check(session.details?.videos.map(\.videoId) ?? [])
             if let content = session.details.map({ OverviewContent(details: $0, library: library, region: nil) }) {
                 let tall = stage.height > 1200
                 for media in content.media.prefix(2) { if let url = OverviewImageSizes.thumb(media, tall: tall) { _ = await metadata.images.data(url) } }
@@ -154,6 +163,7 @@ struct GameOverview: View {
                     _ = await metadata.images.data(url)
                 }
             }
+            await checked
         }
     }
 
@@ -968,8 +978,9 @@ private struct OverviewCarousel: View {
                 ForEach(Array(media.enumerated()), id: \.offset) { index, item in
                     OverviewFocusable(id: OverviewNavigation.media(index), focus: session.focus, corner: 22, pad: 0, scale: 1.06) {
                         thumb(item, tall: tall)
-                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { session.thumbFrames[index] = $0 }
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { session.thumbFrames[item.id] = $0 }
                     } action: {
+                        session.viewerMedia = media
                         session.viewer = index
                     }
                     .id(index)
@@ -986,7 +997,16 @@ private struct OverviewCarousel: View {
             guard let id = now as? String, id.hasPrefix("ov-media-"), let index = Int(id.dropFirst("ov-media-".count)) else { return }
             reveal(index)
         }
-        .onChange(of: session.viewer) { _, now in if let now { reveal(now, animated: false) } }
+        .onChange(of: session.viewer) { _, now in
+            // The viewer's index is into its own list: the same item here can sit elsewhere once a video is left out
+            guard let now, session.viewerMedia.indices.contains(now), let here = media.firstIndex(of: session.viewerMedia[now]) else { return }
+            reveal(here, animated: false)
+        }
+        .onChange(of: media.map(\.id)) { _, ids in
+            // A video left out: the viewer fades instead of zooming into a place where another thumbnail now is
+            let kept = Set(ids)
+            session.thumbFrames = session.thumbFrames.filter { kept.contains($0.key) }
+        }
     }
 
     private func reveal(_ index: Int, animated: Bool = true) {

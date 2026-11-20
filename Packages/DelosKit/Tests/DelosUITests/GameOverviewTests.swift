@@ -132,22 +132,115 @@ import Testing
         #expect(ipad.width == 1640 && abs(ipad.height - 922.5) < 0.001)
     }
 
+    @Test func videoFitsUnderItsControls() {
+        let odin = OverviewViewer.videoFit(width: 1920, height: 1080)
+        #expect(odin.height == 640 && abs(odin.width - 640 * 16 / 9) < 0.001)
+        #expect(abs(odin.minX - (1920 - 640 * 16 / 9) / 2) < 0.001 && odin.minY == 150)
+        let ipad = OverviewViewer.videoFit(width: 1920, height: 1440)
+        #expect(ipad.width == 1640 && abs(ipad.height - 922.5) < 0.001 && abs(ipad.minY - ((1440 - 922.5) / 2 - 70)) < 0.001)
+        let item = OverviewContent.Media(kind: .video, id: "v", name: nil)
+        #expect(OverviewViewer.frame(item, width: 1920, height: 1080) == odin)
+        #expect(OverviewViewer.frame(.init(kind: .screenshot, id: "s", name: nil), width: 1920, height: 1080) == OverviewViewer.fit(width: 1920, height: 1080))
+    }
+
     @Test func viewerCommands() {
         let session = OverviewSession(hostID: "h", app: HostApp(id: 1, title: "G"), coverID: AnyHashable("app-1"), source: .zero, details: complete)
         let media = OverviewContent(details: complete, library: [], region: nil).media
+        var sent: [String] = []
+        func player(_ id: String) {
+            session.video.reset(id)
+            session.video.run = { sent.append($0) }
+        }
+        // A video that plays: Left and Right seek, A plays or pauses, Y mutes, L1 and R1 browse
         session.viewer = 0
-        OverviewViewer.handle(.left, session: session, media: media, openURL: .init(handler: { _ in .handled }))
+        player(media[0].id)
+        OverviewViewer.handle(.left, session: session, media: media)
+        OverviewViewer.handle(.right, session: session, media: media)
         #expect(session.viewer == 0)
-        OverviewViewer.handle(.right, session: session, media: media, openURL: .init(handler: { _ in .handled }))
+        #expect(sent.count == 2 && sent[0].contains("getCurrentTime()+-10.0") && sent[1].contains("getCurrentTime()+10.0"))
+        OverviewViewer.handle(.accept, session: session, media: media)
+        #expect(sent.last?.contains("player.playVideo()") == true)
+        session.video.receive(#"{"type":"status","state":1,"time":12.5,"duration":90,"muted":false}"#)
+        #expect(session.video.playing && session.video.started && session.video.duration == 90)
+        OverviewViewer.handle(.accept, session: session, media: media)
+        #expect(sent.last?.contains("player.pauseVideo()") == true)
+        OverviewViewer.handle(.toastAction, session: session, media: media)
+        #expect(sent.last?.contains("player.mute()") == true)
+        OverviewViewer.handle(.previousTab, session: session, media: media)
+        #expect(session.viewer == 0)
+        OverviewViewer.handle(.nextTab, session: session, media: media)
         #expect(session.viewer == 1 && session.viewerDirection == 1)
-        OverviewViewer.handle(.back, session: session, media: media, openURL: .init(handler: { _ in .handled }))
+        // A video that cannot play browses like a screenshot, and is left out of the carousel from now on
+        player(media[1].id)
+        session.video.receive(#"{"type":"error","code":150}"#)
+        #expect(session.video.error == 150 && OverviewVideos.shared.unplayable.contains(media[1].id))
+        let count = sent.count
+        OverviewViewer.handle(.accept, session: session, media: media)
+        #expect(sent.count == count)
+        OverviewViewer.handle(.right, session: session, media: media)
+        #expect(session.viewer == 2)
+        OverviewViewer.handle(.right, session: session, media: media)
+        #expect(session.viewer == 3)
+        OverviewViewer.handle(.back, session: session, media: media)
         #expect(session.viewerClosing)
     }
+
+    @Test func playerErrorsAndClock() {
+        #expect([100, 101, 150].allSatisfy(OverviewVideo.unplayable(code:)))
+        #expect(![-1, 2, 5, 153].contains(where: OverviewVideo.unplayable(code:)))
+        #expect(OverviewVideo.blocked(code: 101) && OverviewVideo.blocked(code: 150) && !OverviewVideo.blocked(code: 100))
+        #expect(OverviewVideo.clock(0) == "0:00" && OverviewVideo.clock(75.9) == "1:15" && OverviewVideo.clock(3723) == "1:02:03")
+        // A transient error shows, but the video stays in the carousel
+        let video = OverviewVideo()
+        video.reset("transient1")
+        video.receive(#"{"type":"error","code":5}"#)
+        #expect(video.error == 5 && !OverviewVideos.shared.unplayable.contains("transient1"))
+    }
+
+    @Test func unplayableVideosLeftOut() {
+        let all = OverviewContent(details: complete, library: [], region: nil).media
+        let kept = OverviewContent(details: complete, library: [], region: nil, unplayable: ["x7mer01"]).media
+        #expect(all.filter { $0.kind == .video }.map(\.id) == ["x7mer01", "x7mer02"])
+        #expect(kept.filter { $0.kind == .video }.map(\.id) == ["x7mer02"] && kept.count == all.count - 1 && kept.first?.kind == .video)
+    }
+
+    #if !os(tvOS)
+    @Test func playerStaysOnItsPage() {
+        let origin = "https://io.github.meitoncz.delos"
+        let page = URL(string: "https://io.github.meitoncz.delos")
+        #expect(OverviewVideoPlayer.allows(targetMainFrame: true, url: page, firstLoad: true, origin: origin))
+        #expect(!OverviewVideoPlayer.allows(targetMainFrame: true, url: page, firstLoad: false, origin: origin))
+        #expect(!OverviewVideoPlayer.allows(targetMainFrame: true, url: URL(string: "https://www.youtube.com/watch?v=x"), firstLoad: true, origin: origin))
+        #expect(OverviewVideoPlayer.allows(targetMainFrame: true, url: URL(string: "about:blank"), firstLoad: false, origin: origin))
+        #expect(OverviewVideoPlayer.allows(targetMainFrame: false, url: URL(string: "https://www.youtube-nocookie.com/embed/x"), firstLoad: false, origin: origin))
+        #expect(!OverviewVideoPlayer.allows(targetMainFrame: nil, url: URL(string: "https://www.youtube.com/watch?v=x"), firstLoad: false, origin: origin))
+        let html = OverviewVideoPlayer.html(videoID: "abc_DEF-123", origin: origin)
+        #expect(html.contains("videoId:'abc_DEF-123'") && html.contains("origin:'\(origin)'") && html.contains("webkit.messageHandlers.delos"))
+    }
+    #endif
 
     @Test func overviewHints() {
         var hints = ScreenHints()
         hints.overview = true
         let shown = ShellHints.hints(ShellHints.Context(screen: .home(hostID: "h"), screenHints: hints), kind: .controller)
         #expect(shown.map(\Hint.button) == [HintButton.pad(.south), HintButton.pad(.east)])
+    }
+
+    @Test func viewerHints() {
+        func shown(_ item: OverviewViewerItem) -> [Hint] {
+            var hints = ScreenHints()
+            hints.overview = true
+            hints.overviewViewer = item
+            return ShellHints.hints(ShellHints.Context(screen: .home(hostID: "h"), screenHints: hints), kind: .controller)
+        }
+        let browse = [Hint(button: .adjust, label: L("overview_hint_browse")), Hint(button: .pad(.east), label: L("shell_hint_back"))]
+        #expect(shown(.screenshot) == browse)
+        #expect(shown(.unplayable) == browse)
+        let playing = shown(.video(playing: true, muted: false))
+        #expect(playing.map(\Hint.button) == [.adjust, .pad(.south), .pad(.north), .pad(.leftShoulder), .pad(.rightShoulder), .pad(.east)])
+        #expect(playing.map(\.label) == [L("overview_hint_seek"), L("overview_hint_pause"), L("overview_hint_mute"), L("overview_previous"),
+                                         L("overview_next"), L("shell_hint_back")])
+        let paused = shown(.video(playing: false, muted: true))
+        #expect(paused[1].label == L("overview_hint_play") && paused[2].label == L("overview_hint_unmute"))
     }
 }

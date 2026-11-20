@@ -2,23 +2,31 @@ import DelosData
 import DelosInput
 import SwiftUI
 
-/// The full-screen screenshot viewer (`Viewer` of the prototype): it zooms out of the thumbnail and back into it (a fade
-/// when the thumbnail is off screen), crossfades with a little parallax between items, shows the count and a filmstrip
-/// over a blurred backdrop (a material: real blur). Left and Right browse, A on a video opens it, B closes; touch swipes
-/// sideways to browse and down to close; the pointer has arrows and a close button.
+/// The full-screen screenshot and video viewer (`Viewer` of the prototype): it zooms out of the thumbnail and back into it
+/// (a fade when the thumbnail is off screen), crossfades with a little parallax between items, shows the count and a
+/// filmstrip over a blurred backdrop (a material: real blur). A video plays in the app once the viewer has settled on it
+/// (``OverviewVideoPlayer``), with DELOS's controls under it. Left and Right browse (on a video they seek), L1 and R1
+/// browse, A plays or pauses, Y mutes, B closes; touch swipes sideways to browse and down to close; the pointer has arrows
+/// and a close button.
 struct OverviewViewer: View {
     let session: OverviewSession
+    /// The items as they were when the viewer opened (``OverviewSession/viewerMedia``).
     let media: [OverviewContent.Media]
     let index: Int
     @Environment(\.stage) private var stage
     @Environment(\.delosColors) private var colors
     @Environment(\.reducedMotion) private var reduced
-    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     /// 0: on the thumbnail, 1: fitted.
     @State private var zoom = 0.0
     @State private var ready = false
     @State private var drag = CGSize.zero
     @State private var origin = CGPoint.zero
+    /// The item the viewer has settled on (no zoom, no browse running): a video's player exists only then.
+    @State private var settled: Int?
+    @State private var closing = false
+
+    private var video: OverviewVideo { session.video }
 
     /// The fitted picture, stage pixels: 16:9 inside the stage less 280 × 300.
     static func fit(width: Double, height: Double) -> CGRect {
@@ -27,10 +35,21 @@ struct OverviewViewer: View {
         return CGRect(x: (width - w) / 2, y: (height - h) / 2 - 10, width: w, height: h)
     }
 
+    /// The fitted video, stage pixels: 16:9 inside the stage less 280 × 440, higher up, so its controls fit under it.
+    static func videoFit(width: Double, height: Double) -> CGRect {
+        var w = width - 280, h = w * 9 / 16
+        if h > height - 440 { h = height - 440; w = h * 16 / 9 }
+        return CGRect(x: (width - w) / 2, y: (height - h) / 2 - 70, width: w, height: h)
+    }
+
+    /// Where [item] shows, stage pixels.
+    static func frame(_ item: OverviewContent.Media, width: Double, height: Double) -> CGRect {
+        item.kind == .video ? videoFit(width: width, height: height) : fit(width: width, height: height)
+    }
+
     var body: some View {
-        let fit = Self.fit(width: stage.width, height: stage.height)
-        let target = CGRect(x: stage.px(fit.minX), y: stage.px(fit.minY), width: stage.px(fit.width), height: stage.px(fit.height))
         let item = media[index]
+        let target = target(item)
         let tall = stage.height > 1200
         let pullDown = max(drag.height, 0)
         ZStack(alignment: .topLeading) {
@@ -46,6 +65,9 @@ struct OverviewViewer: View {
                         .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.56)),
                     removal: .modifier(active: Slide(x: -session.viewerDirection * stage.px(90), scale: 0.94, opacity: 0), identity: Slide(x: 0, scale: 1, opacity: 1))
                         .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42))))
+            if item.kind == .video, settled == index, !closing {
+                player(item, target: target)
+            }
             ui(item, target: target)
                 .opacity(ready ? 1 : 0)
                 .animation(.easeOut(duration: 0.3), value: ready)
@@ -62,18 +84,47 @@ struct OverviewViewer: View {
         })
         #endif
         .onChange(of: session.viewerClosing) { _, now in if now { close() } }
+        .onChange(of: index) { _, now in
+            // Browsing: the player goes at once, the next one comes once the new item has slid in
+            settle(nil)
+            settle(now, after: reduced ? 280 : 560)
+        }
+        .onChange(of: scenePhase) { _, now in if now == .background { video.pause() } }
         .onAppear {
             session.viewerClosing = false
             withAnimation(reduced ? .easeOut(duration: 0.28) : .timingCurve(0.2, 0.9, 0.25, 1, duration: 0.56)) { zoom = 1 }
+            settle(index, after: reduced ? 280 : 560)
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(reduced ? 0 : 300))
                 ready = true
             }
         }
+        .onDisappear { if video.videoID != nil { video.reset(nil) } }
+    }
+
+    /// [item]'s place on the screen, points.
+    private func target(_ item: OverviewContent.Media) -> CGRect {
+        let fit = Self.frame(item, width: stage.width, height: stage.height)
+        return CGRect(x: stage.px(fit.minX), y: stage.px(fit.minY), width: stage.px(fit.width), height: stage.px(fit.height))
+    }
+
+    /// Settles on item [k] (nil: on nothing) now or [after] ms, when the viewer is still on it then.
+    private func settle(_ k: Int?, after ms: Int = 0) {
+        guard ms > 0 else {
+            video.reset(k.flatMap { media.indices.contains($0) && media[$0].kind == .video ? media[$0].id : nil })
+            settled = k
+            return
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(ms))
+            // The view value this task holds is the one it started in: the session has the current item
+            guard k == session.viewer, !closing, settled != k else { return }
+            settle(k)
+        }
     }
 
     private func picture(_ item: OverviewContent.Media, tall: Bool, target: CGRect) -> some View {
-        let thumb = session.thumbFrames[index].map { $0.offsetBy(dx: -origin.x, dy: -origin.y) }
+        let thumb = session.thumbFrames[item.id].map { $0.offsetBy(dx: -origin.x, dy: -origin.y) }
         // From the thumbnail when it is on screen, else a fade
         let from = thumb.flatMap { $0.intersects(CGRect(x: 0, y: 0, width: stage.px(stage.width), height: stage.px(stage.height))) ? $0 : nil }
         let z = reduced || from == nil ? 1 : zoom
@@ -82,10 +133,11 @@ struct OverviewViewer: View {
         let dx = from.map { Motion.lerp($0.minX - target.minX, 0, z) } ?? 0
         let dy = from.map { Motion.lerp($0.minY - target.minY, 0, z) } ?? 0
         let pull = max(drag.height, 0)
+        let failed = item.kind == .video && video.videoID == item.id && video.error != nil
         return ZStack(alignment: .bottomLeading) {
             RemoteImage(url: OverviewImageSizes.full(item, tall: tall), maxPixels: tall ? 1920 : 1280,
                         placeholder: OverviewImageSizes.thumb(item, tall: tall), placeholderPixels: tall ? 900 : 600)
-            if item.kind == .video {
+            if item.kind == .video, !failed {
                 SymbolView(symbol: Symbols.videoPlay, size: 96, color: RGBA(red: 1, green: 1, blue: 1), filled: true)
                     .shadow(color: .black.opacity(0.6), radius: stage.px(8))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -101,6 +153,27 @@ struct OverviewViewer: View {
         .opacity(from == nil && !reduced ? zoom : 1)
     }
 
+    /// The settled video's player on its picture (invisible until it plays: the thumbnail shows until then), or why it
+    /// cannot play.
+    @ViewBuilder private func player(_ item: OverviewContent.Media, target: CGRect) -> some View {
+        let pull = max(drag.height, 0)
+        Group {
+            if let error = video.error {
+                OverviewVideoError(code: error)
+            } else if video.videoID == item.id {
+                #if !os(tvOS)
+                OverviewVideoPlayer(videoID: item.id, video: video)
+                    .opacity(video.started ? 1 : 0)
+                #endif
+            }
+        }
+        .frame(width: target.width, height: target.height)
+        .clipShape(RoundedRectangle(cornerRadius: stage.px(18), style: .continuous))
+        .scaleEffect(1 - min(pull, 400) / 1600, anchor: .topLeading)
+        .offset(x: target.minX + (pull > 0 ? 0 : drag.width * 0.6), y: target.minY + pull)
+        .id(item.id)
+    }
+
     private func ui(_ item: OverviewContent.Media, target: CGRect) -> some View {
         let pointer = ControllerGlyphs.shared.kind == .pointer
         let touch = ControllerGlyphs.shared.kind == .touch
@@ -112,6 +185,13 @@ struct OverviewViewer: View {
             .monospacedDigit()
             .padding(.leading, stage.px(72 + stage.safe.leading))
             .padding(.top, stage.px(40))
+            #if !os(tvOS)
+            if item.kind == .video, video.error == nil {
+                OverviewVideoBar(video: video)
+                    .frame(width: target.width)
+                    .offset(x: target.minX, y: target.maxY + stage.px(22))
+            }
+            #endif
             HStack(spacing: stage.px(12)) {
                 ForEach(Array(media.enumerated()), id: \.offset) { k, m in
                     RemoteImage(url: OverviewImageSizes.thumb(m, tall: false), maxPixels: 200)
@@ -164,7 +244,11 @@ struct OverviewViewer: View {
     }
 
     func close() {
+        guard !closing else { return }
+        closing = true
         ready = false
+        // The player goes first: the thumbnail under it zooms back
+        settle(nil)
         withAnimation(reduced ? .easeIn(duration: 0.24) : .timingCurve(0.16, 1, 0.3, 1, duration: 0.44)) { zoom = 0 }
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(reduced ? 240 : 440))
@@ -173,19 +257,25 @@ struct OverviewViewer: View {
         }
     }
 
-    /// A command while the viewer is open: Left and Right browse, A watches a video, B closes. Always taken.
-    static func handle(_ command: MenuCommand, session: OverviewSession, media: [OverviewContent.Media], openURL: OpenURLAction) {
-        guard let index = session.viewer else { return }
+    /// A command while the viewer is open, always taken. On a video that can play Left and Right seek 10 s, A plays or
+    /// pauses and Y mutes; elsewhere Left and Right browse. L1 and R1 browse, B closes.
+    static func handle(_ command: MenuCommand, session: OverviewSession, media: [OverviewContent.Media]) {
+        guard let index = session.viewer, media.indices.contains(index) else { return }
+        let video = session.video
+        let playable = media[index].kind == .video && video.error == nil
+        func browse(_ step: Int) {
+            guard media.indices.contains(index + step) else { return }
+            session.viewerDirection = Double(step)
+            session.viewer = index + step
+        }
         switch command {
-        case .left where index > 0:
-            session.viewerDirection = -1
-            session.viewer = index - 1
-        case .right where index + 1 < media.count:
-            session.viewerDirection = 1
-            session.viewer = index + 1
+        case .left: if playable { video.seek(by: -10) } else { browse(-1) }
+        case .right: if playable { video.seek(by: 10) } else { browse(1) }
+        case .previousTab: browse(-1)
+        case .nextTab: browse(1)
+        case .accept: if playable { video.toggle() }
+        case .toastAction: if playable { video.toggleMute() }
         case .back: session.viewerClosing = true
-        case .accept:
-            if media[index].kind == .video, let url = IGDBImage.videoPage(media[index].id) { openURL(url) }
         default: break
         }
     }

@@ -127,8 +127,14 @@ enum ShellHints {
                 ]
             }
             if let viewer = c.screenHints.overviewViewer {
-                // The screenshot viewer: browse, watch a video, back
-                return [Hint(button: .adjust, label: L("overview_hint_browse"))] + (viewer == .video ? [hint(.south, L("overview_hint_watch"))] : []) + [back]
+                // The viewer: a video that plays seeks, plays or pauses, mutes and browses with L1 and R1; else it browses
+                guard case .video(let playing, let muted) = viewer else { return [Hint(button: .adjust, label: L("overview_hint_browse")), back] }
+                return [
+                    Hint(button: .adjust, label: L("overview_hint_seek")),
+                    hint(.south, playing ? L("overview_hint_pause") : L("overview_hint_play")),
+                    hint(.north, muted ? L("overview_hint_unmute") : L("overview_hint_mute")),
+                    hint(.leftShoulder, L("overview_previous")), hint(.rightShoulder, L("overview_next")), back,
+                ]
             }
             if c.screenHints.overview { return [select, back] }
             let filter = c.screenHints.filterLabel.map { [Hint(button: .pad(.north), label: $0, tappable: true, icon: Symbols.filter)] } ?? []
