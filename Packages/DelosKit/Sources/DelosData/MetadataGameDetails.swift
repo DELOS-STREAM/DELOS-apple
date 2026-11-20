@@ -224,9 +224,38 @@ public enum IGDBImage {
         return URL(string: "https://i.ytimg.com/vi/\(videoID)/hqdefault.jpg")
     }
 
-    /// Where Watch opens a video.
-    public static func videoPage(_ videoID: String) -> URL? {
-        guard validID.firstMatch(in: videoID, range: NSRange(videoID.startIndex..., in: videoID)) != nil else { return nil }
-        return URL(string: "https://www.youtube.com/watch?v=\(videoID)")
+    /// Whether [id] is safe to put in a URL path or a query: letters, digits, `_` and `-` only.
+    public static func validVideoID(_ id: String) -> Bool {
+        validID.firstMatch(in: id, range: NSRange(id.startIndex..., in: id)) != nil
+    }
+}
+
+/// Whether YouTube lets a video play in another app's player: its oEmbed endpoint answers 401 for a video whose owner
+/// disabled embedding and 400 or 404 for one that is gone or invalid. Asked without cookies and without a cache.
+public enum YouTubeEmbed {
+    public static func oEmbedURL(_ videoID: String) -> URL? {
+        guard IGDBImage.validVideoID(videoID) else { return nil }
+        return URL(string: "https://www.youtube.com/oembed?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D\(videoID)&format=json")
+    }
+
+    /// False for the answers that say the video cannot be embedded (400, 401, 403, 404); any other answer keeps it.
+    public static func playable(status: Int) -> Bool { ![400, 401, 403, 404].contains(status) }
+
+    private static let session: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 20
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: configuration)
+    }()
+
+    /// Asks YouTube whether [videoID] can be embedded; nil when no answer came (the caller keeps the video: fails open).
+    public static func embeddable(_ videoID: String) async -> Bool? {
+        guard let url = oEmbedURL(videoID) else { return false }
+        guard let (_, response) = try? await session.data(from: url), let http = response as? HTTPURLResponse else { return nil }
+        return playable(status: http.statusCode)
     }
 }

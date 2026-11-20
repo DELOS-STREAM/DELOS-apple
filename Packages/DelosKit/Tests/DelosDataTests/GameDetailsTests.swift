@@ -75,6 +75,15 @@ import Testing
         #expect(IGDBImage.videoThumbnail("dQw4w9WgXcQ")?.absoluteString == "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg")
     }
 
+    @Test func youTubeEmbedCheck() {
+        #expect(YouTubeEmbed.oEmbedURL("dQw4w9WgXcQ")?.absoluteString
+            == "https://www.youtube.com/oembed?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DdQw4w9WgXcQ&format=json")
+        #expect(YouTubeEmbed.oEmbedURL("a&b=c") == nil)
+        // Embedding disabled (401), gone or invalid (400, 404), forbidden (403): not playable; anything else keeps the video
+        for status in [400, 401, 403, 404] { #expect(!YouTubeEmbed.playable(status: status)) }
+        for status in [200, 429, 500, 503] { #expect(YouTubeEmbed.playable(status: status)) }
+    }
+
     @Test func detailsRequestAndNotFound() async throws {
         let transport = RecordingTransport(answers: [MetadataHTTPResponse(data: Self.complete, status: 200),
                                                      MetadataHTTPResponse(data: Data(#"{"error":"game_not_found"}"#.utf8), status: 404)])

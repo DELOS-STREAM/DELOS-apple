@@ -106,7 +106,6 @@ struct HomeScreen: View {
     @State private var launcher = OverviewLauncher()
     /// Where the screen stands in global points (the covers' frames are global).
     @State private var homeOrigin = CGPoint.zero
-    @Environment(\.openURL) private var openURL
 
     /// The focus the screen opens with: no item has it, so the covers, once loaded, give it to the first one.
     static let initialFocus = "first-app"
@@ -224,8 +223,9 @@ struct HomeScreen: View {
 
     /// The item of the overview's open viewer.
     private var viewerItem: OverviewViewerItem? {
-        guard let session = overview, let index = session.viewer, let details = session.details else { return nil }
-        return index < details.videos.count ? .video : .screenshot
+        guard let session = overview, let index = session.viewer, session.viewerMedia.indices.contains(index) else { return nil }
+        guard session.viewerMedia[index].kind == .video else { return .screenshot }
+        return session.video.error == nil ? .video(playing: session.video.playing, muted: session.video.muted) : .unplayable
     }
 
     // MARK: Game overview
@@ -236,9 +236,8 @@ struct HomeScreen: View {
             if !session.landed {
                 OverviewFlight(hostID: hostID, app: session.app, from: session.source, to: overviewSlot, progress: session.flight)
             }
-            if let index = session.viewer, let details = session.details {
-                let media = OverviewContent(details: details, library: [], region: nil).media
-                if media.indices.contains(index) { OverviewViewer(session: session, media: media, index: index) }
+            if let index = session.viewer, session.viewerMedia.indices.contains(index) {
+                OverviewViewer(session: session, media: session.viewerMedia, index: index)
             }
         }
     }
@@ -332,9 +331,9 @@ struct HomeScreen: View {
     /// the page (``OverviewNavigation``).
     private func captureOverview(_ command: MenuCommand, _ session: OverviewSession) -> Bool {
         let feedback = actions.layers.feedback
-        if session.viewer != nil, let details = session.details {
-            OverviewViewer.handle(command, session: session, media: OverviewContent(details: details, library: [], region: nil).media, openURL: openURL)
-            if command == .left || command == .right { feedback?.play(.move) }
+        if let index = session.viewer {
+            OverviewViewer.handle(command, session: session, media: session.viewerMedia)
+            if session.viewer != index { feedback?.play(.move) }
             return true
         }
         switch OverviewNavigation.outcome(command, focused: session.focus.focused) {

@@ -132,6 +132,12 @@ The game overview's details come through the same Worker (`/v1/igdb/game-details
 similar games outside the library load directly from IGDB's public image server (`images.igdb.com`), and video
 thumbnails from YouTube's (`i.ytimg.com`), without credentials: those servers see the device's IP address, as
 HowLongToBeat does. The images are kept in a 150 MB cache under Caches/igdb-images.
+YouTube (`i.ytimg.com`, `youtube.com`, `youtube-nocookie.com`) sees the device's IP address and the video ids of the
+overview's thumbnails; the app asks YouTube's oEmbed endpoint (`youtube.com/oembed`, no cookies, no cache) once per video
+id and process whether the video may be embedded. When a video plays, the in-app player (the YouTube IFrame player in a
+web view of the app, on iPhone, iPad and the Mac) loads from `youtube-nocookie.com` in privacy-enhanced mode: no cookies
+until playback starts; once it plays, YouTube may set cookies and local storage on the device, in the app's web view,
+and YouTube plays its ads. The app never opens a browser or the YouTube app.
 
 The HLTB search flow and payload derive from [howlongtobeatpy](https://github.com/ScrappyCocco/HowLongToBeat-PythonAPI)
 1.0.24, `HTMLRequests.py`, commit `4275a452b9ccd230b7c2a82b8d1a5d851285eb14`, MIT, Copyright (c) 2018 Michele.

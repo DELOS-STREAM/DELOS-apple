@@ -67,8 +67,8 @@ struct OverviewContent: Equatable {
     let sections: [Section]
 
     /// [library]: the PC's apps, to find similar games the player owns; [region]: the device's region, which age rating
-    /// comes first; [hasStreaming]: the Your streaming section has something to show (always, it shows zero too).
-    init(details: GameDetails, library: [HostApp], region: String?) {
+    /// comes first; [unplayable]: the videos YouTube does not let play in the app (``OverviewVideos``), left out.
+    init(details: GameDetails, library: [HostApp], region: String?, unplayable: Set<String> = []) {
         self.details = details
         critics = Rating(value: details.criticRating, count: details.criticRatingCount)
         players = Rating(value: details.rating, count: details.ratingCount)
@@ -100,8 +100,13 @@ struct OverviewContent: Equatable {
         add(.keywords, Array(details.keywords.prefix(5)))
         self.groups = groups
 
-        media = details.videos.map { Media(kind: .video, id: $0.videoId, name: $0.name) }
-            + details.screenshots.map { Media(kind: .screenshot, id: $0.imageId, name: nil) }
+        // Videos first, then screenshots. Apple TV has no web view to play a video in: no videos there
+        #if os(tvOS)
+        let videos: [Media] = []
+        #else
+        let videos = details.videos.filter { !unplayable.contains($0.videoId) }.map { Media(kind: .video, id: $0.videoId, name: $0.name) }
+        #endif
+        media = videos + details.screenshots.map { Media(kind: .screenshot, id: $0.imageId, name: nil) }
 
         var links = details.websites.compactMap { site -> Link? in
             guard let url = URL(string: site.url), ["https", "http"].contains(url.scheme?.lowercased() ?? "") else { return nil }
@@ -179,8 +184,13 @@ struct OverviewContent: Equatable {
     }
 }
 
-/// What the overview's screenshot viewer shows, for the hint bar (Watch only on a video).
-enum OverviewViewerItem: Equatable, Sendable { case screenshot, video }
+/// What the overview's viewer shows, for the hint bar: a screenshot, a video that plays (and whether it is playing and
+/// muted), or a video that cannot play (it browses like a screenshot).
+enum OverviewViewerItem: Equatable, Sendable {
+    case screenshot
+    case video(playing: Bool, muted: Bool)
+    case unplayable
+}
 
 /// The overview's navigation by commands (controller, keyboard, the Siri Remote): the focus walks the page's items by their
 /// geometry (``FocusModel``); what is the overview's own is decided here.

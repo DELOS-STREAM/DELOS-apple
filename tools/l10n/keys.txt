@@ -1627,7 +1627,11 @@ overview_fact_released
 overview_fact_series
 overview_game_info
 overview_hint_browse
-overview_hint_watch
+overview_hint_mute
+overview_hint_pause
+overview_hint_play
+overview_hint_seek
+overview_hint_unmute
 overview_hltb_all
 overview_hltb_share
 overview_in_library
@@ -1665,5 +1669,10 @@ overview_split_screen
 overview_streaming_note
 overview_unavailable
 overview_video
+overview_video_back
+overview_video_blocked
+overview_video_failed
+overview_video_forward
+overview_video_unavailable
 overview_video_youtube
 overview_viewer_count
