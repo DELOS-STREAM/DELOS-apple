@@ -19,7 +19,9 @@ import UniformTypeIdentifiers
 ///                                       every command waits until something can take it (the library loaded, no PC being woken);
 ///                                       input kinds: touch (a finger begins a touch, through the window's probe), click (the pointer's), pad (a controller's button);
 ///                                       rightclick (a secondary click at the middle of the focused item, through the router's pointer entry);
-///                                       tap (the focused item's own tap, a click after `click`: its press and its action)
+///                                       tap (the focused item's own tap, a click after `click`: its press and its action);
+///                                       tap-left, tap-right, tap-up, tap-down (the same on the item beside the focused one that way,
+///                                       which has no focus yet: a finger's first tap there)
 ///   -DelosDemoApps <n>                  how many apps (default 16; 0 empty)
 ///   -DelosDemoInput controller|touch|keyboard|pointer   the kind of input the hints and the back arrow start with (controller: a pad counts as connected)
 enum DemoHarness {
@@ -192,17 +194,26 @@ enum DemoHarness {
         return true
     }
 
-    /// Posted by `tap` with the focused item's id (`userInfo["id"]`): that ``FocusItem`` runs its own tap, as a finger's or
+    /// Posted by `tap` with the tapped item's id (`userInfo["id"]`): that ``FocusItem`` runs its own tap, as a finger's or
     /// the pointer's (after `touch` or `click`) would.
     static let tapNotification = Notification.Name("DelosDemoTap")
 
     /// `tap`: a tap (a click after `click`) on the focused item of whoever has the commands: an open layer or the side menu,
-    /// else the screen. True when [name] was one.
+    /// else the screen. `tap-<direction>`: on the item beside it that way, which keeps no focus until the tap. True when
+    /// [name] was one.
     @MainActor static func tap(_ name: String, navigator: Navigator, router: ShellRouter) -> Bool {
-        guard name == "tap" else { return false }
-        if let id = (router.modalFocus ?? navigator.focus).focused {
-            NotificationCenter.default.post(name: tapNotification, object: nil, userInfo: ["id": id])
+        let directions: [String: FocusDirection] = ["tap-left": .left, "tap-right": .right, "tap-up": .up, "tap-down": .down]
+        guard name == "tap" || directions[name] != nil else { return false }
+        let focus = router.modalFocus ?? navigator.focus
+        guard let focused = focus.focused else { return true }
+        var target = focused
+        if let direction = directions[name] {
+            var frames = focus.registeredFrames
+            guard let current = frames.removeValue(forKey: focused),
+                  let beside = FocusGeometry.next(from: current, direction: direction, candidates: frames) else { return true }
+            target = beside
         }
+        NotificationCenter.default.post(name: tapNotification, object: nil, userInfo: ["id": target])
         return true
     }
 

@@ -74,7 +74,8 @@ private final class ProbeView: UIView, UIGestureRecognizerDelegate {
         ControllerGlyphs.shared.note(.pointer)
     }
 
-    /// A right click or a two-finger click: the context menu of the item under the pointer.
+    /// A right click or a two-finger click: the context menu of the item under the pointer. Never a finger's tap
+    /// (``gestureRecognizer(_:shouldReceive:)``).
     @objc private func secondaryClicked(_ tap: UITapGestureRecognizer) {
         guard tap.state == .ended, let router, let window else { return }
         ControllerGlyphs.shared.note(.pointer)
@@ -84,6 +85,13 @@ private final class ProbeView: UIView, UIGestureRecognizerDelegate {
 
     // The pointer's hover reaches every other recognizer as well (the buttons' own pointer effects)
     func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+
+    // The tap of the secondary button takes only the pointer's touches (``ItemTouch/takesSecondaryClick(indirect:)``): UIKit
+    // checks its button mask on indirect input only, so every finger's tap would be a secondary click
+    func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard g is UITapGestureRecognizer else { return true }
+        return ItemTouch.takesSecondaryClick(indirect: touch.type == .indirectPointer)
+    }
 }
 
 final class TouchKindRecognizer: UIGestureRecognizer, UIGestureRecognizerDelegate {

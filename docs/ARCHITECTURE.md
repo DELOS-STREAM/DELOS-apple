@@ -102,7 +102,8 @@ Its `tap` is what a touch does when it is not what A does; it gets whether the i
 before the tap (a settings row's first tap only focuses it, the second changes it, `RowTouch`); a tap always focuses the item
 first. `focusingOnFirstTap()` gives an item without its own `tap` the same rule with A's action: the library's covers, whose
 first tap only focuses the game (its background, info and chips follow) and whose second starts or resumes it; a pointer's
-click activates at once, as its hover has focused the item. The top navigation and the other buttons act on the first tap.
+click activates at once, as its hover has focused the item (`ItemTouch.of`). The top navigation and the other buttons act on
+the first tap.
 
 ## Navigation
 
@@ -1531,11 +1532,13 @@ pointer, touch) and, for a controller, the glyph family (`PadFamily`). The hint 
   scrolling under a pointer at rest does not take the focus, `PointerHover.moved`), so the focus ring glides as for a
   controller; leaving drops nothing, an item behind an open layer or the side menu is not hovered, and the move cue plays
   at most every 90 ms (`PointerHover.cueGap`). A click is A with the press (no first click that only focuses). A right
-  click or a two-finger click (iPad: a window tap recognizer with `buttonMaskRequired = .secondary`; Mac: the event
-  monitor's `rightMouseDown` and Control-click) goes to `ShellRouter.secondaryClick`: the item under the pointer of whoever
-  has the pointer (`pointerFocus`: the side menu, a layer, a sheet, else the screen) takes the focus and, when it has a
-  context menu, gets Options at once; with a layer open a secondary click beside its items is Options too (it closes a
-  context menu). The system pointer is never hidden or restyled over the items: it stays drawn above them and their ring.
+  click or a two-finger click (iPad: a window tap recognizer with `buttonMaskRequired = .secondary` that takes only the
+  pointer's touches, `ItemTouch.takesSecondaryClick`: UIKit checks the mask on indirect input only, so a finger's tap
+  matched it, noted the pointer and opened the context menu; Mac: the event monitor's `rightMouseDown` and Control-click)
+  goes to `ShellRouter.secondaryClick`: the item under the pointer of whoever has the pointer (`pointerFocus`: the side
+  menu, a layer, a sheet, else the screen) takes the focus and, when it has a context menu, gets Options at once; with a
+  layer open a secondary click beside its items is Options too (it closes a context menu). The system pointer is never
+  hidden or restyled over the items: it stays drawn above them and their ring.
 - **Pointer and scroll: one owner.** The pointer's moves of the focus (hover, click, right click: `FocusModel.point(to:)`)
   set `FocusModel.pointerMoved`, and no scroll that follows the focus runs for them: `FocusItem`'s reveal in a
   `FocusScroll` (side menu, context menus, artwork grid, stream menu, filter strips), the library row
