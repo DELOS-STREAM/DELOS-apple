@@ -807,10 +807,9 @@ struct SettingRowView: View {
         case .appSettings(let language):
             labelled(language, arrows: arrows)
         case .info(let text):
-            MarqueeLabel(text: text, active: focused)
+            Text(text)
                 .font(DelosFonts.figtree(stage.tpx(23)))
                 .foregroundStyle(colors.text2.color)
-                .frame(maxWidth: stage.px(360), alignment: .trailing)
         }
     }
 

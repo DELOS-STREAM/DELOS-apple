@@ -757,7 +757,7 @@ private struct ArtworkGameChip: View {
             SymbolView(symbol: Symbols.sportsEsports, size: 24, color: colors.accent2, filled: true)
                 .frame(width: stage.px(40), height: stage.px(40))
                 .background(Circle().fill(colors.accent2.opacity(0.2).color))
-            MarqueeLabel(text: name, active: false)
+            MarqueeLabel(text: name, active: true)
                 .font(DelosFonts.unbounded(stage.tpx(22)))
                 .foregroundStyle(colors.text.color)
                 .frame(maxWidth: .infinity, alignment: .leading)
