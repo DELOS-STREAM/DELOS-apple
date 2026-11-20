@@ -291,24 +291,27 @@ struct SideMenu: View {
         // be centered by the root's stack)
         return ZStack(alignment: .topLeading) {
             VStack(alignment: .leading, spacing: stage.px(10)) {
+                // The places of the entrance are handed out top-down, as Android composes them: the header first, then
+                // the rows (the order views appear in is not the order they stand in)
                 SideMenuHeader(profile: profile, pc: pc, playtime: playtime)
-                    .staggerEntrance()
+                    .staggerEntrance(index: 0)
                 // What does not fit scrolls, with its edges fading: the focus brings a row into view. The scroll view reaches
                 // the glow's room beyond the rows, which is clear while rows continue behind that edge (`SideMenuLayer`)
                 FocusScroll(axis: .vertical, fades: FadeEdges(
                     start: FadeEdge(solid: Self.glowVertical + 16, clear: Self.glowVertical),
                     end: FadeEdge(solid: Self.glowVertical + 40, clear: Self.glowVertical))) {
                     VStack(alignment: .leading, spacing: stage.px(10)) {
-                        ForEach(QuickSettings.rows(appearance)) { row in
-                            sideRow(row) { onStep(row.id, 1) }
+                        let quick = QuickSettings.rows(appearance)
+                        ForEach(Array(quick.enumerated()), id: \.element.id) { index, row in
+                            sideRow(row, place: index + 1) { onStep(row.id, 1) }
                         }
                         sideRow(SettingRow(
                             id: Self.settingsID, tab: .stream, section: "", icon: Symbols.settings, label: L("shell_side_all_settings"),
-                            value: .action(label: nil), help: ""), action: onSettings)
+                            value: .action(label: nil), help: ""), place: quick.count + 1, action: onSettings)
                         if let hidden {
                             sideRow(SettingRow(
                                 id: Self.hiddenID, tab: .stream, section: "", icon: Symbols.visibility, label: L("shell_side_show_hidden"),
-                                value: .toggle(hidden.showing), help: "", note: hidden.note)) { onStep(Self.hiddenID, 1) }
+                                value: .toggle(hidden.showing), help: "", note: hidden.note), place: quick.count + 2) { onStep(Self.hiddenID, 1) }
                         }
                     }
                     // One plate glides between the rows (`SettingRowList`'s `RowGlideHost`), as in Settings
@@ -326,7 +329,6 @@ struct SideMenu: View {
                 .padding(.vertical, -stage.px(Self.glowVertical))
                 .frame(maxHeight: .infinity)
             }
-            .entranceScope()
             .padding(.top, stage.px(insets.top))
             .padding(.bottom, stage.px(insets.bottom))
             .padding(.leading, stage.px(insets.leading))
@@ -401,13 +403,14 @@ struct SideMenu: View {
         }
     }
 
-    /// A quick-setting row: focusable, on the shared plate, rising in with the others.
-    private func sideRow(_ row: SettingRow, action: @escaping @MainActor () -> Void) -> some View {
+    /// A quick-setting row: focusable, on the shared plate, its content rising in at [place] of the entrance. Only the content
+    /// enters (`SettingRow`'s `staggerEntrance` of DELOS for Android): the row and its anchor keep their place, so the plate is
+    /// on the row from its first frame and never moves while the row arrives.
+    private func sideRow(_ row: SettingRow, place: Int, action: @escaping @MainActor () -> Void) -> some View {
         FocusItem(id: row.id, model: focus, action: action) { focused in
-            SettingRowView(row: row, focused: focused, compact: true, hostedPlate: true)
+            SettingRowView(row: row, focused: focused, compact: true, hostedPlate: true, entrance: min(place, Motion.staggerCap))
         }
         .anchorPreference(key: SettingsRowAnchors.self, value: .bounds) { [row.id: $0] }
-        .staggerEntrance()
     }
 
     private static func fade(_ ms: Double) -> AnyTransition {

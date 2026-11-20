@@ -385,6 +385,12 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- The side menu's rows enter as on Android: top-down after the header (they rose bottom-up, in the order SwiftUI made
+  them appear), and only their icon, label and value rise; the row keeps its place, so the focus ring is on the first row
+  from its first frame and no longer sits 18 px low until the row has landed and then jumps up. Every staggered entrance
+  is now a render effect (opacity and offset where the view is drawn, Android's graphics layer): no body is evaluated
+  and nothing is laid out again on each frame of a rise. The context menu's plate enters with the row it lies on, and the
+  stream menu popover's rows take Android's timing (120 ms, then 46 ms a row). Not verified on a device.
 - The animated game background on the home screen plays at its file's own frame rate, also in a debug build. Each frame
   was saturated, faded and laid over its extension by loops over the pixels in Swift, about 105 ms a frame unoptimized on
   an M6 Mac (Dredge's 24 fps background played at 9 frames a second there, about 4 on the owner's iPad Pro);

@@ -181,13 +181,16 @@ private struct MenuCard: View {
         .padding(.top, stage.px(6))
         .padding(.bottom, stage.px(2))
         .background(alignment: .topLeading) {
-            // The one plate under the focused row: it glides from row to row, red under a destructive one
+            // The one plate under the focused row: it glides from row to row, red under a destructive one. It enters with
+            // the row it first lies on (the plate of DELOS for Android follows its row's layer), so the ring arrives with
+            // that row instead of waiting for it in its place
             if let focusedIndex {
                 RowPlate(color: danger ? menuDanger : colors.accent)
                     .frame(height: stage.px(L.rowHeight))
                     .padding(.horizontal, stage.px(4))
                     .offset(y: stage.px(6 + Double(focusedIndex) * (L.rowHeight + L.rowGap)))
                     .animation(reducedMotion ? .easeOut(duration: 0.18) : .timingCurve(0.3, 1.22, 0.42, 1, duration: Motion.rowFocus / 1000), value: focusedIndex)
+                    .staggerEntrance(index: MenuRow.place(focusedIndex), base: Motion.menuDelay)
             }
         }
     }
@@ -214,8 +217,9 @@ private struct MenuRow: View {
     let focused: Bool
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
-    @Environment(\.reducedMotion) private var reducedMotion
-    @State private var appeared = false
+
+    /// The row's place in the card's entrance: the header is the first (`MenuRow(item, i + 1, …)` of DELOS for Android).
+    static func place(_ index: Int) -> Int { min(index + 1, Motion.staggerCap) }
 
     private typealias L = ContextMenuLayout
 
@@ -235,12 +239,7 @@ private struct MenuRow: View {
         .frame(height: stage.px(L.rowHeight))
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(RoundedRectangle(cornerRadius: stage.px(L.rowRadius)))
-        .opacity(appeared ? 1 : 0)
-        .offset(y: appeared || reducedMotion ? 0 : stage.px(Motion.rise))
-        .onAppear {
-            let delay = Motion.menuDelay + Double(min(index + 1, Motion.staggerCap)) * Motion.staggerRow
-            withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: Motion.rowIn / 1000).delay(delay / 1000)) { appeared = true }
-        }
+        .staggerEntrance(index: Self.place(index), base: Motion.menuDelay)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
     }
