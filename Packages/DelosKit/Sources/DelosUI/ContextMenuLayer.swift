@@ -86,15 +86,7 @@ private struct CardGlass: View {
 
     var body: some View {
         let shape = MenuCardShape(side: side, caret: stage.px(caret), unit: stage.px(1))
-        let caretShape = MenuCardShape(side: side, caret: stage.px(caret), unit: stage.px(1), part: .caret)
-        // The glass only in the rounded body: glass in any other outline (the body with its caret) has the system work out
-        // that outline first, which held the first opening of a menu 300-480 ms without a frame on a fresh iPad simulator.
-        // The caret, drawn over the glass's edge, takes the glass's blur and tint
-        ZStack {
-            GlassShape(MenuCardShape(side: side, caret: stage.px(caret), unit: stage.px(1), part: .body), tint: colors.surface3, role: .panel)
-            caretShape.fill(.regularMaterial)
-            caretShape.fill(colors.surface3.opacity(colors.surface3.alpha * 0.9).color)
-        }
+        CaretCardGlass(shape: shape, tint: colors.surface3)
             .overlay {
                 LinearGradient(stops: [
                     .init(color: .white.opacity(0.13), location: 0),
@@ -125,25 +117,18 @@ private struct CardGlass: View {
 /// The card's outline as one shape: a rounded rectangle inside the rect, ``ContextMenuLayout/caretDepth`` in from each
 /// side (the caret's room), with the shared ``CardCaret`` on [side] centered at [caret] points along that edge; or only
 /// its rounded body or its caret ([part]).
-struct MenuCardShape: Shape {
-    enum Part { case whole, body, caret }
-
+struct MenuCardShape: CaretCard {
     let side: CaretSide
     let caret: CGFloat
     /// Points per stage pixel.
     let unit: CGFloat
-    var part = Part.whole
+    var part = CardPart.whole
 
     func path(in rect: CGRect) -> Path {
         let d = ContextMenuLayout.caretDepth * unit
         let card = rect.insetBy(dx: d, dy: d)
         let center = side == .left || side == .right ? card.minY + caret : card.minX + caret
-        let radius = ContextMenuLayout.corner * unit
-        switch part {
-        case .whole: return CardCaret.outline(card: card, radius: radius, side: side, center: center, unit: unit)
-        case .body: return CardCaret.body(card: card, radius: radius)
-        case .caret: return CardCaret.tip(side: side, center: center, card: card, unit: unit)
-        }
+        return CardCaret.path(part, card: card, radius: ContextMenuLayout.corner * unit, side: side, center: center, unit: unit)
     }
 }
 

@@ -58,4 +58,32 @@ enum CardCaret {
         guard side != .none else { return rounded }
         return rounded.union(tip(side: side, center: center, card: card, unit: unit))
     }
+
+    /// [part] of the card with its caret: the whole ``outline(card:radius:side:center:unit:)``, its rounded ``body(card:radius:)``
+    /// or only its ``tip(side:center:card:unit:)``.
+    static func path(_ part: CardPart, card: CGRect, radius: CGFloat, side: CaretSide, center: CGFloat, unit: CGFloat) -> Path {
+        switch part {
+        case .whole: outline(card: card, radius: radius, side: side, center: center, unit: unit)
+        case .body: body(card: card, radius: radius)
+        case .caret: tip(side: side, center: center, card: card, unit: unit)
+        }
+    }
+}
+
+/// Which part of a card with a caret a shape draws (``CaretCard``).
+enum CardPart { case whole, body, caret }
+
+/// The outline of a card with the shared caret, which can also draw only its rounded body or only its caret: Liquid Glass goes
+/// in the body, the caret is drawn over the glass's edge (``CaretCardGlass``).
+protocol CaretCard: Shape {
+    var part: CardPart { get set }
+}
+
+extension CaretCard {
+    /// The same card drawing only [part].
+    func only(_ part: CardPart) -> Self {
+        var shape = self
+        shape.part = part
+        return shape
+    }
 }

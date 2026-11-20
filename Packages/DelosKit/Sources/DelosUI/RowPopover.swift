@@ -4,11 +4,11 @@ import SwiftUI
 import UIKit
 #endif
 
-/// The card of a popover: Liquid Glass in the card's outline with its caret (the stream menu's material: the glass panel role), a
-/// pale sheen from the top, a 1 px rim and the soft shadow (`0 40px 90px -20px`). The stream menu's popover and the popovers of the
-/// settings rows share it. [blurred]: a card over the rows of a list also blurs what is behind it where the glass does not (before
-/// iOS 26, a material), and dims it a little so its values keep their contrast.
-struct PopoverGlass<S: Shape>: View {
+/// The card of a popover: Liquid Glass in the card's rounded body, its caret in the glass's blur and tint (``CaretCardGlass``; the
+/// stream menu's material: the glass panel role), a pale sheen from the top, a 1 px rim and the soft shadow (`0 40px 90px -20px`).
+/// The stream menu's popover and the popovers of the settings rows share it. [blurred]: a card over the rows of a list also blurs
+/// what is behind it where the glass does not (before iOS 26, a material), and dims it a little so its values keep their contrast.
+struct PopoverGlass<S: CaretCard>: View {
     let shape: S
     var blurred = false
     @Environment(\.delosColors) private var colors
@@ -24,7 +24,7 @@ struct PopoverGlass<S: Shape>: View {
                     shape.fill(colors.bg2.opacity(0.35).color)
                 }
             }
-            GlassShape(shape, tint: colors.surface3, role: .panel)
+            CaretCardGlass(shape: shape, tint: colors.surface3)
         }
         .overlay {
             LinearGradient(stops: [
@@ -40,13 +40,14 @@ struct PopoverGlass<S: Shape>: View {
 }
 
 /// The card of a settings row's popover and its caret as ONE outline: the shared ``CardCaret`` on the card's left edge, pointing left
-/// at [caretY] (from the top), or, [flipped], on the right edge pointing right. The shape's rect holds the caret in its first
-/// (flipped: last) ``CardCaret/depth`` stage pixels.
-struct RowCardShape: Shape {
+/// at [caretY] (from the top), or, [flipped], on the right edge pointing right; or only its rounded body or its caret ([part]). The
+/// shape's rect holds the caret in its first (flipped: last) ``CardCaret/depth`` stage pixels.
+struct RowCardShape: CaretCard {
     var caretY: CGFloat
     var flipped = false
     /// Points per stage pixel.
     let unit: CGFloat
+    var part = CardPart.whole
 
     var animatableData: CGFloat {
         get { caretY }
@@ -56,8 +57,8 @@ struct RowCardShape: Shape {
     func path(in rect: CGRect) -> Path {
         let d = CardCaret.depth * unit
         let card = CGRect(x: flipped ? 0 : d, y: 0, width: max(rect.width - d, 0), height: rect.height)
-        return CardCaret.outline(
-            card: card, radius: StreamMenuLayout.popoverRadius * unit, side: flipped ? .right : .left, center: caretY, unit: unit)
+        return CardCaret.path(
+            part, card: card, radius: StreamMenuLayout.popoverRadius * unit, side: flipped ? .right : .left, center: caretY, unit: unit)
     }
 }
 

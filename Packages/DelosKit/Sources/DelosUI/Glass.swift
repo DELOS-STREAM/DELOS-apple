@@ -78,3 +78,32 @@ struct GlassShape<S: Shape>: View {
         #endif
     }
 }
+
+/// The panel glass of a card with a caret (``CaretCard``): Liquid Glass in the card's rounded body only, the caret drawn over the
+/// glass's edge in its blur and tint (over the stream's video: a thin blur in the scrim, as the clear glass there). Glass in any
+/// other outline (the body with its caret) has the system work out that outline first, which held the first opening of a context
+/// menu 300-480 ms without a frame on a fresh iPad simulator. Before 26 the tint fills the whole outline, as ``GlassShape`` does.
+struct CaretCardGlass<S: CaretCard>: View {
+    let shape: S
+    let tint: RGBA
+    @Environment(\.glassOverMedia) private var overMedia
+    @Environment(\.delosColors) private var colors
+
+    var body: some View {
+        if #available(iOS 26, tvOS 26, macOS 26, *) {
+            let caret = shape.only(.caret)
+            ZStack {
+                GlassShape(shape.only(.body), tint: tint, role: .panel)
+                if overMedia {
+                    caret.fill(.ultraThinMaterial)
+                    caret.fill(colors.scrim.opacity(tint.alpha * 0.85).color)
+                } else {
+                    caret.fill(.regularMaterial)
+                    caret.fill(tint.opacity(tint.alpha * 0.9).color)
+                }
+            }
+        } else {
+            GlassShape(shape, tint: tint, role: .panel)
+        }
+    }
+}

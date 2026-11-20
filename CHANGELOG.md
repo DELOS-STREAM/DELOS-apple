@@ -408,6 +408,12 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- The first opening of a settings row's popover and of the stream menu's popover no longer holds the screen without a
+  frame, as the context menu's no longer does: Liquid Glass is drawn in the card's rounded body only and the caret over
+  its edge in the glass's blur and tint (one `CaretCardGlass` for all three), because glass in the outline of the body
+  with its caret has the system work it out first. On a fresh iPad simulator the first popover of a settings row held
+  283 and 333 ms before, 95 and 87 ms after. The stream menu's popover shares the glass and was not measured (the demo
+  has no stream). Not verified on a device.
 - The side menu's rows enter as on Android: top-down after the header (they rose bottom-up, in the order SwiftUI made
   them appear), and only their icon, label and value rise; the row keeps its place, so the focus ring no longer sits
   18 px low until the row has landed and then jumps up: it fades in together with its row's content, on the row's delay
