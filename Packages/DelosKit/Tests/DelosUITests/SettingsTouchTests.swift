@@ -56,6 +56,23 @@ import Testing
         #expect(RowPopupKind.of(row(.action(label: nil))) == nil)
         #expect(RowPopupKind.of(row(.info("x"))) == nil)
     }
+
+    @Test func optionsOpensThePopoverATapOpensAndACustomAppSettingsMenu() {
+        func row(_ value: SettingValue, enabled: Bool = true) -> SettingRow {
+            SettingRow(id: "r", tab: .stream, section: "s", icon: "", label: "L", value: value, help: "", enabled: enabled)
+        }
+        #expect(RowOptions.of(row(choice)) == .popup(.options))
+        #expect(RowOptions.of(row(slider)) == .popup(.slider))
+        #expect(RowOptions.of(row(toggle)) == .none)
+        #expect(RowOptions.of(nil) == .none)
+        #expect(RowOptions.of(row(choice, enabled: false)) == .refuse)
+        // A custom app setting: its choice list (which ends with the reset), else its reset menu
+        #expect(RowOptions.of(row(choice), custom: true) == .popup(.options))
+        #expect(RowOptions.of(row(slider), custom: true) == .menu)
+        #expect(RowOptions.of(row(toggle), custom: true) == .menu)
+        #expect(RowOptions.of(row(choice, enabled: false), custom: true) == .menu)
+        #expect(!RowOptions.refuse.opens && !RowOptions.none.opens && RowOptions.menu.opens)
+    }
 }
 
 @Suite struct SliderSpecTests {

@@ -101,7 +101,8 @@ struct GameSettingsScreen: View {
             if let popup, let row = rows.first(where: { $0.id == popup.id }) {
                 RowPopover(
                     row: row, kind: popup.kind, focus: popup.focus, anchor: rowFrames[row.id] ?? .zero, slider: popup.slider,
-                    onPick: { index in pick(row.id, index) }, onClose: closePopup)
+                    onPick: { index in pick(row.id, index) },
+                    onReset: model.isCustom(row.id) ? { resetFromPopup(row.id) } : nil, onClose: closePopup)
             }
         }
         .coordinateSpace(.named(Self.space))
@@ -114,7 +115,8 @@ struct GameSettingsScreen: View {
         .onDisappear { navigator.releaseInput(focus) }
         .onChange(of: HintKey(focus: focus.focused, custom: model.overrides.count, popup: popup?.kind), initial: true) {
             navigator.setHints(ScreenHints(
-                adjustable: ShellHints.adjustable(focusedRow), resetsRow: focusedRow.map { model.isCustom($0.id) } ?? false,
+                adjustable: ShellHints.adjustable(focusedRow),
+                rowOptions: RowOptions.of(focusedRow, custom: focusedRow.map { model.isCustom($0.id) } ?? false).opens,
                 rowPopup: popup?.kind), from: focus)
         }
         .onChange(of: focus.focused) { _, now in
@@ -212,9 +214,12 @@ struct GameSettingsScreen: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// The right-menu / long-press menu of a custom row (`ContextMenu` with "Reset to profile value").
+    /// The right-menu / long-press menu of a custom row (`ContextMenu` with "Reset to profile value"); a slider's also opens its
+    /// popover, which Options opens on a row that is not custom.
     private func resetMenu(_ row: SettingRow) -> ContextMenu {
-        ContextMenu(title: row.label, items: [
+        let adjust = RowPopupKind.of(row) == .slider && row.enabled
+            ? [MenuItem(icon: Symbols.tune, label: L("shell_hint_adjust")) { openPopup(row) }] : []
+        return ContextMenu(title: row.label, items: adjust + [
             MenuItem(icon: Symbols.reset, label: L("settings_game_reset_menu")) { resetRow(row.id) },
         ])
     }
@@ -242,10 +247,18 @@ struct GameSettingsScreen: View {
             // A held Up stops at the first row; only a new press there goes on to Reset all
             return navigator.commandRepeat > 0 && focusedRow?.id == rows.first?.id
         case .options:
-            // X resets the focused custom row
-            guard let row = focusedRow, model.isCustom(row.id) else { return false }
-            actions.feedback?.play(.select)
-            resetRow(row.id)
+            // Options opens the popover a second tap opens (a custom choice's list ends with its reset); a custom slider or
+            // a custom row without a popover leaves it to the router, which opens the row's menu
+            guard let row = focusedRow else { return false }
+            switch RowOptions.of(row, custom: model.isCustom(row.id)) {
+            case .popup:
+                actions.feedback?.play(.open)
+                openPopup(row)
+            case .refuse:
+                actions.feedback?.play(.error)
+            case .menu, .none:
+                return false
+            }
             return true
         case .down, .accept, .back, .menu, .toastAction:
             return false
@@ -293,6 +306,17 @@ struct GameSettingsScreen: View {
         actions.feedback?.play(.select)
         model.pick(id, option: index)
         closePopup()
+    }
+
+    private func openPopup(_ row: SettingRow) {
+        popup = RowPopupState.open(row) { value in model.slide(row.id, to: value) }
+    }
+
+    /// "Reset to profile value", the last item of a custom row's list.
+    private func resetFromPopup(_ id: String) {
+        actions.feedback?.play(.select)
+        closePopup()
+        resetRow(id)
     }
 
     private func closePopup() {

@@ -52,6 +52,34 @@ enum RowPopupKind: Equatable {
     }
 }
 
+/// What the Options command (the right menu button, X) does on the focused settings row: the same popover a second tap opens,
+/// so a controller can see every value at once. In the app settings a custom row also resets: its choice list gets "Reset to
+/// profile value" as the last item, while a custom slider (whose popover has no list) or a row without a popover opens its
+/// context menu.
+enum RowOptions: Equatable {
+    case popup(RowPopupKind)
+    case menu
+    /// The row has a popover but is unavailable: the error sound.
+    case refuse
+    case none
+
+    /// [custom]: the row overrides the profile's value (app settings only).
+    static func of(_ row: SettingRow?, custom: Bool = false) -> RowOptions {
+        guard let row else { return .none }
+        let kind = RowPopupKind.of(row)
+        guard let kind, row.enabled else { return custom ? .menu : kind == nil ? .none : .refuse }
+        return kind == .slider && custom ? .menu : .popup(kind)
+    }
+
+    /// Options opens something here (its hint is shown).
+    var opens: Bool {
+        switch self {
+        case .popup, .menu: true
+        case .refuse, .none: false
+        }
+    }
+}
+
 /// A slider row's numbers in its own unit (the bitrate in kbit/s); [divisor] makes them readable (Mbit/s).
 struct SliderSpec: Equatable {
     var value: Int

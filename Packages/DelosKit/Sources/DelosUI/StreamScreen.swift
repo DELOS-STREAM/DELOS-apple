@@ -336,6 +336,13 @@ struct StreamScreen: View {
             } else if menu.focus.handle(command) {
                 feedback?.play(.move)
             }
+        case .options:
+            // The focused choice or slider row's popup, as a second tap opens it
+            switch controller.openFocusedPicker() {
+            case true?: feedback?.play(.open)
+            case false?: feedback?.play(.error)
+            case nil: break
+            }
         default:
             break
         }

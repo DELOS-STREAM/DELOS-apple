@@ -192,6 +192,16 @@ private func streaming(
         #expect(controller.brightnessPercent == 100)
     }
 
+    @Test func optionsOpensTheFocusedSlidersPopupAndNothingOnAnActionRow() async {
+        let (controller, _) = await streaming(brightness: FakeBrightness())
+        controller.openMenu()
+        controller.openMenuPage(.more)
+        #expect(controller.openFocusedPicker() == nil && controller.picker == nil)
+        controller.openMenuPage(.brightness)
+        #expect(controller.openFocusedPicker() == true)
+        #expect(controller.picker?.kind == .slider)
+    }
+
     @Test func leftAndRightAdjustNothingOnAnActionRow() async {
         let (controller, _) = await streaming()
         controller.openMenu()

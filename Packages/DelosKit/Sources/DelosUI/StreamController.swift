@@ -591,6 +591,21 @@ final class StreamController {
         picker = RowPopupState.open(setting) { [weak self] value in self?.setRow(id, value) }
     }
 
+    /// Options on the focused row of the open page: the popup a second tap opens, so a controller sees every value at once.
+    /// nil: the row has no popup; false: it has one but is unavailable.
+    func openFocusedPicker() -> Bool? {
+        let focusedID = menu.focus.focused?.base as? String
+        guard menuOpen, case let .rows(rows) = menuContent(menu.page),
+              let row = rows.first(where: { StreamMenuState.rowID($0.id) == focusedID }), row.settingRow != nil else { return nil }
+        switch row.tap(wasFocused: true) {
+        case .popup:
+            openPicker(row.id)
+            return true
+        case .refuse: return false
+        case .focus, .activate: return nil
+        }
+    }
+
     func closePicker() {
         picker = nil
     }
