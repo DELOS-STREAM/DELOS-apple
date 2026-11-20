@@ -195,8 +195,8 @@ final class ArtworkModel {
 /// cover, background, logo, switched with L1 and R1) over a toolbar (the matched SteamGridDB game, search for another name
 /// with X, the filter sheet with Y), the active filters as removable chips, the grid of every SteamGridDB image to choose
 /// from (the first choice being the PC's artwork, or the name instead of a logo) and a strip about the focused image. A or
-/// a tap uses the image; the image in use has the accent border. Animated images are marked; their tiles show the first
-/// frame (the animation does not play).
+/// a tap uses the image; the image in use has the accent border. Animated images are marked, and their tiles play while on
+/// screen (``ArtworkTileAnimation``).
 struct ArtworkScreen: View {
     let hostID: String
     let app: HostApp
