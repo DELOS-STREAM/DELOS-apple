@@ -53,6 +53,14 @@ public enum Screen: Hashable, Sendable {
         }
     }
 
+    /// The dashboard is a visual root even when its connection left an entry on the navigation stack.
+    /// An in-screen page or search uses the universal back button to close its capture instead.
+    func showsTopBarBack(canGoBack: Bool, capturingBack: Bool) -> Bool {
+        if capturingBack { return true }
+        if case .home = self { return false }
+        return canGoBack
+    }
+
     /// Settings, Profile and Devices take each other's place on the stack ([Navigator.openFromNavigation]).
     var replacesOnNavigation: Bool { self == .settings || self == .profile || self == .devices }
 

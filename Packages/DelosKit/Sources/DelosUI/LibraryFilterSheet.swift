@@ -77,7 +77,7 @@ struct LibraryFilterSheet: View {
             ScrollViewReader { proxy in
                 ScrollView(.vertical, showsIndicators: false) {
                     ChipGlideHost {
-                        VStack(alignment: .leading, spacing: stage.px(34 * k)) {
+                        VStack(alignment: .leading, spacing: stage.px(LibraryFilterLayout.sectionGap * k)) {
                             section(0, Symbols.genreUnknown, L("filters_section_genre")) {
                                 chip(L("filters_all"), selected: filters.genres.isEmpty, id: LibraryFilterIDs.genre(nil), count: games.count) {
                                     change { $0.genres = [] }
@@ -226,10 +226,10 @@ struct LibraryFilterSheet: View {
 
     /// An icon on an accent disc and the section's name, then its chips in one row that scrolls sideways.
     private func section<Chips: View>(_ index: Int, _ icon: String, _ title: String, @ViewBuilder chips: @escaping () -> Chips) -> some View {
-        VStack(alignment: .leading, spacing: stage.px(22 * k)) {
+        VStack(alignment: .leading, spacing: stage.px(LibraryFilterLayout.headingGap * k)) {
             HStack(spacing: stage.px(18)) {
                 SymbolView(symbol: icon, size: 32, color: colors.accent2, filled: true)
-                    .frame(width: stage.px(60 * k), height: stage.px(60 * k))
+                    .frame(width: stage.px(LibraryFilterLayout.headingHeight * k), height: stage.px(LibraryFilterLayout.headingHeight * k))
                     .background(Circle().fill(colors.accent.opacity(0.18).color))
                 Text(title)
                     .font(DelosFonts.unbounded(stage.tpx(29)))
@@ -242,7 +242,7 @@ struct LibraryFilterSheet: View {
                 HStack(spacing: stage.px(LibraryFilterLayout.chipGap)) { chips() }
                     .fixedSize(horizontal: true, vertical: false)
                     .padding(.horizontal, stage.px(12))
-                    .padding(.vertical, stage.px(12))
+                    .padding(.vertical, stage.px(LibraryFilterLayout.chipPadding))
             }
             .scrollClipDisabled()
         }
@@ -266,6 +266,8 @@ enum LibraryFilterLayout {
     /// Between two chips of a row: the gliding ring (``GlideLook/chip``, 5 % growth, 3 px ring 3 px out, not scaled)
     /// reaches 24.5 px beyond a chip as wide as ``chipMaxWidth``.
     static let chipGap = FocusSpacing.gap(reach: GlideLook.chip.reach(width: chipMaxWidth)).rounded(.up)
+    /// Vertical chip clearance also includes the next section's heading, its gap and both rows' padding.
+    static let sectionGap = 34.0, headingHeight = 60.0, headingGap = 22.0, chipPadding = 12.0
 }
 
 /// A selectable chip (`FilterChip`): filled with the accent while chosen, the flat surface tint otherwise, with its icon and

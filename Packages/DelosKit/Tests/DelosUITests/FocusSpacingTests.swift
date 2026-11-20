@@ -1,4 +1,7 @@
 import CoreGraphics
+#if os(macOS)
+import SwiftUI
+#endif
 import Testing
 @testable import DelosUI
 
@@ -29,7 +32,6 @@ import Testing
         // Similar games' covers are 260 px wide (`SimilarCover.width`)
         #expect(O.similarGap >= gap(260, scale: O.similarScale, outset: 0, ring: O.ring, scales: false))
         #expect(O.linkGap >= gap(O.linkMaxWidth, scale: O.linkScale, outset: 0, ring: O.ring, scales: false))
-        #expect(O.linkLineGap >= gap(O.linkHeight, scale: O.linkScale, outset: 0, ring: O.ring, scales: false))
         // Play's sweep band and App settings' ring are inside the pill's scale
         #expect(O.buttonGap >= gap(O.playMaxWidth, scale: O.buttonScale, outset: O.playReachOut, ring: 0, scales: true))
         #expect(O.buttonGap >= gap(O.settingsMaxWidth, scale: O.buttonScale, outset: O.buttonRingOut, ring: 0, scales: true))
@@ -97,6 +99,47 @@ import Testing
         // The PC circles' gliding ring is around the grown circle
         #expect(CircleRowLayout.gap >= gap(220, scale: CircleRowLayout.focusScale, outset: CircleRowLayout.ringGap, ring: CircleRowLayout.ring, scales: false))
     }
+
+    @Test func wrappedRowsKeepTheirRingsClearVertically() {
+        let O = OverviewSpacing.self
+        #expect(O.linkGap >= gap(O.linkHeight, scale: O.linkScale, outset: 0, ring: O.ring, scales: false))
+        // Compact toolbar pills are 52 px high; filter chips are 44 px, or 56 px with library counts.
+        #expect(GlideLook.pillGap >= least(GlideLook.pill.reach(width: 52)))
+        #expect(GlideLook.chipGap >= least(GlideLook.chip.reach(width: 44)))
+        #expect(LibraryFilterLayout.chipGap >= least(GlideLook.chip.reach(width: 56)))
+        for size in [CGSize(width: 1920, height: 1080), CGSize(width: 1080, height: 1920), CGSize(width: 430, height: 172)] {
+            let L = LibraryFilterLayout.self
+            let scale = Stage(size: size).compactScale
+            let clearance = (L.sectionGap + L.headingHeight + L.headingGap) * scale + 2 * L.chipPadding
+            #expect(clearance >= L.chipGap)
+            #expect(clearance >= least(GlideLook.chip.reach(width: 56)))
+        }
+        // Tags and age badges are labels inside a focusable group, not independently growing controls.
+        #expect(O.tagGap >= least(0))
+        #expect(O.badgeGap >= least(0))
+    }
+
+    #if os(macOS)
+    @MainActor @Test func wrappedLinkRowsKeepTheFullGroupGap() async throws {
+        let focus = FocusModel()
+        let host = ScreenHost(size: CGSize(width: 600, height: 500)) {
+            WrapLayout(spacing: OverviewSpacing.linkGap) {
+                ForEach(0..<2) { index in
+                    FocusItem(id: index, model: focus, action: {}) { _ in
+                        Color.clear.frame(width: 400, height: OverviewSpacing.linkHeight)
+                    }
+                }
+            }
+            .frame(width: 500, alignment: .leading)
+        }
+        let frames = await host.settle(focus, atLeast: 2)
+        let first = try #require(frames[0])
+        let second = try #require(frames[1])
+        let clearance = second.minY - first.maxY
+        #expect(abs(clearance - OverviewSpacing.linkGap) < 0.5)
+        #expect(clearance >= gap(OverviewSpacing.linkHeight, scale: OverviewSpacing.linkScale, outset: 0, ring: OverviewSpacing.ring, scales: false))
+    }
+    #endif
 
     @Test func denseKeyGridsKeepTheClearSpace() {
         // No lift, the ring inside the key

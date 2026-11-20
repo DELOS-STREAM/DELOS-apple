@@ -237,12 +237,15 @@ public struct DelosRoot: View {
                         // Settings' search is a screen of its own on Android (`Screen.SettingsSearch`): no navigation, no PC, and
                         // the back arrow closes the search the way B does
                         let search = navigator.screenHints.settingsSearch
+                        let capturesBack = search || navigator.screenHints.overview
                         TopBar(
                             brand: navigator.current != .start, navigation: search ? nil : navigation(entry),
                             pc: navigator.current.showsNavigation && !search ? connectedPC : nil, wifi: device.wifi, battery: device.battery,
                             clock: appearance.clock,
-                            onBack: search ? { _ = navigator.commandCapture?(.back) }
-                                : navigator.canGoBack ? { feedback?.play(.back); go { navigator.back() } } : nil)
+                            onBack: navigator.current.showsTopBarBack(canGoBack: navigator.canGoBack, capturingBack: capturesBack) ? {
+                                if capturesBack { _ = navigator.commandCapture?(.back) }
+                                else { feedback?.play(.back); go { navigator.back() } }
+                            } : nil)
                             // The interface scale zooms the whole bar
                             .modifier(ZoomedBar())
                             .modifier(LayerBackdropBlur(active: librarySheetOpen))

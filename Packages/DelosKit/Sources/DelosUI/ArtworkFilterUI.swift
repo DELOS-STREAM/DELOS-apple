@@ -417,7 +417,7 @@ struct ArtworkFilterSheet: View {
         let kind = state.tab.kind
         let filters = state.filters
         let shape = RoundedRectangle(cornerRadius: stage.px(40), style: .continuous)
-        VStack(alignment: .leading, spacing: stage.px(8)) {
+        VStack(alignment: .leading, spacing: stage.px(GlideLook.pillGap)) {
             HStack(spacing: stage.px(24)) {
                 Text(L("filters_art_title"))
                     .font(DelosFonts.unbounded(stage.tpx(34)))
@@ -449,7 +449,8 @@ struct ArtworkFilterSheet: View {
             }
             .padding(.bottom, stage.px(8))
             ChipGlideHost {
-                VStack(alignment: .leading, spacing: stage.px(6)) {
+                // Each divider splits one full chip gap between the neighbouring rows.
+                VStack(alignment: .leading, spacing: stage.px(GlideLook.chipGap / 2)) {
                     if ArtFilterRules.hasType(kind) {
                         row(icon: Symbols.movie, title: L("filters_art_row_type")) {
                             ForEach(ArtType.allCases, id: \.self) { type in

@@ -188,9 +188,6 @@ struct GameOverview: View {
                            : .timingCurve(0.65, 0, 0.35, 1, duration: OverviewMotion.pageSink / 1000)) {
                     $0.offset(y: session.shown || reduced ? 0 : stage.px(OverviewMotion.pageRise))
                 }
-            if kind == .touch || kind == .pointer {
-                backButton
-            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task(id: session.shown) {
@@ -341,7 +338,7 @@ struct GameOverview: View {
                     // The tags pop one after another with their row (its Rise start, then 36 ms apart)
                     let genreTags = Array(genres.prefix(2)), themeTags = Array(themes.prefix(2))
                     let tagStart = OverviewMotion.headerDelay + OverviewMotion.headerStagger
-                    WrapLayout(spacing: stage.px(10), lineSpacing: stage.px(10)) {
+                    WrapLayout(spacing: stage.px(OverviewSpacing.tagGap)) {
                         ForEach(Array(genreTags.enumerated()), id: \.element.id) { index, genre in
                             OverviewTag(icon: TagLook.genreIcon(genre.id), label: TagLook.genreName(genre), genre: true)
                                 .modifier(ChipPop(active: session.shown, delay: tagStart + Double(index) * OverviewMotion.headerStagger))
@@ -568,11 +565,11 @@ struct GameOverview: View {
                         Text(groupTitle(group.kind).uppercased()).font(DelosFonts.figtree(stage.tpx(15), .bold)).tracking(stage.px(15 * 0.16))
                             .foregroundStyle(colors.text3.color)
                         if group.kind == .ageRatings {
-                            WrapLayout(spacing: stage.px(28), lineSpacing: stage.px(12)) {
+                            WrapLayout(spacing: stage.px(OverviewSpacing.badgeGap)) {
                                 ForEach(content.ageRatings, id: \.organization) { AgeBadge(rating: $0) }
                             }
                         } else {
-                            WrapLayout(spacing: stage.px(10), lineSpacing: stage.px(10)) {
+                            WrapLayout(spacing: stage.px(OverviewSpacing.tagGap)) {
                                 ForEach(group.values, id: \.self) { value in
                                     OverviewTag(icon: groupIcon(group.kind, value, candidate: candidate), label: value, genre: group.kind == .genres, onCard: true)
                                 }
@@ -667,7 +664,7 @@ struct GameOverview: View {
     }
 
     private func links(_ content: OverviewContent) -> some View {
-        WrapLayout(spacing: stage.px(OverviewSpacing.linkGap), lineSpacing: stage.px(OverviewSpacing.linkLineGap)) {
+        WrapLayout(spacing: stage.px(OverviewSpacing.linkGap)) {
             ForEach(Array(content.links.enumerated()), id: \.element.id) { index, link in
                 OverviewFocusable(id: OverviewNavigation.link(index), focus: session.focus, corner: 32, pad: 0, scale: OverviewSpacing.linkScale) {
                     HStack(spacing: stage.px(14)) {
@@ -747,18 +744,6 @@ struct GameOverview: View {
         }
     }
 
-    private var backButton: some View {
-        Button(action: onClose) {
-            SymbolView(symbol: Symbols.arrowBack, size: 34, color: colors.text)
-                .frame(width: stage.px(72), height: stage.px(72))
-                .background(GlassShape(Circle(), tint: colors.surface))
-        }
-        .buttonStyle(.plain)
-        .padding(.leading, stage.px(56 + stage.safe.leading))
-        .padding(.top, stage.px(130))
-        .animation(.easeOut(duration: Motion.exit / 1000)) { $0.opacity(session.shown ? 1 : 0) }
-        .accessibilityLabel(L("shell_hint_back"))
-    }
 }
 
 /// A glass card of the overview (`.a-card.glass`): real blur behind it (Liquid Glass, or a material before it).

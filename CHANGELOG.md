@@ -468,6 +468,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- The dashboard shows no back arrow, and game info keeps only the top bar's back button (the second one under it is gone).
+- Wrapped rows of game info's tags, badges and links, and the filter rows, keep the same focus gap between rows as
+  between items.
+
 - Phase lock no longer freezes a stream a few seconds in: a refresh that waited for its frame released its drawable
   inside the pipeline's state lock while Core Animation's presentation callback waited for that lock, and the system
   ended the app.
