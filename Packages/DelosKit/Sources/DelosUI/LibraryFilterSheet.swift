@@ -243,8 +243,8 @@ struct LibraryFilterSheet: View {
     }
 }
 
-/// A selectable chip (`FilterChip`): filled with the accent while chosen, glass otherwise, with its icon and the number of
-/// games it holds; the gliding ring marks the cursor.
+/// A selectable chip (`FilterChip`): filled with the accent while chosen, the flat surface tint otherwise, with its icon and
+/// the number of games it holds; the gliding ring marks the cursor.
 struct LibraryFilterChip: View {
     let label: String
     let selected: Bool
@@ -276,7 +276,9 @@ struct LibraryFilterChip: View {
             if selected {
                 Capsule().fill(colors.accent.color)
             } else {
-                GlassShape(Capsule(), tint: colors.surface).overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
+                // Android's `glass(surface)` is the flat tint inside an overlay (no backdrop there): a darker pill than the
+                // panel with a faint 1 px line. Liquid glass would lift it brighter than the panel and rim it with light
+                Capsule().fill(colors.surface.color).overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
             }
         }
         .modifier(ChipFocus(focused: focused))
