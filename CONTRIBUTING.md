@@ -24,6 +24,8 @@ the code (behaviour that needs a device), say so in the commit body with a line 
 |---|---|
 | `python3 tools/docs/check_links.py` | Relative links and anchors of the Markdown files |
 | `python3 -m unittest discover -s tools/docs` | The tests of the link check |
+| `python3 tools/ui/check_glass.py` | Every translucent surface of the interface is Liquid Glass (docs/ARCHITECTURE.md, "Glass") |
+| `python3 -m unittest discover -s tools/ui` | The tests of the glass check |
 | `sh tools/hooks/test-commit-msg.sh` | The tests of the commit message hook |
 
 ## Commit messages and branch names

@@ -332,6 +332,13 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- Every semi-transparent surface is Liquid Glass: the pills and badges over covers and artwork tiles, the Artwork filter
+  strip, the overview's Read the story and link pills, its tags and Game info chip, the settings search keys, the reset
+  pill and tab badges of the settings, the stream menu buttons' recording card and the poor-connection notice now blur
+  what is behind them. `tools/ui/check_glass.py`, run by `tools/test.sh`, fails on a translucent fill without glass that
+  its allowlist does not explain.
+- The offer to report a problem sits in the middle of the start and home screens, a fifth wider (936 px) with more room
+  inside.
 - The changelog and the README describe DELOS for Apple on its own; `tools/docs/check_platform.py`, run by
   `tools/test.sh`, fails when either names another platform.
 - The library filter takes several values in every row (for example two genres, a theme and Native HDR): a chip toggles

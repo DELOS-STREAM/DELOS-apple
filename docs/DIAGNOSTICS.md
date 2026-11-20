@@ -114,8 +114,9 @@ Detection (`ProblemDetector`, `DelosData/DiagnosticsProblems.swift`), at the sta
 
 The ledger (`diag_problems_*` keys in the standard defaults) is written at detection, so a problem is never offered twice.
 
-**The card** (`DelosUI/ProblemOfferCard.swift`): top right of the start and home screens, only with no layer, side menu or portal
-up. It shows what happened, the summary and a note on what Report does. Focus starts on **Report this problem** (A); left and right
+**The card** (`DelosUI/ProblemOfferCard.swift`): a Liquid Glass card, 936 stage px wide (48 px from the edges on a compact stage),
+in the middle of the start and home screens, only with no layer, side menu or portal up. It shows what happened, the summary and a
+note on what Report does. Focus starts on **Report this problem** (A, with the GitHub mark, `Symbols.reportIssue`); left and right
 move to **Dismiss**; B dismisses; with the report service a second row saves the log instead. While it shows it takes the
 controller's commands (the menu button still opens the side menu); touch reaches the screen under it. On Apple TV Report is offered
 only with the report service.

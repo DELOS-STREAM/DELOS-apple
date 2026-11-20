@@ -18,7 +18,7 @@ struct StreamConnectionNotice: View {
             .font(DelosFonts.figtree(stage.tpx(40)))
             .foregroundStyle(.white)
             .multilineTextAlignment(.trailing)
-            .background(Color.black.opacity(0.5))
+            .background(GlassShape(Rectangle(), tint: RGBA(red: 0, green: 0, blue: 0, alpha: 0.5), role: .panel, share: 1))
             .padding(.top, stage.px(22 + stage.safe.top))
             .padding(.trailing, stage.px(22 + stage.safe.trailing))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)

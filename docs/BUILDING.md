@@ -65,7 +65,7 @@ theme, HDR, length), and its own profile "Player", all in a separate defaults su
 client identity, none of the app's own data. `-DelosScreen <name>` then opens `start` (default), `home`, `devices`, `profile`,
 `pair`, `create`, `artwork`, `appsettings` or `settings:<tab>`; `-DelosDemoApps <n>` sets the number of games (0: an empty library);
 `-DelosDemoInput controller|touch|keyboard` sets the kind of input the hints and the back arrow start with (`controller` also
-counts a pad as connected, which the simulator lacks);
+counts a pad as connected, which the simulator lacks); `-DelosDemoProblem YES` shows the offer to report a crash of the last run;
 `-DelosDemoCommands "w3 menu w1 down accept"` routes commands through the real router like a controller would (`up down left right
 accept back menu options toast toast-undo prevtab nexttab`, `wN` waits N seconds): `menu` opens the side menu, `options` a game's menu,
 `toast` (Y) the filter sheet. `swipe-open`, `swipe-peek` and `swipe-close` drag the side menu as a finger would through the

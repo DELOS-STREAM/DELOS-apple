@@ -933,7 +933,7 @@ struct ArtworkTileView: View, Equatable {
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, stage.px(8))
-                    .background(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0.65))
+                    .background(GlassShape(Rectangle(), tint: .overArt(0.65), role: .panel, share: 1))
                     .frame(maxHeight: .infinity, alignment: .bottom)
             }
             if loading {
@@ -955,7 +955,7 @@ struct ArtworkTileView: View, Equatable {
                 .fixedSize()
                 .padding(.horizontal, stage.px(tab == .cover ? 6 : 12))
                 .padding(.vertical, stage.px(4))
-                .background(Capsule().fill(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0xB3 / 255)))
+                .background(GlassShape(Capsule(), tint: .overArt(0xB3 / 255), role: .panel, share: 1))
                 .padding(stage.px(12))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }

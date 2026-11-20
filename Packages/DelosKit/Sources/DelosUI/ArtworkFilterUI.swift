@@ -291,7 +291,7 @@ struct ArtStripChip: View {
         }
         .padding(.horizontal, stage.px(20))
         .frame(height: stage.px(44))
-        .background { Capsule().fill(colors.surface2.color).overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1))) }
+        .background { GlassShape(Capsule(), tint: colors.surface2).overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1))) }
         .modifier(ChipFocus(focused: focused))
     }
 }
@@ -341,7 +341,7 @@ struct ArtworkFilterStrip: View {
                     .padding(.horizontal, stage.px(20))
                     .padding(.vertical, stage.px(7))
                     .background {
-                        Capsule().fill(tint.opacity(0.14).color)
+                        GlassShape(Capsule(), tint: tint.opacity(0.14), share: 1)
                             .overlay(Capsule().strokeBorder(tint.opacity(0.45).color, lineWidth: stage.px(1)))
                     }
                 if refreshing { RingSpinner(size: 26) }

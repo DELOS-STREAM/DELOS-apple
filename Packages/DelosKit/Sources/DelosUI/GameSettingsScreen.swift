@@ -515,7 +515,7 @@ struct RowResetButton: View {
                 }
                 .padding(.horizontal, stage.px(touch ? 0 : 16))
                 .frame(minWidth: stage.px(touch ? 52 : 0), minHeight: stage.px(touch ? 52 : 46))
-                .background(Capsule().fill(tint.opacity(0.22).color))
+                .background(GlassShape(Capsule(), tint: tint.opacity(0.22), share: 1))
                 .overlay(Capsule().strokeBorder(tint.opacity(0.5).color, lineWidth: stage.px(1)))
             }
             .pressButton()

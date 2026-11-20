@@ -1198,7 +1198,7 @@ private struct Cover: View {
             if art.artwork.isBusy(hostID: hostID, appID: app.id) {
                 RingSpinner(size: 32)
                     .frame(width: stage.px(56), height: stage.px(56))
-                    .background(Circle().fill(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0.55)))
+                    .background(GlassShape(Circle(), tint: .overArt(0.55), role: .panel, share: 1))
                     .padding(stage.px(16))
                     .frame(maxWidth: .infinity, alignment: .trailing)
             } else if !marks.isEmpty {
@@ -1208,7 +1208,7 @@ private struct Cover: View {
                         SymbolView(symbol: mark.icon, size: 22, color: RGBA(red: 1, green: 1, blue: 1, alpha: mark.opacity), filled: true)
                             .padding(.horizontal, stage.px(14))
                             .padding(.vertical, stage.px(6))
-                            .background(Capsule().fill(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0.55)))
+                            .background(GlassShape(Capsule(), tint: .overArt(0.55), role: .panel, share: 1))
                             .accessibilityElement()
                             .accessibilityLabel(mark.label)
                     }
@@ -1225,7 +1225,7 @@ private struct Cover: View {
                 }
                 .padding(.horizontal, stage.px(14))
                 .padding(.vertical, stage.px(6))
-                .background(Capsule().fill(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0.55)))
+                .background(GlassShape(Capsule(), tint: .overArt(0.55), role: .panel, share: 1))
                 .padding(stage.px(18))
             }
             ZStack(alignment: .bottom) {

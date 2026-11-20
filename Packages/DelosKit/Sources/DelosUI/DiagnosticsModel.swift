@@ -524,6 +524,11 @@ final class ProblemOffers {
         withAnimation(.easeOut(duration: 0.3)) { problem = found }
     }
 
+    #if DEBUG
+    /// The demo harness's problem (`-DelosDemoProblem`).
+    func showDemo(_ found: Problem) { show(found) }
+    #endif
+
     /// Whether the card shows now (`offerShown`): on the start and home screens, with no layer, side menu or portal up.
     func shown(screen: Screen, layerOpen: Bool, sideMenu: Bool, portal: Bool) -> Bool {
         guard problem != nil, !layerOpen, !sideMenu, !portal else { return false }

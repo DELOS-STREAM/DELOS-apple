@@ -1,10 +1,11 @@
 import DelosData
 import SwiftUI
 
-/// The offer after a problem (`ProblemOfferCard` of DELOS for Android; docs/DIAGNOSTICS.md): a glass card in the top right corner
-/// of the start and home screens, below the toast's place, with what happened in one sentence, the one-line summary, a note on
-/// what Report does, and Report this problem (A) beside Dismiss (B). With the report service a second row offers saving the log
-/// instead. There is no scrim and nothing is asked before it leaves; it is offered once per problem.
+/// The offer after a problem (`ProblemOfferCard` of DELOS for Android; docs/DIAGNOSTICS.md): a Liquid Glass card in the middle
+/// of the start and home screens, with what happened in one sentence, the one-line summary, a note on what Report does, and
+/// Report this problem (A, with the GitHub mark: the report is a GitHub issue) beside Dismiss (B). With the report service a
+/// second row offers saving the log instead. There is no scrim and nothing is asked before it leaves; it is offered once per
+/// problem.
 ///
 /// While it shows it has the controller's commands (``ShellRouter``): left and right move between its buttons, down reaches the
 /// second row, A runs the focused one, B dismisses it. Touch reaches the screen under it as well. Apple TV, which can neither
@@ -18,26 +19,26 @@ struct ProblemOfferCard: View {
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reducedMotion
 
+    /// The card's width in stage pixels; on a compact stage it keeps 48 px from both edges.
+    static let width = 936.0
+
     var body: some View {
         let compact = stage.compact
-        let margin = compact ? 48.0 : 64.0
-        ZStack(alignment: .topTrailing) {
+        ZStack {
             if shown, let problem = offers.problem {
                 card(problem)
-                    .frame(width: stage.px(compact ? min(780, stage.width - 2 * 48) : 780))
-                    .transition(reducedMotion ? .opacity : .scale(scale: 0.92, anchor: .topTrailing).combined(with: .opacity))
+                    .frame(width: stage.px(compact ? min(Self.width, stage.width - 2 * 48) : Self.width))
+                    .transition(reducedMotion ? .opacity : .scale(scale: 0.92).combined(with: .opacity))
             }
         }
-        .padding(.top, stage.px(compact ? HomeCompact.statusBar * stage.textScale + stage.safe.top : 230))
-        .padding(.trailing, stage.px(margin + stage.safe.trailing))
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.easeOut(duration: 0.3), value: shown && offers.problem != nil)
     }
 
     private func card(_ problem: Problem) -> some View {
         let uploads = ReportUploader.shared.enabled
-        return VStack(alignment: .leading, spacing: stage.px(18)) {
-            HStack(spacing: stage.px(22)) {
+        return VStack(alignment: .leading, spacing: stage.px(22)) {
+            HStack(spacing: stage.px(26)) {
                 ZStack {
                     Circle().fill(colors.accent.color)
                     SymbolView(symbol: Symbols.debug, size: 46, color: colors.onAccent, filled: true)
@@ -81,7 +82,7 @@ struct ProblemOfferCard: View {
                 }
             }
         }
-        .padding(stage.px(stage.compact ? 32 : 36))
+        .padding(stage.px(stage.compact ? 40 : 52))
         .background {
             GlassShape(RoundedRectangle(cornerRadius: stage.px(34)), tint: colors.surface, role: .panel)
                 .overlay(RoundedRectangle(cornerRadius: stage.px(34)).strokeBorder(colors.line.color, lineWidth: stage.px(1)))

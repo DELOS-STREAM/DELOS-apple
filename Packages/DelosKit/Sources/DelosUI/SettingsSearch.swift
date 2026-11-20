@@ -229,7 +229,8 @@ struct SettingsSearchView: View {
         let left = compact ? margin : margin + stage.safe.leading
         let right = compact ? margin : margin + stage.safe.trailing
         let bottom = SettingsLayout.bottom(scale: stage.textScale) + stage.safe.bottom
-        Group {
+        // One glass pass for the letter keys, the field and the circles
+        GlassGroup {
             if compact { compactBody } else { wideBody }
         }
         .padding(.leading, stage.px(left))
@@ -364,7 +365,7 @@ struct SettingsSearchView: View {
                 .foregroundStyle((focused ? colors.accent : colors.text).color)
                 .lineLimit(1)
                 .frame(width: stage.px(size), height: stage.px(size))
-                .background(RoundedRectangle(cornerRadius: stage.px(18)).fill((focused ? colors.surface2 : colors.surface).color))
+                .background(GlassShape(RoundedRectangle(cornerRadius: stage.px(18)), tint: focused ? colors.surface2 : colors.surface))
                 .focusLook(focused, scale: 1.06, ring: hosted ? 4 : 5, glowBlur: hosted ? 0 : 80, glowY: hosted ? 0 : 30, corner: 18)
         }
     }
@@ -376,7 +377,7 @@ struct SettingsSearchView: View {
             .lineLimit(1)
             .padding(.horizontal, stage.px(24))
             .frame(minWidth: stage.px(size), minHeight: stage.px(size), maxHeight: stage.px(size))
-            .background(RoundedRectangle(cornerRadius: stage.px(18)).fill((focused ? colors.surface2 : colors.surface).color))
+            .background(GlassShape(RoundedRectangle(cornerRadius: stage.px(18)), tint: focused ? colors.surface2 : colors.surface))
             .focusLook(focused, scale: 1.06, ring: 4, glowBlur: 0, glowY: 0, corner: 18)
     }
 

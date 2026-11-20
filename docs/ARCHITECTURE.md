@@ -981,6 +981,30 @@ is masked out under the bar, so the glass would only blur the still backdrop whi
 Not glass: primary buttons (solid main color, as on Android), focus rings, progress bars, cover art and toasts (an
 opaque navy card, as on Android, so it reads over any frame of a stream).
 
+**The rule: every semi-transparent surface is glass.** A panel, pill, chip, badge or band over cover art, card, dialog,
+menu, info box, sheet or popover whose fill lets the background through gets real blur: `GlassShape` with the fill as its
+tint (`share: 1` where the fill's own alpha must stay, as the dark navy pills over cover art, `RGBA.overArt`). A flat
+translucent fill stays only where glass is not wanted:
+
+- scrims and veils that dim a whole screen, picture or tile;
+- focus plates, rings, glows and knob halos;
+- tracks of switches, sliders and progress bars;
+- tints inside a surface that is already glass (or opaque): the chips and pills of a sheet, a popover, a menu card or a
+  details card are a flat tint, never a blur inside a blur (`OverviewTag(onCard:)`);
+- the base under cover art and images, which the picture covers;
+- the material fallback before 26.
+
+The on-screen controls over the stream stay a flat tint: they are drawn in one `Canvas` that redraws with every touch over
+the live picture, and a glass pass per control there would cost frames while playing.
+
+Many glass surfaces side by side (the letter keys of the settings search) share one `GlassEffectContainer` (`GlassGroup`),
+so they sample the background once; glass is never animated by its blur, only by opacity, scale and offset.
+
+`tools/ui/check_glass.py` (run by `tools/test.sh`) flags every line of `DelosUI` that fills a shape or a background with a
+translucent color (`.opacity(…)`, an `opacity:` or `alpha:` component, a material, the `surface`, `surface2`, `surface3` and
+`scrim` tokens) without glass. The exceptions above are listed in `tools/ui/glass_allowlist.txt`, each with its reason; an
+entry that no longer matches a line fails the check too.
+
 Focus rings are Android's `drawFocusRing`: the ring (5 px; 4 px on the profile chip) lies a gap of its own width outside the
 element and the gap is filled with the background color; the glow is a box-shadow with a spread (a cover's `0 30 80 -18`,
 the chip's `14 / 40 / -12`; `focusLook(glowSpread:gap:)`), drawn as a blurred, shrunk copy of the element's shape and
