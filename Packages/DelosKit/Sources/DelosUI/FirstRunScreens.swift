@@ -143,7 +143,7 @@ struct CreateProfileScreen: View {
                 title: editing ? L("firstrun_create_edit_title") : L("firstrun_create_new_title"),
                 sub: editing ? L("firstrun_create_edit_note") : L("firstrun_create_new_note")
             )
-            .staggerEntrance()
+            .staggerEntrance(index: 0)
             avatarGrid
             HStack(spacing: stage.px(stage.compact ? 44 : 24)) {
                 ValuePill(
@@ -181,7 +181,8 @@ struct CreateProfileScreen: View {
                                 focused: focused
                             )
                         }
-                        .staggerEntrance()
+                        // After the headline, row by row and left to right, as Android composes them
+                        .staggerEntrance(index: min(a.index + 1, Motion.staggerCap))
                     }
                 }
             }

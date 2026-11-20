@@ -11,20 +11,17 @@ extension Motion {
     }
 }
 
-/// Counts the elements of one screen as they appear, so each knows its place in the staggered entrance (`EntranceStagger`
-/// of DELOS for Android): the first takes place 0, the next 1, and so on up to [cap], which everything after it shares.
-/// An element that appears more than [lateAfterMs] after the counter was made is not part of the entrance.
+/// The time one screen's entrance takes elements in (`lateAfterMs` of `EntranceStagger` of DELOS for Android): an element
+/// that appears more than [lateAfterMs] after the screen did is not part of the entrance. The places are the elements' own,
+/// handed out top-down by the screen: the order SwiftUI makes views appear in is not the order they stand in.
 @MainActor
-final class EntranceStagger {
-    private let cap: Int
+final class EntranceWindow {
     private let lateAfterMs: Double
     private let clock: () -> Double
     private let created: Double
-    private var next = 0
 
     /// [clock]: the time in milliseconds.
-    init(cap: Int = Motion.staggerCap, lateAfterMs: Double = Motion.staggerWindow, clock: @escaping () -> Double = EntranceStagger.uptime) {
-        self.cap = cap
+    init(lateAfterMs: Double = Motion.staggerWindow, clock: @escaping () -> Double = EntranceWindow.uptime) {
         self.lateAfterMs = lateAfterMs
         self.clock = clock
         created = clock()
@@ -33,14 +30,7 @@ final class EntranceStagger {
     nonisolated static func uptime() -> Double { ProcessInfo.processInfo.systemUptime * 1000 }
 
     /// Whether an element that appears now still takes part in the entrance.
-    var isEarly: Bool { clock() - created <= lateAfterMs }
-
-    /// The next place in the entrance, or nil when this element does not take part in it.
-    func take() -> Int? {
-        guard isEarly else { return nil }
-        defer { next += 1 }
-        return min(next, cap)
-    }
+    var isOpen: Bool { clock() - created <= lateAfterMs }
 }
 
 /// What an element of a staggered entrance looks like at [progress] (0…1, already eased): it fades in and rises
@@ -56,23 +46,19 @@ struct EntranceLook: Equatable {
 }
 
 extension EnvironmentValues {
-    /// The counter of the screen whose elements enter one after the other; nil: nothing animates.
-    @Entry var entranceStagger: EntranceStagger?
+    /// The entrance window of the screen around; nil: every element with a place enters, whenever it appears (a menu, a dialog).
+    @Entry var entranceWindow: EntranceWindow?
 }
 
 private struct EntranceScope: ViewModifier {
-    let cap: Int
-    let lateAfterMs: Double
-    @State private var stagger: EntranceStagger
+    @State private var window: EntranceWindow
 
-    init(cap: Int, lateAfterMs: Double) {
-        self.cap = cap
-        self.lateAfterMs = lateAfterMs
-        _stagger = State(initialValue: EntranceStagger(cap: cap, lateAfterMs: lateAfterMs))
+    init(lateAfterMs: Double) {
+        _window = State(initialValue: EntranceWindow(lateAfterMs: lateAfterMs))
     }
 
     func body(content: Content) -> some View {
-        content.environment(\.entranceStagger, stagger)
+        content.environment(\.entranceWindow, window)
     }
 }
 
@@ -85,25 +71,27 @@ private enum EntranceState {
 }
 
 private struct StaggerEntrance: ViewModifier {
-    let explicit: Int?
+    let index: Int?
     let base: Double
     let step: Double
-    @Environment(\.entranceStagger) private var stagger
+    let rises: Bool
+    @Environment(\.entranceWindow) private var window
     @Environment(\.reducedMotion) private var reduced
     @Environment(\.stage) private var stage
     @State private var state = EntranceState.undecided
 
+    /// Whether an element appearing now takes part in the entrance.
+    private var enters: Bool { index != nil && window?.isOpen != false }
+
     func body(content: Content) -> some View {
         // Hidden from the first frame while it will take part: no flash of the finished element before its turn. An
-        // element appearing late (`isEarly` is false) is shown at once
-        let hidden = state == .waiting || (state == .undecided && (explicit != nil || stagger?.isEarly == true))
+        // element appearing late is shown at once
+        let hidden = state == .waiting || (state == .undecided && enters)
         content
-            .modifier(EntranceEffect(look: EntranceLook(progress: hidden ? 0 : 1, distance: stage.px(Motion.rise), reduced: reduced)))
+            .modifier(EntranceEffect(look: EntranceLook(progress: hidden ? 0 : 1, distance: rises ? stage.px(Motion.rise) : 0, reduced: reduced)))
             .onAppear {
                 guard state == .undecided else { return }
-                // The place is taken here, not while the body is evaluated: a measuring pass (a row that fits or scrolls)
-                // evaluates bodies of elements that never show
-                guard let index = explicit ?? stagger?.take() else {
+                guard let index, enters else {
                     state = .shown
                     return
                 }
@@ -130,18 +118,18 @@ private struct EntranceEffect: ViewModifier {
 }
 
 extension View {
-    /// Makes this the root of a screen, a page or a menu whose elements enter one after the other: everything inside
-    /// that takes ``staggerEntrance(index:base:step:)`` without an index gets the next place, up to [cap]; elements
-    /// that appear later than [lateAfterMs] after this was made just appear.
-    func entranceScope(cap: Int = Motion.staggerCap, lateAfterMs: Double = Motion.staggerWindow) -> some View {
-        modifier(EntranceScope(cap: cap, lateAfterMs: lateAfterMs))
+    /// Makes this the root of a screen or a page whose elements enter one after the other: an element inside that appears
+    /// later than [lateAfterMs] after this was made (a PC found by the discovery, a row revealed by a switch) just appears.
+    func entranceScope(lateAfterMs: Double = Motion.staggerWindow) -> some View {
+        modifier(EntranceScope(lateAfterMs: lateAfterMs))
     }
 
     /// The entrance of one element of a staggered list: it rises ``Motion/rise`` stage pixels and fades in over
-    /// ``Motion/rowIn`` ms, starting [base] ms after it appears plus [step] ms for every place before it. The place is
-    /// [index], else the next one the surrounding ``entranceScope(cap:lateAfterMs:)`` hands out; without either the
-    /// element is left alone. The element is usable all the time, the entrance is only what it looks like.
-    func staggerEntrance(index: Int? = nil, base: Double = Motion.rowDelay, step: Double = Motion.staggerRow) -> some View {
-        modifier(StaggerEntrance(explicit: index, base: base, step: step))
+    /// ``Motion/rowIn`` ms, starting [base] ms after it appears plus [step] ms for every place before [index]. The places
+    /// run top-down as on DELOS for Android (`staggerEntrance(index)`); nil leaves the element alone. The element is usable
+    /// all the time, the entrance is only what it looks like. With [rises] false it only fades (a focus ring that shows
+    /// together with its row, in the row's place).
+    func staggerEntrance(index: Int?, base: Double = Motion.rowDelay, step: Double = Motion.staggerRow, rises: Bool = true) -> some View {
+        modifier(StaggerEntrance(index: index, base: base, step: step, rises: rises))
     }
 }

@@ -190,9 +190,10 @@ struct PairPCScreen: View {
                 sub: searching ? L("pairing_pc_searching")
                     : shown.isEmpty ? L("pairing_pc_none") : L("pairing_pc_found", shown.count)
             )
-            .staggerEntrance()
+            // The places run top-down and left to right, as Android composes them: the headline, the PCs found, then the two actions
+            .staggerEntrance(index: 0)
             CircleRow {
-                ForEach(shown, id: \.id) { host in
+                ForEach(Array(shown.enumerated()), id: \.element.id) { index, host in
                     FocusItem(
                         id: Self.hostFocusID(host.id), model: focus, menu: { Self.menu(host, onPin: onHost, onCode: onCode) },
                         action: { onHost(host) }
@@ -203,16 +204,16 @@ struct PairPCScreen: View {
                             pulse: host.reachability == .online && host.pin == nil, focused: focused
                         )
                     }
-                    .staggerEntrance()
+                    .staggerEntrance(index: min(index + 1, Motion.staggerCap))
                 }
                 FocusItem(id: "address", model: focus, action: onAddress) { focused in
                     CircleItem(icon: Symbols.addAddress, label: L("pairing_pc_address"), meta: L("pairing_pc_address_hint"), focused: focused)
                 }
-                .staggerEntrance()
+                .staggerEntrance(index: min(shown.count + 1, Motion.staggerCap))
                 FocusItem(id: "search", model: focus, action: searchAgain) { focused in
                     CircleItem(icon: Symbols.refresh, label: L("pairing_pc_search_again"), meta: L("pairing_pc_network"), focused: focused)
                 }
-                .staggerEntrance()
+                .staggerEntrance(index: min(shown.count + 2, Motion.staggerCap))
             }
         }
         .entranceScope()
@@ -253,11 +254,11 @@ struct PinScreen: View {
         VStack(spacing: stage.px(44)) {
             if code == nil {
                 Heading(title: L("pairing_pin_title", name), sub: L("pairing_pin_note"))
-                    .staggerEntrance()
+                    .staggerEntrance(index: 0)
                 PinDigits(pin: generatedPIN)
             } else {
                 Heading(title: L("pairing_code_title", name), sub: L("pairing_code_note"))
-                    .staggerEntrance()
+                    .staggerEntrance(index: 0)
             }
             HStack(spacing: stage.px(16)) {
                 if !accepted { Spinner() }

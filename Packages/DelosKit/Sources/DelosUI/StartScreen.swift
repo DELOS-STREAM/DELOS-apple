@@ -68,16 +68,17 @@ struct StartScreen: View {
                 title: profile.map { L("devices_start_greeting", $0.name) } ?? L("devices_start_welcome"),
                 sub: paired.isEmpty ? L("devices_start_pair_note") : L("devices_start_choose_note")
             )
-            .staggerEntrance()
+            // The places run top-down and left to right, as Android composes them: the headline, the PCs, then the pair circle
+            .staggerEntrance(index: 0)
             CircleRow {
-                ForEach(paired, id: \.id) { host in
+                ForEach(Array(paired.enumerated()), id: \.element.id) { index, host in
                     FocusItem(id: Self.pcID(host.id), model: focus, menu: { actions.startMenu(host.id) }, action: { onPC(host) }) { focused in
                         CircleItem(
                             icon: Symbols.desktopWindows, label: host.name, meta: Self.status(host, isDefault: host.id == defaultPC),
                             metaDot: host.reachability == .online ? .onlineGreen : nil, selected: host.id == defaultPC, focused: focused
                         )
                     }
-                    .staggerEntrance()
+                    .staggerEntrance(index: min(index + 1, Motion.staggerCap))
                 }
                 FocusItem(id: "pair", model: focus, action: onPair) { focused in
                     CircleItem(
@@ -87,7 +88,7 @@ struct StartScreen: View {
                         focused: focused
                     )
                 }
-                .staggerEntrance()
+                .staggerEntrance(index: min(paired.count + 1, Motion.staggerCap))
             }
         }
         .entranceScope()

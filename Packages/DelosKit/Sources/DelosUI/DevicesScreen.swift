@@ -70,9 +70,10 @@ struct DevicesScreen: View {
         let paired = DevicesLogic.paired(hosts.hosts)
         VStack(spacing: stage.px(48)) {
             Heading(title: L("devices_title"), sub: L("devices_note"))
-                .staggerEntrance()
+                // The places run top-down and left to right, as Android composes them: the headline, the PCs, then the pair circle
+                .staggerEntrance(index: 0)
             CircleRow {
-                ForEach(paired, id: \.id) { host in
+                ForEach(Array(paired.enumerated()), id: \.element.id) { index, host in
                     let active = host.id == activeID
                     FocusItem(
                         id: StartScreen.pcID(host.id), model: focus, menu: { actions.devicesMenu(host.id) },
@@ -84,12 +85,12 @@ struct DevicesScreen: View {
                             metaDot: host.reachability == .online ? .onlineGreen : nil,
                             selected: active, focused: focused)
                     }
-                    .staggerEntrance()
+                    .staggerEntrance(index: min(index + 1, Motion.staggerCap))
                 }
                 FocusItem(id: "pair", model: focus, action: onPair) { focused in
                     CircleItem(icon: Symbols.addLink, label: L("devices_pair_new"), meta: L("devices_pair_new_meta"), focused: focused)
                 }
-                .staggerEntrance()
+                .staggerEntrance(index: min(paired.count + 1, Motion.staggerCap))
             }
         }
         .entranceScope()

@@ -47,10 +47,15 @@ enum CardCaret {
         }
     }
 
-    /// The card and its caret as one outline: a continuous rounded rectangle, and on [side] the caret centered at [center].
+    /// The card without its caret: a continuous rounded rectangle, which Liquid Glass draws without working out its form.
+    static func body(card: CGRect, radius: CGFloat) -> Path {
+        Path(roundedRect: card, cornerRadius: min(radius, min(card.width, card.height) / 2), style: .continuous)
+    }
+
+    /// The card and its caret as one outline: the ``body(card:radius:)``, and on [side] the caret centered at [center].
     static func outline(card: CGRect, radius: CGFloat, side: CaretSide, center: CGFloat, unit: CGFloat) -> Path {
-        let body = Path(roundedRect: card, cornerRadius: min(radius, min(card.width, card.height) / 2), style: .continuous)
-        guard side != .none else { return body }
-        return body.union(tip(side: side, center: center, card: card, unit: unit))
+        let rounded = body(card: card, radius: radius)
+        guard side != .none else { return rounded }
+        return rounded.union(tip(side: side, center: center, card: card, unit: unit))
     }
 }

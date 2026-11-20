@@ -640,7 +640,8 @@ private struct LibraryCovers: View, Equatable {
                     Cover(hostID: hostID, app: app, wide: index == 0, focused: isFocused, menuOpen: menuOpen, badge: badge,
                           marks: actions.marks(hostID: hostID, appID: app.id), geometry: covers)
                 }
-                .staggerEntrance()
+                // Left to right, as Android's lazy row composes them
+                .staggerEntrance(index: min(index, Motion.staggerCap))
             }
         }
         .padding(.leading, start)

@@ -240,12 +240,12 @@ private struct PopoverContent: View {
             } else {
                 FocusScroll(axis: .horizontal) {
                     HStack(spacing: stage.px(14)) {
-                        ForEach(pills) { pill in
+                        ForEach(Array(pills.enumerated()), id: \.element.id) { index, pill in
                             FocusItem(
                                 id: StreamMenuState.pillID(pill.id), model: menu.focus,
                                 action: { if !menu.swallowsAccept() { pill.run() } }
                             ) { focused in
-                                PopoverPill(label: pill.label, focused: focused, plate: plate)
+                                PopoverPill(label: pill.label, focused: focused, index: index, plate: plate)
                             }
                         }
                     }
@@ -518,10 +518,13 @@ private struct PopoverSlider: View {
     }
 }
 
-/// One choice of the Send keys or Commands page: text on a pale capsule; the focused one wears the gliding plate.
+/// One choice of the Send keys or Commands page: text on a pale capsule; the focused one wears the gliding plate. The
+/// choices rise in one after the other from the left (`staggerEntrance()` of the label in `PopoverPills`, places from 0
+/// and no cap), the focused one's plate with it.
 private struct PopoverPill: View {
     let label: String
     let focused: Bool
+    let index: Int
     let plate: Namespace.ID
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
@@ -541,6 +544,8 @@ private struct PopoverPill: View {
                         .matchedGeometryEffect(id: "plate", in: plate)
                 }
             }
+            // The plate shows together with its pill, as a row's does (the owner's choice; Android's stays put from the first frame)
+            .staggerEntrance(index: index)
             .animation(reducedMotion ? .easeOut(duration: 0.18) : .timingCurve(0.3, 1.22, 0.42, 1, duration: Motion.rowFocus / 1000), value: focused)
             .contentShape(Capsule())
             .accessibilityAddTraits(.isButton)
