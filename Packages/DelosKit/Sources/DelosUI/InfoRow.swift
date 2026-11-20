@@ -59,7 +59,8 @@ struct PlaytimeTexts: Equatable {
 /// The info row under the title (`InfoBar` of DELOS for Android): the streaming-time block at its start, then 30 px
 /// of air and the badges (the facts, a divider and the tags). The block gives up the last-streamed column, then the long
 /// unit, when the row is too narrow; the badges scroll in the room it leaves when they do not fit. On a very narrow
-/// compact stage ([above], ``HomeCompact/blockAbove(areaWidth:scale:)``) the block stands above the badges instead.
+/// compact stage ([above], ``HomeCompact/blockAbove(areaWidth:scale:)``) the block stands above the badges instead, and
+/// scrolls when not even its short form fits the row.
 struct InfoRow<Facts: View, Tags: View>: View {
     let playtime: Playtime
     /// Stage pixels: the row's height; with the block [above] the badges, the gap and the block's own height are in it.
@@ -77,12 +78,12 @@ struct InfoRow<Facts: View, Tags: View>: View {
         Group {
             if above {
                 VStack(alignment: .leading, spacing: stage.px(HomeCompact.blockAboveGap)) {
-                    stat(texts, height: block)
+                    stat(texts, height: block, scrolls: true)
                     BadgeStrip(hasFacts: hasFacts, hasTags: hasTags, facts: facts, tags: tags)
                 }
             } else {
                 HStack(spacing: stage.px(HomeCompact.blockGapX)) {
-                    stat(texts, height: block)
+                    stat(texts, height: block, scrolls: false)
                         .layoutPriority(1)
                     BadgeStrip(hasFacts: hasFacts, hasTags: hasTags, facts: facts, tags: tags)
                 }
@@ -91,11 +92,22 @@ struct InfoRow<Facts: View, Tags: View>: View {
         .frame(height: stage.px(height), alignment: .top)
     }
 
-    private func stat(_ texts: PlaytimeTexts, height: Double) -> some View {
-        ViewThatFits(in: .horizontal) {
-            StatRow(texts: texts, fit: .full, height: height)
-            StatRow(texts: texts, fit: .statOnly, height: height)
-            StatRow(texts: texts, fit: .short, height: height)
+    /// The widest form of the block that fits; with [scrolls], the short one scrolling when none does (`StreamingTimeBlock`,
+    /// PlaytimeBlock.kt:146-150), otherwise the short one whatever its width (InfoBar.kt:84-87).
+    @ViewBuilder private func stat(_ texts: PlaytimeTexts, height: Double, scrolls: Bool) -> some View {
+        if scrolls {
+            ViewThatFits(in: .horizontal) {
+                StatRow(texts: texts, fit: .full, height: height)
+                StatRow(texts: texts, fit: .statOnly, height: height)
+                StatRow(texts: texts, fit: .short, height: height)
+                MarqueeContent(key: texts) { StatRow(texts: texts, fit: .short, height: height) }
+            }
+        } else {
+            ViewThatFits(in: .horizontal) {
+                StatRow(texts: texts, fit: .full, height: height)
+                StatRow(texts: texts, fit: .statOnly, height: height)
+                StatRow(texts: texts, fit: .short, height: height)
+            }
         }
     }
 }

@@ -1123,10 +1123,15 @@ rows, resolving row anchors in the scrolling content's coordinate space so scrol
 `SettingsPlateGeometry` grows the target around its center by 1.02; focus changes glide over 520 ms with Android's
 Glide curve, while reduced motion snaps. Rows using the shared plate do not draw independent plates.
 
-Focused overflowing row labels and values use `MarqueeLabel`: a 700 ms initial pause, 56 stage pixels per second,
-a 56 px repeat gap and 900 ms between laps (`SettingsReadingMotion`, from Android's `MarqueeText`). Fitting,
-unfocused and reduced-motion labels have no active marquee clock. `AutoScrollingHelp` restarts on the selected
-help's identity or viewport size, waits 3 s, travels at 20 stage pixels per second (1–120 s per leg), pauses 2.5 s
+Overflowing single-line texts use `MarqueeLabel` (any one-line view: `MarqueeContent`) wherever Android uses
+`MarqueeText`: rows and values scroll while focused, the context menu's title and facts, the stream dock's and
+popover's titles and the streaming-time block standing above the badges that does not fit even in its short form
+scroll always. A 700 ms initial pause, 56 stage pixels per second, a 56 px repeat gap and 900 ms between laps
+(`SettingsReadingMotion`, from Android's `MarqueeText`); the right end of an overflowing text fades over 36 px, the
+left over 28 px only while the text is moved away from its start. A text that stops scrolling or changes stands at
+its start again. Fitting, unfocused and reduced-motion labels have no active marquee clock. `AutoScrollingHelp`
+restarts on the selected help's identity or viewport size, waits 3 s, travels at 20 stage pixels per second (1–120 s
+per leg), pauses 2.5 s
 at the bottom and returns. Reduced motion leaves help still and touch-scrollable. The reading task is cancelled
 when selection, size, motion preference or view lifetime changes. `PolishMotionTests` covers the motion arithmetic,
 plate target, session memory, and localized announcement text/priority.

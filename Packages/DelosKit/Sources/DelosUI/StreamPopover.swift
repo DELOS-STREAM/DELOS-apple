@@ -198,10 +198,10 @@ private struct PopoverContent: View {
             FocusItem(id: StreamMenuState.backID, model: controller.menu.focus, clickCue: .back, action: { controller.menuBack() }) { focused in
                 BackCircle(focused: focused)
             }
-            Text(title)
+            // Scrolls whenever it does not fit (StreamMenuPopover.kt:337-345)
+            MarqueeLabel(text: title, active: true)
                 .font(DelosFonts.unbounded(stage.px(M.popoverTitle)))
                 .foregroundStyle(colors.text.color)
-                .lineLimit(1)
         }
         .frame(height: stage.px(M.popoverHead))
     }
@@ -351,10 +351,10 @@ private struct PopoverRow: View {
             SymbolView(symbol: row.icon, size: M.rowIcon, color: focused ? colors.accent2 : colors.accent2.opacity(0.62), filled: focused)
                 .frame(width: stage.px(M.rowIconColumn))
             Spacer().frame(width: stage.px(M.rowColumnGap))
-            Text(row.label)
+            // Scrolls while focused when it does not fit (StreamMenuPopover.kt:549-553)
+            MarqueeLabel(text: row.label, active: focused)
                 .font(DelosFonts.figtree(stage.tpx(M.rowSize), .semibold))
                 .foregroundStyle(colors.text.color)
-                .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Spacer().frame(width: stage.px(M.rowColumnGap))
             value
@@ -419,15 +419,18 @@ private struct PopoverRow: View {
                     SymbolView(symbol: Symbols.chevronLeft, size: 28, color: chevron)
                         .contentShape(Rectangle())
                         .onTapGesture { if row.enabled { row.step?(-1) } }
-                    Text(label).font(text).foregroundStyle(colors.text2.color).lineLimit(1)
-                        .frame(minWidth: stage.px(M.choiceValueMinWidth * stage.textScale))
+                    // A box of its own width, the value centred in it and scrolling while focused when it does not fit
+                    // (StreamMenuPopover.kt:572-581)
+                    MarqueeLabel(text: label, active: focused).font(text).foregroundStyle(colors.text2.color)
+                        .frame(maxWidth: stage.px(520))
+                        .frame(width: stage.px(M.choiceValueMinWidth * stage.textScale))
                     SymbolView(symbol: Symbols.chevronRight, size: 28, color: chevron)
                         .contentShape(Rectangle())
                         .onTapGesture { if row.enabled { row.step?(1) } }
                 }
             case .text(let value):
                 HStack(spacing: stage.px(14)) {
-                    Text(value.isEmpty ? L("stream_menu_not_set") : value).font(text).foregroundStyle(colors.text2.color).lineLimit(1)
+                    MarqueeLabel(text: value.isEmpty ? L("stream_menu_not_set") : value, active: focused).font(text).foregroundStyle(colors.text2.color)
                         .frame(maxWidth: stage.px(420), alignment: .trailing)
                     SymbolView(symbol: Symbols.chevronRight, size: 28, color: chevron)
                 }
