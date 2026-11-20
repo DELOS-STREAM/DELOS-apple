@@ -286,14 +286,8 @@ enum OverviewMotion {
     static func heroZoom(_ scroll: Double) -> Double { 1 + min(max(scroll, 0), 900) / 9000 }
     /// Only the additional overview blur is capped; the dashboard's configured blur is unchanged.
     static func deepBlur(from dashboard: Int) -> Int { max(dashboard, 0) + 24 }
-    /// The header's logo box (the dashboard's 900 × 180 box at 80 %, the same shape, so the logo flies by one scale).
+    /// The header's logo box (the dashboard's 900 × 180 box at 80 %).
     static let logoWidth = 720.0, logoHeight = 144.0
-
-    /// How much larger a logo of [aspect] (width / height) shows fitted into [from] than into [to] (the title flight's scale).
-    static func logoScale(aspect: Double, from: CGSize, to: CGSize) -> Double {
-        func fitted(_ box: CGSize) -> Double { min(box.width, box.height * max(aspect, 0.01)) }
-        return fitted(from) / max(fitted(to), 0.01)
-    }
     /// The screenshots move against the carousel by 7 % of their distance from its middle.
     static let parallax = 0.07
     /// Touch: pulling the page down this far at its top closes the overview; a cover swiped up this far opens it.

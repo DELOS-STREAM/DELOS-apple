@@ -25,18 +25,10 @@ struct OverviewViewer: View {
 
     private var video: OverviewVideo { session.video }
 
-    /// The entire viewport belongs to media. Images fit their natural aspect ratio; the iframe fits the video itself.
-    static func fit(width: Double, height: Double) -> CGRect {
-        CGRect(x: 0, y: 0, width: width, height: height)
-    }
-
-    static func videoFit(width: Double, height: Double) -> CGRect {
-        CGRect(x: 0, y: 0, width: width, height: height)
-    }
-
-    /// Where [item] shows, stage pixels.
+    /// Where [item] shows, stage pixels: the whole viewport, edge to edge, for screenshots (fitted inside it by their
+    /// aspect) and videos (the player letterboxes) alike.
     static func frame(_ item: OverviewContent.Media, width: Double, height: Double) -> CGRect {
-        item.kind == .video ? videoFit(width: width, height: height) : fit(width: width, height: height)
+        CGRect(x: 0, y: 0, width: width, height: height)
     }
 
     var body: some View {

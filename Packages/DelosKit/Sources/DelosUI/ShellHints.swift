@@ -27,6 +27,8 @@ struct ScreenHints: Equatable, Sendable {
     var overview = false
     /// The overview's screenshot viewer is open, on a screenshot or a video.
     var overviewViewer: OverviewViewerItem?
+    /// The viewer's overlay (count, controls) shows; after ~3 s without input it hides, the hint bar with it.
+    var overviewViewerControlsVisible = true
 }
 
 /// The button hints of the shell (`hints` in DELOS for Android's `Shell.kt`, the prototype's `updateHints`): by screen and

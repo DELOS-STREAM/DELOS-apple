@@ -17,10 +17,6 @@ enum GlassRole {
 extension EnvironmentValues {
     /// True over the stream's video: glass there is clear (the picture shows through) with a darker tint for contrast.
     @Entry var glassOverMedia = false
-    /// True where glass would only blur a still backdrop under content that moves past it unseen (the top bar over the
-    /// game overview, whose page is masked out under the bar): the tint token is a plain fill there, as the prototype's
-    /// `.sb-nav` and Android's look without blur.
-    @Entry var glassFlat = false
     /// Interface motion is reduced: the profile's Animations setting (Settings → Appearance) or the system's Reduce
     /// Motion (``DelosRoot`` sets it; `LocalReducedMotion` of DELOS for Android). The animated background keeps its
     /// pace, as on Android, and slows down only for the system setting.
@@ -39,7 +35,6 @@ struct GlassShape<S: Shape>: View {
     /// alpha) on the glass, for the surfaces whose color the Android screenshots fix (the circles, the profile chip).
     let share: Double?
     @Environment(\.glassOverMedia) private var overMedia
-    @Environment(\.glassFlat) private var flat
     @Environment(\.delosColors) private var colors
 
     init(_ shape: S, tint: RGBA, role: GlassRole = .control, share: Double? = nil) {
@@ -51,15 +46,12 @@ struct GlassShape<S: Shape>: View {
 
     var body: some View {
         ZStack {
-            if flat {
-                shape.fill(tint.color)
-            } else if #available(iOS 26, tvOS 26, macOS 26, *) {
+            if #available(iOS 26, tvOS 26, macOS 26, *) {
                 Color.clear.glassEffect(glass, in: shape)
             } else {
                 shape.fill(tint.color)
             }
         }
-        .animation(.easeOut(duration: Motion.fade / 1000), value: flat)
     }
 
     @available(iOS 26, tvOS 26, macOS 26, *)
