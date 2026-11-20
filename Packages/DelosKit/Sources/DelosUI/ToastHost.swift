@@ -222,6 +222,8 @@ private struct ToastCard: View {
                 content.offset(x: slide.map { (proxy.size.width + $0.0) * (1 - step) + $0.1 } ?? 0)
             }
             .allowsHitTesting(toast.action != nil && age >= 0 && leaving == 0)
+            // The toast with an action is its button: the light hover for the pointer (its chip has its own press)
+            .hoverLook()
             .onTapGesture(perform: onTap)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(toast.action.map { L("toast_description_action", word, toast.text, $0.label) } ?? L("toast_description", word, toast.text))

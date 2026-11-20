@@ -162,6 +162,22 @@ import Testing
         #expect(focusGlow(50, pressed: false) == 50)
         #expect(focusGlow(50, pressed: true) == 50 * Motion.pressGlow)
         #expect(Motion.pressGlow > 1)
+        // The press is the shared one (`pressLook`, 0.96) around every item; an element's own look drops its focus lift
+        // meanwhile, so a pressed element stands at 0.96 of its size at rest, below every focus scale
+        #expect(focusScale(focused: true, pressed: false, focus: 1.055) == 1.055)
+        #expect(focusScale(focused: true, pressed: true, focus: 1.055) == 1)
+        #expect(focusScale(focused: false, pressed: false, focus: 1.055) == 1)
+        // Seen in full: squeezed in, held, and only then the action of a tap or a click
+        #expect(Motion.press == 120)
+        #expect(Motion.pressHold == 130)
+    }
+
+    @Test func theLightHoverIsSubtlerThanAnyFocus() {
+        // Tier 2 (no ring): a soft brighten and a slight lift, below every focus scale of the interface (the chips' 1.05)
+        #expect(Motion.hoverTint == 0.08)
+        #expect(Motion.hoverScale == 1.03)
+        #expect(Motion.hoverScale > 1 && Motion.hoverScale < 1.05)
+        #expect(Motion.ringIn == 140 && Motion.ringOut == 110)
     }
 }
 #endif

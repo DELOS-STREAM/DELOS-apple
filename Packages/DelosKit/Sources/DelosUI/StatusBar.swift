@@ -358,7 +358,7 @@ private struct BackButton: View {
                     .background(GlassShape(Circle(), tint: colors.surface))
                     .overlay(Circle().strokeBorder(colors.line.color, lineWidth: stage.px(1)))
             }
-            .buttonStyle(.plain)
+            .pressButton()
             .accessibilityLabel(L("shell_hint_back"))
             // A controller's B goes back: the arrow is for fingers, pointers and keyboards (the gap after it goes with it)
             .inputKindVisibility(.withoutController, gap: 24)

@@ -51,7 +51,8 @@ import Testing
     }
 
     @Test func pressIsAbsoluteBelowEveryFocusScale() {
-        #expect(focusScale(focused: true, pressed: true, focus: 1.16) == Motion.pressScale)
+        // The element's lift drops while pressed; FocusItem's shared pressLook takes it to 0.96 of its size at rest
+        #expect(focusScale(focused: true, pressed: true, focus: 1.16) * Motion.pressScale == Motion.pressScale)
         #expect(focusScale(focused: true, pressed: false, focus: 1.16) == 1.16)
         #expect(focusScale(focused: false, pressed: false, focus: 1.16) == 1)
     }

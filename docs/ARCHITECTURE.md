@@ -1484,9 +1484,23 @@ pointer, touch) and, for a controller, the glyph family (`PadFamily`). The hint 
   before. The player's own scroll (a finger, the trackpad's two fingers, a wheel, with their momentum; the scroll views
   take every scroll type, `allowedScrollTypesMask = .all` in `KeyboardScrollOffView`) stops a running glide
   (`ScrollGlide.isPlayers`), and a settings list judges the next focus from where the player left it.
-- **Press** (`Motion.press`, `pressHold`, `pressScale`, `pressGlow`): every activation (A, Return, a tap, a click)
-  squeezes the item to 0.96 in 120 ms on the prototype's spring, holds 130 ms and springs back in 420 ms, while the
-  focus glow's blur pulses to 1.6 times (`focusGlow`).
+- **Press and hover** (`Interaction.swift`; `Motion.press`, `pressHold`, `pressScale`, `pressGlow`, `hoverTint`,
+  `hoverScale`). One press for every interactive element and every activation (A, Return, a tap, a click):
+  `pressLook` squeezes the element to 0.96 in 120 ms on the prototype's spring, holds 130 ms and springs back in 420 ms,
+  while a glow, where the element has one, pulses its blur to 1.6 times (`focusGlow`, read from
+  `EnvironmentValues.pressed`). `FocusItem` puts it around every item, and an element's own focus look drops its focus
+  lift meanwhile (`focusScale(focused:pressed:focus:)`, or `focusLift` for an element that draws its own focus: the top
+  navigation's buttons, the settings rows, the stream menu's back circle), so a pressed element stands at 0.96 of its size at rest, below
+  every focus scale; a tap or a click runs the item's action once the
+  squeeze has landed (120 ms), so the press is seen before the action changes the screen (A runs at once). An element
+  that is no `FocusItem` (a tappable hint pill, the back arrow, the Settings tabs, the reset pill of a game's row, the
+  steppers' arrows, a slider's hold buttons and Enter, the context menu's back chip, the launch scene's Cancel) is a
+  button of `pressButton()` (`PressButtonStyle`): the same press from the moment it is held, shown at least 250 ms, and
+  no system hover effect, whose highlight would take the pointer into it. Hover has two tiers, both leaving the system
+  pointer as it is: (1) a `FocusItem` takes the focus where it is and shows its focus look, the gold ring where it has
+  one; (2) every other interactive element (the buttons above, an actionable toast) gets the light `hoverLook`: it
+  brightens by 0.08 and lifts to 1.03 in 140 ms, back in 110 ms. The PC pill beside the brand is a label, not an
+  element: it neither presses nor hovers. Nothing of this on tvOS but the press (no pointer).
 - **Marks of a controller.** Face buttons and shoulders by position (`GlyphRole`), per family (A/B/X/Y, cross/circle/square/
   triangle, Nintendo letters with B south; shoulders LB/RB/LT/RT, L1/R1/L2/R2, L/R/ZL/ZR). The left menu button is View
   (Xbox, generic), Create (DualSense; Share on DualShock) or the minus sign (Switch); the right one Menu, Options or the plus

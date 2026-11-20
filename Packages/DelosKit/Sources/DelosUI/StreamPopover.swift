@@ -295,7 +295,7 @@ private struct BackCircle: View {
             .overlay {
                 Circle().strokeBorder(colors.accent.color, lineWidth: stage.px(StreamMenuLayout.rowRing)).opacity(focused ? 1 : 0)
             }
-            .scaleEffect(focused && !reducedMotion ? 1.06 : 1)
+            .focusLift(focused, scale: reducedMotion ? 1 : 1.06)
             .animation(.easeOut(duration: Motion.fade / 1000), value: focused)
             .contentShape(Circle())
             .accessibilityElement()
@@ -413,7 +413,7 @@ private struct PopoverRow: View {
                 HStack(spacing: stage.px(14)) {
                     SymbolView(symbol: Symbols.chevronLeft, size: 28, color: chevron)
                         .contentShape(Rectangle())
-                        .onTapGesture { if row.enabled { row.step?(-1) } }
+                        .pressTap { if row.enabled { row.step?(-1) } }
                     // A box of its own width, the value centred in it and scrolling while focused when it does not fit
                     // (StreamMenuPopover.kt:572-581)
                     MarqueeLabel(text: label, active: focused).font(text).foregroundStyle(colors.text2.color)
@@ -421,7 +421,7 @@ private struct PopoverRow: View {
                         .frame(width: stage.px(M.choiceValueMinWidth * stage.textScale))
                     SymbolView(symbol: Symbols.chevronRight, size: 28, color: chevron)
                         .contentShape(Rectangle())
-                        .onTapGesture { if row.enabled { row.step?(1) } }
+                        .pressTap { if row.enabled { row.step?(1) } }
                 }
             case .text(let value):
                 HStack(spacing: stage.px(14)) {

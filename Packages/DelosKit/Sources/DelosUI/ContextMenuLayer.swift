@@ -298,7 +298,7 @@ private struct MenuCardHeader: View {
                         .frame(width: stage.px(52), height: stage.px(52))
                         .background(Circle().fill(.white.opacity(0.10)))
                         .contentShape(Circle())
-                        .onTapGesture(perform: onBack)
+                        .pressTap(perform: onBack)
                         .accessibilityElement()
                         .accessibilityLabel(L("shell_hint_back"))
                         .accessibilityAddTraits(.isButton)

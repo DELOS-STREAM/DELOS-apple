@@ -360,7 +360,7 @@ private struct ValueField: View {
                         .frame(width: stage.px(L.touch), height: stage.px(L.touch))
                         .background(Circle().fill(colors.accent.color))
                 }
-                .buttonStyle(.plain)
+                .pressButton()
                 .accessibilityLabel(tr("row_slider_enter_value"))
             }
         }
@@ -432,6 +432,8 @@ private struct HoldStepButton: View {
             .opacity(atEnd ? 0.4 : 1)
             .contentShape(Circle())
             .touching(onChanged: { _ in if holding == nil { begin() } }, onEnded: { end() })
+            .pressLook(holding != nil)
+            .hoverLook(pressed: holding != nil)
             .accessibilityElement()
             .accessibilityLabel(tr(direction < 0 ? "row_slider_decrease" : "row_slider_increase"))
             .accessibilityAddTraits(.isButton)

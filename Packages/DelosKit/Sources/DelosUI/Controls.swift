@@ -182,10 +182,11 @@ extension View {
     }
 }
 
-/// The scale of a focusable element (`animateFocusScale`): a press squeezes it to ``Motion/pressScale`` (absolute, below
-/// every focus scale), else the focus lifts it to [focus]; 1 otherwise.
+/// The scale of a focusable element (`animateFocusScale`): the focus lifts it to [focus], 1 otherwise; a press drops the lift
+/// while ``FocusItem``'s shared ``View/pressLook(_:)`` squeezes the item to ``Motion/pressScale``, so every pressed element
+/// stands at 0.96 of its size at rest, below every focus scale.
 func focusScale(focused: Bool, pressed: Bool, focus: Double) -> Double {
-    pressed ? Motion.pressScale : focused ? focus : 1
+    focused && !pressed ? focus : 1
 }
 
 /// The glow blur of a focusable element (CSS blur, stage pixels): a press pulses it to ``Motion/pressGlow`` times [blur],

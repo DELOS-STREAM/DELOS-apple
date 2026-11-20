@@ -277,7 +277,7 @@ struct ChoiceValue<Value: View>: View {
             arrow
                 .padding(stage.px(36))
                 .contentShape(Rectangle())
-                .onTapGesture { onStep(side) }
+                .pressTap { onStep(side) }
                 .padding(-stage.px(36))
         } else {
             arrow

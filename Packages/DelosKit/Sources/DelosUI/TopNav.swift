@@ -146,7 +146,7 @@ struct TopNav: View {
             }
         }
         .frame(width: stage.px(size), height: stage.px(size))
-        .scaleEffect(focused ? Self.focusScale : 1)
+        .focusLift(focused, scale: Self.focusScale)
         .animation(.focusScale(pressed: false, reduced: reduceMotion), value: focused)
         // The name under the focused button (`.nav-btn .tip`), without widening the bar: it fades in over 280 ms and slides
         // down from a quarter of its height above its place over 560 ms, and leaves in 240 ms

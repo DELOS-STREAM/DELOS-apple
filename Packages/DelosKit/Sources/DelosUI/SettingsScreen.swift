@@ -766,7 +766,7 @@ struct SettingRowView: View {
                     .opacity(focused ? 1 : 0)
             }
         }
-        .scaleEffect(focused ? 1.02 : 1)
+        .focusLift(focused, scale: 1.02)
         .zIndex(focused ? 1 : 0)
         // The scale of a focused row: the prototype's spring over Motion.ROW_FOCUS
         .animation(reduceMotion ? nil : Motion.spring(Motion.rowFocus), value: focused)
@@ -1299,7 +1299,7 @@ private struct TouchStepArea: ViewModifier {
         content
             .padding(stage.px(24))
             .contentShape(Rectangle())
-            .onTapGesture { onStep(1) }
+            .pressTap { onStep(1) }
             .padding(-stage.px(24))
     }
 }

@@ -384,6 +384,7 @@ public struct DelosRoot: View {
                 if DemoHarness.streamMenu(step.command, navigator: navigator, router: router) { continue }
                 if await DemoHarness.sideDrag(step.command, router: router) { continue }
                 if await DemoHarness.secondaryClick(step.command, router: router) { continue }
+                if DemoHarness.tap(step.command, navigator: navigator, router: router) { continue }
                 if let command = DemoHarness.command(step.command) { router.route(command, repeatCount: 0) }
             }
         }

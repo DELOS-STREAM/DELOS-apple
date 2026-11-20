@@ -182,7 +182,7 @@ struct LaunchCancelPill: View {
             }
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .pressButton()
         .accessibilityLabel(L("common_cancel"))
     }
 }

@@ -512,12 +512,13 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
         })
     }
 
-    /// The squeeze of an activation: held ``Motion/pressHold`` ms, a new activation restarts it.
+    /// The squeeze of an activation (``View/pressLook(_:)``): in ``Motion/press`` ms, held ``Motion/pressHold`` ms more, then
+    /// back; a new activation restarts it.
     private func pulse() {
         release?.cancel()
         pressed = true
         release = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(Int(Motion.pressHold)))
+            try? await Task.sleep(for: .milliseconds(Int(Motion.press + Motion.pressHold)))
             guard !Task.isCancelled else { return }
             pressed = false
         }
@@ -528,12 +529,24 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
         { pulse(); action() }
     }
 
-    /// A tap or a click: the squeeze, the action, the same cue as A.
-    private func activate(_ run: @MainActor () -> Void) {
+    /// A tap or a click: the squeeze and, once it has landed, the action with the same cue as A.
+    private func activate(_ run: @escaping @MainActor () -> Void) {
+        let feedback = layers?.feedback, cue = clickCue
+        afterPress {
+            if let feedback {
+                feedback.activate(cue) { run(); return true }
+            } else {
+                run()
+            }
+        }
+    }
+
+    /// The squeeze and, once it has landed (``Motion/press``), [run]: the press of a tap or a click is seen before what it
+    /// does changes the screen (a cover's game starts, a row opens its popover, a button opens a page).
+    private func afterPress(_ run: @escaping @MainActor () -> Void) {
         pulse()
-        if let feedback = layers?.feedback {
-            feedback.activate(clickCue) { run(); return true }
-        } else {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(Int(Motion.press)))
             run()
         }
     }
@@ -566,6 +579,7 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
     public var body: some View {
         // The element a layer belongs to keeps its focus look while the layer has the system focus
         let item = content(systemFocused || (blocked && model.focused == AnyHashable(id)))
+            .pressLook(pressed)
             // The frames and actions are registered as on the other platforms: a context menu is placed beside its
             // item, and the root's commands (Play/Pause, a controller's X) open the focused item's menu
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
@@ -615,6 +629,8 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
         // Only this item's own focus: a move redraws the item that loses the focus and the one that gains it
         let focused = model.isFocused(AnyHashable(id))
         let item = content(focused)
+            // Every item's press, the same squeeze whatever its own focus look (docs/ARCHITECTURE.md, "Press and hover")
+            .pressLook(pressed)
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
                 model.register(AnyHashable(id), frame: frame, moves: moves, menu: menu, cue: clickCue, action: pressAction)
             }
@@ -622,19 +638,13 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
             .contentShape(Rectangle())
             .onChange(of: focused) { _, now in if now { revealed(AnyHashable(id)) } }
             .onAppear { revealed(model.focused, animated: false) }
-            .onTapGesture {
-                let key = AnyHashable(id)
-                // The pointer focused the item when it moved over it: a click is never only the first tap that focuses
-                let wasFocused = model.focused == key || ControllerGlyphs.shared.kind == .pointer
-                // A click takes the focus where the item is, as the hover does: nothing scrolls for it
-                if ControllerGlyphs.shared.kind == .pointer { model.point(to: key) } else { model.focus(key) }
-                if let tap {
-                    pulse()
-                    tap(wasFocused)
-                } else {
-                    activate(action)
-                }
+            .onTapGesture { tapped() }
+            #if DEBUG
+            // The demo harness's `tap`: the focused item's own tap (``DemoHarness/tap(router:)``)
+            .onReceive(NotificationCenter.default.publisher(for: DemoHarness.tapNotification)) { note in
+                if note.userInfo?["id"] as? AnyHashable == AnyHashable(id) { tapped() }
             }
+            #endif
             // The pointer moving over the item focuses it (docs/ARCHITECTURE.md, "Pointer"): global points, so content that
             // scrolls under a pointer at rest does not take the focus; the item stays where it is, no scroll follows
             .onContinuousHover(coordinateSpace: .global) { phase in
@@ -665,6 +675,20 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
             })
         } else {
             item
+        }
+    }
+
+    /// A tap or a click on the item.
+    private func tapped() {
+        let key = AnyHashable(id)
+        // The pointer focused the item when it moved over it: a click is never only the first tap that focuses
+        let wasFocused = model.focused == key || ControllerGlyphs.shared.kind == .pointer
+        // A click takes the focus where the item is, as the hover does: nothing scrolls for it
+        if ControllerGlyphs.shared.kind == .pointer { model.point(to: key) } else { model.focus(key) }
+        if let tap {
+            afterPress { tap(wasFocused) }
+        } else {
+            activate(action)
         }
     }
     #endif
