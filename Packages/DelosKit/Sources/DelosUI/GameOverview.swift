@@ -67,21 +67,6 @@ final class OverviewSession {
     /// re-evaluated on every scroll frame.
     var pull = 0.0
     var position = ScrollPosition(y: 0)
-    /// The focused screenshot or video, for the backdrop.
-    var mediaFocus: Int?
-
-    /// The backdrop's deep layer share at the page's [scroll] (stage pixels): full on a focused screenshot or video,
-    /// else growing with the scroll.
-    func backdropDeep(scroll: Double) -> Double {
-        mediaFocus != nil ? 1 : min(1, max(scroll, 0) / OverviewMotion.deepBlurScroll)
-    }
-
-    /// A finger or the pointer starts scrolling the page: the focused-screenshot backdrop goes (a touch's first tap
-    /// focused a thumbnail and nothing moved the focus off it, so it stayed up to the header); a controller's next
-    /// focus change sets it again.
-    func pageScrollBegan() {
-        if mediaFocus != nil { mediaFocus = nil }
-    }
 
     /// Frames (in the page's space) of the sections and items, for the focus scroll.
     @ObservationIgnored var sectionFrames: [String: CGRect] = [:]
@@ -173,7 +158,7 @@ struct GameOverview: View {
             OverviewContent(details: $0, library: library, region: Locale.current.region?.identifier, unplayable: OverviewVideos.shared.unplayable)
         }
         ZStack(alignment: .topLeading) {
-            OverviewBackdrop(session: session, content: content)
+            OverviewBackdrop(session: session)
             let covers = HomeMetrics(stage: stage).covers
             OverviewFlight(hostID: session.hostID, app: session.app, from: session.source,
                            to: CGRect(x: stage.px(150 + stage.safe.leading), y: stage.px(150), width: stage.px(340), height: stage.px(510)),
@@ -203,22 +188,13 @@ struct GameOverview: View {
             session.buttonsVisible = true
         }
         .task(id: session.app.id) {
-            // The details come from the cache, else they are fetched now; the first thumbnails and the first full
-            // screenshot are fetched while the overview opens
+            // Load the cached details or fetch them now; media images load where they are displayed.
             if session.details == nil, let details = await metadata.loadDetails(session.app) {
                 withAnimation(.easeOut(duration: 0.3)) { session.details = details }
             }
             session.detailsSettled = true
-            // Meanwhile YouTube is asked which videos it lets play in the app
-            async let checked: Void = OverviewVideos.shared.check(session.details?.videos.map(\.videoId) ?? [])
-            if let content = session.details.map({ OverviewContent(details: $0, library: library, region: nil) }) {
-                let tall = stage.height > 1200
-                for media in content.media.prefix(2) { if let url = OverviewImageSizes.thumb(media, tall: tall) { _ = await metadata.images.data(url) } }
-                if let first = content.media.first(where: { $0.kind == .screenshot }), let url = OverviewImageSizes.full(first, tall: tall) {
-                    _ = await metadata.images.data(url)
-                }
-            }
-            await checked
+            // Check which videos YouTube lets play in the app.
+            await OverviewVideos.shared.check(session.details?.videos.map(\.videoId) ?? [])
         }
     }
 
@@ -255,7 +231,6 @@ struct GameOverview: View {
             if pull != session.pull { session.pull = pull }
         }
         .onScrollPhaseChange { old, now in
-            if now == .interacting { session.pageScrollBegan() }
             // Pulling the page down at its top closes the overview
             if old == .interacting, now != .interacting, -session.scroll > stage.px(OverviewMotion.pullClose) { onClose() }
         }
@@ -274,8 +249,7 @@ struct GameOverview: View {
         .environment(\.focusReveal, nil)
     }
 
-    /// The focus moved: the page scrolls the focused section to its line (the header to the top), a screenshot crossfades
-    /// the backdrop to it, the streaming numbers count up when their section comes into view.
+    /// The focus moved: scroll the focused section to its line and count the streaming numbers when their section appears.
     private func focused(_ id: AnyHashable?, content: OverviewContent?) {
         guard let id = id as? String, content != nil else { return }
         let section = sectionOf(id)
@@ -285,7 +259,6 @@ struct GameOverview: View {
                 session.streamingOn = true
             }
         }
-        session.mediaFocus = id.hasPrefix("ov-media-") ? Int(id.dropFirst("ov-media-".count)) : nil
         guard kind != .pointer, kind != .touch else { return }
         let k = max(stage.scale, 0.01)
         let frame = session.focus.registeredFrames[AnyHashable(id)]
@@ -1156,13 +1129,11 @@ struct TitleCrossfade: ViewModifier {
     }
 }
 
-/// The hero behind the overview (the prototype's `#backdrop` steered by `linkBackdrop`): at the top it is the dashboard's
-/// own game background showing through (the root's backdrop, with the profile's blur, playing when animated); as the page
-/// scrolls a deeper blur of it fades in (rendered once, ``OverviewMotion/deepBlur(from:)``), drifting slower than the
-/// page and zooming slightly; a focused screenshot takes the deep layer's place. Opacity and transforms only.
+/// The hero behind the overview: the dashboard's own game background shows through at its configured blur and keeps
+/// playing when animated. Scrolling fades in a deeper render of that same hero, with parallax and a small zoom.
+/// Carousel focus never changes the image source.
 private struct OverviewBackdrop: View {
     let session: OverviewSession
-    let content: OverviewContent?
     @Environment(HomeArt.self) private var art
     @Environment(\.stage) private var stage
     @Environment(\.delosColors) private var colors
@@ -1178,8 +1149,7 @@ private struct OverviewBackdrop: View {
 
     var body: some View {
         let scroll = max(session.scroll, 0) / stage.scale
-        let deep = session.backdropDeep(scroll: scroll)
-        let media = session.mediaFocus.flatMap { content?.media.indices.contains($0) == true ? content?.media[$0] : nil }
+        let deep = min(1, scroll / OverviewMotion.deepBlurScroll)
         let area = HeroArea.of(stageWidth: stage.width, stageHeight: stage.height)
         // Sized by the screen, never by the pictures (filled pictures are larger than it)
         Color.clear.overlay {
@@ -1188,23 +1158,15 @@ private struct OverviewBackdrop: View {
                 Image(decorative: deepImage, scale: 1).resizable().interpolation(.medium)
                     .frame(width: stage.px(area.width), height: stage.px(area.height))
                     .brightness(-0.25)
-                    .opacity(media == nil ? deep * look.opacity : 0)
-            }
-            if let media {
-                RemoteImage(url: OverviewImageSizes.thumb(media, tall: false), maxPixels: 640)
-                    .blur(radius: stage.px(Double(OverviewMotion.deepBlur(from: look?.blur ?? 16))))
-                    .brightness(-0.25)
-                    .id(media.id)
-                    .transition(.opacity)
+                    .opacity(deep * look.opacity)
             }
             LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .clear, location: 0.42), .init(color: colors.bg.color, location: 1)],
                            startPoint: .top, endPoint: .bottom)
-                .opacity(0.62 + deep * 0.25)
+                .opacity((0.62 + deep * 0.25) * 0.7)
         }
         }
         .scaleEffect(reduced ? 1 : OverviewMotion.heroZoom(scroll))
         .offset(y: reduced ? 0 : stage.px(OverviewMotion.heroDrift(scroll)))
-        .animation(.easeInOut(duration: 0.8), value: media?.id)
         .opacity(session.shown ? 1 : 0)
         .animation(session.shown ? Motion.out(OverviewMotion.heroIn)
                    : .timingCurve(0.65, 0, 0.35, 1, duration: OverviewMotion.heroOut / 1000), value: session.shown)

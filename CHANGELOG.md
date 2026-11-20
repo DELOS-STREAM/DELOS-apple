@@ -468,6 +468,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- The game overview keeps the game's hero while browsing screenshots and videos, without media-background prefetch or
+  full-screen image swaps. Its text dim gradient uses 30 % less opacity; hero scroll blur and the full-screen viewer's
+  blurred still are unchanged ([#32](https://github.com/DELOS-STREAM/DELOS-apple/issues/32)).
+
 - Phase lock no longer freezes a stream a few seconds in: a refresh that waited for its frame released its drawable
   inside the pipeline's state lock while Core Animation's presentation callback waited for that lock, and the system
   ended the app.

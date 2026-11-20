@@ -1298,7 +1298,10 @@ The game overview plays by the library's rule too, with the library's own animat
 covers are hidden then): the header's cover and the logo once the cover's flight has landed (nothing decodes during the
 motion), the similar games' covers on screen, none under the full-screen viewer. Its game background is the root's (the
 dashboard's, with the profile's blur, playing when animated) under a deeper blur rendered once that fades in as the page
-scrolls. The flying cover takes the frame the card's or the header's animation shows as it starts (`AnimatedFrames`, the
+scrolls. The deep render adds 24 px to the configured blur, unchanged; its source never follows carousel focus.
+The text's dim gradient uses 70 % of its former opacity. Media images load where displayed rather than being prefetched
+for the page background; the full-screen viewer retains its own blurred still.
+The flying cover takes the frame the card's or the header's animation shows as it starts (`AnimatedFrames`, the
 last frame each playing layer drew), so it neither restarts nor falls back to the first frame.
 
 The overview's motion (`OverviewMotion`) is a family of springs, interruptible from their position and velocity: the
@@ -1321,8 +1324,7 @@ During the flight nothing is laid out below the fold: the sections are composed 
 and the pictures are in memory before it starts. Debug builds log the frame times of each opening and closing under
 the os_log category `OverviewMotion` (`OverviewFrameLog`: frames, mean, 95th percentile, longest, frames over 1.5 times
 the display's frame). The storyline opens by its height (`StoryReveal`), its clipped bottom fading over 90 px while
-text continues below it. A finger or pointer scroll of the page drops the focused-screenshot backdrop
-(`OverviewSession.pageScrollBegan`), so the header's backdrop returns as the page scrolls back up.
+text continues below it. Browsing screenshots or videos does not replace the hero or force a deeper page backdrop.
 
 `AnimatedArtBenchmark` (DelosUITests, `DELOS_ART_BENCH=1` or `DELOS_ART_BENCH=<file>:<file>`) plays animated files through
 these players in real time at 120 Hz for 2 s, with the main thread idle and busy, and prints the frames presented

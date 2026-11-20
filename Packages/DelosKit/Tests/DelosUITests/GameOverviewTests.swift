@@ -118,20 +118,6 @@ import Testing
         for (a, b) in zip(samples[index...], samples[(index + 1)...]) { #expect(b <= a + 1e-9 && b >= 1) }
     }
 
-    /// Regression: a touch's first tap focused a thumbnail (the focused-screenshot backdrop), the viewer opened and
-    /// closed, and a finger scrolled back to the header: the backdrop stayed darker and shrank with the scroll.
-    @Test func touchScrollLeavesTheFocusedScreenshotBackdrop() {
-        let session = OverviewSession(hostID: "h", app: HostApp(id: 1, title: "G"), coverID: AnyHashable("app-1"), source: .zero, details: nil)
-        let header = (deep: session.backdropDeep(scroll: 0), zoom: OverviewMotion.heroZoom(0))
-        session.scroll = 1400
-        session.mediaFocus = 2
-        #expect(session.backdropDeep(scroll: 1400) == 1)
-        session.pageScrollBegan()
-        session.scroll = 0
-        #expect(session.mediaFocus == nil)
-        #expect(session.backdropDeep(scroll: 0) == header.deep && OverviewMotion.heroZoom(0) == header.zoom)
-    }
-
     /// Regression (#23): flying back into the wide first cover stretched the portrait art to the landscape frame; the
     /// frame now changes its shape while the picture keeps one scale for both axes, filling it.
     @Test func wideFlightKeepsThePictureUnstretched() {
