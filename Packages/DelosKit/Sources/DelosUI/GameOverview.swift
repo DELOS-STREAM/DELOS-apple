@@ -389,12 +389,12 @@ struct GameOverview: View {
 
     private func sectionIcon(_ section: OverviewContent.Section) -> String {
         switch section {
-        case .about: Symbols.info
-        case .media: Symbols.photoLibrary
-        case .details: Symbols.metadata
-        case .streaming: Symbols.timer
-        case .links: Symbols.addLink
-        case .similar: Symbols.viewCarousel
+        case .about: Symbols.overviewAbout
+        case .media: Symbols.overviewMedia
+        case .details: Symbols.overviewDetails
+        case .streaming: Symbols.overviewStreaming
+        case .links: Symbols.overviewLinks
+        case .similar: Symbols.overviewSimilar
         }
     }
 
@@ -523,9 +523,9 @@ struct GameOverview: View {
         switch kind {
         case .genres: candidate?.genres.first { OverviewContent.genreName($0.name) == value }.map { TagLook.genreIcon($0.id) } ?? Symbols.genreUnknown
         case .themes: candidate?.themes.first { $0.name == value }.map { TagLook.themeIcon($0.id) } ?? Symbols.genreUnknown
-        case .modes: value.contains("player") && !value.contains("Multi") ? Symbols.accountCircle : Symbols.group
-        case .perspectives: Symbols.visibility
-        case .platforms: value == "PC" ? Symbols.desktopWindows : value == "Mac" ? Symbols.monitor : Symbols.sportsEsports
+        case .modes: value.lowercased().hasPrefix("single") ? Symbols.modeSingle : Symbols.modeMulti
+        case .perspectives: Symbols.perspective
+        case .platforms: value == "PC" || value == "Linux" ? Symbols.desktopWindows : value == "Mac" ? Symbols.platformMac : Symbols.platformConsole
         case .multiplayer: Symbols.group
         case .languages: Symbols.language
         case .keywords, .ageRatings: nil
@@ -591,7 +591,7 @@ struct GameOverview: View {
                     HStack(spacing: stage.px(14)) {
                         SymbolView(symbol: linkIcon(link.kind), size: 28, color: colors.accent2)
                         Text(linkName(link)).font(DelosFonts.figtree(stage.tpx(21), .semibold)).foregroundStyle(colors.text.color)
-                        SymbolView(symbol: Symbols.arrowForward, size: 20, color: colors.text3)
+                        SymbolView(symbol: Symbols.linkOpenExternal, size: 20, color: colors.text3)
                     }
                     .padding(.horizontal, stage.px(24))
                     .frame(height: stage.px(64))
@@ -606,10 +606,11 @@ struct GameOverview: View {
     private func linkIcon(_ kind: OverviewContent.Link.Kind) -> String {
         switch kind {
         case .steam: Symbols.steam
-        case .twitch, .youtube: Symbols.movie
-        case .wikipedia: Symbols.library
-        case .gog, .epic: Symbols.download
-        case .official, .discord, .other: Symbols.public
+        case .official: Symbols.websiteOfficial
+        case .gog, .epic: Symbols.websiteStore
+        case .wikipedia: Symbols.websiteWiki
+        case .twitch, .youtube: Symbols.websiteVideo
+        case .discord, .other: Symbols.overviewLinks
         }
     }
 
@@ -1006,9 +1007,8 @@ private struct OverviewCarousel: View {
                 }
                 .frame(width: stage.px(520), height: stage.px(292))
                 .clipped()
-                .opacity(session.viewer.map { session.thumbFrames[$0] != nil } == true ? 1 : 1)
             if item.kind == .video {
-                SymbolView(symbol: Symbols.playArrow, size: 64, color: RGBA(red: 1, green: 1, blue: 1), filled: true)
+                SymbolView(symbol: Symbols.videoPlay, size: 64, color: RGBA(red: 1, green: 1, blue: 1), filled: true)
                     .shadow(color: .black.opacity(0.6), radius: stage.px(8))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if let name = item.name {
