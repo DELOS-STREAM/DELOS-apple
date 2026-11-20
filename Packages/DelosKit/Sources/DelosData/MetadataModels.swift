@@ -91,21 +91,32 @@ public struct GameMetadata: Codable, Equatable, Sendable {
     public var hltbFailedAt: Int64
     public var steamFailedAt: Int64
     public var steamTags: [String]
+    /// The game overview's details of ``candidate`` (fetched when the overview first opens), when it was fetched and when
+    /// its last fetch failed (epoch milliseconds): the same 7-day refresh and failure backoff as the rest of the record.
+    public var details: GameDetails?
+    public var detailsUpdatedAt: Int64
+    public var detailsFailedAt: Int64
 
     public init(candidate: MetadataCandidate? = nil, hdr: HDREvidence = HDREvidence(), completion: CompletionTime? = nil,
                 updatedAt: Int64 = 0, manual: Bool = false, igdbFailedAt: Int64 = 0, pcgwFailedAt: Int64 = 0,
-                hltbFailedAt: Int64 = 0, steamFailedAt: Int64 = 0, steamTags: [String] = []) {
+                hltbFailedAt: Int64 = 0, steamFailedAt: Int64 = 0, steamTags: [String] = [], details: GameDetails? = nil,
+                detailsUpdatedAt: Int64 = 0, detailsFailedAt: Int64 = 0) {
         self.candidate = candidate; self.hdr = hdr; self.completion = completion; self.updatedAt = updatedAt
         self.manual = manual; self.igdbFailedAt = igdbFailedAt; self.pcgwFailedAt = pcgwFailedAt
         self.hltbFailedAt = hltbFailedAt; self.steamFailedAt = steamFailedAt; self.steamTags = steamTags
+        self.details = details; self.detailsUpdatedAt = detailsUpdatedAt; self.detailsFailedAt = detailsFailedAt
     }
 
     private enum CodingKeys: String, CodingKey {
         case candidate, hdr, completion, updatedAt, manual, igdbFailedAt, pcgwFailedAt, hltbFailedAt, steamFailedAt, steamTags
+        case details, detailsUpdatedAt, detailsFailedAt
     }
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(candidate: try c.decodeIfPresent(MetadataCandidate.self, forKey: .candidate),
+        // Details of another game than the candidate are never shown
+        let candidate = try c.decodeIfPresent(MetadataCandidate.self, forKey: .candidate)
+        let details = (try? c.decodeIfPresent(GameDetails.self, forKey: .details)).flatMap { $0?.id == candidate?.id ? $0 : nil }
+        self.init(candidate: candidate,
                   hdr: try c.decodeIfPresent(HDREvidence.self, forKey: .hdr) ?? HDREvidence(),
                   completion: try? c.decodeIfPresent(CompletionTime.self, forKey: .completion),
                   updatedAt: try c.decodeIfPresent(Int64.self, forKey: .updatedAt) ?? 0,
@@ -114,7 +125,10 @@ public struct GameMetadata: Codable, Equatable, Sendable {
                   pcgwFailedAt: try c.decodeIfPresent(Int64.self, forKey: .pcgwFailedAt) ?? 0,
                   hltbFailedAt: try c.decodeIfPresent(Int64.self, forKey: .hltbFailedAt) ?? 0,
                   steamFailedAt: try c.decodeIfPresent(Int64.self, forKey: .steamFailedAt) ?? 0,
-                  steamTags: try c.decodeIfPresent([MetadataCachedValue<String>].self, forKey: .steamTags)?.compactMap(\.value) ?? [])
+                  steamTags: try c.decodeIfPresent([MetadataCachedValue<String>].self, forKey: .steamTags)?.compactMap(\.value) ?? [],
+                  details: details,
+                  detailsUpdatedAt: details == nil ? 0 : (try? c.decodeIfPresent(Int64.self, forKey: .detailsUpdatedAt)) ?? 0,
+                  detailsFailedAt: (try? c.decodeIfPresent(Int64.self, forKey: .detailsFailedAt)) ?? 0)
     }
 }
 

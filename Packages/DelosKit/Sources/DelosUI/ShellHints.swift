@@ -23,6 +23,10 @@ struct ScreenHints: Equatable, Sendable {
     var settingsSearch = false
     /// The popover of the focused row is open (Android's `shell.picker`): a list of values or a slider.
     var rowPopup: RowPopupKind?
+    /// The game overview is open on the home screen: Select and Back.
+    var overview = false
+    /// The overview's screenshot viewer is open, on a screenshot or a video.
+    var overviewViewer: OverviewViewerItem?
 }
 
 /// The button hints of the shell (`hints` in DELOS for Android's `Shell.kt`, the prototype's `updateHints`): by screen and
@@ -118,6 +122,11 @@ enum ShellHints {
                 // The library's filter sheet (Android's `Layer.Filters`): Y closes it as B does, unlike the Artwork sheet's Done
                 return [select, hint(.west, L("shell_hint_reset")), hint(.north, L("shell_hint_close")), hint(.east, L("shell_hint_close"))]
             }
+            if let viewer = c.screenHints.overviewViewer {
+                // The screenshot viewer: browse, watch a video, back
+                return [Hint(button: .adjust, label: L("overview_hint_browse"))] + (viewer == .video ? [hint(.south, L("overview_hint_watch"))] : []) + [back]
+            }
+            if c.screenHints.overview { return [select, back] }
             let filter = c.screenHints.filterLabel.map { [Hint(button: .pad(.north), label: $0, tappable: true, icon: Symbols.filter)] } ?? []
             return [hint(.south, L("shell_hint_start"))] + filter + [menu] + optionsHint
         case .settings:

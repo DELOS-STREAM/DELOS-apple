@@ -128,6 +128,10 @@ The metadata data layer ports DELOS for Android's `GameMetadata`, policy and cli
 IGDB, PCGamingWiki and Steam tags are requested through the private DELOS metadata Worker, never with embedded
 provider credentials. HowLongToBeat is requested directly; its website is not an official public API and can change.
 Provider content remains subject to each service's terms. No service response is embedded in the app.
+The game overview's details come through the same Worker (`/v1/igdb/game-details`). Its screenshots and the covers of
+similar games outside the library load directly from IGDB's public image server (`images.igdb.com`), and video
+thumbnails from YouTube's (`i.ytimg.com`), without credentials: those servers see the device's IP address, as
+HowLongToBeat does. The images are kept in a 150 MB cache under Caches/igdb-images.
 
 The HLTB search flow and payload derive from [howlongtobeatpy](https://github.com/ScrappyCocco/HowLongToBeat-PythonAPI)
 1.0.24, `HTMLRequests.py`, commit `4275a452b9ccd230b7c2a82b8d1a5d851285eb14`, MIT, Copyright (c) 2018 Michele.

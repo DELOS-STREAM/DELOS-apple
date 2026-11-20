@@ -122,13 +122,23 @@ def plural(forms: dict[str, str]) -> dict:
     """A plural as a variation by plural category. Apple requires a plural variation to show its number; forms without
     one ("hour" / "hours", Android's getQuantityString for a unit beside a number) become a substitution that picks
     the form from the first argument and shows only the form. A form that shows texts ("%1$s Hours", the quantity an
-    Android count apart from its text; "%1$s, %2$s log lines") takes them as the following arguments, after the count."""
+    Android count apart from its text; "%1$s, %2$s log lines"; "%s ratings", a count formatted apart) takes them as the
+    following arguments, after the count: an unnumbered placeholder is numbered first, so it never reads the count."""
     variations = {"plural": {q: unit(t) for q, t in forms.items()}}
     if any(PLACEHOLDER.search(t) for t in forms.values()):
         return {"variations": variations}
-    variations = {"plural": {q: unit(SHIFT.sub(lambda m: f"%{int(m.group(1)) + 1}$", t)) for q, t in forms.items()}}
+    variations = {"plural": {q: unit(SHIFT.sub(lambda m: f"%{int(m.group(1)) + 1}$", number(t))) for q, t in forms.items()}}
     return {"stringUnit": {"state": "translated", "value": "%#@count@"},
             "substitutions": {"count": {"argNum": 1, "formatSpecifier": "d", "variations": variations}}}
+
+
+LONE = re.compile(r"%%|%(?!\d)")
+
+
+def number(text: str) -> str:
+    """Numbers the unnumbered placeholders of [text] in order (`%@ of %@` -> `%1$@ of %2$@`); `%%` stays."""
+    count = iter(range(1, 100))
+    return LONE.sub(lambda m: m.group(0) if m.group(0) == "%%" else f"%{next(count)}$", text)
 
 
 def build(android: Path, keys: list[str], extra: tuple[Path, ...] = ()) -> tuple[dict, list[str]]:

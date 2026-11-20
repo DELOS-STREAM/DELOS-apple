@@ -7,6 +7,13 @@ public protocol MetadataProviders: Sendable {
     func hdr(steamAppIDs: [Int64], name: String) async throws -> HDREvidence
     func completion(steamAppIDs: [Int64], name: String) async throws -> CompletionTime?
     func steamTags(_ steamAppIDs: [Int64]) async throws -> [String]
+    /// The game overview's details of IGDB game [id]; nil when IGDB has no such game.
+    func details(_ id: Int64) async throws -> GameDetails?
+}
+
+extension MetadataProviders {
+    /// A provider that has no overview details answers none.
+    public func details(_ id: Int64) async throws -> GameDetails? { nil }
 }
 
 public struct HTTPMetadataProviders: MetadataProviders {
@@ -39,6 +46,10 @@ public struct HTTPMetadataProviders: MetadataProviders {
     public func completion(steamAppIDs: [Int64], name: String) async throws -> CompletionTime? {
         try requireAvailable()
         return try await hltb.lookup(name: name, steamAppIDs: steamAppIDs)
+    }
+    public func details(_ id: Int64) async throws -> GameDetails? {
+        try requireAvailable()
+        return try await igdb.details(id)
     }
     public func steamTags(_ steamAppIDs: [Int64]) async throws -> [String] {
         try requireAvailable()

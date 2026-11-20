@@ -160,7 +160,7 @@ public struct DelosRoot: View {
         #endif
         _homeArt = State(initialValue: homeArt)
         #if DEBUG
-        let metadata = DemoHarness.on ? GameMetadataModel(store: DemoHarness.metadataStore()) : GameMetadataModel()
+        let metadata = DemoHarness.on ? GameMetadataModel(store: DemoHarness.metadataStore(), images: DemoHarness.imageStore()) : GameMetadataModel()
         #else
         let metadata = GameMetadataModel()
         #endif
