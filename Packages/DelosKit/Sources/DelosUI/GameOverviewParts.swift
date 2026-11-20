@@ -388,9 +388,11 @@ enum OverviewImageSizes {
 struct GameInfoHint: View {
     let kind: InputKind
     let onOpen: () -> Void
+    var active = true
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduced
+    @Environment(\.scenePhase) private var scenePhase
     @State private var hovered = false
 
     static func dpadDown(_ family: PadFamily) -> String {
@@ -405,8 +407,8 @@ struct GameInfoHint: View {
     var body: some View {
         let tappable = kind == .touch || kind == .pointer
         HStack(spacing: stage.px(10)) {
-            glyph.modifier(Bob(up: kind == .touch, paused: reduced))
-            Text(L("overview_game_info"))
+            glyph.modifier(Bob(up: kind == .touch, paused: reduced || !active || scenePhase != .active))
+            Text(L(kind == .touch ? "overview_swipe_up_game_info" : "overview_game_info"))
                 .font(DelosFonts.figtree(stage.tpx(20), .semibold))
                 .foregroundStyle(.white)
                 .lineLimit(1)
@@ -454,8 +456,9 @@ private struct Bob: ViewModifier {
     func body(content: Content) -> some View {
         TimelineView(.animation(paused: paused)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2.2) / 2.2
-            let wave = paused ? 0 : (1 - cos(t * 2 * .pi)) / 2
-            content.offset(y: stage.px((up ? -6 : 5) * wave))
+            let wave = paused ? 0 : (up ? t : (1 - cos(t * 2 * .pi)) / 2)
+            content.offset(y: stage.px((up ? -12 : 5) * wave))
+                .opacity(up && !paused ? 1 - 0.75 * wave : 1)
         }
     }
 }

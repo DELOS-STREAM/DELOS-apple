@@ -284,9 +284,8 @@ enum OverviewMotion {
     static let deepBlurScroll = 520.0
     static func heroDrift(_ scroll: Double) -> Double { -min(scroll, 700) * 0.1 }
     static func heroZoom(_ scroll: Double) -> Double { 1 + min(max(scroll, 0), 900) / 9000 }
-    /// The deep blur the hero reaches while the page scrolls: 40 px beyond the dashboard's (the profile's game background
-    /// blur, where the overview starts), as the prototype's 56 px is beyond its dashboard's 16.
-    static func deepBlur(from dashboard: Int) -> Int { max(dashboard, 0) + 40 }
+    /// Only the additional overview blur is capped; the dashboard's configured blur is unchanged.
+    static func deepBlur(from dashboard: Int) -> Int { max(dashboard, 0) + 24 }
     /// The header's logo box (the dashboard's 900 × 180 box at 80 %, the same shape, so the logo flies by one scale).
     static let logoWidth = 720.0, logoHeight = 144.0
 
