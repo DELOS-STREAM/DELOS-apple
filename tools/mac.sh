@@ -2,14 +2,14 @@
 # Builds DELOS for this Mac (ad-hoc signed, sandboxed, hardened runtime), starts it and saves a screenshot of its window.
 #   sh tools/mac.sh [screenshot.png] [seconds before the screenshot] [app arguments...]
 #   sh tools/mac.sh build                 only builds (tools/test.sh)
-# Build products go to /tmp/delos-dd-mac. The app arguments are the debug launch arguments of docs/BUILDING.md, such as
+# Build products go to /tmp/delos-dd-mac (DELOS_MAC_DERIVED_DATA overrides it). The app arguments are the debug launch arguments of docs/BUILDING.md, such as
 # `-DelosSettings stream`. DELOS_PROFILE=<name> puts a profile with that name into the app's container first (the app
 # starts on its first-run screens without one, and Settings needs a profile). The screenshot needs the Screen Recording
 # permission of the terminal that runs this script. The app is left running; quit it with Command-Q.
 set -eu
 cd "$(dirname "$0")/.."
 
-dd=/tmp/delos-dd-mac
+dd="${DELOS_MAC_DERIVED_DATA:-/tmp/delos-dd-mac}"
 bundle=io.github.meitoncz.delos.debug
 app="$dd/Build/Products/Debug/DELOS.app"
 
