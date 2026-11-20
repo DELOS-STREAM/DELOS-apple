@@ -81,6 +81,26 @@ struct GlassShape<S: Shape>: View {
     }
 }
 
+extension RGBA {
+    /// The dark navy of the glass pills and bands over cover art and over the hero (Android's `Color(0x..050A14)`), at [alpha].
+    static func overArt(_ alpha: Double) -> RGBA { RGBA(red: 5 / 255, green: 10 / 255, blue: 20 / 255, alpha: alpha) }
+}
+
+/// Many glass surfaces side by side (a grid of keys, a row of chips): one `GlassEffectContainer`, so they share one pass that
+/// samples the background instead of one each. Before 26 the content as it is.
+struct GlassGroup<Content: View>: View {
+    var spacing: Double = 0
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        if #available(iOS 26, tvOS 26, macOS 26, *) {
+            GlassEffectContainer(spacing: spacing) { content() }
+        } else {
+            content()
+        }
+    }
+}
+
 /// The panel glass of a card with a caret (``CaretCard``): Liquid Glass in the card's rounded body only, the caret drawn over the
 /// glass's edge in its blur and tint (over the stream's video: a thin blur in the scrim, as the clear glass there). Glass in any
 /// other outline (the body with its caret) has the system work out that outline first, which held the first opening of a context

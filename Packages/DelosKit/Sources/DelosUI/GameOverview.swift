@@ -498,7 +498,7 @@ struct GameOverview: View {
                         }
                         .padding(.horizontal, stage.px(22))
                         .frame(height: stage.px(52))
-                        .background(Capsule().fill(Color.white.opacity(0.06)).overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1))))
+                        .background(GlassShape(Capsule(), tint: RGBA(red: 1, green: 1, blue: 1, alpha: 0.06), share: 1).overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1))))
                     } action: {
                         withAnimation(reduced ? .easeOut(duration: 0.28) : .timingCurve(0.16, 1, 0.3, 1, duration: 0.6)) { session.storyOpen.toggle() }
                     }
@@ -544,7 +544,7 @@ struct GameOverview: View {
                         } else {
                             WrapLayout(spacing: stage.px(10), lineSpacing: stage.px(10)) {
                                 ForEach(group.values, id: \.self) { value in
-                                    OverviewTag(icon: groupIcon(group.kind, value, candidate: candidate), label: value, genre: group.kind == .genres)
+                                    OverviewTag(icon: groupIcon(group.kind, value, candidate: candidate), label: value, genre: group.kind == .genres, onCard: true)
                                 }
                             }
                         }
@@ -647,7 +647,7 @@ struct GameOverview: View {
                     }
                     .padding(.horizontal, stage.px(24))
                     .frame(height: stage.px(64))
-                    .background(Capsule().fill(Color.white.opacity(0.06)).overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1))))
+                    .background(GlassShape(Capsule(), tint: RGBA(red: 1, green: 1, blue: 1, alpha: 0.06), share: 1).overlay(Capsule().strokeBorder(colors.line.color, lineWidth: stage.px(1))))
                 } action: {
                     openURL(link.url)
                 }
@@ -1021,7 +1021,7 @@ private struct SimilarCover: View {
                 Text(L("overview_in_library"))
                     .font(DelosFonts.figtree(stage.tpx(17), .bold)).foregroundStyle(colors.accent.color)
                     .padding(.horizontal, stage.px(12)).padding(.vertical, stage.px(5))
-                    .background(Capsule().fill(.ultraThinMaterial).overlay(Capsule().fill(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0.6))))
+                    .background(GlassShape(Capsule(), tint: .overArt(0.6), role: .panel, share: 1))
                     .padding(stage.px(15))
             }
         }

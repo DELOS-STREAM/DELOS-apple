@@ -1,0 +1,81 @@
+# Translucent fills that stay flat on purpose (tools/ui/check_glass.py; docs/ARCHITECTURE.md, "Glass").
+# File.swift | text of the line | reason
+
+# Scrims and veils: they dim a whole screen, picture or tile, they are not surfaces
+ArtworkScreen.swift | opacity: 0x73 / 255 | scrim under the filter sheet
+ArtworkScreen.swift | .background(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0.6)) | veil over a loading tile
+ButtonCaptureLayer.swift | colors.scrim.color.ignoresSafeArea() | scrim behind the card
+Layers.swift | colors.scrim.color) | the layers' scrim
+OverviewVideoPlayer.swift | Color.black.opacity(0.6) | veil over the thumbnail of a video that cannot play
+RowPopover.swift | Color.black.opacity(0.25) | scrim behind the popover
+RowPopover.swift | shape.fill(colors.bg2.opacity(0.35).color) | tint over the blurred rows behind the popover
+StreamScreen.swift | colors.scrim.color.ignoresSafeArea() | scrim of the stream's result
+StreamScreen.swift | Color.black.ignoresSafeArea().opacity( | the picture's fade to black
+
+# Focus plates, glows and knob halos: focus marks, not surfaces
+ContextMenuLayer.swift | shape.fill(color.opacity(0.17).color) | the focused row's plate
+RowPopover.swift | .fill(colors.accent.opacity(0.17).color) | the focused option's plate
+SettingsMotion.swift | .fill(colors.surface2.color) | the gliding focus plate of the settings rows
+SettingsScreen.swift | .fill(colors.surface2.color) | the focus plate of a settings row
+SettingsScreen.swift | Circle().fill(colors.accent3.opacity(0.4).color) | the focused slider knob's halo
+StreamDock.swift | shape.fill(colors.glow.opacity( | the focused tile's glow
+StreamPopover.swift | shape.fill(colors.accent.opacity(0.17).color) | the focused row's plate
+StreamPopover.swift | Circle().fill(colors.accent3.opacity(0.40).color) | the focused slider knob's halo
+
+# Tracks of switches, sliders and progress bars, and knob shadows
+ArtworkScreen.swift | opacity: 0x99 / 255 | a tile's download bar track
+GameOverviewParts.swift | Capsule().fill(Color.white.opacity(0.1)) | fill bar track
+LaunchScene.swift | Capsule().fill(colors.text.opacity(0.16).color) | progress track
+OverviewVideoPlayer.swift | Capsule().fill(colors.text.color.opacity(0.18)) | the video's progress track
+RowPopover.swift | Capsule().fill(colors.surface3.color) | slider track
+ShellProgressPill.swift | .background(Capsule().fill(colors.surface2.color)) | progress track inside the glass pill
+RowPopover.swift | Circle().fill(.black.opacity(0.3)) | slider knob shadow
+SettingsImpact.swift | colors.text3.opacity(0.3).color | an impact meter's empty steps
+SettingsScreen.swift | Capsule().fill(colors.surface3.color) | switch and slider tracks
+SettingsScreen.swift | Circle().fill(.black.opacity(0.3)) | slider knob shadow
+StreamPopover.swift | Capsule().fill(.white.opacity(0.18)) | switch and slider tracks
+
+# Inside a glass (or opaque) surface: a flat tint, never a blur inside a blur
+ArtworkFilterUI.swift | Capsule().fill(colors.accent.opacity(0.16).color) | count pill in the filter sheet's header
+ArtworkFilterUI.swift | .background(Circle().fill(colors.accent.opacity(0.18).color)) | row icon disc in the filter sheet
+ArtworkScreen.swift | .background(Circle().fill(colors.accent2.opacity(0.2).color)) | icon disc in the glass game chip
+ArtworkScreen.swift | .background(Capsule().fill(colors.surface2.color)) | fact chips in the glass game chip
+ArtworkScreen.swift | .background(Capsule().fill((accent ? colors.accent : colors.surface2).color)) | badges in the glass info strip
+ContextMenuLayer.swift | shape.fill(.white.opacity(0.26)) | the card's lit top edge
+ContextMenuLayer.swift | .background(Circle().fill(.white.opacity(0.10))) | back button inside the menu card
+ContextMenuLayer.swift | Rectangle().fill(.white.opacity(0.10)) | divider inside the menu card
+ContextMenuLayer.swift | shape.fill(fill.opacity(0.85).color) | the header's game tile inside the menu card
+FullKeyboard.swift | palette.onLatched.opacity(0.85) | a latched key's bar, on the opaque key
+FullKeyboard.swift | .fill(content.opacity(content.alpha * 0.55).color) | a key's legend mark, on the opaque key
+GameSettingsScreen.swift | .background(shape.fill(custom ? tint.opacity(0.22).color : colors.text.opacity(0.06).color)) | source box inside the glass panel
+Glass.swift | caret.fill( | the caret of a glass card: material and tint drawn over the glass's edge
+LibraryFilterSheet.swift | Capsule().fill((filters.active ? colors.accent.opacity(0.16) : colors.surface).color) | count pill in the filter sheet's header
+LibraryFilterSheet.swift | .background(Circle().fill(colors.accent.opacity(0.18).color)) | row icon disc in the filter sheet
+MetadataChips.swift | .overlay(Capsule().fill(Color.black.opacity(0.12))) | shade over the opaque HDR badge
+RowPopover.swift | RoundedRectangle(cornerRadius: stage.px(28)).fill(colors.surface2.color) | value field inside the popover card
+RowPopover.swift | .background(Circle().fill(.white.opacity(holding == nil ? 0.10 : 0.22))) | stepper inside the popover card
+StreamDock.swift | shape.fill(RGBA(red: 5 / 255, green: 7 / 255, blue: 15 / 255).opacity(0.28).color) | shade under a tile's own glass
+StreamDock.swift | RGBA(red: 22 / 255, green: 28 / 255, blue: 48 / 255, alpha: 0.78).color) | on/off pill on a glass tile
+StreamPopover.swift | .background(Circle().fill(.white.opacity(focused ? 0.20 : 0.10))) | back button inside the popover card
+StreamPopover.swift | .background(Capsule().fill(.white.opacity(0.10))) | option pill inside the popover card
+ToastHost.swift | .background(Capsule().fill(gold.opacity(0.16).color)) | action pill inside the opaque toast
+
+# The base under cover art and images: the picture covers it
+ArtworkScreen.swift | shape.fill(colors.surface2.color) | a tile's base under its image
+GameOverviewParts.swift | Rectangle().fill(colors.surface2.color) | a remote image's base
+HomeScreen.swift | shape.fill(colors.surface2.color) | a cover's base under its art
+
+# Before iOS, iPadOS, tvOS and macOS 26: a material where Liquid Glass is not available
+GameOverview.swift | shape.fill(.ultraThinMaterial) | OverviewCard before 26
+GameOverview.swift | shape.fill(Color(.sRGB, red: 22 / 255, green: 32 / 255, blue: 60 / 255, opacity: 0.46)) | OverviewCard's tint before 26
+RowPopover.swift | shape.fill(.regularMaterial) | blur of the rows behind the popover before 26
+
+# Marks, separators and halos: no surface holds content
+Components.swift | Circle().fill(colors.accent2.opacity(0.35).color) | the logo's moon halo
+GameOverview.swift | Rectangle().fill(colors.accent.opacity(0.7).color) | timeline tick
+GameOverview.swift | Rectangle().fill(colors.text3.opacity(0.4).color) | timeline tick
+MetadataChips.swift | Capsule().fill(text.opacity(0.55).color) | separator between facts
+MetadataChips.swift | Capsule().fill(colors.text3.opacity(0.55).color) | separator between facts and tags
+SideMenuHeader.swift | Circle().fill(colors.accent2.color).opacity( | the status dot's pulse
+StreamScreen.swift | Circle().fill(colors.accent.opacity(0.16).color) | the emblem's disc on the result scrim
+ToastHost.swift | with: .color(.black.opacity(ToastTiming.shadowPeak * opacity)) | the toast's drawn shadow

@@ -102,7 +102,10 @@ struct TabRow<ID: Hashable>: View {
                     .foregroundStyle((on ? colors.onAccent : colors.accent3).color)
                     .padding(.horizontal, stage.px(9))
                     .padding(.vertical, stage.px(2))
-                    .background(Capsule().fill((on ? colors.onAccent.opacity(0.16) : colors.accent3.opacity(0.22)).color))
+                    .background {
+                        // On the selected tab it lies on the solid accent pill: a flat tint, nothing behind it to blur
+                        if on { Capsule().fill(colors.onAccent.opacity(0.16).color) } else { GlassShape(Capsule(), tint: colors.accent3.opacity(0.22), share: 1) }
+                    }
             }
         }
         .animation(fade, value: on)

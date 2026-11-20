@@ -43,7 +43,7 @@ struct ButtonCaptureLayer: View {
             }
             .padding(stage.px(52))
             .frame(width: stage.px(820))
-            .background(RoundedRectangle(cornerRadius: stage.px(40)).fill(colors.surface3.color))
+            .background(GlassShape(RoundedRectangle(cornerRadius: stage.px(40)), tint: colors.surface3, role: .panel))
             .overlay(RoundedRectangle(cornerRadius: stage.px(40)).strokeBorder(colors.line.color, lineWidth: stage.px(1)))
             .clipShape(RoundedRectangle(cornerRadius: stage.px(40)))
             // A tap on the card cancels too (Android's tap handler covers the whole layer)

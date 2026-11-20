@@ -256,11 +256,13 @@ struct FillBar: View {
 
 // MARK: Tags
 
-/// A tag of the overview (`.tag`): an icon and a name in a faint pill; a genre's takes the game's hue.
+/// A tag of the overview (`.tag`): an icon and a name in a faint glass pill; a genre's takes the game's hue. Inside an
+/// ``OverviewCard`` (already glass) the pill is the flat tint, never a blur inside a blur.
 struct OverviewTag: View {
     let icon: String?
     let label: String
     var genre = false
+    var onCard = false
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
 
@@ -272,8 +274,9 @@ struct OverviewTag: View {
         .padding(.horizontal, stage.px(16))
         .frame(height: stage.px(40))
         .background {
-            Capsule().fill(genre ? colors.accent2.opacity(0.18).color : Color.white.opacity(0.06))
-                .overlay(Capsule().strokeBorder((genre ? colors.accent2.opacity(0.45) : colors.line).color, lineWidth: stage.px(1)))
+            let fill = genre ? colors.accent2.opacity(0.18) : RGBA(red: 1, green: 1, blue: 1, alpha: 0.06)
+            let edge = Capsule().strokeBorder((genre ? colors.accent2.opacity(0.45) : colors.line).color, lineWidth: stage.px(1))
+            if onCard { Capsule().fill(fill.color).overlay(edge) } else { GlassShape(Capsule(), tint: fill, share: 1).overlay(edge) }
         }
         .fixedSize()
     }
@@ -466,7 +469,7 @@ struct GameInfoHint: View {
         .padding(.trailing, stage.px(18))
         .frame(height: stage.px(48))
         .background {
-            Capsule().fill(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: hovered ? 0.78 : 0.6))
+            GlassShape(Capsule(), tint: .overArt(hovered ? 0.78 : 0.6), role: .panel, share: 1)
                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: stage.px(1)))
         }
         .contentShape(Capsule())

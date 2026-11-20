@@ -26,6 +26,7 @@ import UniformTypeIdentifiers
 ///                                       the focused one that way and focuses it; nothing scrolls)
 ///   -DelosDemoApps <n>                  how many apps (default 16; 0 empty)
 ///   -DelosDemoInput controller|touch|keyboard|pointer   the kind of input the hints and the back arrow start with (controller: a pad counts as connected)
+///   -DelosDemoProblem YES               the offer to report a crash of the last run (``ProblemOfferCard``) over the first screen
 enum DemoHarness {
     static var on: Bool { UserDefaults.standard.bool(forKey: "DelosDemo") }
     static let hostID = "demo-pc"
@@ -107,6 +108,10 @@ enum DemoHarness {
 
     /// Opens the screen named by -DelosFakeScreen.
     @MainActor static func navigate(_ navigator: Navigator, actions: ShellActions) {
+        if UserDefaults.standard.bool(forKey: "DelosDemoProblem") {
+            ProblemOffers.shared.showDemo(Problem(id: "demo-crash", kind: .crash, atMs: Int64(Date().timeIntervalSince1970 * 1000),
+                                                  subject: "Fatal error: Index out of range", detail: ""))
+        }
         let screen = UserDefaults.standard.string(forKey: "DelosScreen") ?? "start"
         switch screen {
         case "home": navigator.openHome(hostID: hostID)
