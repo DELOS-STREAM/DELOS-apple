@@ -38,7 +38,7 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - Keyboard keys for every shell action, shown on the hint bar with key caps when the keyboard was used last: Tab the side
   menu, O the context menu, F the filter and the Settings search, [ and ] the tabs, beside Return, Esc and the arrows.
   Keys with Command, Control or Option, and the letters while a text field is typed in, are left alone.
-- The app icon: the mark of DELOS for Android (the gold ring and the blue moon on the dark background), drawn from its
+- The app icon: the DELOS mark (the gold ring and the blue moon on the dark background), drawn from its
   vector for iPhone and iPad (with a dark and a tinted variant), for the Mac (the rounded shape at every size) and for
   Apple TV (the layered icon and the Top Shelf images).
 - Debug builds log the video path once a second (os_log category `StreamPerf` and the diagnostic log): the frame rate
@@ -77,7 +77,7 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   the result per PC and kind of network with its date; the bitrate row then says the recommendation and why, and its
   help names both numbers. The bitrate is only changed by pressing Use recommended bitrate. App settings show the
   same recommendation. Not verified against a real PC.
-- The Delos full keyboard on every device, as on DELOS for Android: the stream menu's Keyboard tile raises a bar of
+- The Delos full keyboard on every device: the stream menu's Keyboard tile raises a bar of
   80 keys over the stream. Fingers (several at once) or the pointer press keys; a controller moves a gold ring
   with the D-pad or the left stick, A presses, B closes, L3 latches Shift, X and Y type Backspace and Space; on Apple
   TV the Siri Remote drives it. Modifiers held for a moment stay down (sticky modifiers), keys carry the modifiers
@@ -85,7 +85,7 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   keyboard size, width, alignment, opacity and vibration apply. While it is up the controllers type instead of
   playing, and everything held comes up at the PC when it closes. The system keyboard of iPhone and iPad moved to
   More → Open system keyboard.
-- The six touch modes of DELOS for Android on iPhone and iPad: Multi touch (the fingers are the PC's touch screen,
+- Six touch modes on iPhone and iPad: Multi touch (the fingers are the PC's touch screen,
   the mouse where the PC takes no touch), Mouse and Mouse with swapped buttons (tap, long press for the other
   button, a second finger scrolls), Trackpad natural (acceleration, flicks, double tap to drag, two-finger scroll)
   and Trackpad gaming (long press to drag, its own X/Y speed, absolute mouse mode), and touch off. Taps of three,
@@ -94,7 +94,7 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   turn the touch sensitivity on. The Apple Pencil is the PC's pen with its pressure, tilt and hover, or its mouse.
   The local pointer shows the system pointer and moves the PC's to where it is; the Mac scrolls from AppKit with the
   trackpad's speed and swapped axes. Not verified on a device or against a real PC.
-- On-screen controls on iPhone and iPad, as on DELOS for Android: the D-pad, A/B/X/Y, bumpers, triggers, Back,
+- On-screen controls on iPhone and iPad: the D-pad, A/B/X/Y, bumpers, triggers, Back,
   Guide, Start, L3/R3, the trackpad button and fixed or free sticks in the DELOS style, any number of fingers at
   once, sent to the PC as controller 0. The default layout is computed for every screen shape; the gear edits it
   (turn on or off, move, resize) and only the changed controls are stored, against their side of the screen in
@@ -107,14 +107,14 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   verified.
 - Live bitrate change and clipboard sync with Vibepollo and Apollo: the stream can ask the PC for another
   bitrate and reports what it accepted or why it failed; Smart Clipboard Sync sends this device's clipboard when
-  the stream starts and fetches the PC's on Disconnect, with Android's toasts and the Hide clipboard content
+  the stream starts and fetches the PC's on Disconnect, with toasts and the Hide clipboard content
   option. The stream menu's Bitrate page and clipboard rows come later; nothing was verified against a real PC.
 
-- Controllers send their motion sensors (at the host's rate, up to 200 Hz, with the gyro smoothing of DELOS for
-  Android), their battery and their touchpad to the PC and take the PC's light colour; player 1 can use the iPhone's or
+- Controllers send their motion sensors (at the host's rate, up to 200 Hz, with gyro smoothing), their battery and
+  their touchpad to the PC and take the PC's light colour; player 1 can use the iPhone's or
   iPad's own sensors when its controller has none. Stick dead zone, flipped face buttons, Multiple controllers off,
   the mouse emulation (hold Start) with stick scrolling, Touchpad as mouse, Select/Guide from combinations on
-  controllers without those buttons, and a quick double Start that opens the stream menu work as on Android.
+  controllers without those buttons, and a quick double Start that opens the stream menu work.
   Controllers are no longer announced with capabilities the app does not deliver.
 - The keyboard: Control + Alt + Shift with Z (release or grab the input), Q (disconnect) and C (local pointer), with
   Command instead of Control as well; the right Option key as the Windows key; the mouse's back and forward buttons as
@@ -137,7 +137,7 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - Try again on a failed stream first checks that the PC answers and still has the game, and otherwise returns to the
   library saying why; the hint bar over the result shows Select and Back to library.
 - While artwork downloads or game info is looked up, a glass pill above the button hints shows what runs, "x of N" and
-  a bar. Strings Android does not translate have their English text in every language of the catalog.
+  a bar. Strings without a translation have their English text in every language of the catalog.
 - The Metal renderer upscales the stream with MetalFX: MetalFX Spatial, MetalFX Temporal (motion vectors and a reactive
   mask computed from the video's own optical flow, a constant depth plane, no jitter, the history dropped on cuts and
   gaps), and Sharpen only (contrast-adaptive sharpening at the stream's size). The sharpness applies as a
@@ -171,13 +171,13 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   and blurred, then springs in to 100 % with a short squash, wave and RGB split, and ends exactly on the plain picture.
   It is drawn by the Metal renderer on the live frames; with reduced motion, and with the display layer where Metal
   is unavailable, the picture is shown as it is. Not verified on a device.
-- Controller hints use the same approved complete Xbox, DualSense, DualShock 4 and Joy-Con font glyphs as Android,
+- Controller hints use the approved complete Xbox, DualSense, DualShock 4 and Joy-Con font glyphs of the shared icon set,
   with physical button positions preserved and no extra disc or connected-pad SF Symbols override. Both font files
-  are byte-identical to Android; the shared library also includes Mac keyboard, mouse and trackpad symbols.
+  come from the shared icon set unchanged; the shared library also includes Mac keyboard, mouse and trackpad symbols.
   Physical-device rendering is not verified.
 - The library filter on the home screen (when `DelosMetadataURL` is configured): Y, or a tap on the hint bar's Filter
   (a glyphless pill while no controller is the input), opens a glass sheet with chips for genre and theme (with the number of games each holds), HDR support and
-- The library filter of Android on the home screen (when `DelosMetadataURL` is configured): Y, or a tap on the hint bar's Filter
+- The library filter on the home screen (when `DelosMetadataURL` is configured): Y, or a tap on the hint bar's Filter
   (a 52 px glass pill with the filter symbol before its label while no controller is the input), opens a glass sheet with chips for genre and theme (with the number of games each holds), HDR support and
 - A demo harness for debug builds (`-DelosDemo YES`, docs/BUILDING.md): a fake PC with games, generated artwork, fake metadata and a
   command script, none of it touching the network, the client identity or the app's data, and `tools/sim-walkthrough.sh` to
@@ -324,7 +324,7 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   Shift + M, or holding Escape for a second, opens the stream menu and frees the pointer, as does L3 + R3. Command-Q,
   Quit and closing the window disconnect the stream first. `sh tools/mac.sh` builds an ad-hoc signed copy, starts it
   and takes a screenshot of its window. Not yet tried with a real stream.
-- Links and shortcut files from outside the app, as on DELOS for Android: an `art://` link pairs with a PC (with its
+- Links and shortcut files from outside the app: an `art://` link pairs with a PC (with its
   one-time code when it has one) or starts a game or opens a PC, and an opened `.art` shortcut file starts its game. Each
   asks first in a dialog, since a link can come from any web page or app. A PC that sleeps is woken and waited for, a
   game already running on the PC is never quit (its library opens with a toast), and a link naming no known PC or game
@@ -332,6 +332,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- The changelog and the README describe DELOS for Apple on its own; `tools/docs/check_platform.py`, run by
+  `tools/test.sh`, fails when either names another platform.
 - The library filter takes several values in every row (for example two genres, a theme and Native HDR): a chip toggles
   on and off, values in one row match any of them and the rows must all match. The library changes only when the
   choices are confirmed with the "Show N apps" pill, which counts the matching apps live, or with Y (F; Return on a chip
@@ -346,8 +348,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   come first.
 - The press of an activation (A, Return, a tap, a click) squeezes the item to 0.96 (was 0.97) and pulses its focus glow
   to 1.6 times its blur, then springs back.
-- The GPU impact chip shows the chip icon again instead of a graphics card, as in DELOS for Android: Apple devices have a
-  system on a chip rather than a separate graphics card. The icon fonts and `Symbols.swift` are synced from Android.
+- The GPU impact chip shows the chip icon again instead of a graphics card: Apple devices have a
+  system on a chip rather than a separate graphics card. The icon fonts and `Symbols.swift` come from the shared icon set.
 - Video frame pacing: Steady low latency takes the place of Lowest latency. Each frame is shown at the earliest refresh
   its arrival makes 99 times out of 100, measured against the PC's own frame times over the last two seconds, so the
   picture keeps the PC's cadence and a frame waits only the few milliseconds of the network's jitter, never a whole
@@ -375,8 +377,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   VoiceOver on a device.
 - Texts: the local network prompt and the Mac's copyright line are translated into all ten languages; the CUSTOM badge
   of a per-app row is translated; the help of asynchronous decoding, of PyroWave and of the stream menu's sharpness no
-  longer names MediaCodec, Vulkan or SGSR. `tools/l10n/check_usage.py` now also fails on a catalog entry without every
-  language and on a text that names Android's platform.
+  longer names another platform's decoder, graphics API or upscaler. `tools/l10n/check_usage.py` now also fails on a catalog entry without every
+  language and on a text that names another platform.
 - Every Settings row now does something on Apple. The metered bitrate applies when the network is expensive or in Low
   Data Mode at the stream's start (a quarter of the bitrate unless set). Wi-Fi keep-alive sends an empty packet to the
   PC every 20 ms during a stream. Asynchronous decoding switches VideoToolbox's asynchronous decompression in the Metal
@@ -394,7 +396,7 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   default: Settings → Controls → Stream menu buttons records your own combination ("Not set" by default). On the touch
   screen the menu opens with a swipe up from a band above the bottom edge (Swipe up to open the menu, on by default)
   instead of the swipe from the left edge; touches starting in that band do not reach the PC. Not yet tried on a device.
-- Feedback and motion as in DELOS for Android: a tap or a click plays the same cue and squeezes the element (.97) as A
+- Feedback and motion: a tap or a click plays the same cue and squeezes the element (.97) as A
   does, without a second sound (Cancel and Back to library are BACK only; the stream menu opens with OPEN and closes with
   BACK; the PC ending the stream shows a toast), Apple TV plays MOVE and SELECT through the focus engine, circle rows and
   tall menus scroll to the focused item, icons cross-fade between Regular and Fill, the focus curves are 420 ms and jump
@@ -415,7 +417,7 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - The game menu offers Metadata for every game except DELOS's own entries, also without a metadata service (its
   actions then say the service is unavailable). The home screen's notes for no paired PC and an offline PC point to
   the Devices screen.
-- The info row's badges, when they do not fit, bounce like Android's: still for 0.7 s, linear to the end at 56 px/s, a
+- The info row's badges, when they do not fit, bounce: still for 0.7 s, linear to the end at 56 px/s, a
   0.9 s pause, back, a 0.9 s pause. Disconnect and Quit from the stream menu play SELECT when the library returns.
 - MetalFX Spatial is the recommended upscaler mode (it was and stays the default, also of a new profile) and MetalFX
   Temporal is marked experimental in Settings and the stream menu: its help says it is meant for noisy, low-bitrate
@@ -459,17 +461,17 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   with its caret has the system work it out first. On a fresh iPad simulator the first popover of a settings row held
   283 and 333 ms before, 95 and 87 ms after. The stream menu's popover shares the glass and was not measured (the demo
   has no stream). Not verified on a device.
-- The side menu's rows enter as on Android: top-down after the header (they rose bottom-up, in the order SwiftUI made
+- The side menu's rows enter top-down after the header (they rose bottom-up, in the order SwiftUI made
   them appear), and only their icon, label and value rise; the row keeps its place, so the focus ring no longer sits
   18 px low until the row has landed and then jumps up: it fades in together with its row's content, on the row's delay
-  and curve (Android shows it from the first frame; the owner prefers it with its row). Every staggered entrance
-  is now a render effect (opacity and offset where the view is drawn, Android's graphics layer): no body is evaluated
+  and curve (the owner prefers it with its row). Every staggered entrance
+  is now a render effect (opacity and offset where the view is drawn): no body is evaluated
   and nothing is laid out again on each frame of a rise. The context menu's plate enters with the row it lies on, and the
-  stream menu popover's rows take Android's timing (120 ms, then 46 ms a row). Not verified on a device.
-- The start, home, devices, pairing, profile and avatar screens' entrances run top-down and left to right as on Android
+  stream menu popover's rows take the DELOS timing (120 ms, then 46 ms a row). Not verified on a device.
+- The start, home, devices, pairing, profile and avatar screens' entrances run top-down and left to right
   (the headline first, then the circles or covers in order): each element has its place instead of taking the next one
   as it appeared, which SwiftUI often did from the last element up. An element that appears more than 700 ms after its
-  screen (a PC found later, a settings row a switch reveals) is just there, as on Android. The stream menu's Send keys
+  screen (a PC found later, a settings row a switch reveals) is just there. The stream menu's Send keys
   and Commands pills rise in one after the other from the left, each with its focus plate. Not verified on a device.
 - A long list of values that a tap on a settings row opens (Video resolution) starts below the top bar and the name
   under its focused button and scrolls, instead of running up under them.
@@ -479,15 +481,15 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   CoreGraphics and Accelerate do it now, about 3 ms, and real SteamGridDB backgrounds of 10 to 60 frames a second play
   every frame (`AnimatedArtBenchmark`). Animations also decode two frames ahead instead of one, so Dredge's 62.5 fps
   cover keeps its pace while the main thread is busy. Not verified on a device.
-- Settings search is a screen of its own, as on Android: the top navigation and the PC pill are hidden while it is open
+- Settings search is a screen of its own: the top navigation and the PC pill are hidden while it is open
   (the Settings button no longer takes the focus and shows its name), the hints are A Select and B Back, the focus starts
-  on the field, the results keep Android's order (Appearance first), and B returns to the row that was focused. The back
+  on the field, the results keep the Settings order (Appearance first), and B returns to the row that was focused. The back
   arrow closes the search instead of leaving Settings.
-- Long texts scroll where they do on Android instead of ending in an ellipsis: the context menu's title, its line of
+- Long texts scroll instead of ending in an ellipsis: the context menu's title, its line of
   facts and its rows (a row while focused), the stream dock's title, the stream menu popover's title, rows and values,
   the options of a choice popover, and on a narrow compact stage the streaming-time block above the badges when not
   even its short form fits. The right end of an overflowing text fades over its full 36 px however little of it is
-  cut, as on Android.
+  cut.
 - Latency presentation preserves a bounded one-frame jitter reserve instead of discarding paired arrivals. Metal's
   shown FPS now uses actual drawable presentation feedback, not selection or submission; CPU submission and GPU
   deadlines are reported separately. Sustained 120 FPS on physical devices is not verified for this change.
