@@ -10,10 +10,11 @@ import SwiftUI
 /// CUSTOM badge and the profile's value and resets with X (or its round button on touch). Changes are stored at once and
 /// apply to the next stream. Android's Display tab has no counterpart here, so there are no tabs.
 struct GameSettingsScreen: View {
-    /// What the hint bar's adjust and reset hints depend on.
+    /// What the hint bar's adjust, reset and popover hints depend on.
     private struct HintKey: Equatable {
         let focus: AnyHashable?
         let custom: Int
+        let popup: RowPopupKind?
     }
 
     let hostID: String
@@ -111,9 +112,10 @@ struct GameSettingsScreen: View {
             if focusedRow == nil { focus.focus(Self.firstFocus()) }
         }
         .onDisappear { navigator.releaseInput(focus) }
-        .onChange(of: HintKey(focus: focus.focused, custom: model.overrides.count), initial: true) {
+        .onChange(of: HintKey(focus: focus.focused, custom: model.overrides.count, popup: popup?.kind), initial: true) {
             navigator.setHints(ScreenHints(
-                adjustable: ShellHints.adjustable(focusedRow), resetsRow: focusedRow.map { model.isCustom($0.id) } ?? false), from: focus)
+                adjustable: ShellHints.adjustable(focusedRow), resetsRow: focusedRow.map { model.isCustom($0.id) } ?? false,
+                rowPopup: popup?.kind), from: focus)
         }
         .onChange(of: focus.focused) { _, now in
             if let id = now as? String, rows.contains(where: { $0.id == id }) { lastRow = id }
@@ -522,6 +524,10 @@ enum GameSettingsLayout {
 /// The banner (`GameBanner`): the app's artwork blurred like the app's background (the hero, else the cover, else the PC's box
 /// art), the top of the hero's area; the placeholder art while there is no image. A scrim keeps the title legible on bright art,
 /// and the strip fades into the page towards its bottom.
+///
+/// The hero's area is the one of a stage no taller than 16:9 (``bannerStageHeight``), so a 4:3 stage shows the same crop, band
+/// and diagonal fade of the art as DELOS for Android's 16:9 stage: the art stays as dark and as blurred, relative to the
+/// banner, instead of the taller area's larger band and weaker fade bringing it forward.
 private struct GameBanner: View {
     let hostID: String
     let app: HostApp
@@ -534,22 +540,24 @@ private struct GameBanner: View {
 
     var body: some View {
         let placeholder = GameArt(hostID: hostID, app: app)
-        let area = HeroArea.of(stageWidth: stage.width, stageHeight: stage.height)
         let height = stage.compact ? GameSettingsLayout.compactBannerHeight : GameSettingsLayout.bannerHeight
+        let heroStageHeight = Self.bannerStageHeight(stageWidth: stage.width, stageHeight: stage.height)
+        let area = HeroArea.of(stageWidth: stage.width, stageHeight: heroStageHeight)
         ZStack(alignment: .top) {
             PlaceholderArt(hue: placeholder.hue, hue2: placeholder.hue2, icon: placeholder.icon, glyphSize: 420, glyphRight: 84, glyphTop: -0.14, glyphAlpha: 0.14)
-            // The stage-wide top of the hero's overscanned area (2100 x 1260 at 16:9), as the dashboard shows it. An overlay, so the
-            // wider picture overflows the banner evenly on both sides (Android's `requiredSize`) instead of widening it, and the
-            // whole screen with it, the moment the art arrives
+            // The stage-wide top of the hero's overscanned area (2100 x 1260 at 16:9), as the dashboard shows it at 16:9. An
+            // overlay, so the wider picture overflows the banner evenly on both sides (Android's `requiredSize`) instead of
+            // widening it, and the whole screen with it, the moment the art arrives
             Color.clear.overlay(alignment: .top) {
-                // The dashboard's render of the same art is usually in memory already: it shows from the first frame, without a
-                // fade (Android's `HeroBitmaps.cached`), so the banner never starts on the placeholder and swaps in the art later
+                // The dashboard's render of the same art (same area: a stage of 16:9 or wider) is usually in memory already: it
+                // shows from the first frame, without a fade (Android's `HeroBitmaps.cached`), so the banner never starts on the
+                // placeholder and swaps in the art later
                 if let lens = lens ?? cachedLens(area: area) {
                     Image(decorative: lens, scale: 1)
                         .resizable()
                         .interpolation(.low)
                         .frame(width: stage.px(area.width), height: stage.px(area.height))
-                        .offset(y: stage.px(-(area.height - stage.height) / 2))
+                        .offset(y: stage.px(-(area.height - heroStageHeight) / 2))
                         .transition(.opacity.animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000)))
                 }
             }
@@ -562,11 +570,11 @@ private struct GameBanner: View {
         .frame(maxWidth: .infinity)
         .frame(height: stage.px(height), alignment: .top)
         .clipped()
-        // The strip fades into the page over its lower 65 %
+        // The strip fades into the page over its lower 65 %. Opaque from its very top: Android's mask starts clear for one
+        // stage pixel, a hairline on the Odin but a seam of the animated background on a denser screen
         .mask {
             LinearGradient(stops: [
-                .init(color: .clear, location: 0), .init(color: .black, location: min(1 / max(stage.px(height), 1), 1)),
-                .init(color: .black, location: 0.35), .init(color: .clear, location: 1),
+                .init(color: .black, location: 0), .init(color: .black, location: 0.35), .init(color: .clear, location: 1),
             ], startPoint: .top, endPoint: .bottom)
         }
         .allowsHitTesting(false)
@@ -578,6 +586,12 @@ private struct GameBanner: View {
             if result === lens || result === cachedLens(area: area) { lens = result; return }
             withAnimation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000)) { lens = result }
         }
+    }
+
+    /// The stage height the banner's hero area is worked out for: the stage's own, at most 16:9 of its width (DELOS for
+    /// Android's 1920 × 1080 stage), so a taller stage keeps the wide stage's crop.
+    static func bannerStageHeight(stageWidth: Double, stageHeight: Double) -> Double {
+        min(stageHeight, stageWidth * 1080 / 1920)
     }
 
     /// The banner's render if it is in memory already, from the same picks as ``bannerImage()`` in the same order.
