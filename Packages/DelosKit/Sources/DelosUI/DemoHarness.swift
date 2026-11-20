@@ -21,7 +21,9 @@ import UniformTypeIdentifiers
 ///                                       rightclick (a secondary click at the middle of the focused item, through the router's pointer entry);
 ///                                       tap (the focused item's own tap, a click after `click`: its press and its action);
 ///                                       tap-left, tap-right, tap-up, tap-down (the same on the item beside the focused one that way,
-///                                       which has no focus yet: a finger's first tap there)
+///                                       which has no focus yet: a finger's first tap there);
+///                                       hover-left, hover-right, hover-up, hover-down (the pointer moves onto the item beside
+///                                       the focused one that way and focuses it; nothing scrolls)
 ///   -DelosDemoApps <n>                  how many apps (default 16; 0 empty)
 ///   -DelosDemoInput controller|touch|keyboard|pointer   the kind of input the hints and the back arrow start with (controller: a pad counts as connected)
 enum DemoHarness {
@@ -210,10 +212,24 @@ enum DemoHarness {
         if let direction = directions[name] {
             var frames = focus.registeredFrames
             guard let current = frames.removeValue(forKey: focused),
-                  let beside = FocusGeometry.next(from: current, direction: direction, candidates: frames) else { return true }
+                  let beside = FocusGeometry.nearest(from: current, direction: direction, candidates: frames) else { return true }
             target = beside
         }
         NotificationCenter.default.post(name: tapNotification, object: nil, userInfo: ["id": target])
+        return true
+    }
+
+    /// Posted by `hover-<direction>` with the direction (`userInfo["direction"]`): the focused ``FocusItem`` hands the focus
+    /// to the item beside it that way as the pointer moving onto it does (``FocusModel/point(to:)``: nothing scrolls).
+    static let hoverNotification = Notification.Name("DelosDemoHover")
+
+    /// `hover-left`, `hover-right`, `hover-up`, `hover-down`: the pointer moves onto the item beside the focused one that
+    /// way (the simulator has no scripted pointer). True when [name] was one.
+    @MainActor static func hover(_ name: String) -> Bool {
+        let directions: [String: FocusDirection] = ["hover-left": .left, "hover-right": .right, "hover-up": .up, "hover-down": .down]
+        guard let direction = directions[name] else { return false }
+        ControllerGlyphs.shared.note(.pointer)
+        NotificationCenter.default.post(name: hoverNotification, object: nil, userInfo: ["direction": direction])
         return true
     }
 

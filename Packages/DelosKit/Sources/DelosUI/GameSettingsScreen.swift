@@ -172,7 +172,7 @@ struct GameSettingsScreen: View {
 
     private func list(_ rows: [SettingRow]) -> some View {
         ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: stage.px(10)) {
+            VStack(alignment: .leading, spacing: stage.px(SettingsLayout.rowGap)) {
                 ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                     FocusItem(
                         id: row.id, model: focus,

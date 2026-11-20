@@ -350,7 +350,9 @@ struct KeyboardMetrics: Equatable, Sendable {
     let keyHeight: Double
 
     static let rows = 6.0
-    static let gap = 6.0
+    /// The gap between two keys, across and down (``FocusSpacing``, dense key grid): a key does not grow and its ring is
+    /// drawn inside it, so the clearance is enough.
+    static let gap = FocusSpacing.clearance
     static let sep = 12.0
     static let side = 24.0
     static let topPad = 22.0

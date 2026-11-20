@@ -16,19 +16,24 @@ enum CenterColumnLayout {
     static func side(_ stage: Stage) -> Double {
         stage.compact ? margin + max(stage.safe.leading, stage.safe.trailing) : 0
     }
+
+    /// The column's gap in stage pixels: [gap] times the compact scale, at least [min].
+    static func gap(_ gap: Double, min: Double, _ stage: Stage) -> Double { max(gap * stage.compactScale, min) }
 }
 
-/// `.center-col`: a column in the middle of the stage whose [gap] shrinks on a compact stage. What is too tall for the
-/// room (the avatar picker on an iPhone, large text) scrolls instead of running under the bars, and the focused item is
-/// kept in view with room for its ring and glow; the cut edges fade while there is more beyond them.
+/// `.center-col`: a column in the middle of the stage whose [gap] shrinks on a compact stage, never below [minGap] (the
+/// least gap focusable items one above the other need, ``FocusSpacing``). What is too tall for the room (the avatar picker
+/// on an iPhone, large text) scrolls instead of running under the bars, and the focused item is kept in view with room for
+/// its ring and glow; the cut edges fade while there is more beyond them.
 struct CenterColumn<Content: View>: View {
     let gap: Double
+    var minGap = 0.0
     @ViewBuilder let content: () -> Content
     @Environment(\.stage) private var stage
 
     var body: some View {
         let clear = CenterColumnLayout.clearance(stage)
-        let column = VStack(spacing: stage.px(gap * stage.compactScale), content: content)
+        let column = VStack(spacing: stage.px(CenterColumnLayout.gap(gap, min: minGap, stage)), content: content)
             .frame(maxWidth: .infinity)
             .entranceScope()
         ViewThatFits(in: .vertical) {

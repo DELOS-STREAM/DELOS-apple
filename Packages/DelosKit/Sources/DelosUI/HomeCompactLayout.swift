@@ -89,9 +89,6 @@ enum HomeCompact {
     /// The peeking cover ends this far from the stage's right edge (inside the fade).
     static let peekEdge = 24.0
 
-    /// The least air between a focused cover's ring and the cover next to it (the growth, the ring and 12 px).
-    static let focusAir = 12.0
-
     /// The info row at interface scale [scale] (its texts grow with it).
     static func blockHeight(_ scale: Double) -> Double { infoRowHeight * scale }
 
@@ -115,18 +112,21 @@ enum HomeCompact {
     /// How far the ring of a focused cover [height] high reaches above and below it.
     static func ringReach(_ height: Double) -> Double { height * (focusScale - 1) / 2 + ring * focusScale }
 
-    /// The gap between two covers at [scale]: the prototype's 44 scaled with them, but never less than a focused cover's
-    /// growth to one side, its ring and ``focusAir``.
+    /// How far a focused cover at [scale] reaches beside it: half its growth and its ring, which grows with it.
+    static func sideReach(_ scale: Double) -> Double { tile * scale * (focusScale - 1) / 2 + ring * focusScale }
+
+    /// The gap between two covers at [scale]: the prototype's 44 scaled with them, but never less than the focus spacing
+    /// rule's (``FocusSpacing``: twice a focused cover's reach and the clear space).
     static func coverGap(_ scale: Double) -> Double {
-        max(coverGap * scale, tile * scale * (focusScale - 1) / 2 + ring * focusScale + focusAir)
+        max(coverGap * scale, FocusSpacing.gap(reach: sideReach(scale)))
     }
 
     /// Where the row starts: the focused wide first cover grows to the left only, so its unfocused left edge lies that far
     /// right of ``side`` and the focused one (with the ring 10 px further out) stands exactly on it.
     static func rowStart(_ scale: Double) -> Double { side + wide * scale * (focusScale - 1) }
 
-    /// The cover scale below which ``coverGap(_:)``'s floor is the larger one.
-    private static let gapFloorScale = (ring * focusScale + focusAir) / (coverGap - tile * (focusScale - 1) / 2)
+    /// The cover scale below which ``coverGap(_:)``'s floor is the larger one (above 1: at every scale).
+    private static let gapFloorScale = (2 * ring * focusScale + FocusSpacing.clearance) / (coverGap - tile * (focusScale - 1))
 
     /// The widest cover scale at which, next to the focused wide first cover, one whole cover and a third of the next one
     /// end ``peekEdge`` before the stage's right edge: a second game is always clearly there.
@@ -134,8 +134,9 @@ enum HomeCompact {
         let room = stageWidth - side - peekEdge
         let proto = room / (wide * focusScale + 2 * coverGap + tile * 4 / 3)
         if proto >= gapFloorScale { return proto }
-        let floorGap = tile * (focusScale - 1) / 2
-        let floorBase = ring * focusScale + focusAir
+        // The floor gap is floorGap × scale + floorBase
+        let floorGap = tile * (focusScale - 1)
+        let floorBase = 2 * ring * focusScale + FocusSpacing.clearance
         return (room - 2 * floorBase) / (wide * focusScale + 2 * floorGap + tile * 4 / 3)
     }
 

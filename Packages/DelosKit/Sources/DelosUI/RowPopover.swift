@@ -221,7 +221,7 @@ private struct OptionsList: View {
                 .frame(height: stage.px(L.title), alignment: .top)
             ScrollViewReader { proxy in
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: stage.px(L.gap)) {
+                    VStack(spacing: stage.px(L.optionGap)) {
                         ForEach(Array(options.enumerated()), id: \.offset) { index, option in
                             FocusItem(id: RowPopover.optionID(index), model: focus, action: { onPick(index) }) { focused in
                                 optionView(option, current: index == selected, focused: focused)

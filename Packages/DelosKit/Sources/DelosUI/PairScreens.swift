@@ -131,6 +131,15 @@ enum PairFailure: Equatable {
 
 // MARK: Screens
 
+/// The numbers of ``CircleRow``, stage pixels.
+enum CircleRowLayout {
+    /// The focused circle's growth and the gliding ring (5 px wide, 5 px out, not scaled).
+    static let focusScale = 1.16, ring = 5.0, ringGap = 5.0
+    /// The gap between two circles (``FocusSpacing``): a focused 220 px circle grows by 17.6 a side and its ring reaches
+    /// 10 beyond that, so two neighbours need 2 × 27.6 + 8 = 63.2.
+    static let gap = 64.0
+}
+
 /// A row of circles in the middle of the stage; it scrolls sideways when they do not fit.
 struct CircleRow<Content: View>: View {
     @ViewBuilder let content: () -> Content
@@ -139,9 +148,9 @@ struct CircleRow<Content: View>: View {
     var body: some View {
         // The 40 px around the circles keep the ring and glow of the first and last from being cut where the row scrolls; they
         // take no room in the layout (Android's scroll area gives them back: `bleed`), so the heading keeps its distance
-        let row = HStack(alignment: .top, spacing: stage.px(56)) { content() }.padding(stage.px(40)).padding(-stage.px(40))
-            // One focus ring glides between the circles (`GlideRingHost(FocusRing(5, 5), focusScale = 1.16)`)
-            .glideRingHost(focusScale: 1.16)
+        let row = HStack(alignment: .top, spacing: stage.px(CircleRowLayout.gap)) { content() }.padding(stage.px(40)).padding(-stage.px(40))
+            // One focus ring glides between the circles
+            .glideRingHost(focusScale: CircleRowLayout.focusScale, ring: CircleRowLayout.ring, gap: CircleRowLayout.ringGap)
         ViewThatFits(in: .horizontal) {
             row
             // The cut edges fade over 40 px where circles go on behind them; the mask reaches over the glow room

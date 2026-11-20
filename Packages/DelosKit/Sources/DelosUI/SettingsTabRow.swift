@@ -70,16 +70,16 @@ struct TabRow<ID: Hashable>: View {
         #if os(tvOS)
         FocusItem(id: focusID(tab.id), model: focus, action: { onSelect(tab.id) }) { focused in
             pillView(tab)
-                .focusLook(focused, scale: 1.06, ring: 3, glowBlur: 0, glowY: 0)
+                .focusLook(focused, scale: TabRowLayout.tabScale, ring: TabRowLayout.tabRing, glowBlur: 0, glowY: 0)
         }
-        .padding(.horizontal, stage.cpx(stage.compact ? 3 : 5))
+        .padding(.horizontal, stage.px(TabRowLayout.tvTabGap / 2))
         #else
         Button { onSelect(tab.id) } label: {
             pillView(tab).contentShape(Capsule())
         }
         .pressButton()
         .focusable(false)
-        .padding(.horizontal, stage.cpx(stage.compact ? 3 : 5))
+        .padding(.horizontal, stage.cpx((stage.compact ? TabRowLayout.compactTabGap : TabRowLayout.tabGap) / 2))
         #endif
     }
 

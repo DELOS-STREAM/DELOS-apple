@@ -43,7 +43,7 @@ struct DialogLayer: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: stage.px(40), style: .continuous)
-        VStack(spacing: stage.px(22)) {
+        VStack(spacing: stage.px(DialogLayout.stackGap)) {
             Text(spec.title)
                 .font(DelosFonts.unbounded(stage.tpx(38)))
                 .foregroundStyle(colors.text.color)
@@ -55,16 +55,20 @@ struct DialogLayer: View {
                 .foregroundStyle(colors.text2.color)
                 .fixedSize(horizontal: false, vertical: true)
                 .staggerEntrance(index: 1, base: Motion.menuDelay)
-            ForEach(spec.fields.indices, id: \.self) { index in
-                DialogFieldView(
-                    field: spec.fields[index], value: $values[index], index: index, typing: $typing, focus: layers.focus,
-                    width: width - 2 * padding
-                ) {
-                    if index == spec.fields.count - 1 { confirm() } else { layers.focus.focus(Self.fieldID(index + 1)) }
+            if !spec.fields.isEmpty {
+                VStack(spacing: stage.px(DialogLayout.fieldGap)) {
+                    ForEach(spec.fields.indices, id: \.self) { index in
+                        DialogFieldView(
+                            field: spec.fields[index], value: $values[index], index: index, typing: $typing, focus: layers.focus,
+                            width: width - 2 * padding
+                        ) {
+                            if index == spec.fields.count - 1 { confirm() } else { layers.focus.focus(Self.fieldID(index + 1)) }
+                        }
+                        .staggerEntrance(index: index + 2, base: Motion.menuDelay)
+                    }
                 }
-                .staggerEntrance(index: index + 2, base: Motion.menuDelay)
             }
-            HStack(spacing: stage.px(stage.compact ? 20 : 24)) {
+            HStack(spacing: stage.px(FocusSpacing.pillGap)) {
                 FocusItem(id: Self.confirmID, model: layers.focus, action: confirm) { focused in
                     PillButton(label: spec.confirm, icon: Symbols.check, primary: true, focused: focused)
                 }
@@ -72,7 +76,7 @@ struct DialogLayer: View {
                     PillButton(label: L("common_cancel"), focused: focused)
                 }
             }
-            .padding(.top, stage.px(8))
+            .padding(.top, stage.px(DialogLayout.buttonsGap - DialogLayout.stackGap))
             .staggerEntrance(index: spec.fields.count + 2, base: Motion.menuDelay)
         }
         .multilineTextAlignment(.center)
@@ -128,6 +132,18 @@ struct DialogLayer: View {
         let cleaned = zip(values, spec.fields).map { String($0.prefix($1.maxLength)) }
         if spec.onConfirm(cleaned) { layers.close() }
     }
+}
+
+/// The gaps of a ``DialogLayer``'s card, stage pixels (``FocusSpacing``).
+enum DialogLayout {
+    /// Between the title, the note and the fields.
+    static let stackGap = 22.0
+    /// Between two fields, one above the other: ``TextPill``s 84 px high that grow by 5 % with a 4 px ring 4 px out inside
+    /// their scale reach 10.5 px beyond their edge, so 2 · 10.5 + ``FocusSpacing/clearance`` = 29.
+    static let fieldGap = 30.0
+    /// Above the buttons, after the last field (or the note): a ``PillButton`` reaches further than a field, so
+    /// ``FocusSpacing/pillLineGap`` covers both.
+    static let buttonsGap = FocusSpacing.pillLineGap
 }
 
 /// One field of a dialog: the shared text pill, filling the dialog's width. A on it starts typing.

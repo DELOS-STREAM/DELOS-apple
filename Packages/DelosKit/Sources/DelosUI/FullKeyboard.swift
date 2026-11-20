@@ -98,10 +98,10 @@ extension KeyboardPrefs {
     }
 }
 
-/// The ring around the focused key: a 4 px gold line with a 3 px gap in the background color, around a key of corner 11.
+/// The ring of the focused key: a 4 px gold line drawn inside the key's own edge (corner 11), so it reaches nothing beyond
+/// the key, which does not grow (the dense key grid of ``FocusSpacing``: ``KeyboardMetrics/gap`` needs only the clearance).
 private enum KeyRing {
     static let width = 4.0
-    static let gap = 3.0
     static let corner = 11.0
 }
 
@@ -284,15 +284,8 @@ private struct KeyRows: View {
             case .up: (0, -1)
             case .down: (0, 1)
             }
-            let g = KeyRing.gap, w = KeyRing.width
-            ZStack {
-                RoundedRectangle(cornerRadius: stage.px(KeyRing.corner + g))
-                    .strokeBorder(colors.bg.color, lineWidth: stage.px(g))
-                    .frame(width: stage.px(frame.width + 2 * g), height: stage.px(frame.height + 2 * g))
-                RoundedRectangle(cornerRadius: stage.px(KeyRing.corner + g + w))
-                    .strokeBorder(colors.accent.color, lineWidth: stage.px(w))
-                    .frame(width: stage.px(frame.width + 2 * (g + w)), height: stage.px(frame.height + 2 * (g + w)))
-            }
+            RoundedRectangle(cornerRadius: stage.px(KeyRing.corner))
+                .strokeBorder(colors.accent.color, lineWidth: stage.px(KeyRing.width))
             .frame(width: stage.px(frame.width), height: stage.px(frame.height))
             // The ring squeezes with the key under it
             .scaleEffect(focusedPressed ? Motion.pressScale : 1)

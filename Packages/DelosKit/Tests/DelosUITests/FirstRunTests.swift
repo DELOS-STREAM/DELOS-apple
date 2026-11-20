@@ -108,7 +108,8 @@ import Testing
         #expect(model.focused == AnyHashable("c"))
         #expect(model.handle(.left))
         #expect(model.focused == AnyHashable("b"))
-        // Directions without a move stay spatial
+        // Directions without a move stay spatial; the avatars are a 2-D grid, so Down keeps the column
+        model.keepColumn(in: "avatars", items: ["a", "b", "c", "d"])
         #expect(model.handle(.down))
         #expect(model.focused == AnyHashable("d"))
     }

@@ -68,9 +68,10 @@ import Testing
 
     @Test func dockGeometryAndTimeline() {
         typealias D = StreamDockLayout
-        #expect(D.rowWidth(count: 4) == 720)
+        #expect(D.rowWidth(count: 4) == 732)
         #expect(D.ringLeft(0) == -18)
-        #expect(D.tileLeft(2) == 380)
+        #expect(D.tileLeft(2) == 388)
+        #expect(D.gap >= FocusSpacing.gap(reach: (D.ring - D.tile) / 2))
         #expect(D.tileDelay(0) == 100 && D.tileDelay(3) == 226)
         #expect(D.labelDelay(1) == 282)
         #expect(D.ringDelay(3) == 486)

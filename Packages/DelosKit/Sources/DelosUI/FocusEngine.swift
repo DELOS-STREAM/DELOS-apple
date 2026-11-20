@@ -17,7 +17,30 @@ public enum FocusDirection: Sendable {
 public enum FocusGeometry {
     private static let edge: CGFloat = 0.5
 
+    /// The item a move in [direction] from [current] lands on. Left and right go to the nearest item that way; up and down
+    /// go to the row the nearest item that way stands in and land on its first item (docs/ENGINEERING_RULES.md, "A new row
+    /// starts at its first item"): the leftmost one whose left edge is on screen (at or right of 0 in the global space the
+    /// frames are in), so a row scrolled sideways starts at its first item in view.
     public static func next<ID: Hashable>(from current: CGRect, direction: FocusDirection, candidates: [ID: CGRect]) -> ID? {
+        guard let hit = nearest(from: current, direction: direction, candidates: candidates) else { return nil }
+        guard direction == .up || direction == .down, let band = candidates[hit] else { return hit }
+        return rowStart(of: hit, band: band, from: current, direction: direction, candidates: candidates)
+    }
+
+    /// The first item of the row [hit] stands in: of the items beyond [current] in [direction] whose vertical centre lies
+    /// within [band] (the hit's frame), the leftmost one on screen; the hit itself when none is.
+    static func rowStart<ID: Hashable>(of hit: ID, band: CGRect, from current: CGRect, direction: FocusDirection, candidates: [ID: CGRect]) -> ID {
+        var first: (id: ID, minX: CGFloat)?
+        for (id, frame) in candidates where frame.midY >= band.minY && frame.midY <= band.maxY && frame.minX >= -edge {
+            guard measure(frame, from: current, direction) != nil else { continue }
+            if let first, frame.minX > first.minX || (frame.minX == first.minX && "\(id)" >= "\(first.id)") { continue }
+            first = (id, frame.minX)
+        }
+        return first?.id ?? hit
+    }
+
+    /// The nearest item in [direction] (Android's focus finder): one in the beam beats any that is not, then the weight.
+    static func nearest<ID: Hashable>(from current: CGRect, direction: FocusDirection, candidates: [ID: CGRect]) -> ID? {
         var best: (id: ID, inBeam: Bool, weight: CGFloat)?
         for (id, frame) in candidates {
             guard let (major, minor, inBeam, ahead, side) = measure(frame, from: current, direction) else { continue }
@@ -113,6 +136,8 @@ public final class FocusModel {
     /// focus last.
     @ObservationIgnored private var groups: [AnyHashable: AnyHashable] = [:]
     @ObservationIgnored private var lastInGroup: [AnyHashable: AnyHashable] = [:]
+    /// The items of the 2-D grids (``keepColumn(in:items:)``) and the grid each is in.
+    @ObservationIgnored private var grids: [AnyHashable: AnyHashable] = [:]
     /// Whether the pointer made the last move of the focus (``point(to:)``). The item is under the pointer, where it is: no
     /// scroll view follows that move (docs/ARCHITECTURE.md, "Pointer"), so the trackpad's or the wheel's own scroll is the
     /// only one and a hover never runs a row away under the pointer. Every scroll that follows the focus asks it first.
@@ -173,6 +198,20 @@ public final class FocusModel {
         guard let group = groups[target], from.flatMap({ groups[$0] }) != group, let last = lastInGroup[group],
               last != target, groups[last] == group, frames[last] != nil else { return target }
         return last
+    }
+
+    /// Makes [items] a 2-D grid (the artwork tiles, the avatars, a keyboard's keys): Up and Down inside it keep the column
+    /// instead of landing on the first item of the next row (docs/ENGINEERING_RULES.md, "A new row starts at its first
+    /// item"). Calling it again replaces the grid's items.
+    func keepColumn(in grid: AnyHashable, items: [AnyHashable]) {
+        grids = grids.filter { $0.value != grid }
+        for item in items { grids[item] = grid }
+    }
+
+    /// Whether a vertical move from [from] to [to] stays inside one 2-D grid.
+    private func inOneGrid(_ from: AnyHashable, _ to: AnyHashable) -> Bool {
+        guard let grid = grids[from] else { return false }
+        return grids[to] == grid
     }
 
     /// While set, the focus is on the first item in reading order of those registered so far (``focusFirstItem()``).
@@ -301,8 +340,10 @@ public final class FocusModel {
         }
         var others = frames
         others[focused] = nil
-        guard let next = FocusGeometry.next(from: current, direction: direction, candidates: others) else { return false }
-        move(to: restored(AnyHashable(next), from: focused))
+        // Up and Down land on the first item of the new row, except inside a 2-D grid, which keeps the column
+        guard let nearest = FocusGeometry.nearest(from: current, direction: direction, candidates: others) else { return false }
+        let next = inOneGrid(focused, nearest) ? nearest : FocusGeometry.next(from: current, direction: direction, candidates: others) ?? nearest
+        move(to: restored(next, from: focused))
         return true
     }
 }
@@ -654,6 +695,14 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
             // The demo harness's `tap`: the focused item's own tap (``DemoHarness/tap(router:)``)
             .onReceive(NotificationCenter.default.publisher(for: DemoHarness.tapNotification)) { note in
                 if note.userInfo?["id"] as? AnyHashable == AnyHashable(id) { tapped() }
+            }
+            // The demo harness's `hover-<direction>`: the focused item hands the focus on as the pointer would
+            .onReceive(NotificationCenter.default.publisher(for: DemoHarness.hoverNotification)) { note in
+                guard model.focused == AnyHashable(id), let direction = note.userInfo?["direction"] as? FocusDirection else { return }
+                var frames = model.registeredFrames
+                guard let current = frames.removeValue(forKey: AnyHashable(id)),
+                      let beside = FocusGeometry.nearest(from: current, direction: direction, candidates: frames) else { return }
+                model.point(to: beside)
             }
             #endif
             // The pointer moving over the item focuses it (docs/ARCHITECTURE.md, "Pointer"): global points, so content that

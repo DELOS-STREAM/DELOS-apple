@@ -92,15 +92,17 @@ import Testing
     @Test func aFocusedCoverKeepsItsRingOffItsNeighbour() {
         for s in [0.45, 0.5, 0.6, 0.7, 0.8, 1.0] {
             let reach = C.tile * s * (C.focusScale - 1) / 2 + C.ring * C.focusScale
-            #expect(C.coverGap(s) >= reach + 12 - 0.001)
+            #expect(C.coverGap(s) >= 2 * reach + 8 - 0.001)
             #expect(C.coverGap(s) >= 44 * s)
         }
-        #expect(close(C.coverGap(0.7), 44 * 0.7, 0.001))
-        #expect(close(C.coverGap(0.6), 27.5))
+        // The rule's floor is the larger at every scale: 45.6 at 1, 37.35 at 0.5
+        #expect(close(C.coverGap(1), 45.6, 0.01))
+        #expect(close(C.coverGap(0.5), 37.35, 0.01))
     }
 
     @Test func theNumbersOfTheSixStages() {
-        let expected = [0.6554, 0.7665, 0.7155, 0.6359, 0.6237, 0.45]
+        // The width-bound stages (1099, 1191, 1051 wide) give the covers' gaps the focus spacing rule's room
+        let expected = [0.6404, 0.7665, 0.7028, 0.6359, 0.6079, 0.45]
         for (stage, scale) in zip(stages, expected) {
             #expect(close(C.layout(stageWidth: stage.0, stageHeight: stage.1).coverScale, scale, 0.0005))
         }

@@ -6,7 +6,9 @@ import SwiftUI
 enum StreamDockLayout {
     static let tile = 150.0
     static let tileRadius = 42.0
-    static let gap = 40.0
+    /// The gap between two tiles (``FocusSpacing``): the focused tile's ring box (``ring``) reaches 18 px beyond the
+    /// 150 px tile on each side, its 4 px line included, so two neighbours need 2 × 18 + 8 = 44.
+    static let gap = 44.0
     static let icon = 64.0
     static let focusScale = 1.12
     static let iconFocusScale = 1.04

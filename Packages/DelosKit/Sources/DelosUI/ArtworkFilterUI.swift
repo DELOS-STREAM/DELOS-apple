@@ -32,9 +32,12 @@ struct GlideLook: Equatable, Sendable {
     static let chip = GlideLook(scale: 1.05, ring: 3, glow: false)
     /// The toolbar's pills (`PillButton(compact = true)`: scale 1.08, ring 4, the glow of `focusLook`).
     static let pill = GlideLook(scale: 1.08, ring: 4, glow: true)
-    /// The space between neighbouring pills: the focused one grows and its ring lies beyond that, and neither may reach the
-    /// next pill (a pill is up to about 600 px wide).
-    static let pillGap = 32.0
+    /// The space between neighbouring pills (``FocusSpacing``): twice the reach of a focused pill up to ``pillMaxWidth``
+    /// wide and the clear space.
+    static let pillMaxWidth = 400.0, pillGap = 56.0
+    /// The space between neighbouring chips of the Artwork screen, up to ``chipMaxWidth`` wide in any language (the longest,
+    /// a sort chip of the strip, is about 370).
+    static let chipMaxWidth = 400.0, chipGap = 40.0
 
     /// How far the focused element's ring reaches beyond its own layout bounds on each side (stage px): half of the growth
     /// and the band the ring lies in, which is twice its width.
@@ -72,26 +75,35 @@ struct RingGlide: Equatable {
     var left = 0.0, top = 0.0, right = 0.0, bottom = 0.0
     /// When the glide started (seconds since the reference date).
     var start = 0.0
+    /// How long it runs (seconds).
+    var length = Self.duration
 
+    /// A row's glide (`Motion.rowFocus`).
     static let duration = Motion.rowFocus / 1000
     /// The prototype's `--ease-glide` (`Motion.Glide`): it overshoots a little.
     static let curve = CubicBezier(0.3, 1.22, 0.42, 1)
 
-    /// A glide that starts at [time] with the ring at [from] and ends on [to].
-    init(from: CGRect, to: CGRect, at time: Double) {
+    /// A glide that starts at [time] with the ring at [from] and ends on [to] [duration] seconds later.
+    init(from: CGRect, to: CGRect, at time: Double, duration: Double = Self.duration) {
         left = from.minX - to.minX
         top = from.minY - to.minY
         right = from.maxX - to.maxX
         bottom = from.maxY - to.maxY
         start = time
+        length = duration
     }
 
     /// No glide: the ring is on the element.
     init() {}
 
+    /// The share of the carry still left at [time]: 1 when the glide starts, 0 once it is over (below 0 while it overshoots).
+    func rest(at time: Double) -> Double {
+        1 - Self.curve((time - start) / length)
+    }
+
     /// The ring's bounds (before the focus scale) at [time], while the element is at [frame].
     func rect(on frame: CGRect, at time: Double) -> CGRect {
-        let rest = 1 - Self.curve((time - start) / Self.duration)
+        let rest = rest(at: time)
         let minX = frame.minX + left * rest, minY = frame.minY + top * rest
         let maxX = frame.maxX + right * rest, maxY = frame.maxY + bottom * rest
         return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
@@ -351,13 +363,16 @@ struct ArtworkFilterStrip: View {
                         .foregroundStyle(colors.text3.color)
                         .lineLimit(1)
                 } else {
-                    ForEach(ArtFilterRules.chips(filters), id: \.self) { chip in
-                        FocusItem(id: Self.chipID(chip), model: focus, action: { onClear(chip) }) { focused in
-                            ArtStripChip(label: chip.label, icon: Symbols.close, focused: focused)
+                    // The chips keep the focus spacing between them; the result line keeps its 12
+                    HStack(spacing: stage.px(GlideLook.chipGap)) {
+                        ForEach(ArtFilterRules.chips(filters), id: \.self) { chip in
+                            FocusItem(id: Self.chipID(chip), model: focus, action: { onClear(chip) }) { focused in
+                                ArtStripChip(label: chip.label, icon: Symbols.close, focused: focused)
+                            }
                         }
-                    }
-                    FocusItem(id: Self.resetID, model: focus, action: onReset) { focused in
-                        ArtStripChip(label: L("filters_art_chips_reset"), icon: Symbols.reset, focused: focused)
+                        FocusItem(id: Self.resetID, model: focus, action: onReset) { focused in
+                            ArtStripChip(label: L("filters_art_chips_reset"), icon: Symbols.reset, focused: focused)
+                        }
                     }
                 }
                 Spacer(minLength: 0)
@@ -537,7 +552,7 @@ struct ArtworkFilterSheet: View {
             }
             .frame(width: stage.px(270), alignment: .leading)
             FocusScroll(axis: .horizontal) {
-                HStack(spacing: stage.px(14)) { options() }
+                HStack(spacing: stage.px(GlideLook.chipGap)) { options() }
                     .padding(.horizontal, stage.px(12))
                     .padding(.vertical, stage.px(12))
             }
