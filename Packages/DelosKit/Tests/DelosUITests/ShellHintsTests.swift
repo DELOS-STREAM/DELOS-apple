@@ -163,7 +163,7 @@ import Testing
     @Test func xAndTheRightMenuButtonShareOneKeyShownOnce() {
         var app = ShellHints.Context(screen: .appSettings(hostID: "h", appID: 1))
         app.hasContextMenu = true
-        app.screenHints.resetsRow = true
+        app.screenHints.rowOptions = true
         let keys = adapted(.keyboard, app)
         #expect(keys.filter { $0 == .key(.letterO) }.count == 1)
         #expect(keys.contains(.key(.escape)))
