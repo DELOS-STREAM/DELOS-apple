@@ -39,12 +39,15 @@ enum OverviewSpacing {
     /// The overview ring's width.
     static let ring = 4.0
 
+    /// Noninteractive tags and age badges share their group's spacing across and between wrapped rows.
+    static let tagGap = 10.0, badgeGap = 28.0
+
     /// Screenshots and videos: 520 px thumbnails that grow by 6 %.
     static let mediaWidth = 520.0, mediaScale = 1.06, mediaGap = 48.0
     /// Similar games: 260 px covers that grow by 6 %.
     static let similarScale = 1.06, similarGap = 32.0
     /// Links: 64 px pills, up to ``linkMaxWidth`` wide in any language, that grow by 5 %.
-    static let linkHeight = 64.0, linkMaxWidth = 480.0, linkScale = 1.05, linkGap = 40.0, linkLineGap = 20.0
+    static let linkHeight = 64.0, linkMaxWidth = 480.0, linkScale = 1.05, linkGap = 40.0
     /// Play and App settings: 86 px pills that grow by 6 % with their ring's outer edge ``buttonRingOut`` out; Play, up
     /// to ``playMaxWidth`` wide, also has its sweep band reaching ``playReachOut`` out; App settings is up to
     /// ``settingsMaxWidth`` wide.

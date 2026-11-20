@@ -36,6 +36,9 @@ $$\text{gap} \ge 2 \times \text{reach} + 8\ \text{px}$$
 - **Dense key grids** (a letter picker, a keyboard) may instead not grow on focus and draw the ring inside the key
   (0–2 px in): their reach is 0 and 8 px between keys is enough.
 - A soft glow that fades out (a blurred shadow) is not counted; a ring, a sweep band or any hard edge is.
+- **Wrapped rows** use their group's named horizontal gap vertically too: tags, badges and links share one `WrapLayout`
+  spacing on both axes. Filter rows retain that minimum clearance vertically; library sections also count their heading and
+  chip padding, rather than adding the full gap again between sections.
 
 Sizes that depend on text use the widest label of every language. The rule lives in code as `FocusSpacing`
 (DelosUI); every gap it governs is a named constant that `FocusSpacingTests` checks against the ring geometry. A layout
