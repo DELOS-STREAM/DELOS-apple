@@ -493,7 +493,7 @@ struct HomeScreen: View {
             if let feedback { feedback.activate(sheetFocus.acceptCue) { sheetFocus.handle(.accept) } } else { sheetFocus.handle(.accept) }
         case .up, .down, .left, .right:
             if sheetFocus.handle(command) { feedback?.play(.move) }
-        case .previousTab, .nextTab, .menu:
+        case .previousTab, .nextTab, .menu, .mute:
             break
         }
         return true

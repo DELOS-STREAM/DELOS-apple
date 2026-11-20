@@ -194,6 +194,10 @@ import Testing
         #expect(sent.last?.contains("player.pauseVideo()") == true)
         OverviewViewer.handle(.toastAction, session: session, media: media)
         #expect(sent.last?.contains("player.mute()") == true)
+        // M on a keyboard does what Y does: once the player reports the mute, it turns the sound on again
+        session.video.receive(#"{"type":"status","state":1,"time":13,"duration":90,"muted":true}"#)
+        OverviewViewer.handle(.mute, session: session, media: media)
+        #expect(sent.last?.contains("player.unMute()") == true)
         OverviewViewer.handle(.previousTab, session: session, media: media)
         #expect(session.viewer == 0)
         OverviewViewer.handle(.nextTab, session: session, media: media)

@@ -258,7 +258,7 @@ struct OverviewViewer: View {
     }
 
     /// A command while the viewer is open, always taken. On a video that can play Left and Right seek 10 s, A plays or
-    /// pauses and Y mutes; elsewhere Left and Right browse. L1 and R1 browse, B closes.
+    /// pauses and Y (or M) mutes; elsewhere Left and Right browse. L1 and R1 browse, B closes.
     static func handle(_ command: MenuCommand, session: OverviewSession, media: [OverviewContent.Media]) {
         guard let index = session.viewer, media.indices.contains(index) else { return }
         let video = session.video
@@ -274,7 +274,7 @@ struct OverviewViewer: View {
         case .previousTab: browse(-1)
         case .nextTab: browse(1)
         case .accept: if playable { video.toggle() }
-        case .toastAction: if playable { video.toggleMute() }
+        case .toastAction, .mute: if playable { video.toggleMute() }
         case .back: session.viewerClosing = true
         default: break
         }

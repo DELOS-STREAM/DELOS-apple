@@ -287,7 +287,7 @@ public final class FocusModel {
             guard let focused, let action = actions[focused] else { return false }
             action()
             return true
-        case .back, .previousTab, .nextTab, .menu, .options, .toastAction:
+        case .back, .previousTab, .nextTab, .menu, .options, .toastAction, .mute:
             return false
         }
         watchingForFirst = false

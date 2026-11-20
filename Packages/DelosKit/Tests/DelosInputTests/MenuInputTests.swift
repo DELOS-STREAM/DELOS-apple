@@ -35,6 +35,8 @@ import Testing
         #expect(MenuInput.keyCommand(.keyF) == .toastAction)
         #expect(MenuInput.keyCommand(.openBracket) == .previousTab)
         #expect(MenuInput.keyCommand(.closeBracket) == .nextTab)
+        #expect(MenuInput.keyCommand(.keyM) == .mute)
+        #expect(MenuInput.keyCommand(.keyM, typing: true) == nil)
         #expect(MenuInput.keyCommand(.keypadEnter) == .accept)
         #expect(MenuInput.keyCommand(.spacebar) == .accept)
     }

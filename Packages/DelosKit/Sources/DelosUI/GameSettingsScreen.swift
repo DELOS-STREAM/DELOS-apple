@@ -260,7 +260,7 @@ struct GameSettingsScreen: View {
                 return false
             }
             return true
-        case .down, .accept, .back, .menu, .toastAction:
+        case .down, .accept, .back, .menu, .toastAction, .mute:
             return false
         }
     }

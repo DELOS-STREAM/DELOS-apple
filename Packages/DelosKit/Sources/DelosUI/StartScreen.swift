@@ -249,6 +249,11 @@ public struct DelosRoot: View {
                             // Over the game overview its pills are plain fills: the page is masked out under the bar, so glass
                             // there would only blur the still backdrop (the prototype's `.sb-nav`)
                             .environment(\.glassFlat, navigator.screenHints.overview)
+                            // The game overview's viewer covers the whole screen, the bar too (as on Android): its count sits
+                            // where the brand is
+                            .opacity(navigator.screenHints.overviewViewer == nil ? 1 : 0)
+                            .allowsHitTesting(navigator.screenHints.overviewViewer == nil)
+                            .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: navigator.screenHints.overviewViewer == nil)
                             // The navigation's buttons belong to the focus of the screen shown
                             .id(ObjectIdentifier(entry.focus))
                     }
