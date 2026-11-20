@@ -380,6 +380,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- Long texts scroll where they do on Android instead of ending in an ellipsis: the context menu's title, its line of
+  facts and its rows (a row while focused), the stream dock's title, the stream menu popover's title, rows and values,
+  the options of a choice popover, and on a narrow compact stage the streaming-time block above the badges when not
+  even its short form fits. The right end of an overflowing text fades over its full 36 px however little of it is
+  cut, as on Android.
 - Latency presentation preserves a bounded one-frame jitter reserve instead of discarding paired arrivals. Metal's
   shown FPS now uses actual drawable presentation feedback, not selection or submission; CPU submission and GPU
   deadlines are reported separately. Sustained 120 FPS on physical devices is not verified for this change.

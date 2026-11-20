@@ -223,11 +223,11 @@ private struct MenuRow: View {
         let iconColor = item.danger ? menuDanger : focused ? colors.accent : colors.text2
         HStack(spacing: stage.px(18)) {
             SymbolView(symbol: item.icon, size: 30, color: iconColor, filled: focused)
-            Text(item.label)
+            // Scrolls while focused when it does not fit (ContextMenuLayer.kt:513-517)
+            MarqueeLabel(text: item.label, active: focused)
                 .font(DelosFonts.figtree(stage.tpx(23), .semibold))
                 .foregroundStyle((item.danger ? menuDanger : colors.text).color)
-                .lineLimit(1)
-            Spacer(minLength: 0)
+                .frame(maxWidth: .infinity, alignment: .leading)
             if item.children != nil { SymbolView(symbol: Symbols.chevronRight, size: 26, color: colors.text3) }
         }
         .padding(.leading, stage.px(24))
@@ -303,18 +303,17 @@ private struct MenuCardHeader: View {
                                 .lineLimit(1)
                         }
                     }
-                    Text(menu.title)
+                    // The title and the line of facts scroll whenever they do not fit (ContextMenuLayer.kt:471-480)
+                    MarqueeLabel(text: menu.title, active: true)
                         .font(DelosFonts.unbounded(stage.tpx(25)))
                         .foregroundStyle(colors.text.color)
-                        .lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, stage.px(eyebrow != nil ? 3 : 0))
                         .padding(.bottom, stage.px(2))
                     if let meta = menu.header?.meta {
-                        Text(meta)
+                        MarqueeLabel(text: meta, active: true)
                             .font(DelosFonts.figtree(stage.tpx(19), .medium))
                             .foregroundStyle(colors.text2.color)
-                            .lineLimit(1)
                     }
                 }
             }

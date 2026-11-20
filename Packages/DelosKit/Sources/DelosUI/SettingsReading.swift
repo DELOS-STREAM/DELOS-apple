@@ -24,51 +24,92 @@ enum SettingsReadingMotion {
     }
 }
 
-/// A fitting label is just text. Only a focused, overflowing label owns an active display clock.
+/// One line of text that always stays readable (`MarqueeText` of DELOS for Android). A fitting label is just text; an
+/// overflowing one fades out at its right end and, while [active] (usually: its row is focused), scrolls round in a loop.
+/// Only a scrolling label owns an active display clock.
 struct MarqueeLabel: View {
     let text: String
     let active: Bool
+
+    var body: some View {
+        Text(text)
+            .lineLimit(1)
+            .hidden()
+            .overlay(alignment: .leading) { MarqueeTrack(key: text, active: active) { Text(text) } }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(text)
+    }
+}
+
+/// [MarqueeLabel] for any single-line [content] (`MarqueeContent` of DELOS for Android, one way round): the same fades,
+/// scroll and reduced-motion rules. It is as wide as its content, or as the room it is offered when that is less. A new
+/// [key] starts the scroll over.
+struct MarqueeContent<Key: Equatable, Content: View>: View {
+    let key: Key
+    var active = true
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        MarqueeRoom { content().fixedSize() }
+            .hidden()
+            .overlay(alignment: .leading) { MarqueeTrack(key: key, active: active, content: content) }
+    }
+}
+
+/// Takes its content's ideal width, or the width offered when that is less, and its content's ideal height.
+private struct MarqueeRoom: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let ideal = subviews.first?.sizeThatFits(.unspecified) ?? .zero
+        return CGSize(width: min(proposal.width ?? ideal.width, ideal.width), height: ideal.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: .unspecified)
+    }
+}
+
+/// The visible part of a marquee, laid over the room it has: [content] at its natural width, cut and faded to the room
+/// (MarqueeText.kt:29-34): still for 0.7 s, a lap of the content and a 56 px gap at 56 px a second, a 0.9 s pause, and
+/// again. The left end fades in over 28 px only as the content moves away from its start (and out as the lap ends), the
+/// right end of an overflowing content always fades over 36 px. A content that stops scrolling (focus lost, reduced
+/// motion) or changes stands at its start again.
+private struct MarqueeTrack<Key: Equatable, Content: View>: View {
+    let key: Key
+    let active: Bool
+    @ViewBuilder let content: () -> Content
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduced
     @State private var naturalWidth = 0.0
     @State private var started = Date.now
 
     var body: some View {
-        Text(text)
-            .lineLimit(1)
-            .hidden()
-            .overlay(alignment: .leading) {
-                GeometryReader { proxy in
-                    let overflow = naturalWidth > proxy.size.width + 0.5
-                    let scrolling = overflow && active && !reduced
-                    TimelineView(.animation(paused: !scrolling)) { clock in
-                        let offset = scrolling ? SettingsReadingMotion.marqueeOffset(
-                            elapsed: clock.date.timeIntervalSince(started), width: naturalWidth / stage.scale) : 0
-                        let lap = naturalWidth / stage.scale + SettingsReadingMotion.gap
-                        // Hidden at the left: what has scrolled away, back to nothing as the next lap's text arrives; at the
-                        // right: the rest of the text (MarqueeText's 28 and 36 px fades)
-                        let hiddenStart = scrolling ? stage.px(min(offset, lap - offset)) : 0
-                        let hiddenEnd = overflow ? (scrolling ? stage.px(lap) : naturalWidth - proxy.size.width) : 0
-                        HStack(spacing: stage.px(SettingsReadingMotion.gap)) {
-                            Text(text).fixedSize()
-                                .onGeometryChange(for: Double.self) { $0.size.width } action: { naturalWidth = $0 }
-                            if scrolling { Text(text).fixedSize() }
-                        }
-                        .offset(x: -stage.px(offset))
-                        .frame(width: proxy.size.width, alignment: .leading)
-                        .modifier(EdgeFadeMask(
-                            hiddenStart: hiddenStart, hiddenEnd: hiddenEnd, axis: .horizontal,
-                            start: FadeEdge(solid: stage.px(28)), end: FadeEdge(solid: min(stage.px(36), proxy.size.width))))
-                        .clipped()
-                    }
-                    .onChange(of: active, initial: true) { _, _ in started = .now }
-                    .onChange(of: text) { _, _ in started = .now }
-                    .onChange(of: naturalWidth) { _, _ in started = .now }
-                    .onChange(of: reduced) { _, _ in started = .now }
+        GeometryReader { proxy in
+            let overflow = naturalWidth > proxy.size.width + 0.5
+            let scrolling = overflow && active && !reduced
+            TimelineView(.animation(paused: !scrolling)) { clock in
+                let offset = scrolling ? SettingsReadingMotion.marqueeOffset(
+                    elapsed: clock.date.timeIntervalSince(started), width: naturalWidth / stage.scale) : 0
+                let lap = naturalWidth / stage.scale + SettingsReadingMotion.gap
+                // Hidden at the left: what has scrolled away, back to nothing as the next lap's content arrives
+                let hiddenStart = scrolling ? stage.px(min(offset, lap - offset)) : 0
+                let hiddenEnd = overflow ? stage.px(36) : 0
+                HStack(spacing: stage.px(SettingsReadingMotion.gap)) {
+                    content().fixedSize()
+                        .onGeometryChange(for: Double.self) { $0.size.width } action: { naturalWidth = $0 }
+                    if scrolling { content().fixedSize() }
                 }
+                .offset(x: -stage.px(offset))
+                .frame(width: proxy.size.width, alignment: .leading)
+                .modifier(EdgeFadeMask(
+                    hiddenStart: hiddenStart, hiddenEnd: hiddenEnd, axis: .horizontal,
+                    start: FadeEdge(solid: stage.px(28)), end: FadeEdge(solid: min(stage.px(36), proxy.size.width))))
+                .clipped()
             }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(text)
+            // The keys of MarqueeContent's LaunchedEffect: whether it scrolls, the content and its width
+            .onChange(of: scrolling, initial: true) { _, _ in started = .now }
+            .onChange(of: key) { _, _ in started = .now }
+            .onChange(of: naturalWidth) { _, _ in started = .now }
+        }
     }
 }
 

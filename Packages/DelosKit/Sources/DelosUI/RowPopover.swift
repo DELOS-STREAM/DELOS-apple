@@ -242,10 +242,10 @@ private struct OptionsList: View {
     /// with a check.
     private func optionView(_ label: String, current: Bool, focused: Bool) -> some View {
         HStack(spacing: stage.px(18)) {
-            Text(label)
+            // Scrolls while focused when it does not fit (RowPicker.kt:299-302)
+            MarqueeLabel(text: label, active: focused)
                 .font(DelosFonts.figtree(stage.tpx(23), .semibold))
                 .foregroundStyle(colors.text.color)
-                .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if current {
                 SymbolView(symbol: Symbols.check, size: 30, color: focused ? colors.accent : colors.text2)

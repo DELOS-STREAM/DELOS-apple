@@ -396,22 +396,25 @@ private struct DockHead: View {
             hint("B", L("stream_menu_hint_back"))
         }
         let block = VStack(alignment: .leading, spacing: stage.px(M.headGap)) {
-            Text(title)
+            // Scrolls whenever it is wider than its room (StreamMenuBar.kt:271-278)
+            MarqueeLabel(text: title, active: true)
                 .font(DelosFonts.unbounded(stage.px(M.titleSize)))
                 .foregroundStyle(colors.text.color)
                 .shadow(color: .black.opacity(0.55), radius: stage.px(8), y: stage.px(2))
-                .lineLimit(1)
-                .frame(maxWidth: stage.px(min(M.titleMaxWidth, stage.width - 2 * DockGeometry.scrollSide)), alignment: .leading)
             if inRow {
                 HStack(spacing: stage.px(32)) { hints }
             } else {
                 VStack(alignment: .leading, spacing: stage.px(M.hintsGap)) { hints }
             }
         }
+        // The block is as wide as the title's room, which it is given whole: a title wider than that scrolls in it
+        let room = stage.px(min(M.titleMaxWidth, stage.width - 2 * DockGeometry.scrollSide))
         // The block's bottom edge lies 46 above the tiles: it hangs from a point on that edge
         Color.clear
             .frame(width: 0, height: 0)
-            .overlay(alignment: .bottomLeading) { block.fixedSize().offset(y: -stage.px(M.headBottom)) }
+            .overlay(alignment: .bottomLeading) {
+                block.frame(width: room, alignment: .leading).fixedSize().offset(y: -stage.px(M.headBottom))
+            }
             .opacity(min(max(p, 0), 1) * (1 - leaving) * (hidden ? 0 : 1))
             .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: hidden)
             .offset(y: reducedMotion ? 0 : stage.px(24 * (1 - p)))
