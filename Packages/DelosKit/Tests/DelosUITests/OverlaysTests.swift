@@ -79,6 +79,13 @@ import Testing
         #expect(p.y == 1080 - L.marginY - 700)
     }
 
+    @Test func anUnderOnlyCardStaysUnderItsElementInsteadOfCoveringTheHeadingAbove() {
+        let pc = CGRect(x: 800, y: 700, width: 200, height: 200)
+        let p = placeContextMenu(anchor: pc, w: 500, h: 300, below: true, stageW: stageW, stageH: stageH, underOnly: true)
+        #expect(p.side == .top)
+        #expect(p.y == 1080 - L.marginY - 300)
+    }
+
     @Test func aCrampedBelowCardGoesBesideItsElementWhenAsked() {
         // A circle on a short compact stage: a card fits neither under nor above it
         let circle = CGRect(x: 116, y: 420, width: 214, height: 214)

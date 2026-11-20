@@ -45,7 +45,7 @@ struct ContextMenuLayer: View {
         let card = size ?? estimated
         return placeContextMenu(
             anchor: stageAnchor, w: card.width, h: card.height, below: menu.below, stageW: stage.width, stageH: stage.height,
-            marginX: marginX, marginY: marginY, marginBottom: marginBottom, besideWhenCramped: stage.compact)
+            marginX: marginX, marginY: marginY, marginBottom: marginBottom, besideWhenCramped: stage.compact, underOnly: menu.underOnly)
     }
 
     var body: some View {

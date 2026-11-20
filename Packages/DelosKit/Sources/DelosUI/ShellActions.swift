@@ -64,7 +64,7 @@ final class ShellActions {
             items.append(MenuItem(icon: Symbols.wake, label: L("devices_menu_wake")) { [self] in wake(hostID) })
         }
         items.append(MenuItem(icon: Symbols.edit, label: L("devices_menu_rename")) { [self] in rename(hostID) })
-        return ContextMenu(title: host.name, items: items, below: true)
+        return ContextMenu(title: host.name, items: items, below: true, underOnly: true)
     }
 
     /// The Devices screen's first focus (`DevicesLogic.firstFocus`).
@@ -87,7 +87,7 @@ final class ShellActions {
             case .remove: MenuItem(icon: Symbols.delete, label: L("devices_menu_remove"), danger: true) { [self] in remove(hostID) }
             }
         }
-        return ContextMenu(title: host.name, items: items, below: true)
+        return ContextMenu(title: host.name, items: items, below: true, underOnly: true)
     }
 
     /// Asks the online PC to forget this client (`unpair`); the PC leaves the list once it has.
