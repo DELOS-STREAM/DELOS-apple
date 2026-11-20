@@ -43,6 +43,8 @@ struct ContextMenu {
     let items: [MenuItem]
     var header: MenuHeader?
     var below = false
+    /// With [below]: never above the element (`placeContextMenu`'s `underOnly`), for an element under a heading.
+    var underOnly = false
     /// The row focused when the menu opens: a menu that is the confirmation of a destructive choice starts on the safe row.
     var initialRow = 0
 }

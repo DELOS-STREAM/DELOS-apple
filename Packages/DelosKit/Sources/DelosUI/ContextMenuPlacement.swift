@@ -60,13 +60,15 @@ private func clamp(_ value: Double, _ low: Double, _ high: Double) -> Double { m
 /// The card of size [w] × [h] for the element [anchor] (stage pixels; `placeContextMenu` of DELOS for Android). Beside
 /// the element by default: to its right with the caret on the card's left, flipped to its left when it would leave the
 /// stage, vertically centered on the element and kept inside the margins of the stage. With [below] under the element,
-/// centered on it, caret on top; when it does not fit there but fits above, above it with the caret on the bottom; when
-/// it fits neither, pushed up from the bottom edge over the element, or with [besideWhenCramped] (a compact stage, where
-/// that would cover the element) beside it like a card that is not [below].
+/// centered on it, caret on top; when it does not fit there but fits above (and not [underOnly]), above it with the caret
+/// on the bottom; when it fits neither, pushed up from the bottom edge over the element, or with [besideWhenCramped] (a
+/// compact stage, where that would cover the element) beside it like a card that is not [below]. [underOnly] is for an
+/// element under a heading (the Devices screen's PCs): a card above would cover the heading, so it stays under the
+/// element as on DELOS for Android, whose 16:9 stage never has the room above.
 func placeContextMenu(
     anchor: CGRect?, w: Double, h: Double, below: Bool, stageW: Double, stageH: Double,
     marginX: Double = ContextMenuLayout.marginX, marginY: Double = ContextMenuLayout.marginY, marginBottom: Double? = nil,
-    besideWhenCramped: Bool = false
+    besideWhenCramped: Bool = false, underOnly: Bool = false
 ) -> MenuPlacement {
     typealias L = ContextMenuLayout
     let bottomLimit = stageH - (marginBottom ?? marginY)
@@ -81,7 +83,7 @@ func placeContextMenu(
         let caret = caretAlong(anchor.midX - x, length: w)
         let under = anchor.maxY + reach
         let fitsUnder = under + h <= bottomLimit
-        let fitsAbove = anchor.minY - reach - h >= marginY
+        let fitsAbove = !underOnly && anchor.minY - reach - h >= marginY
         if fitsUnder || (!fitsAbove && !besideWhenCramped) {
             let y = min(under, max(bottomLimit - h, marginY))
             return MenuPlacement(x: x, y: y, side: .top, caret: caret, tipX: x + caret, tipY: y - L.caretDepth)
