@@ -544,6 +544,7 @@ public struct DelosRoot: View {
         let focus = layers.isOpen ? layers.focus : navigator.focus
         return ShellHints.hints(ShellHints.Context(
             screen: navigator.current, layer: layer, sideMenu: sideMenu != nil,
+            sideMenuAdjustable: ShellHints.adjustable(sideMenu.flatMap { side in QuickSettings.rows(appearance).first { $0.id == side.focused as? String } }),
             portalCancellable: actions.connection.portal.map(\.cancellable), canGoBack: navigator.canGoBack,
             hasContextMenu: focus.focusedHasMenu, screenHints: navigator.screenHints))
     }

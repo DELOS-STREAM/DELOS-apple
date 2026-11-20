@@ -17,6 +17,9 @@ import Testing
         context.layer = .context(root: true)
         #expect(buttons(context) == [.pad(.south), .pad(.east)])
         context.sideMenu = true
+        #expect(buttons(context) == [.pad(.south), .pad(.east)])
+        // Adjust only on a side row with values (Theme, Background), not on a toggle or All settings
+        context.sideMenuAdjustable = true
         #expect(buttons(context) == [.adjust, .pad(.south), .pad(.east)])
         context.portalCancellable = true
         #expect(buttons(context) == [.pad(.east)])
@@ -147,5 +150,40 @@ import Testing
         for kind in InputKind.allCases { #expect(InputKindRule.withoutController.shows(kind) == (kind != .controller)) }
         #expect(InputKindRule.withController.shows(.controller))
         #expect(!InputKindRule.withController.shows(.touch))
+    }
+
+    private func labels(_ context: ShellHints.Context) -> [String] {
+        ShellHints.hints(context, kind: .controller).map(\.label)
+    }
+
+    @Test func theSettingsSearchOffersSelectAndBack() {
+        var context = ShellHints.Context(screen: .settings)
+        context.screenHints.adjustable = true
+        #expect(labels(context) == ["Adjust", "Previous tab", "Next tab", "Search", "Change", "Back"])
+        context.screenHints = ScreenHints(settingsSearch: true)
+        #expect(labels(context) == ["Select", "Back"])
+    }
+
+    @Test func appSettingsOfferTheTabsAndOptionsOnlyOnACustomRow() {
+        var context = ShellHints.Context(screen: .appSettings(hostID: "h", appID: 1))
+        context.hasContextMenu = true
+        context.screenHints.adjustable = true
+        #expect(labels(context) == ["Adjust", "Previous tab", "Next tab", "Change", "Back"])
+        context.screenHints.resetsRow = true
+        #expect(labels(context) == ["Adjust", "Previous tab", "Next tab", "Change", "Reset to profile value", "Options", "Back"])
+    }
+
+    @Test func theLibraryFilterSheetClosesWithYAndB() {
+        var context = ShellHints.Context(screen: .home(hostID: "h"))
+        context.screenHints.sheetOpen = true
+        #expect(labels(context) == ["Select", "Reset", "Close", "Close"])
+    }
+
+    @Test func aRowPopoverHasThePickersHints() {
+        var context = ShellHints.Context(screen: .settings)
+        context.screenHints.rowPopup = .options
+        #expect(labels(context) == ["Select", "Close"])
+        context.screenHints.rowPopup = .slider
+        #expect(labels(context) == ["Adjust", "Done", "Close"])
     }
 }
