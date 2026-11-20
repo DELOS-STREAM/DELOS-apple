@@ -820,13 +820,13 @@ shell_home_apps_on_pc
 
 # Settings: frame pacing
 title_frame_pacing
-pacing_latency
+pacing_phase_lock
 pacing_balanced
 pacing_balanced_alt
 pacing_smoothness
 pacing_warp
 pacing_warp2
-help_frame_pacing_latency
+help_frame_pacing_phase_lock
 help_frame_pacing_balanced
 help_frame_pacing_cap_fps
 help_frame_pacing_smoothness

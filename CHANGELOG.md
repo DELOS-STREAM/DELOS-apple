@@ -305,6 +305,17 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 - The GPU impact chip shows the chip icon again instead of a graphics card, as in DELOS for Android: Apple devices have a
   system on a chip rather than a separate graphics card. The icon fonts and `Symbols.swift` are synced from Android.
+- Video frame pacing: Steady low latency takes the place of Lowest latency. Each frame is shown at the earliest refresh
+  its arrival makes 99 times out of 100, measured against the PC's own frame times over the last two seconds, so the
+  picture keeps the PC's cadence and a frame waits only the few milliseconds of the network's jitter, never a whole
+  frame; with the display's deadline after the callback, a frame decoded just after it still reaches that refresh, and
+  on an adaptive-sync Mac display the refreshes come at the display's fastest rate. A stored Lowest latency becomes
+  Steady low latency; Balanced stays the default. On the modeled replay of the iPad Pro M5 log (1440×1080 at 120 fps on
+  120 Hz, the log's assembly percentiles, clocks drifting ±100 ppm): 119.98 to 120.00 frames shown a second against
+  119.93 to 120.00 with Balanced, and 17.8 to 24.1 ms from decoded to the screen at the median against 25.3 to 27.4 ms.
+  If the display leaves no time after its callback, the median is 25.1 to 26.5 ms and the 99th percentile up to 3 ms
+  longer than Balanced's. Debug builds name it in the StreamPerf launch line (`lock=p99/240`) and log its margin and
+  window each second. Not verified on a device.
 - Resolution choices on a display that is not 16:9 (iPad, iPhone, a 16:10 Mac) add the 720p, 1080p, 1440p and 4K line
   counts in the display's own shape, for example 1440x1080 and 1920x1440 on a 13" iPad Pro, so a stream fills the panel
   without black bars and the upscaler enlarges all of it. The 16:9 presets, Native and Custom stay.
@@ -373,8 +384,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - Settings rows without an Apple meaning: Auto orientation and Auto invert resolution (the app is landscape only),
   PyroWave chroma (no PyroWave 4:4:4), the trackpad's drag-and-drop vibration and threshold, Force QWERTY (keys do not
   depend on the layout), LFR and Ultra low latency (MediaCodec options; VideoToolbox already decodes in real time), the
-  Fast V-Sync frame pacing (Lowest latency already shows each frame at the next refresh), and the on-screen virtual key
-  rows with their layout import and export, until the virtual keys are ported. A stored Fast V-Sync becomes Balanced.
+  Fast V-Sync frame pacing (Steady low latency is the bounded scheduler on Apple), and the on-screen virtual key rows
+  with their layout import and export, until the virtual keys are ported. A stored Fast V-Sync becomes Balanced.
 - The Moonlight for iOS/tvOS reference app it was forked from (Objective-C, storyboards, Core Data), its prebuilt
   FFmpeg, SDL2 and Opus libraries (71 MB without recorded sources) and the X1Kit and moonlight-common-c submodules.
 - The inherited Moonlight workflow that ran on every push and pull request, and the Moonlight bot configurations.

@@ -114,7 +114,8 @@ public final class VideoOutput: VideoDecodeUnitSink, @unchecked Sendable {
         let keyFrame = unit.isIDRFrame
         // Each key frame is where the picture's description may change: the host's HDR mode and metadata are read then
         if keyFrame { updateHDR(unit.hdrActive) }
-        let sample = frame.withUnsafeBytes { try? samples!.sample(for: $0, keyFrame: keyFrame) }
+        let hostTimeUs = unit.presentationTimeUs
+        let sample = frame.withUnsafeBytes { try? samples!.sample(for: $0, keyFrame: keyFrame, hostTimeUs: hostTimeUs) }
         let accepted = sample.map { renderer.enqueue($0) } ?? false
         if let perf { perf.submitted(seconds: Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000_000) }
         return accepted ? .ok : .needIDRFrame

@@ -14,6 +14,9 @@ struct DecodedFrame: @unchecked Sendable {
     let pixelBuffer: CVPixelBuffer
     /// Seconds from submitting the compressed frame to VideoToolbox until the picture came back.
     let decodeSeconds: Double
+    /// The host's time of the frame in seconds (the sample's presentation time stamp, ``VideoSamples``); nil when the
+    /// sample had none.
+    let sourceTime: Double?
 }
 
 /// Decodes the stream's frames with a `VTDecompressionSession`: hardware where the device has it, in the real-time
@@ -142,14 +145,14 @@ final class VideoDecoder: @unchecked Sendable {
         var info = VTDecodeInfoFlags()
         let status = VTDecompressionSessionDecodeFrame(
             session, sampleBuffer: sample, flags: asynchronous ? [._EnableAsynchronousDecompression] : [], infoFlagsOut: &info
-        ) { status, flags, image, _, _ in
+        ) { status, flags, image, time, _ in
             guard status == noErr, let image, !flags.contains(.frameDropped) else {
                 onFailure(status == noErr ? OSStatus(kVTVideoDecoderBadDataErr) : status)
                 return
             }
             let seconds = Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000_000
             Self.attach(hdr, to: image)
-            onFrame(DecodedFrame(pixelBuffer: image, decodeSeconds: seconds))
+            onFrame(DecodedFrame(pixelBuffer: image, decodeSeconds: seconds, sourceTime: time.isNumeric ? time.seconds : nil))
         }
         if status != noErr {
             // The session is gone (the app was in the background) or the data is bad: the next frame builds a new one

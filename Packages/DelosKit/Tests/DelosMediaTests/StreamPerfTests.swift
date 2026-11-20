@@ -150,7 +150,7 @@ import Testing
             "StreamPerf req=0 link=120 in=120.0 gap=1 host=120.0 mbps=48.0 fecfail=- oos=- asm=1.50/1.50 submit=0.10/0.10/0.10 "))
         #expect(line.contains(
             " dec=120/120 decfail=0 decq=3 dect=2.00/20.00 queue=120 selected=117 shown=116 draw=120 drawfail=0 drop=3 full=1 skip=2 gpu-busy=1 repeat=3 wait=0.50 "))
-        #expect(line.contains(" tick=120 tickhz=120.0 lead=16.60 budget=8.30 encode=0.30/0.30 over=2 gpu=0.50/0.50 gpufail=0 late=1 up=off "))
+        #expect(line.contains(" tick=120 tickhz=120.0 lead=16.60 budget=8.30 lock=- encode=0.30/0.30 over=2 gpu=0.50/0.50 gpufail=0 late=1 up=off "))
         // No pass was timed: the breakdown is empty
         #expect(line.contains(" conv=- flow=- fx=- sharp=- present=- rest=- "))
         #expect(line.hasSuffix(" glass=119 lost=1 off=0.10/0.10 thermal=fair lpm=1"))
@@ -213,6 +213,23 @@ import Testing
             == "upscaler=temporal sharpness=30 supersampling=2")
         // Switched off: the mode that is stored is not what runs
         #expect(StreamPerf.launchText(UpscalerSettings(enabled: false, mode: .sharpen)) == "upscaler=off sharpness=50 supersampling=1")
+    }
+
+    @Test func theLaunchLineNamesPhaseLocksArrivalEstimate() {
+        #expect(StreamPerf.launchText(FramePacing.phaseLock) == "lock=p99/240")
+        #expect(StreamPerf.launchText(FramePacing.balanced) == "lock=off")
+    }
+
+    @Test func phaseLockShowsItsMarginWindowAndTheRefreshesThatWaited() {
+        let lines = Mutex<[String]>([])
+        let perf = StreamPerf { line in lines.withLock { $0.append(line) } }
+        for tick in 0..<4 {
+            perf.tick(StreamPerf.Refresh(
+                presentation: Double(tick) / 120, selected: true, margin: 0.0024, window: tick < 2 ? 0.0068 : 0.007,
+                caught: tick % 2 == 0))
+        }
+        perf.flush(seconds: 1, thermal: .nominal, lowPower: false)
+        #expect(lines.withLock { $0 }.first?.contains(" lock=2.40/6.80/2 ") == true)
     }
 
     /// The core's packet counters are cumulative: the line shows what changed in its second.

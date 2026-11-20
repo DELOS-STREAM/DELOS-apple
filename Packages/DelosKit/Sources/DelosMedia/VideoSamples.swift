@@ -30,9 +30,11 @@ public struct VideoSamples: Sendable {
     }
 
     /// A sample buffer for one frame, marked to be shown as soon as it is decoded (the stream is paced by the host,
-    /// not by timestamps). `keyFrame`: the host marked the frame as an IDR / key frame. `frame` is read during the
-    /// call only.
-    public mutating func sample(for frame: UnsafeRawBufferPointer, keyFrame: Bool) throws -> CMSampleBuffer {
+    /// not by timestamps). `keyFrame`: the host marked the frame as an IDR / key frame. `hostTimeUs`: the host's time of
+    /// the frame (`DECODE_UNIT.presentationTimeUs`, from its first captured frame), carried as the presentation time
+    /// stamp to the decoded picture (``DecodedFrame/sourceTime``, phase lock); nil leaves the sample untimed. `frame` is
+    /// read during the call only.
+    public mutating func sample(for frame: UnsafeRawBufferPointer, keyFrame: Bool, hostTimeUs: UInt64? = nil) throws -> CMSampleBuffer {
         let size: Int
         if codec == .av1 {
             if keyFrame || format == nil, let header = try? AV1.sequenceHeader(in: frame) {
@@ -69,10 +71,13 @@ public struct VideoSamples: Sendable {
 
         var sample: CMSampleBuffer?
         var sampleSize = size
+        var timing = CMSampleTimingInfo(
+            duration: .invalid, presentationTimeStamp: hostTimeUs.map { CMTime(value: Int64($0), timescale: 1_000_000) } ?? .invalid,
+            decodeTimeStamp: .invalid)
         status = CMSampleBufferCreateReady(
             allocator: kCFAllocatorDefault, dataBuffer: block, formatDescription: format, sampleCount: 1,
-            sampleTimingEntryCount: 0, sampleTimingArray: nil, sampleSizeEntryCount: 1, sampleSizeArray: &sampleSize,
-            sampleBufferOut: &sample)
+            sampleTimingEntryCount: hostTimeUs == nil ? 0 : 1, sampleTimingArray: &timing, sampleSizeEntryCount: 1,
+            sampleSizeArray: &sampleSize, sampleBufferOut: &sample)
         guard status == noErr, let sample else { throw Failure.coreMedia(status) }
         if let attachments = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: true),
            CFArrayGetCount(attachments) > 0 {

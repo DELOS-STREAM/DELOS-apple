@@ -110,6 +110,7 @@ public final class MetalRenderer: VideoRenderer {
         pipeline.retime(fps: Int(plan.streamFrameRate.rounded()))
         pipeline.setLinkFrameRate(plan.surfaceFrameRate)
         ticker?.stop()
+        pipeline.endWaitingRefresh()
         let ticker = MetalDisplayLinkTicker(layer: layer, frameRate: plan.surfaceFrameRate) { [pipeline] tick in
             pipeline.tick(tick)
         }
@@ -121,6 +122,7 @@ public final class MetalRenderer: VideoRenderer {
     @MainActor public func detached() {
         ticker?.stop()
         ticker = nil
+        pipeline.endWaitingRefresh()
     }
 }
 

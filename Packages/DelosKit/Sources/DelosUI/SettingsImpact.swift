@@ -28,7 +28,7 @@ struct ImpactContext: Equatable {
     /// The stored value of the codec (`auto`, `forceav1`, `forceh265`, `neverh265`, `pyrowave`).
     var codec: String
     var hdr: Bool
-    /// The stored value of the frame pacing (`latency`, `balanced`, `cap-fps`, `smoothness`, `warp`, `warp2`).
+    /// The stored value of the frame pacing (`phase-lock`, `balanced`, `cap-fps`, `smoothness`, `warp`, `warp2`).
     var pacing: String
     /// The upscaler (`checkbox_sgsr`), its mode (`list_sgsr_quality`) and sharpness.
     var upscaler = false

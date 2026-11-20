@@ -255,7 +255,7 @@ private func expectPose(_ opening: Double, _ expected: [Float], tolerance: Float
     /// One fixture frame decoded and shown at the refresh at 0.1 s; the picture stays on screen.
     private func setup() throws -> Setup {
         let clock = VirtualClock()
-        let pipeline = try #require(MetalPipeline(pacing: .latency, fps: 60, clock: clock.reading))
+        let pipeline = try #require(MetalPipeline(pacing: .phaseLock, fps: 60, clock: clock.reading))
         var stream = try ReplayStream(fixture: "frames.h264", codec: .h264)
         let sample = try stream.sample(0)
         #expect(pipeline.enqueue(sample))

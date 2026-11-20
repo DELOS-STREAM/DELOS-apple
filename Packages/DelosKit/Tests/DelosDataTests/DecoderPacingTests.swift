@@ -40,4 +40,14 @@ struct DecoderPacingTests {
             #expect(restored.fps == 120)
         }
     }
+    @Test func aStoredLowestLatencyBecomesPhaseLock() throws {
+        let stream = try JSONDecoder().decode(StreamSettings.self, from: Data(#"{"framePacing":"latency","fps":120}"#.utf8))
+        #expect(stream.framePacing == .phaseLock)
+        #expect(stream.fps == 120)
+        let game = try JSONDecoder().decode(GameSettingsOverride.self, from: Data(#"{"framePacing":"latency"}"#.utf8))
+        #expect(game.framePacing == .phaseLock)
+        // Phase lock is stored under its own name from then on
+        let stored = String(decoding: try JSONEncoder().encode(stream), as: UTF8.self)
+        #expect(stored.contains(#""framePacing":"phase-lock""#))
+    }
 }

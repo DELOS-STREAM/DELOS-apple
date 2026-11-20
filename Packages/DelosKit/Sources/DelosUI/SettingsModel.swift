@@ -453,16 +453,17 @@ struct StreamSettingsForm: Equatable {
     /// The bitrate the slider shows: the chosen one, else the default for the resolution and frame rate.
     var effectiveBitrate: Int { settings.bitrate(at: effectiveResolution) }
 
-    /// The frame pacing modes in Android's order. Fast V-Sync is not offered: Latency already shows each frame at the
-    /// first refresh after it is decoded, which is all Android's Nano pacer adds over it.
+    /// The frame pacing modes in Android's order. Phase lock stands where Android has Lowest latency, which it replaces
+    /// (a frame reaches the earliest refresh that its arrival safely makes); Fast V-Sync, Android's Nano pacer, adds
+    /// nothing over it and is not offered.
     var framePacingOptions: [(value: FramePacing, label: String)] {
-        let order: [FramePacing] = [.warp2, .warp, .latency, .balanced, .capFPS, .smoothness]
+        let order: [FramePacing] = [.warp2, .warp, .phaseLock, .balanced, .capFPS, .smoothness]
         return order.map { ($0, Self.pacingLabel($0)) }
     }
 
     private static func pacingLabel(_ mode: FramePacing) -> String {
         switch mode {
-        case .latency: L("pacing_latency")
+        case .phaseLock: L("pacing_phase_lock")
         case .balanced: L("pacing_balanced")
         case .capFPS: L("pacing_balanced_alt")
         case .smoothness: L("pacing_smoothness")
@@ -473,7 +474,7 @@ struct StreamSettingsForm: Equatable {
 
     private static func pacingHelp(_ mode: FramePacing) -> String {
         switch mode {
-        case .latency: L("help_frame_pacing_latency")
+        case .phaseLock: L("help_frame_pacing_phase_lock")
         case .balanced: L("help_frame_pacing_balanced")
         case .capFPS: L("help_frame_pacing_cap_fps")
         case .smoothness: L("help_frame_pacing_smoothness")

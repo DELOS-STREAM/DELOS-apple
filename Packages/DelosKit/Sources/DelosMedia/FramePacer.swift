@@ -1,10 +1,12 @@
 import Foundation
 
-/// Android's pacing choices with an honest display-layer mapping. Warp requests oversampling at the host, not generated frames.
+/// Android's pacing choices with an honest display-layer mapping, except Lowest latency: on Apple, Phase lock takes its
+/// place. Warp requests oversampling at the host, not generated frames.
 public enum FramePacing: String, CaseIterable, Codable, Sendable {
-    /// Each frame is shown as soon as it is decoded (`latency`). Lowest delay; the network's jitter shows as uneven
-    /// motion.
-    case latency
+    /// Each frame is shown at the earliest refresh that its arrival makes 99 times out of 100 (`phase-lock`): the frames
+    /// keep the host's cadence and wait only the few milliseconds of the network's jitter, not a whole frame (``FrameQueue``).
+    /// The display layer (``DisplayLayerRenderer``), without a display link to lock to, shows each frame at once.
+    case phaseLock = "phase-lock"
     /// Frames are spaced evenly with up to one frame of buffer (`balanced`).
     case balanced
     /// Balanced presentation with Android's host FPS cap just below the display refresh rate.
@@ -15,10 +17,24 @@ public enum FramePacing: String, CaseIterable, Codable, Sendable {
     case warp
     case warp2
 
-    /// The frames of buffer that absorb the network's jitter; 0 shows frames at once.
+    /// The stored value of Lowest latency, which Phase lock replaced.
+    static let lowestLatency = "latency"
+
+    /// Reads a stored value; Lowest latency becomes Phase lock.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let stored = try container.decode(String.self)
+        guard let pacing = FramePacing(rawValue: stored == Self.lowestLatency ? Self.phaseLock.rawValue : stored) else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unknown frame pacing \(stored)")
+        }
+        self = pacing
+    }
+
+    /// The frames of buffer that absorb the network's jitter; 0 shows frames at once (Phase lock holds its frames by
+    /// its own measure, not by whole frames).
     var bufferFrames: Double {
         switch self {
-        case .latency, .warp, .warp2: 0
+        case .phaseLock, .warp, .warp2: 0
         case .balanced, .capFPS: 1
         case .smoothness: 2
         }
