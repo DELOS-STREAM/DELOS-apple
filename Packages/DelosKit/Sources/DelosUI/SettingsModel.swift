@@ -457,7 +457,7 @@ struct StreamSettingsForm: Equatable {
     /// (a frame reaches the earliest refresh that its arrival safely makes); Fast V-Sync, Android's Nano pacer, adds
     /// nothing over it and is not offered.
     var framePacingOptions: [(value: FramePacing, label: String)] {
-        let order: [FramePacing] = [.warp2, .warp, .phaseLock, .balanced, .capFPS, .smoothness]
+        let order: [FramePacing] = [.phaseLock, .balanced, .capFPS, .smoothness, .warp, .warp2]
         return order.map { ($0, Self.pacingLabel($0)) }
     }
 

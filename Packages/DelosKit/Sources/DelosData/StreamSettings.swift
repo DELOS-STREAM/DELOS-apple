@@ -39,10 +39,10 @@ public struct StreamResolution: Codable, Hashable, Sendable {
 public enum VideoCodec: String, CaseIterable, Codable, Sendable {
     /// H.264, and HEVC where this device decodes it. AV1 is offered only when chosen.
     case automatic = "auto"
-    case av1 = "forceav1"
-    case hevc = "forceh265"
     /// H.264 only.
     case h264 = "neverh265"
+    case hevc = "forceh265"
+    case av1 = "forceav1"
     /// PyroWave, Vibepollo's wavelet codec, where the host and this device support it; the usual codecs otherwise
     /// (offered only where a PyroWave decoder exists, ``choices(decodable:pyroWave:)``).
     case pyroWave = "pyrowave"
@@ -64,7 +64,7 @@ public enum VideoCodec: String, CaseIterable, Codable, Sendable {
         return formats
     }
 
-    /// The choices in Android's order (Automatic, AV1, HEVC, H.264, PyroWave), without a codec this device does not
+    /// The choices in Android's order (Automatic, H.264, HEVC, AV1, PyroWave), without a codec this device does not
     /// decode; PyroWave only where [pyroWave] (a PyroWave decoder) is there.
     public static func choices(decodable: VideoFormats, pyroWave: Bool = false) -> [VideoCodec] {
         allCases.filter {

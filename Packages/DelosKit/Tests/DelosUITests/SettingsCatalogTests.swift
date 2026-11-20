@@ -207,7 +207,7 @@ import Testing
     @Test func theFramePacingIsAndroidsWithoutFastVSync() {
         var settings = StreamSettings()
         #expect(StreamSettingsForm(settings: settings, device: phone).framePacingOptions.map(\.value)
-            == [.warp2, .warp, .phaseLock, .balanced, .capFPS, .smoothness])
+            == [.phaseLock, .balanced, .capFPS, .smoothness, .warp, .warp2])
         // Without a PyroWave decoder the codec is not offered and a stored one goes back to Automatic
         settings.codec = .pyroWave
         #expect(StreamSettingsForm(settings: settings, device: phone).settings.codec == .automatic)

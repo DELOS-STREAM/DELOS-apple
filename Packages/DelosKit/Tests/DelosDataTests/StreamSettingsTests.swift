@@ -168,8 +168,9 @@ import Testing
 
     @Test func onlyDecodableCodecsAreOffered() {
         #expect(VideoCodec.choices(decodable: .h264) == [.automatic, .h264])
-        #expect(VideoCodec.choices(decodable: [.h264, .hevc]) == [.automatic, .hevc, .h264])
-        #expect(VideoCodec.choices(decodable: [.h264, .hevc, .av1Main8]) == [.automatic, .av1, .hevc, .h264])
+        #expect(VideoCodec.choices(decodable: [.h264, .hevc]) == [.automatic, .h264, .hevc])
+        #expect(VideoCodec.choices(decodable: [.h264, .hevc, .av1Main8]) == [.automatic, .h264, .hevc, .av1])
+        #expect(VideoCodec.choices(decodable: [.h264, .hevc, .av1Main8], pyroWave: true) == [.automatic, .h264, .hevc, .av1, .pyroWave])
     }
 
     @Test func theCodecChoosesTheOfferedFormats() {

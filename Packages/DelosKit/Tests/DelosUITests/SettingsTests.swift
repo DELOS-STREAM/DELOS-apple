@@ -86,7 +86,7 @@ private let iPhone = StreamDevice(pixelWidth: 1290, pixelHeight: 2796, maxFrames
         #expect(range == 1000...1_000_000 && step == 1000 && divisor == 1000 && unit == " Mbps")
         guard case let .choice(codec, codecs, _) = value("video_format") else { Issue.record("codec"); return }
         #expect(codec == "Automatic")
-        #expect(codecs == ["Automatic", "HEVC (H.265)", "H.264"])
+        #expect(codecs == ["Automatic", "H.264", "HEVC (H.265)"])
         #expect(rows.first { $0.id == "video_format" }?.help.hasPrefix("Automatic\nPicks H.264 or HEVC.") == true)
         let hostAudio = form.rows(.audio).first { $0.id == "checkbox_host_audio" }
         #expect(hostAudio?.value == .toggle(false))
@@ -96,7 +96,7 @@ private let iPhone = StreamDevice(pixelWidth: 1290, pixelHeight: 2796, maxFrames
     @Test func leftAndRightStepThroughTheChoicesAndWrap() {
         var form = StreamSettingsForm(settings: StreamSettings(), device: iPhone)
         form.step("video_format", by: -1)
-        #expect(form.settings.codec == .h264)
+        #expect(form.settings.codec == .hevc)
         form.step("video_format", by: 1)
         #expect(form.settings.codec == .automatic)
         form.step("list_fps", by: 1)
@@ -109,16 +109,16 @@ private let iPhone = StreamDevice(pixelWidth: 1290, pixelHeight: 2796, maxFrames
         #expect(form.settings.resolution == StreamResolution(width: 2796, height: 1290))
         form.step("checkbox_host_audio", by: 1)
         #expect(form.settings.playAudioOnHost)
-        // Balanced by default; Android's order (Warp 2, Warp, phase lock, balanced, cap, smoothness), wrapping
+        // Balanced by default; Android's order (phase lock, balanced, cap, smoothness, Warp, Warp 2), wrapping
         #expect(form.settings.framePacing == .balanced)
         form.step("frame_pacing", by: 1)
         #expect(form.settings.framePacing == .capFPS)
         form.step("frame_pacing", by: 1)
         #expect(form.settings.framePacing == .smoothness)
         form.step("frame_pacing", by: 1)
-        #expect(form.settings.framePacing == .warp2)
-        form.step("frame_pacing", by: 1)
         #expect(form.settings.framePacing == .warp)
+        form.step("frame_pacing", by: 1)
+        #expect(form.settings.framePacing == .warp2)
         form.step("frame_pacing", by: 1)
         #expect(form.settings.framePacing == .phaseLock)
     }
@@ -130,10 +130,10 @@ private let iPhone = StreamDevice(pixelWidth: 1290, pixelHeight: 2796, maxFrames
         form.pick("list_fps", option: 3)
         #expect(form.settings.fps == 120)
         form.pick("video_format", option: 1)
-        #expect(form.settings.codec == .hevc)
+        #expect(form.settings.codec == .h264)
         // An index outside the list changes nothing
         form.pick("video_format", option: 9)
-        #expect(form.settings.codec == .hevc)
+        #expect(form.settings.codec == .h264)
     }
 
     @Test func theBitrateFollowsUntilTheSliderMoves() {

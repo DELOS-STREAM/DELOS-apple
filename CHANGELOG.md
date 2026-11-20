@@ -303,6 +303,9 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- Frame pacing lists Warp Drive and Warp 2 last (Phase Lock, Balanced, Balanced with FPS limit, Smoothest video, Warp
+  Drive, Warp 2), and the video codec lists H.264, HEVC, AV1, then PyroWave after Automatic, so the familiar choices
+  come first.
 - The GPU impact chip shows the chip icon again instead of a graphics card, as in DELOS for Android: Apple devices have a
   system on a chip rather than a separate graphics card. The icon fonts and `Symbols.swift` are synced from Android.
 - Video frame pacing: Steady low latency takes the place of Lowest latency. Each frame is shown at the earliest refresh
