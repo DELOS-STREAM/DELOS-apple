@@ -333,7 +333,7 @@ private struct FocusPlate: View {
 
 /// A row of a popover page (`.row`): 72 px, the icon in a 56 px column, the label, and the value on the right. The page's
 /// plate carries its pale gold fill and ring; the icon turns gold and filled. It rises in after the card opens, one after
-/// the other.
+/// the other, its plate with it (`staggerEntrance()` of the row, places from 0 and no cap, `EntranceStagger` of the page).
 private struct PopoverRow: View {
     let row: StreamMenuRow
     let focused: Bool
@@ -342,7 +342,6 @@ private struct PopoverRow: View {
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reducedMotion
-    @State private var appeared = false
 
     private typealias M = StreamMenuLayout
 
@@ -369,13 +368,9 @@ private struct PopoverRow: View {
             }
         }
         .animation(reducedMotion ? .easeOut(duration: 0.18) : .timingCurve(0.3, 1.22, 0.42, 1, duration: Motion.rowFocus / 1000), value: focused)
-        .opacity((row.enabled ? 1 : 0.45) * (appeared ? 1 : 0))
-        .offset(y: appeared || reducedMotion ? 0 : stage.px(Motion.rise))
+        .opacity(row.enabled ? 1 : 0.45)
+        .staggerEntrance(index: index)
         .contentShape(Rectangle())
-        .onAppear {
-            let delay = Motion.menuDelay + Double(min(index + 1, Motion.staggerCap)) * Motion.staggerRow
-            withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: Motion.rowIn / 1000).delay(delay / 1000)) { appeared = true }
-        }
         // The name and the value (a switch reads On or Off); the focus item makes it a button
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(row.label)

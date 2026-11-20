@@ -98,7 +98,7 @@ private struct StaggerEntrance: ViewModifier {
         // element appearing late (`isEarly` is false) is shown at once
         let hidden = state == .waiting || (state == .undecided && (explicit != nil || stagger?.isEarly == true))
         content
-            .modifier(EntranceEffect(progress: hidden ? 0 : 1, distance: stage.px(Motion.rise), reduced: reduced))
+            .modifier(EntranceEffect(look: EntranceLook(progress: hidden ? 0 : 1, distance: stage.px(Motion.rise), reduced: reduced)))
             .onAppear {
                 guard state == .undecided else { return }
                 // The place is taken here, not while the body is evaluated: a measuring pass (a row that fits or scrolls)
@@ -114,21 +114,18 @@ private struct StaggerEntrance: ViewModifier {
     }
 }
 
-private struct EntranceEffect: ViewModifier, Animatable {
-    var progress: Double
-    let distance: Double
-    let reduced: Bool
-
-    nonisolated var animatableData: Double {
-        get { progress }
-        set { progress = newValue }
-    }
+/// The look of an entering element as a render effect (`graphicsLayer { alpha; translationY }` of DELOS for Android): the
+/// animation interpolates the opacity and the offset where the view is drawn, so no body is evaluated again and nothing is
+/// laid out again while it rises.
+private struct EntranceEffect: ViewModifier {
+    let look: EntranceLook
 
     func body(content: Content) -> some View {
-        let look = EntranceLook(progress: progress, distance: distance, reduced: reduced)
-        content
-            .opacity(look.opacity)
-            .offset(y: look.offset)
+        content.visualEffect { [look] effect, _ in
+            effect
+                .opacity(look.opacity)
+                .offset(y: look.offset)
+        }
     }
 }
 
