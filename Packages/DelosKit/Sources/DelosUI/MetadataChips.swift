@@ -168,9 +168,10 @@ struct BadgeStrip<Facts: View, Tags: View>: View {
         .offset(x: shifted ? -overflow : 0)
         .frame(maxWidth: .infinity, alignment: .leading)
         .onGeometryChange(for: Double.self) { $0.size.width } action: { room = $0 }
+        // MarqueeContent's fade (FADE_START 28, FADE_END 36), cut at the strip's own ends like its `clipToBounds`
         .modifier(EdgeFadeMask(
             hiddenStart: shifted ? overflow : 0, hiddenEnd: shifted ? 0 : overflow, axis: .horizontal,
-            start: FadeEdge(solid: stage.px(40)), end: FadeEdge(solid: stage.px(40)), bleed: stage.px(40), outset: stage.px(40)))
+            start: FadeEdge(solid: stage.px(28)), end: FadeEdge(solid: stage.px(36)), outset: stage.px(40)))
         .task(id: overflow > 0 && !reduceMotion) {
             shifted = false
             guard overflow > 0, !reduceMotion else { return }
