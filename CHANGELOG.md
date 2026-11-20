@@ -303,6 +303,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- The GPU impact chip shows the chip icon again instead of a graphics card, as in DELOS for Android: Apple devices have a
+  system on a chip rather than a separate graphics card. The icon fonts and `Symbols.swift` are synced from Android.
 - Resolution choices on a display that is not 16:9 (iPad, iPhone, a 16:10 Mac) add the 720p, 1080p, 1440p and 4K line
   counts in the display's own shape, for example 1440x1080 and 1920x1440 on a 13" iPad Pro, so a stream fills the panel
   without black bars and the upscaler enlarges all of it. The 16:9 presets, Native and Custom stay.

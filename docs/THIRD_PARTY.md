@@ -31,8 +31,8 @@ from verified sources; the licence files are next to them in `Packages/DelosKit/
 |---|---|---|---|---|
 | `unbounded.ttf` | [google/fonts](https://github.com/google/fonts) `ofl/unbounded` | commit `e7db6ca603fd4862010383ff17ffd6cc4ffac1c0` | OFL-1.1 | `af82d541d5007a370b0fd6e05d573ae7214fb0b5c1ece3327c17ebd971bf19d1` |
 | `figtree.ttf` | google/fonts `ofl/figtree` | same commit | OFL-1.1 | `723c2843a782299a5473cbbe9ad44b685fe0994d17a4b7dc75e4644ae695e962` |
-| `phosphor_regular.ttf` (subset with input glyphs) | [phosphor-icons/web](https://github.com/phosphor-icons/web), original input artwork | `v2.1.2` plus approved local SVGs | MIT base, OFL-1.1 lettering, CC0-1.0 brand paths | `578799423b926bc0b29bd74165cb082b93af7668f347194d67670e4d5e4384d8` |
-| `phosphor_fill.ttf` (subset with input glyphs) | same sources | same versions | same component licences | `4616e725b7affa949f0a5c4d99f2606ad58336f8cf6736a3fa7fe9047683d228` |
+| `phosphor_regular.ttf` (subset with input glyphs) | [phosphor-icons/web](https://github.com/phosphor-icons/web), original input artwork | `v2.1.2` plus approved local SVGs | MIT base, OFL-1.1 lettering, CC0-1.0 brand paths | `6d7f64ee4af231bd407ec0ff1ead565ce4887d91ededdb90734401a987da30ad` |
+| `phosphor_fill.ttf` (subset with input glyphs) | same sources | same versions | same component licences | `da1b27a46e6a622cfc23c13696bb6cd94f687bfc97fdb590268cb56e6efa3876` |
 
 The icon subsets add the approved Xbox, DualSense, DualShock 4, Joy-Con and Mac input controls
 from Android's `tools/fonts/controller/` and `tools/fonts/mac/`. Figtree-derived lettering retains
