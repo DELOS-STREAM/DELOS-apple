@@ -200,7 +200,7 @@ final class Layers {
             if focus.handle(command) { feedback?.play(.move) }
         case .left, .right:
             if case .dialog = layer, focus.handle(command) { feedback?.play(.move) }
-        case .previousTab, .nextTab, .menu, .toastAction:
+        case .previousTab, .nextTab, .menu, .toastAction, .mute:
             break
         }
     }

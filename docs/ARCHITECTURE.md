@@ -1344,7 +1344,9 @@ access and physical-device integration are not verified.
 The overview's Screenshots and videos carousel lists the videos first, then the screenshots. `OverviewViewer` opens on a
 snapshot of that list (`OverviewSession.viewerMedia`), so its indices never shift while it is open. A screenshot fits
 16:9 in the stage less 280 × 300; a video 16:9 in the stage less 280 × 440, centred and 70 px higher, so that its
-controls fit under it (1920 × 1080: 1137.8 × 640 at 391, 150). The thumbnail zooms into the item's own rectangle.
+controls fit under it (1920 × 1080: 1137.8 × 640 at 391, 150). The thumbnail zooms into the item's own rectangle. The
+viewer covers the whole screen: the top bar fades out while it is open (as on Android), so the count at 72, 40 sits
+where the brand was.
 
 Videos play in the app, never in a browser or the YouTube app. Once the viewer has settled on a video (the opening zoom
 done, no browse running, not closing), `OverviewVideoPlayer` puts a `WKWebView` exactly on the video rectangle: it loads
@@ -1365,7 +1367,7 @@ play or pause, forward 10 s, the elapsed time, the progress (a tap or a click se
 | Left / Right | previous / next item | seek -10 / +10 s |
 | L1 / R1 (`[` `]`) | previous / next item | previous / next item |
 | A (Return, Space) | nothing | play / pause (at the end: from the start) |
-| Y (F) | nothing | mute / sound on |
+| Y (F, M) | nothing | mute / sound on |
 | B (Esc) | close | close |
 
 Touch swipes sideways to browse and down to close; the pointer has the side arrows and the close button. The hint bar
@@ -1510,6 +1512,7 @@ pointer, touch) and, for a controller, the glyph family (`PadFamily`). The hint 
   menu, and Tab or Esc closes it); O and the PC keyboard's menu key are the right menu button and X (the context menu,
   Options; a custom app setting's reset; the Artwork screen's search by name); F is Y (the library's filter, the Settings
   search, the Artwork filter, a toast's Undo); [ and ] are L1 and R1 (the tabs of Settings, app settings and Artwork);
+  M mutes the video the overview's viewer plays (`MenuCommand.mute`, no pad button);
   the arrows left and right adjust a value. Keys with Command, Control or Option are the system's (Command-Tab) and do
   nothing; while a text field is typed in only the arrows, Return, Space and Esc reach the shell. `MenuKeyOwnerView` takes
   Tab from UIKit too (the iPad's keyboard focus would move between groups); the Mac app swallows plain keys anyway.

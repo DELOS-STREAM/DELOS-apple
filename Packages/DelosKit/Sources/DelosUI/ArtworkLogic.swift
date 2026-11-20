@@ -281,7 +281,7 @@ enum ArtworkCommand: Equatable {
             case .options: return .resetFilters
             case .accept: return .sheetAccept
             case .up, .down, .left, .right: return .sheetMove
-            case .previousTab, .nextTab, .menu: return .nothing
+            case .previousTab, .nextTab, .menu, .mute: return .nothing
             }
         }
         switch command {
@@ -290,6 +290,7 @@ enum ArtworkCommand: Equatable {
         case .options: return .search
         case .toastAction: return toastOwnsY ? .pass : .openSheet
         case .up, .down, .left, .right, .accept, .back, .menu: return .pass
+        case .mute: return .nothing
         }
     }
 }

@@ -358,7 +358,7 @@ struct SettingsScreen: View {
                 return false
             }
             return true
-        case .down, .accept, .back, .menu:
+        case .down, .accept, .back, .menu, .mute:
             return false
         }
     }
@@ -611,7 +611,7 @@ struct SettingsScreen: View {
             if let feedback { feedback.activate(searchFocus.acceptCue) { searchFocus.handle(.accept) } } else { searchFocus.handle(.accept) }
         case .up, .down, .left, .right:
             if searchFocus.handle(command) { feedback?.play(.move) }
-        case .previousTab, .nextTab, .menu, .options, .toastAction:
+        case .previousTab, .nextTab, .menu, .options, .toastAction, .mute:
             break
         }
         return true

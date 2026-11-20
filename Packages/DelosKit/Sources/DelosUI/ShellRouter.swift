@@ -198,7 +198,7 @@ final class ShellRouter {
             case .accept: activate(sideMenu.acceptCue) { sideMenu.handle(.accept) }
             case .up, .down: if sideMenu.handle(command) { feedback?.play(.move) }
             case .left, .right: adjustQuickSetting(of: sideMenu, command == .right ? 1 : -1)
-            case .previousTab, .nextTab, .options, .toastAction: break
+            case .previousTab, .nextTab, .options, .toastAction, .mute: break
             }
             return
         }
@@ -223,7 +223,7 @@ final class ShellRouter {
             case .up, .down, .left, .right: if card.handle(command) { feedback?.play(.move) }
             case .menu where navigator.current.hasSideMenu: openSideMenu()
             case .toastAction: toasts.runAction()
-            case .menu, .options, .previousTab, .nextTab: break
+            case .menu, .options, .previousTab, .nextTab, .mute: break
             }
             return
         }

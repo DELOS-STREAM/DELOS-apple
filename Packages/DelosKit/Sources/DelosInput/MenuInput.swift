@@ -17,6 +17,8 @@ public enum MenuCommand: Sendable, Hashable {
     case options
     /// Y (or F): the action of the toast that is shown (Undo), else the screen's (the filter, the search).
     case toastAction
+    /// M on a keyboard (no pad button): the sound of the video the overview's viewer plays (Y and F do it too).
+    case mute
 }
 
 /// Turns game controller and keyboard input into ``MenuCommand``s: the D-pad, the left stick (past half of its travel,
@@ -160,7 +162,7 @@ public final class MenuInput {
     nonisolated static func repeats(_ command: MenuCommand) -> Bool {
         switch command {
         case .up, .down, .left, .right: true
-        case .accept, .back, .previousTab, .nextTab, .menu, .options, .toastAction: false
+        case .accept, .back, .previousTab, .nextTab, .menu, .options, .toastAction, .mute: false
         }
     }
 
@@ -230,9 +232,9 @@ public final class MenuInput {
 
     /// The shell's keys (docs/ARCHITECTURE.md, "Input kind and the hints"): the arrows move, Return, Enter and Space are A,
     /// Escape is B, Tab the left menu button (the side menu), the menu key and O the right one (the context menu, X),
-    /// F is Y (filter, search, the toast's action), [ and ] the shoulders (tabs). The keys are positions (HID usages), so
-    /// they are the same on every layout. While a text field is typed in ([typing]) only the arrows, Return, Space and
-    /// Escape emit; a key with Command, Control or Option ([modified]) never does.
+    /// F is Y (filter, search, the toast's action), [ and ] the shoulders (tabs), M the mute of the overview's video. The keys
+    /// are positions (HID usages), so they are the same on every layout. While a text field is typed in ([typing]) only the
+    /// arrows, Return, Space and Escape emit; a key with Command, Control or Option ([modified]) never does.
     nonisolated static func keyCommand(_ key: GCKeyCode, typing: Bool = false, modified: Bool = false) -> MenuCommand? {
         guard !modified else { return nil }
         switch key {
@@ -251,6 +253,7 @@ public final class MenuInput {
         case .keyF: return .toastAction
         case .openBracket: return .previousTab
         case .closeBracket: return .nextTab
+        case .keyM: return .mute
         default: return nil
         }
     }

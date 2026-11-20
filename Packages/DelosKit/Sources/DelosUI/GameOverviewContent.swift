@@ -231,7 +231,7 @@ enum OverviewNavigation {
         case .back: .close
         case .up where inHeader(focused): .close
         case .up, .down, .left, .right, .accept: .focus
-        case .menu, .options, .toastAction, .previousTab, .nextTab: .ignore
+        case .menu, .options, .toastAction, .previousTab, .nextTab, .mute: .ignore
         }
     }
 
