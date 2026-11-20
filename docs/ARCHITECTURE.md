@@ -1353,11 +1353,9 @@ access and physical-device integration are not verified.
 ### The overview's screenshots and videos
 
 The overview's Screenshots and videos carousel lists the videos first, then the screenshots. `OverviewViewer` opens on a
-snapshot of that list (`OverviewSession.viewerMedia`), so its indices never shift while it is open. A screenshot fits
-16:9 in the stage less 280 × 300; a video 16:9 in the stage less 280 × 440, centred and 70 px higher, so that its
-controls fit under it (1920 × 1080: 1137.8 × 640 at 391, 150). The thumbnail zooms into the item's own rectangle. The
-viewer covers the whole screen: the top bar fades out while it is open (as on Android), so the count at 72, 40 sits
-where the brand was.
+snapshot of that list (`OverviewSession.viewerMedia`), so its indices never shift while it is open. Screenshots and
+videos fill the whole stage (a screenshot fitted by its aspect, the player letterboxing the video); the thumbnail zooms
+from the item's carousel rectangle. The viewer covers the whole screen: the top bar fades out while it is open.
 
 Videos play in the app, never in a browser or the YouTube app. Once the viewer has settled on a video (the opening zoom
 done, no browse running, not closing), `OverviewVideoPlayer` puts a `WKWebView` exactly on the video rectangle: it loads
@@ -1365,24 +1363,51 @@ the YouTube IFrame player (`youtube-nocookie.com`, no YouTube controls, autoplay
 URL and player `origin` are `https://` and the bundle id in lower case (the Referer YouTube requires). The page reports
 the player's state, time, duration, mute and errors through the `delos` script message handler (a weak proxy, so the
 web view does not keep the coordinator alive) to `OverviewVideo`; DELOS's commands go back with `evaluateJavaScript`. The
-web view stays invisible, with the thumbnail showing, until the player first plays. Every main-frame navigation except
+web view stays invisible until the player first plays; meanwhile the video's thumbnail (`maxresdefault`, else
+`hqdefault`: a missing `maxresdefault` is YouTube's 120 × 90 placeholder) fills the viewer, blurred 16 px, and fades out
+over 280 ms over the sharp video once the player reports playing. Every main-frame navigation except
 the page's own first load and `about:` pages is cancelled (the player's frame loads freely), new windows are never made
 (`createWebViewWith` returns nil), and the video pauses when the app goes to the background. The player goes when the
 viewer browses away or starts closing. Apple TV has no WebKit: there the overview lists no videos.
 
-Nothing of DELOS lies over the player. Its controls are a glass pill 22 px under the video, as wide as it: back 10 s,
-play or pause, forward 10 s, the elapsed time, the progress (a tap or a click seeks there), the duration and the sound.
+The overlay is the dock (`OverviewDock`, `GameOverviewDock.swift`): one glass panel 64 px from the sides, radius 46, over
+the bottom of the stage. Its glass is the system's `.ultraThinMaterial` (a real backdrop blur of whatever is under it,
+the player's web view and the video included) with a 0.20 tint of `#0A1020`, a top highlight and a hairline. A video
+that plays gets the timeline (elapsed, the track with the buffered share from `getVideoLoadedFraction` and the played
+share, the remaining time) over one row: the game, the count and the title on the left ("3 / 11 · Launch Trailer"),
+the transport (previous 76, back 10 s 92, play 124, forward 10 s 92, next 76 px) and the sound (mute, a volume slider
+backed by `setVolume`/`getVolume`) on the right. Left and right take equal widths, so the transport is centred on the
+screen. A screenshot (or a video that cannot play) gets previous, a page indicator (one dot per item, videos as rings,
+the current one a gold bar; a tap on a dot opens it) and next. Close is a glass button top right.
+
+Every glyph is drawn by `InkSymbol` from its outline (Core Text), placed so the middle of its ink bounds is the middle
+of its button; the play triangle uses its area centroid instead, which puts it a little right of its box, as the eye
+expects. `GameOverviewTests.dockGlyphsAreCentred` renders each glyph and checks that within 1 px.
+
+The overlay hides after 3 s without input while a video plays or a screenshot shows (`OverviewViewerControls`); it
+stays while the video is paused, ended or loading and while a slider is dragged; any input brings it back, and the hint
+bar and the pointer hide with it. It rises 18 px in 420 ms and fades out in 240 ms; close drops in 92 ms later. Each
+press of a seek shows variant B's arc flash on its side with the running total (10 s, 20 s…) for 900 ms. With reduced
+motion the parts and the flash only fade.
 
 | Input | Screenshot, or a video that cannot play | A video that plays |
 |---|---|---|
-| Left / Right | previous / next item | seek -10 / +10 s |
+| D-pad | walks previous and next (Up: close) | the timeline first: Left / Right seek 10 s; Down: play, then Left / Right along the transport and the sound; Up: close |
 | L1 / R1 (`[` `]`) | previous / next item | previous / next item |
-| A (Return, Space) | nothing | play / pause (at the end: from the start) |
+| A (Return, Space) | presses the focused button | on the timeline play / pause; else presses the focused button |
 | Y (F, M) | nothing | mute / sound on |
 | B (Esc) | close | close |
 
-Touch swipes sideways to browse and down to close; the pointer has the side arrows and the close button. The hint bar
-follows: Browse and Back on a screenshot; Seek, Play or Pause, Mute or Sound on, L1, R1 and Back on a video that plays.
+On the volume slider Left and Right change the volume by 10. A press while the overlay is hidden shows it with the focus
+back on its first stop, and acts. A gold ring glides to the focused stop for the controller and the keyboard.
+
+Touch: a tap shows or hides the overlay, a double tap in the left or right third seeks 10 s, a sideways swipe browses,
+a swipe down closes, the sliders drag. While the overlay is hidden over a video, the player's web view takes the touches
+itself, so YouTube's own surface (an ad's Skip) keeps working; a tap there also brings the overlay back (a gesture
+recognizer that does not cancel the page's touches). While the overlay shows, its tap layer takes them. Pointer: moving
+shows the overlay, a click on the picture plays or pauses, hovering the timeline shows the time under the pointer.
+The hint bar: L1 R1 Browse and Back on a screenshot; Seek, Play or Pause, Mute or Sound on, L1, R1 and Back on a video
+that plays.
 
 A video that cannot play shows its thumbnail dimmed with a warning, "This video can't be played" and why (its owner does
 not allow other apps for the player's errors 101 and 150, YouTube couldn't load it for the rest); its controls hide.

@@ -332,6 +332,15 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- The game overview's full-screen viewer has a new overlay, the dock: a tall translucent glass panel (a real backdrop
+  blur over the video and the screenshots) with the timeline (buffered and played, the remaining time), the count and
+  title, a big centred transport (previous, back 10 s, play, forward 10 s, next) and the sound with a volume slider;
+  on a screenshot a page indicator. Every icon sits optically centred in its button. A seek shows an arc flash with
+  the running total (10 s, 20 s…). The controller starts on the timeline (Left and Right seek), Down reaches the
+  transport, L1 and R1 browse (only they: on a screenshot the D-pad walks the dock), B closes. Touch: a tap shows or
+  hides it, a double tap seeks 10 s; while it is hidden, taps reach the player itself (an ad's Skip). It hides after 3 s
+  while playing and stays while paused. While a trailer loads, its largest thumbnail fills the viewer, slightly blurred,
+  and fades into the video once it plays.
 - The changelog and the README describe DELOS for Apple on its own; `tools/docs/check_platform.py`, run by
   `tools/test.sh`, fails when either names another platform.
 - The library filter takes several values in every row (for example two genres, a theme and Native HDR): a chip toggles
