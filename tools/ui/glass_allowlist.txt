@@ -26,7 +26,14 @@ StreamPopover.swift | Circle().fill(colors.accent3.opacity(0.40).color) | the fo
 ArtworkScreen.swift | opacity: 0x99 / 255 | a tile's download bar track
 GameOverviewParts.swift | Capsule().fill(Color.white.opacity(0.1)) | fill bar track
 LaunchScene.swift | Capsule().fill(colors.text.opacity(0.16).color) | progress track
-OverviewVideoPlayer.swift | Capsule().fill(colors.text.color.opacity(0.18)) | the video's progress track
+GameOverviewDock.swift | Capsule().fill(Color.white.opacity(0.18)) | the dock timeline's track
+GameOverviewDock.swift | Capsule().fill(Color.white.opacity(0.34)).frame(width: w * max(video.loaded, played)) | the dock timeline's buffered part
+GameOverviewDock.swift | Capsule().fill(Color.white.opacity(0.22)) | the dock volume slider's track
+GameOverviewDock.swift | shape.fill(.ultraThinMaterial) | the dock's own material (it is the glass)
+GameOverviewDock.swift | shape.fill(Color(red: 10 / 255, green: 16 / 255, blue: 32 / 255).opacity(0.20)) | the dock's tint over its material
+GameOverviewDock.swift | media[k].kind == .video ? Color.clear : Color.white.opacity(0.4) | page dot inside the dock's glass
+GameOverviewDock.swift | Circle().fill(Color.white.opacity(hovered ? 0.18 : 0.08)) | button disc inside the dock's glass
+GameOverviewDock.swift | .background(Capsule().fill(Color.black.opacity(0.55))) | hover time label inside the dock's glass
 RowPopover.swift | Capsule().fill(colors.surface3.color) | slider track
 ShellProgressPill.swift | .background(Capsule().fill(colors.surface2.color)) | progress track inside the glass pill
 RowPopover.swift | Circle().fill(.black.opacity(0.3)) | slider knob shadow
