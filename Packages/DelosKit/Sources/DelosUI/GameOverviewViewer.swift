@@ -86,7 +86,7 @@ struct OverviewViewer: View {
             RemoteImage(url: OverviewImageSizes.full(item, tall: tall), maxPixels: tall ? 1920 : 1280,
                         placeholder: OverviewImageSizes.thumb(item, tall: tall), placeholderPixels: tall ? 900 : 600)
             if item.kind == .video {
-                SymbolView(symbol: Symbols.playArrow, size: 96, color: RGBA(red: 1, green: 1, blue: 1), filled: true)
+                SymbolView(symbol: Symbols.videoPlay, size: 96, color: RGBA(red: 1, green: 1, blue: 1), filled: true)
                     .shadow(color: .black.opacity(0.6), radius: stage.px(8))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 Text(L("overview_video_youtube", item.name ?? L("overview_video"))).font(DelosFonts.figtree(stage.tpx(26), .bold)).foregroundStyle(.white)

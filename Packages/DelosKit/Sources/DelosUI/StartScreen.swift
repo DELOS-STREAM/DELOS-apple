@@ -564,9 +564,9 @@ public struct DelosRoot: View {
     }
 
     /// The library's note on the hint bar: how many apps the PC has, of how many while a filter is on (the home screen with
-    /// nothing open).
+    /// nothing open; not under the game overview).
     private var libraryNote: String? {
-        guard case .home(let hostID) = navigator.current, !layers.isOpen, sideMenu == nil,
+        guard case .home(let hostID) = navigator.current, !layers.isOpen, sideMenu == nil, !navigator.screenHints.overview,
               let apps = hosts.apps[hostID], let host = hosts.hosts.first(where: { $0.id == hostID }) else { return nil }
         let filters = metadata.enabled ? actions.libraryFilters.filters(hostID: hostID) : MetadataFilters()
         guard filters.active else { return ShellHints.libraryNote(apps: apps.count, pc: host.name) }
