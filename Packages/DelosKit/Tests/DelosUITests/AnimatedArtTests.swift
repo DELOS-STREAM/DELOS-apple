@@ -103,8 +103,17 @@ import Testing
     @Test func theNextFrameWaitsUntilItIsDecoded() {
         var clock = FrameClock(durations: [100, 100, 100], repeats: true, now: 0)
         // Shown as soon as it is there; it was due at 100, so the frame after it keeps its pace (due at 200)
-        let steps = draw(&clock, [(120, false), (130, true), (199, true), (200, true)])
-        #expect(steps == [nil, 1, nil, 2])
+        #expect(draw(&clock, [(50, false)]) == [nil] && !clock.waiting)
+        #expect(draw(&clock, [(120, false)]) == [nil] && clock.waiting)
+        let steps = draw(&clock, [(130, true), (199, true), (200, true)])
+        #expect(steps == [1, nil, 2] && !clock.waiting)
+    }
+
+    @Test func theFramesAheadFollowThePlayOrder() {
+        let looping = FrameClock(durations: [100, 100, 100], repeats: true, now: 0)
+        #expect([0, 1, 2].map { looping.index(after: $0) } == [1, 2, 0])
+        let once = FrameClock(durations: [100, 100, 100], repeats: false, now: 0)
+        #expect([0, 1, 2].map { once.index(after: $0) } == [1, 2, nil])
     }
 
     @Test func aFrameThatCameVeryLateKeepsItsWholeTimeInsteadOfTheNextOnesRushingBy() {

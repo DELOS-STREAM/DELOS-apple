@@ -336,12 +336,11 @@ private struct HeroArt: View {
     }
 }
 
-/// The playing animated game background (`HeroLive`): each frame is decoded no wider than it is drawn (and never above
-/// ``AnimatedPlayback/heroWidth``) and rendered exactly like the still one (``HeroRender/frame(_:blur:area:extension:)``,
-/// over the still first frame's extension for a wide hero), then drawn over the hero area with the same tilt. It loops
-/// without a jump (``LoopedAnimation``), fades in over the still once decoded, and exists while composed; [play] false
-/// pauses it on the frame it shows (the caller removes it to release it), and it plays its newest pass from the start when
-/// [play] or the app's foreground comes back.
+/// The playing animated game background (`HeroLive`): each frame is decoded and rendered exactly like the still one
+/// (``HeroFrameRender``), then drawn over the hero area with the same tilt. It loops without a jump (``LoopedAnimation``),
+/// fades in over the still once decoded, and exists while composed; [play] false pauses it on the frame it shows (the
+/// caller removes it to release it), and it plays its newest pass from the start when [play] or the app's foreground
+/// comes back.
 private struct HeroLive: View {
     let still: CGImage
     let animation: AnimatedSource
@@ -378,16 +377,11 @@ private struct HeroLive: View {
             looped = nil
             onLive(false)
             let (still, blur, area) = (still, blur, area)
-            let layout = HeroGeometry.layout(area, width: still.width, height: still.height)
-            // The extension under a wide hero is the still first frame's
-            let underlay = layout.extended ? await Task.detached(priority: .userInitiated) { HeroRender.extensionImage(still, area: area) }.value : nil
-            if layout.extended, underlay == nil { return }
-            // Frames are decoded no wider than the render draws them, and never above the hero's own cap
-            let drawn = Int((layout.width * Double(blur > 0 ? HeroRender.width : HeroRender.sharpWidth) / area.width).rounded())
-            let decodeWidth = min(AnimatedPlayback.heroWidth, max(drawn, 1))
-            guard let loaded = await LoopedAnimation.load(animation.data, maxWidth: decodeWidth, render: { frame in
-                HeroRender.frame(frame, blur: blur, area: area, extension: underlay)
-            }), !Task.isCancelled else { return }
+            let prepare = Task.detached(priority: .userInitiated) { HeroFrameRender(still: still, blur: blur, area: area) }
+            guard let render = await prepare.value, !Task.isCancelled,
+                  let loaded = await LoopedAnimation.load(animation.data, label: animation.key, maxWidth: render.decodeWidth,
+                                                          render: render.frame),
+                  !Task.isCancelled else { return }
             looped = loaded
             onLive(true)
             withAnimation(Motion.fadeIn) { shown = true }

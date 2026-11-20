@@ -16,6 +16,9 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   asked for and received, lost frame numbers, the rate the PC encoded at, FEC failures, the receive thread's time per
   frame, the decoder's backlog and time, the queue's drops by reason, the display link's rate, the GPU time, the
   thermal state and Low Power Mode, plus one line for the launch request and one for the display plan.
+- Debug builds log animated artwork once a second (os_log category `ArtFPS`): per playing animation the frames shown a
+  second against its file's rate, the display frames that waited for a decode, and the time from asking for a frame to
+  having it, so a device console tells the rate artwork really plays at.
 - Picture in Picture on iPhone and iPad (Settings → Appearance → Enable Picture-in-Picture observer mode): when DELOS
   leaves during a stream, the stream keeps playing in the system's Picture in Picture window, with its sound and its
   connection, and nothing is sent to the PC; what was held comes up there, and the stream menu and the keyboards close.
@@ -380,6 +383,12 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- The animated game background on the home screen plays at its file's own frame rate, also in a debug build. Each frame
+  was saturated, faded and laid over its extension by loops over the pixels in Swift, about 105 ms a frame unoptimized on
+  an M6 Mac (Dredge's 24 fps background played at 9 frames a second there, about 4 on the owner's iPad Pro);
+  CoreGraphics and Accelerate do it now, about 3 ms, and real SteamGridDB backgrounds of 10 to 60 frames a second play
+  every frame (`AnimatedArtBenchmark`). Animations also decode two frames ahead instead of one, so Dredge's 62.5 fps
+  cover keeps its pace while the main thread is busy. Not verified on a device.
 - Latency presentation preserves a bounded one-frame jitter reserve instead of discarding paired arrivals. Metal's
   shown FPS now uses actual drawable presentation feedback, not selection or submission; CPU submission and GPU
   deadlines are reported separately. Sustained 120 FPS on physical devices is not verified for this change.
