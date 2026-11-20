@@ -17,9 +17,10 @@ import UniformTypeIdentifiers
 ///                                       over a stream: streammenu (opens or closes the stream menu, as a controller's Home tap; then
 ///                                       the directions, accept and back drive the dock, its pages and Quit game);
 ///                                       every command waits until something can take it (the library loaded, no PC being woken);
-///                                       input kinds: touch (a finger begins a touch, through the window's probe), click (the pointer's), pad (a controller's button)
+///                                       input kinds: touch (a finger begins a touch, through the window's probe), click (the pointer's), pad (a controller's button);
+///                                       rightclick (a secondary click at the middle of the focused item, through the router's pointer entry)
 ///   -DelosDemoApps <n>                  how many apps (default 16; 0 empty)
-///   -DelosDemoInput controller|touch|keyboard   the kind of input the hints and the back arrow start with (controller: a pad counts as connected)
+///   -DelosDemoInput controller|touch|keyboard|pointer   the kind of input the hints and the back arrow start with (controller: a pad counts as connected)
 enum DemoHarness {
     static var on: Bool { UserDefaults.standard.bool(forKey: "DelosDemo") }
     static let hostID = "demo-pc"
@@ -85,7 +86,7 @@ enum DemoHarness {
     @MainActor static func forceInput() {
         guard !inputForced, let name = UserDefaults.standard.string(forKey: "DelosDemoInput") else { return }
         inputForced = true
-        let kinds: [String: InputKind] = ["controller": .controller, "touch": .touch, "keyboard": .keyboard]
+        let kinds: [String: InputKind] = ["controller": .controller, "touch": .touch, "keyboard": .keyboard, "pointer": .pointer]
         if let kind = kinds[name] { ControllerGlyphs.shared.debugForce(kind) }
     }
 
@@ -168,6 +169,17 @@ enum DemoHarness {
             router.moveSideDrag(travel: travel * Double(step) / Double(steps))
         }
         router.endSideDrag(opening: opening, travel: travel, velocity: 0)
+        return true
+    }
+
+    /// `rightclick`: a right click (or a two-finger click) at the middle of the focused item of whoever has the pointer
+    /// (``ShellRouter/secondaryClick(at:)``), as the window's probe sends it. True when [name] was one.
+    @MainActor static func secondaryClick(_ name: String, router: ShellRouter) async -> Bool {
+        guard name == "rightclick" else { return false }
+        ControllerGlyphs.shared.note(.pointer)
+        if let focus = router.pointerFocus, let id = focus.focused, let frame = focus.registeredFrames[id] {
+            await router.secondaryClick(at: CGPoint(x: frame.midX, y: frame.midY))
+        }
         return true
     }
 

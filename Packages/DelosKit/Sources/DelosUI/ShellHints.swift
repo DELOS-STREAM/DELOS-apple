@@ -56,28 +56,33 @@ enum ShellHints {
     /// - controller: unchanged;
     /// - touch: only the primary action stays, with the tap symbol (every other action has a control on the screen), and a
     ///   tappable hint (the library's Filter), which the bar draws as a glass pill with its symbol;
-    /// - pointer (mouse, trackpad): the same, with the pointer symbol;
-    /// - keyboard: Return for the primary action, Esc for back, the arrows for the adjust cue; the buttons with no key
-    ///   (tabs, menu buttons, X, Y) are dropped.
+    /// - pointer (mouse, trackpad): the primary action with the click, the right menu button (the context menu) with the
+    ///   secondary click, and the tappable hint as a pill;
+    /// - keyboard: every button with its key (``KeyCap/of(_:)``: Return, Esc, Tab, O, F, [ and ], the arrows), the tappable
+    ///   hint too (a key is pressed, not the pill); X and the right menu button are both O, so it shows once.
     nonisolated static func adapt(_ hints: [Hint], to kind: InputKind) -> [Hint] {
         func map(_ hint: Hint, _ button: HintButton?) -> Hint? {
             button.map { Hint(button: $0, label: hint.label, shortLabel: hint.shortLabel) }
         }
         switch kind {
         case .controller: return hints
-        case .touch, .pointer:
-            let primary: HintButton = kind == .touch ? .tap : .click
+        case .touch:
             // A tappable hint (Filter) stays: it is the control on the screen, as a glass pill with its symbol
-            return hints.compactMap { $0.tappable ? $0 : map($0, $0.button == .pad(.south) ? primary : nil) }
-        case .keyboard:
+            return hints.compactMap { $0.tappable ? $0 : map($0, $0.button == .pad(.south) ? .tap : nil) }
+        case .pointer:
             return hints.compactMap { hint -> Hint? in
                 if hint.tappable { return hint }
                 switch hint.button {
-                case .pad(.south): return map(hint, .key(.returnKey))
-                case .pad(.east): return map(hint, .key(.escape))
-                case .adjust: return map(hint, .key(.arrows))
+                case .pad(.south): return map(hint, .click)
+                case .pad(.menuRight): return map(hint, .secondaryClick)
                 default: return nil
                 }
+            }
+        case .keyboard:
+            var shown = Set<KeyCap>()
+            return hints.compactMap { hint -> Hint? in
+                guard let cap = KeyCap.of(hint.button), shown.insert(cap).inserted else { return nil }
+                return map(hint, .key(cap))
             }
         }
     }

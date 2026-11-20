@@ -177,11 +177,15 @@ private func game(genres: [Int] = [], themes: [Int] = [], hdr: NativeHDR = .unkn
         #expect(ShellHints.hints(context).allSatisfy { !$0.tappable })
         context.screenHints.filterLabel = "Filter"
         #expect(ShellHints.hints(context, kind: .controller).filter(\.tappable).map(\.button) == [.pad(.north)])
-        // Without a controller the other hints go, the Filter pill stays
-        for kind in [InputKind.touch, .pointer, .keyboard] {
+        // Without a controller the other hints go, the Filter pill stays for a finger and the pointer
+        for kind in [InputKind.touch, .pointer] {
             #expect(ShellHints.hints(context, kind: kind).filter(\.tappable).map(\.label) == ["Filter"], "\(kind)")
             // The pill carries the filter symbol before its label, so it reads as a button
             #expect(ShellHints.hints(context, kind: kind).filter(\.tappable).map(\.icon) == [Symbols.filter], "\(kind)")
         }
+        // The keyboard presses F instead: a key hint, no pill
+        let keyboard = ShellHints.hints(context, kind: .keyboard)
+        #expect(keyboard.allSatisfy { !$0.tappable })
+        #expect(keyboard.first { $0.label == "Filter" }?.button == .key(.letterF))
     }
 }

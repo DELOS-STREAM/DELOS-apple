@@ -4,23 +4,23 @@ import GameController
 /// A command for moving through the interface, from a game controller or a hardware keyboard.
 public enum MenuCommand: Sendable, Hashable {
     case up, down, left, right
-    /// A (or Return): activate the focused item.
+    /// A (or Return, Space, a click): activate the focused item.
     case accept
     /// B (or Escape): go back.
     case back
-    /// L1 and R1: the previous and the next tab.
+    /// L1 and R1 (or [ and ]): the previous and the next tab.
     case previousTab, nextTab
-    /// The left menu button (View, Select, Create): the side menu.
+    /// The left menu button (View, Select, Create) or Tab: the side menu.
     case menu
-    /// The right menu button (Menu, Start, Options), X or the keyboard's menu key: the focused item's context menu
-    /// (`KEYCODE_BUTTON_START` and `KEYCODE_BUTTON_X` of DELOS for Android).
+    /// The right menu button (Menu, Start, Options), X, the keyboard's menu key or O, a right click: the focused item's
+    /// context menu (`KEYCODE_BUTTON_START` and `KEYCODE_BUTTON_X` of DELOS for Android).
     case options
-    /// Y: the action of the toast that is shown (Undo).
+    /// Y (or F): the action of the toast that is shown (Undo), else the screen's (the filter, the search).
     case toastAction
 }
 
 /// Turns game controller and keyboard input into ``MenuCommand``s: the D-pad, the left stick (past half of its travel,
-/// once per push), A, B, X, Y, L1, R1 and both menu buttons, and the arrow, Return, Escape and menu keys. Each press
+/// once per push), A, B, X, Y, L1, R1 and both menu buttons, and the shell's keys (``keyCommand(_:typing:modified:)``). Each press
 /// emits one command; a direction held down repeats like a held key on Android: after 500 ms, every 50 ms, with the
 /// number of the repeat (0 for the press itself).
 ///
@@ -52,6 +52,9 @@ public final class MenuInput {
     private var down: Set<AnyHashable> = []
     private let repeatAfter: Duration
     private let repeatEvery: Duration
+    /// A text field is typed in (the root keeps it): the keys that are letters, Tab or brackets there are the field's, so
+    /// only the arrows, Return, Space and Escape still emit (``keyCommand(_:typing:modified:)``).
+    public var typing = false
 
     /// - Parameters:
     ///   - only: the commands to emit; nil: all of them.
@@ -205,26 +208,44 @@ public final class MenuInput {
     }
 
     private func attach(_ keyboard: GCKeyboard) {
-        keyboard.keyboardInput?.keyChangedHandler = { [weak self] _, _, key, pressed in
-            guard let command = Self.keyCommand(key) else { return }
+        keyboard.keyboardInput?.keyChangedHandler = { [weak self] input, _, key, pressed in
+            // A key with Command, Control or Option is a shortcut of the system or of the menu bar (Command-Tab), not ours
+            let modified = [GCKeyCode.leftGUI, .rightGUI, .leftControl, .rightControl, .leftAlt, .rightAlt]
+                .contains { input.button(forKeyCode: $0)?.isPressed == true }
             MainActor.assumeIsolated {
-                guard self?.emits(command) ?? false else { return }
+                guard let self else { return }
                 let source = AnyHashable(["key", AnyHashable(key.rawValue)])
-                if pressed { self?.press(command, from: source, input: .keyboard) } else { self?.lift(source) }
+                guard pressed else { return self.lift(source) }
+                guard let command = Self.keyCommand(key, typing: self.typing, modified: modified), self.emits(command) else { return }
+                self.press(command, from: source, input: .keyboard)
             }
         }
     }
 
-    nonisolated static func keyCommand(_ key: GCKeyCode) -> MenuCommand? {
+    /// The shell's keys (docs/ARCHITECTURE.md, "Input kind and the hints"): the arrows move, Return, Enter and Space are A,
+    /// Escape is B, Tab the left menu button (the side menu), the menu key and O the right one (the context menu, X),
+    /// F is Y (filter, search, the toast's action), [ and ] the shoulders (tabs). The keys are positions (HID usages), so
+    /// they are the same on every layout. While a text field is typed in ([typing]) only the arrows, Return, Space and
+    /// Escape emit; a key with Command, Control or Option ([modified]) never does.
+    nonisolated static func keyCommand(_ key: GCKeyCode, typing: Bool = false, modified: Bool = false) -> MenuCommand? {
+        guard !modified else { return nil }
         switch key {
-        case .upArrow: .up
-        case .downArrow: .down
-        case .leftArrow: .left
-        case .rightArrow: .right
-        case .returnOrEnter, .keypadEnter, .spacebar: .accept
-        case .escape: .back
-        case .application: .options
-        default: nil
+        case .upArrow: return .up
+        case .downArrow: return .down
+        case .leftArrow: return .left
+        case .rightArrow: return .right
+        case .returnOrEnter, .keypadEnter, .spacebar: return .accept
+        case .escape: return .back
+        default: break
+        }
+        guard !typing else { return nil }
+        switch key {
+        case .application, .keyO: return .options
+        case .tab: return .menu
+        case .keyF: return .toastAction
+        case .openBracket: return .previousTab
+        case .closeBracket: return .nextTab
+        default: return nil
         }
     }
 

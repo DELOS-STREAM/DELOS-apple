@@ -60,8 +60,12 @@ enum Motion {
     static let chevronBump = 320.0
     static let valueSlideDistance = 22.0
     static let chevronBumpDistance = 7.0
+    /// The press of an activation (A, Return, a tap, a click): the element squeezes to ``pressScale`` in ``press`` ms on
+    /// the spring, stays ``pressHold`` ms, and springs back in the focus's ``focus`` ms; meanwhile its glow pulses to
+    /// ``pressGlow`` times its blur (owner's #16: 0.96 and a glow pulse, the DELOS press rather than a system highlight).
     static let press = 120.0
     static let pressHold = 130.0
+    static let pressGlow = 1.6
     static let fade = 280.0
     static let rowFocus = 520.0
     static let popIn = 560.0
@@ -77,7 +81,7 @@ enum Motion {
 
     /// How far an entering element rises (stage pixels).
     static let rise = 18.0
-    static let pressScale = 0.97
+    static let pressScale = 0.96
     static let popFromScale = 0.86
     static let popFromPill = 0.6
     static let dialogFromScale = 0.96

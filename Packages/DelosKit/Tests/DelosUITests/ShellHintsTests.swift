@@ -128,22 +128,45 @@ import Testing
         ShellHints.adapt(ShellHints.hints(context, kind: .controller), to: kind).map(\.button)
     }
 
-    @Test func touchAndPointerKeepOnlyThePrimaryAction() {
+    @Test func touchKeepsThePrimaryActionThePointerItsClickAndRightClick() {
         var context = ShellHints.Context(screen: .home(hostID: "h"))
         context.hasContextMenu = true
         #expect(adapted(.touch, context) == [.tap])
-        #expect(adapted(.pointer, context) == [.click])
+        // The pointer's secondary click is the right menu button: the cover's context menu (#16)
+        #expect(adapted(.pointer, context) == [.click, .secondaryClick])
         let hints = ShellHints.adapt(ShellHints.hints(context, kind: .controller), to: .touch)
         #expect(hints.first?.label == ShellHints.hints(context, kind: .controller).first?.label)
     }
 
-    @Test func theKeyboardHasReturnEscapeAndTheArrows() {
+    @Test func theKeyboardShowsTheKeyOfEveryAction() {
         var settings = ShellHints.Context(screen: .settings)
         settings.screenHints.adjustable = true
-        #expect(adapted(.keyboard, settings) == [.key(.arrows), .key(.returnKey), .key(.escape)])
-        // No key for the tabs, search (Y) or the menu buttons
-        #expect(adapted(.keyboard, ShellHints.Context(screen: .home(hostID: "h"))) == [.key(.returnKey)])
+        #expect(adapted(.keyboard, settings) == [
+            .key(.arrows), .key(.leftBracket), .key(.rightBracket), .key(.letterF), .key(.returnKey), .key(.escape),
+        ])
+        var home = ShellHints.Context(screen: .home(hostID: "h"))
+        home.hasContextMenu = true
+        #expect(adapted(.keyboard, home) == [.key(.returnKey), .key(.tab), .key(.letterO)])
         #expect(adapted(.controller, settings) == buttons(settings))
+    }
+
+    @Test func theKeyboardPressesTheFilterKeyInsteadOfThePill() {
+        var home = ShellHints.Context(screen: .home(hostID: "h"))
+        home.screenHints.filterLabel = "Filter"
+        let keyboard = ShellHints.adapt(ShellHints.hints(home, kind: .controller), to: .keyboard)
+        #expect(keyboard.map(\.button) == [.key(.returnKey), .key(.letterF), .key(.tab)])
+        #expect(keyboard.allSatisfy { !$0.tappable })
+        // A finger and the pointer press the pill
+        #expect(ShellHints.adapt(ShellHints.hints(home, kind: .controller), to: .pointer).map(\.tappable).contains(true))
+    }
+
+    @Test func xAndTheRightMenuButtonShareOneKeyShownOnce() {
+        var app = ShellHints.Context(screen: .appSettings(hostID: "h", appID: 1))
+        app.hasContextMenu = true
+        app.screenHints.resetsRow = true
+        let keys = adapted(.keyboard, app)
+        #expect(keys.filter { $0 == .key(.letterO) }.count == 1)
+        #expect(keys.contains(.key(.escape)))
     }
 
     @Test func theBackArrowIsForEveryInputButAController() {

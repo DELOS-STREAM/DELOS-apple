@@ -1,27 +1,51 @@
 import DelosInput
 import SwiftUI
 
-/// A key of a hardware keyboard, drawn as a key cap.
+/// A key of a hardware keyboard, drawn with the shared font's Mac key caps: the key of each button of the shell
+/// (``MenuInput/keyCommand(_:typing:modified:)``, docs/ARCHITECTURE.md, "Input kind and the hints").
 enum KeyCap: Hashable, Sendable {
-    case returnKey, escape, arrows
+    case returnKey, escape, tab, letterF, letterO, leftBracket, rightBracket, arrows
 
-    var legend: String {
+    /// The key that does what the controller's [button] does; nil for one no key has (the guide, the sticks).
+    static func of(_ button: HintButton) -> KeyCap? {
+        switch button {
+        case .pad(.south): .returnKey
+        case .pad(.east): .escape
+        case .pad(.west), .pad(.menuRight): .letterO
+        case .pad(.north): .letterF
+        case .pad(.menuLeft): .tab
+        case .pad(.leftShoulder): .leftBracket
+        case .pad(.rightShoulder): .rightBracket
+        case .adjust: .arrows
+        case .key(let cap): cap
+        case .pad, .tap, .click, .secondaryClick: nil
+        }
+    }
+
+    /// The caps drawn for it, side by side (the adjust cue is two arrows).
+    var symbols: [String] {
         switch self {
-        case .returnKey: "return"
-        case .escape: "esc"
-        case .arrows: "\u{2190} \u{2192}"
+        case .returnKey: [Symbols.macReturn]
+        case .escape: [Symbols.macEscape]
+        case .tab: [Symbols.macTab]
+        case .letterF: [Symbols.macLetterF]
+        case .letterO: [Symbols.macLetterO]
+        case .leftBracket: [Symbols.macLeftBracket]
+        case .rightBracket: [Symbols.macRightBracket]
+        case .arrows: [Symbols.macArrowLeft, Symbols.macArrowRight]
         }
     }
 }
 
 /// The button a hint names: a place on the connected controller (drawn with its glyph family), the adjust cue, which is
 /// no button (`Glyph.ADJUST` of Android: two arrows), or what the other kinds of input do instead (``InputKind``): a tap
-/// of the finger, a click of the pointer, a key of the keyboard.
+/// of the finger, a click or a secondary (right, two-finger) click of the pointer, a key of the keyboard.
 enum HintButton: Hashable, Sendable {
     case pad(GlyphRole)
     case adjust
     case tap
     case click
+    case secondaryClick
     case key(KeyCap)
 }
 
@@ -163,16 +187,21 @@ struct GlyphButton: View {
         let k = size / GlyphLook.size
         let ink = ink ?? colors.bg
         let side = stage.px(size)
+        // While the keyboard is the input a button is drawn as its key, also beside a control (the Artwork screen's pills)
+        let shown = ControllerGlyphs.shared.kind == .keyboard ? KeyCap.of(button).map(HintButton.key) ?? button : button
         Group {
-            switch button {
+            switch shown {
             case .pad(let role):
-                Text(ControllerFontGlyph.symbol(role, family: ControllerGlyphs.shared.family))
-                    .font(DelosFonts.symbol(stage.px(GlyphLook.controllerEm(for: size)), filled: true))
-                    .foregroundStyle((disc ?? colors.text).color)
-                    .fixedSize()
+                fontCap(ControllerFontGlyph.symbol(role, family: ControllerGlyphs.shared.family), side: side)
                     .frame(width: side, height: side)
             case .key(let cap):
-                keyCap(cap, k: k, ink: ink, side: side)
+                HStack(spacing: stage.px(4 * k)) {
+                    ForEach(cap.symbols, id: \.self) { fontCap($0, side: side) }
+                }
+            case .click:
+                fontCap(Self.click, side: side)
+            case .secondaryClick:
+                fontCap(Self.secondaryClick, side: side)
             default:
                 nonPadMark(k: k, ink: ink)
                     .frame(width: side, height: side)
@@ -182,24 +211,28 @@ struct GlyphButton: View {
         .accessibilityHidden(true)
     }
 
-    /// A key of the keyboard: its legend on a rounded cap with a thin edge, the height of a disc.
-    private func keyCap(_ cap: KeyCap, k: Double, ink: RGBA, side: CGFloat) -> some View {
-        Text(cap.legend)
-            .font(DelosFonts.figtree(stage.tpx(GlyphLook.letter * 0.8 * k), .heavy))
-            .foregroundStyle(ink.color)
-            .lineLimit(1)
+    /// The pointer's click and secondary click: the trackpad's on the iPad (the Magic Keyboard), the mouse's on the Mac.
+    #if os(macOS)
+    static let click = Symbols.macMouseClickLeft, secondaryClick = Symbols.macMouseClickRight
+    #else
+    static let click = Symbols.macTrackpadClick, secondaryClick = Symbols.macTrackpadSecondaryClick
+    #endif
+
+    /// A complete cap of the shared font (a controller's button, a key, the trackpad), the ink of a disc's height; a key
+    /// cap wider than tall (Return, Tab) keeps its width.
+    private func fontCap(_ symbol: String, side: CGFloat) -> some View {
+        Text(symbol)
+            .font(DelosFonts.symbol(stage.px(GlyphLook.controllerEm(for: size)), filled: true))
+            .foregroundStyle((disc ?? colors.text).color)
             .fixedSize()
-            .padding(.horizontal, stage.px(GlyphLook.letterInset))
             .frame(minWidth: side, minHeight: side)
-            .background(RoundedRectangle(cornerRadius: side * 0.28).fill((disc ?? colors.text).color))
     }
 
     @ViewBuilder private func nonPadMark(k: Double, ink: RGBA) -> some View {
         switch button {
         case .tap: SymbolView(symbol: Symbols.touchApp, size: GlyphLook.icon * GlyphLook.tapScale * k, color: ink, filled: true)
-        case .click: SymbolView(symbol: Symbols.mouse, size: GlyphLook.icon * GlyphLook.tapScale * k, color: ink, filled: true)
         case .adjust: SymbolView(symbol: Symbols.swapHoriz, size: GlyphLook.icon * GlyphLook.adjustScale * k, color: ink, filled: true)
-        case .pad, .key: EmptyView()
+        case .pad, .key, .click, .secondaryClick: EmptyView()
         }
     }
 }

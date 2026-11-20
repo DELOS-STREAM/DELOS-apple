@@ -1452,10 +1452,35 @@ pointer, touch) and, for a controller, the glyph family (`PadFamily`). The hint 
   is not a gamepad (no `extendedGamepad`). A controller that is gone cannot be the answer, so unplugging it brings back the
   touch or keyboard hints at once.
 - **Hints by kind** (`ShellHints.adapt`; the screens only write controller hints): controller: unchanged; touch: only the
-  primary action (south: Select, Start, Connect, Change), drawn with the hand-tap symbol; pointer: the same with the mouse
-  symbol; keyboard: Return (primary), Esc (back), the arrows (adjust), key caps with the legend as text; the other actions
-  (tabs, menu buttons, X, Y) have a control on the screen or no key and are dropped. The toast's action shows its Y button
-  only for a controller; a finger or a pointer presses the chip.
+  primary action (south: Select, Start, Connect, Change), drawn with the hand-tap symbol; pointer: the primary action with
+  the click and the right menu button (the context menu) with the secondary click (the shared font's trackpad caps on the
+  iPad, its mouse caps on the Mac), the other actions have a control on the screen; keyboard: every action with its key
+  from the key map below, drawn with the shared font's Mac key caps (`KeyCap`), X and the right menu button (both O)
+  once. A tappable hint (the library's Filter) stays a pill for touch and pointer and becomes its key (F) for the
+  keyboard. The toast's action shows its Y button only for a controller; a finger or a pointer presses the chip.
+- **Key map** (`MenuInput.keyCommand`, the keys are positions, HID usages, the same on every layout): the arrows move;
+  Return, Enter and Space are A (start, select, change); Esc is B (back, close); Tab is the left menu button (the side
+  menu, and Tab or Esc closes it); O and the PC keyboard's menu key are the right menu button and X (the context menu,
+  Options; a custom app setting's reset; the Artwork screen's search by name); F is Y (the library's filter, the Settings
+  search, the Artwork filter, a toast's Undo); [ and ] are L1 and R1 (the tabs of Settings, app settings and Artwork);
+  the arrows left and right adjust a value. Keys with Command, Control or Option are the system's (Command-Tab) and do
+  nothing; while a text field is typed in only the arrows, Return, Space and Esc reach the shell. `MenuKeyOwnerView` takes
+  Tab from UIKit too (the iPad's keyboard focus would move between groups); the Mac app swallows plain keys anyway.
+- **Pointer** (#16, Magic Keyboard's trackpad, a mouse; not over a stream, where it is the PC's mouse). Hover focuses: a
+  `FocusItem` moves the focus to itself when the pointer moves over it (`onContinuousHover` in global points; content
+  scrolling under a pointer at rest does not take the focus, `PointerHover.moved`), so the focus ring glides as for a
+  controller; leaving drops nothing, an item behind an open layer or the side menu is not hovered, and the move cue plays
+  at most every 90 ms (`PointerHover.cueGap`). A click is A with the press (no first click that only focuses). A right
+  click or a two-finger click (iPad: a window tap recognizer with `buttonMaskRequired = .secondary`; Mac: the event
+  monitor's `rightMouseDown` and Control-click) goes to `ShellRouter.secondaryClick`: the item under the pointer of whoever
+  has the pointer (`pointerFocus`: the side menu, a layer, a sheet, else the screen) takes the focus and, when it has a
+  context menu, gets Options once the focus scroll has settled; with a layer open a secondary click beside its items is
+  Options too (it closes a context menu). On the iPad the pointer hides over the items (a window `UIPointerInteraction`
+  whose regions are the items' frames, `ShellRouter.pointerTarget`): the focus ring is where it is, and a system highlight
+  or lift would be a second focus. The Mac keeps its cursor.
+- **Press** (`Motion.press`, `pressHold`, `pressScale`, `pressGlow`): every activation (A, Return, a tap, a click)
+  squeezes the item to 0.96 in 120 ms on the prototype's spring, holds 130 ms and springs back in 420 ms, while the
+  focus glow's blur pulses to 1.6 times (`focusGlow`).
 - **Marks of a controller.** Face buttons and shoulders by position (`GlyphRole`), per family (A/B/X/Y, cross/circle/square/
   triangle, Nintendo letters with B south; shoulders LB/RB/LT/RT, L1/R1/L2/R2, L/R/ZL/ZR). The left menu button is View
   (Xbox, generic), Create (DualSense; Share on DualShock) or the minus sign (Switch); the right one Menu, Options or the plus

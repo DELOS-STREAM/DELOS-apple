@@ -8,12 +8,15 @@ import AppKit
 
 extension View {
     /// Tells ``ControllerGlyphs`` which kind of input the player uses, as it happens: a finger on the screen (touch), a
-    /// mouse or trackpad (pointer). Keys and controllers are noted by ``MenuInput``. Put once at the root of the shell.
-    func tracksInputKind() -> some View {
+    /// mouse or trackpad (pointer). Keys and controllers are noted by ``MenuInput``. It is also where the pointer reaches
+    /// [router] beyond what the items do themselves (docs/ARCHITECTURE.md, "Pointer"): a right click or a two-finger
+    /// click (``ShellRouter/secondaryClick(at:)``), and on the iPad the pointer hiding over the items
+    /// (``ShellRouter/pointerTarget(at:)``). Put once at the root of the shell.
+    func tracksInputKind(router: ShellRouter) -> some View {
         #if os(iOS)
-        background(InputKindProbe())
+        background(InputKindProbe(router: router))
         #elseif os(macOS)
-        background(InputKindMonitor())
+        background(InputKindMonitor(router: router))
         #else
         self
         #endif
@@ -23,14 +26,24 @@ extension View {
 #if os(iOS)
 /// Watches every touch of the window without taking part: a recognizer that only looks at the touches that begin (a
 /// direct one is a finger or the Pencil, an indirect pointer one a mouse or trackpad) and then fails, at once, and a hover
-/// recognizer for the pointer moving over the window.
+/// recognizer for the pointer moving over the window. A tap recognizer of the secondary button takes the right click and
+/// the trackpad's two-finger click, and a pointer interaction hides the pointer over the items.
 private struct InputKindProbe: UIViewRepresentable {
-    func makeUIView(context: Context) -> ProbeView { ProbeView() }
-    func updateUIView(_ view: ProbeView, context: Context) {}
+    let router: ShellRouter
+
+    func makeUIView(context: Context) -> ProbeView {
+        let view = ProbeView()
+        view.router = router
+        return view
+    }
+
+    func updateUIView(_ view: ProbeView, context: Context) { view.router = router }
 }
 
-private final class ProbeView: UIView, UIGestureRecognizerDelegate {
+private final class ProbeView: UIView, UIGestureRecognizerDelegate, UIPointerInteractionDelegate {
+    weak var router: ShellRouter?
     private var recognizers: [UIGestureRecognizer] = []
+    private var pointer: UIPointerInteraction?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -43,12 +56,21 @@ private final class ProbeView: UIView, UIGestureRecognizerDelegate {
         super.didMoveToWindow()
         recognizers.forEach { $0.view?.removeGestureRecognizer($0) }
         recognizers = []
+        pointer.map { $0.view?.removeInteraction($0) }
+        pointer = nil
         guard let window else { return }
         let hover = UIHoverGestureRecognizer(target: self, action: #selector(hovered))
         hover.cancelsTouchesInView = false
         hover.delegate = self
-        recognizers = [TouchKindRecognizer(), hover]
+        let secondary = UITapGestureRecognizer(target: self, action: #selector(secondaryClicked))
+        secondary.buttonMaskRequired = .secondary
+        secondary.cancelsTouchesInView = false
+        secondary.delegate = self
+        recognizers = [TouchKindRecognizer(), hover, secondary]
         recognizers.forEach(window.addGestureRecognizer)
+        let pointer = UIPointerInteraction(delegate: self)
+        window.addInteraction(pointer)
+        self.pointer = pointer
     }
 
     /// The pointer moved over the window (not merely there when a view appeared under it); the Pencil hovering above the
@@ -58,8 +80,30 @@ private final class ProbeView: UIView, UIGestureRecognizerDelegate {
         ControllerGlyphs.shared.note(.pointer)
     }
 
+    /// A right click or a two-finger click: the context menu of the item under the pointer.
+    @objc private func secondaryClicked(_ tap: UITapGestureRecognizer) {
+        guard tap.state == .ended, let router, let window else { return }
+        ControllerGlyphs.shared.note(.pointer)
+        let point = tap.location(in: window)
+        Task { await router.secondaryClick(at: point) }
+    }
+
     // The pointer's hover reaches every other recognizer as well (the buttons' own pointer effects)
     func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+
+    /// Over an item the pointer is hidden (its focus ring, which the hover moved there, shows where it is: a highlight or a
+    /// lift of the system would draw a second focus over ours); elsewhere it is the system's.
+    func pointerInteraction(
+        _ interaction: UIPointerInteraction, regionFor request: UIPointerRegionRequest, defaultRegion: UIPointerRegion
+    ) -> UIPointerRegion? {
+        // The interaction is the window's: the location is in window points, SwiftUI's global space
+        guard let frame = router?.pointerTarget(at: request.location) else { return nil }
+        return UIPointerRegion(rect: frame, identifier: NSValue(cgRect: frame))
+    }
+
+    func pointerInteraction(_ interaction: UIPointerInteraction, styleFor region: UIPointerRegion) -> UIPointerStyle? {
+        .hidden()
+    }
 }
 
 final class TouchKindRecognizer: UIGestureRecognizer, UIGestureRecognizerDelegate {
@@ -95,17 +139,22 @@ final class TouchKindRecognizer: UIGestureRecognizer, UIGestureRecognizerDelegat
     #endif
 }
 #elseif os(macOS)
-/// Notes the pointer when the mouse moves, clicks or scrolls in the app.
+/// Notes the pointer when the mouse moves, clicks or scrolls in the app, and takes a right click (or a Control-click)
+/// over an item for its context menu.
 private struct InputKindMonitor: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
+    let router: ShellRouter
+
+    func makeNSView(context: Context) -> MonitorView {
         let view = MonitorView()
+        view.router = router
         return view
     }
 
-    func updateNSView(_ view: NSView, context: Context) {}
+    func updateNSView(_ view: MonitorView, context: Context) { view.router = router }
 }
 
 private final class MonitorView: NSView {
+    weak var router: ShellRouter?
     private var monitor: Any?
 
     override func viewDidMoveToWindow() {
@@ -113,10 +162,28 @@ private final class MonitorView: NSView {
         monitor.map(NSEvent.removeMonitor)
         monitor = nil
         guard window != nil else { return }
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown, .rightMouseDown, .scrollWheel]) { event in
-            MainActor.assumeIsolated { ControllerGlyphs.shared.note(.pointer) }
-            return event
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown, .rightMouseDown, .scrollWheel]) { [weak self] event in
+            let secondary = event.type == .rightMouseDown || (event.type == .leftMouseDown && event.modifierFlags.contains(.control))
+            let (location, windowNumber) = (event.locationInWindow, event.windowNumber)
+            let taken = MainActor.assumeIsolated {
+                ControllerGlyphs.shared.note(.pointer)
+                return secondary && self?.secondaryClick(at: location, windowNumber: windowNumber) == true
+            }
+            return taken ? nil : event
         }
+    }
+
+    /// A right click or a Control-click at [location] in the window numbered [windowNumber], over an item (or beside an open
+    /// layer's) of this window: the router's, and the event goes no further (a Control-click would also activate the item).
+    /// Over the stream it is the PC's mouse.
+    private func secondaryClick(at location: CGPoint, windowNumber: Int) -> Bool {
+        guard let router, let window, window.windowNumber == windowNumber, let content = window.contentView else { return false }
+        let local = content.convert(location, from: nil)
+        // SwiftUI's global space has its origin at the top left of the window's content
+        let point = CGPoint(x: local.x, y: content.isFlipped ? local.y : content.bounds.height - local.y)
+        guard let focus = router.pointerFocus, focus.item(at: point) != nil || router.layers.isOpen else { return false }
+        Task { await router.secondaryClick(at: point) }
+        return true
     }
 }
 #endif
