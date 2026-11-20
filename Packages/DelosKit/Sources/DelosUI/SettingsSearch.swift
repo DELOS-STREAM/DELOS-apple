@@ -329,8 +329,8 @@ struct SettingsSearchView: View {
                 }
                 .focusable(false)
                 .scrollClipDisabled()
-                // The ends of the scrolling layer fade where keys go on behind them
-                .scrollEdgeFade(.horizontal, FadeEdges(LetterPicker.compactEdge))
+                // Both ends of the scrolling layer always fade, as Android's `fadeMask` does
+                .scrollEdgeFade(.horizontal, FadeEdges(LetterPicker.compactEdge), growth: .always)
                 VStack(spacing: stage.px(gap)) {
                     FocusItem(id: Self.deleteID, model: focus, action: delete) { focused in
                         circle(Symbols.backspace, focused: focused, size: key)
