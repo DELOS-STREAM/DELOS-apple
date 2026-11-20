@@ -381,9 +381,10 @@ enum OverviewImageSizes {
 
 // MARK: The Game info hint
 
-/// The "Game info" hint under the focused cover (the prototype's `.gi`), drawn for the input in use: the D-pad's down
-/// arm on a controller (outline cut, the pressed arm filled), the ↓ key cap on a keyboard, a small arrow up for touch
-/// (swipe the cover up) and a clickable arrow down for the pointer; each bobs gently (not with reduced motion).
+/// The "Game info" hint (the prototype's `.gi`): a small dark glass chip centred over the focused cover's lower edge, as
+/// its badges are, drawn for the input in use: the D-pad's down arm on a controller (outline cut, the pressed arm filled),
+/// the ↓ key cap on a keyboard, a small arrow up for touch (swipe the cover up) and a clickable arrow down for the
+/// pointer; the glyph bobs gently (not with reduced motion). A tap or a click on it opens the overview.
 struct GameInfoHint: View {
     let kind: InputKind
     let onOpen: () -> Void
@@ -391,7 +392,6 @@ struct GameInfoHint: View {
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduced
     @State private var hovered = false
-    @Environment(\.pressed) private var pressed
 
     static func dpadDown(_ family: PadFamily) -> String {
         switch family {
@@ -407,13 +407,17 @@ struct GameInfoHint: View {
         HStack(spacing: stage.px(10)) {
             glyph.modifier(Bob(up: kind == .touch, paused: reduced))
             Text(L("overview_game_info"))
-                .font(DelosFonts.figtree(stage.tpx(21), .semibold))
-                .foregroundStyle((hovered ? colors.text : colors.text2).color)
-                .shadow(color: .black.opacity(0.6), radius: stage.px(4), y: stage.px(2))
+                .font(DelosFonts.figtree(stage.tpx(20), .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
         }
-        .padding(.horizontal, tappable ? stage.px(18) : 0)
-        .padding(.vertical, tappable ? stage.px(8) : 0)
-        .background { if hovered { Capsule().fill(colors.surface.color) } }
+        .padding(.leading, stage.px(14))
+        .padding(.trailing, stage.px(18))
+        .frame(height: stage.px(48))
+        .background {
+            Capsule().fill(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: hovered ? 0.78 : 0.6))
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: stage.px(1)))
+        }
         .contentShape(Capsule())
         .pointerHover { hovered = $0 && kind == .pointer }
         .onTapGesture { if tappable { onOpen() } }
@@ -427,12 +431,12 @@ struct GameInfoHint: View {
         switch kind {
         case .controller:
             Text(Self.dpadDown(ControllerGlyphs.shared.family))
-                .font(DelosFonts.symbol(stage.px(GlyphLook.controllerEm(for: 38)), filled: false))
-                .foregroundStyle(colors.text.color)
+                .font(DelosFonts.symbol(stage.px(GlyphLook.controllerEm(for: 32)), filled: false))
+                .foregroundStyle(.white)
         case .keyboard:
             Text(Symbols.macArrowDown)
-                .font(DelosFonts.symbol(stage.px(GlyphLook.controllerEm(for: 38)), filled: true))
-                .foregroundStyle(colors.text.color)
+                .font(DelosFonts.symbol(stage.px(GlyphLook.controllerEm(for: 32)), filled: true))
+                .foregroundStyle(.white)
         case .touch:
             SymbolView(symbol: Symbols.expandLess, size: 26, color: colors.accent, filled: true)
         case .pointer:

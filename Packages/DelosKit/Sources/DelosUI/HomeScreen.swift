@@ -146,11 +146,10 @@ struct HomeScreen: View {
                         FilteredLibraryEmpty(focus: focus, onReset: resetFilters)
                     } else {
                         // Animated artwork (covers, the wide cover, the logo) plays only while nothing covers or stops it
-                        // (`rememberArtworkMotion`); each cover adds whether it is on screen
+                        // (`rememberArtworkMotion`); each cover adds whether it is on screen. The overview hides the library: its
+                        // animations are released meanwhile
                         GameLibrary(hostID: hostID, apps: visible, focus: focus, actions: actions)
-                            .environment(\.artMotion, AnimatedPlayback.shouldPlay(
-                                visible: !shellCoversArt && !AnimatedPlayback.layerStopsLibraryArt(layers.layer) && !sheetOpen,
-                                foreground: true, streaming: false, reducedMotion: reducedMotion, systemReduceMotion: systemReduceMotion))
+                            .environment(\.artMotion, artMotion(visible: !sheetOpen && overview == nil))
                             .environment(\.overviewDescent, OverviewDescent(active: overview?.shown ?? false, appID: overview?.app.id))
                             .environment(\.overviewLauncher, launcher)
                     }
@@ -233,9 +232,16 @@ struct HomeScreen: View {
     @ViewBuilder private func overviewLayer(listed: [HostApp]) -> some View {
         if let session = overview {
             GameOverview(session: session, actions: actions, library: listed, onClose: closeOverview, onJump: jump, libraryFocus: focus)
-            if !session.landed {
-                OverviewFlight(hostID: hostID, app: session.app, from: session.source, to: overviewSlot, progress: session.flight)
-            }
+                // The overview's cover, logo and hero play by the library's rule, not under the full-screen viewer
+                .environment(\.artMotion, artMotion(visible: session.viewer == nil))
+            // Always there while the overview is, hidden once landed: inserted with the closing's animation it would start at
+            // its end, the card's place, instead of flying there
+            let covers = HomeMetrics(stage: stage).covers
+            OverviewFlight(hostID: hostID, app: session.app, from: session.source, to: overviewSlot,
+                           fromCorner: stage.px(covers.corner * CoverGeometry.focusScale), toCorner: stage.px(30),
+                           fromArt: session.flightFrom, toArt: session.flightTo, wide: session.wide, coverScale: covers.scale,
+                           progress: session.flight)
+                .opacity(session.landed ? 0 : 1)
             if let index = session.viewer, let details = session.details {
                 let media = OverviewContent(details: details, library: [], region: nil).media
                 if media.indices.contains(index) { OverviewViewer(session: session, media: media, index: index) }
@@ -248,12 +254,29 @@ struct HomeScreen: View {
         CGRect(x: stage.px(150 + stage.safe.leading), y: stage.px(150), width: stage.px(340), height: stage.px(510))
     }
 
-    /// The card of [app] as it shows in the row (focused: grown about its middle), in the screen's space.
+    /// Whether animated artwork may play on this screen (`rememberArtworkMotion`): the screen's part [visible] and nothing
+    /// of the shell covering it or stopping it.
+    private func artMotion(visible: Bool) -> Bool {
+        AnimatedPlayback.shouldPlay(
+            visible: visible && !shellCoversArt && !AnimatedPlayback.layerStopsLibraryArt(layers.layer),
+            foreground: true, streaming: false, reducedMotion: reducedMotion, systemReduceMotion: systemReduceMotion)
+    }
+
+    /// The card of [app] as it shows in the row (focused: grown about its middle; the wide first cover only to the left), in
+    /// the screen's space.
     private func cardFrame(_ app: HostApp, drag: Double = 0) -> CGRect? {
         guard let frame = focus.registeredFrames[AnyHashable(GameLibrary.id(app))] else { return nil }
         let s = CoverGeometry.focusScale
-        return frame.offsetBy(dx: -homeOrigin.x, dy: -homeOrigin.y + drag)
-            .insetBy(dx: -frame.width * (s - 1) / 2, dy: -frame.height * (s - 1) / 2)
+        let width = frame.width * s, height = frame.height * s
+        let x = frame.width > frame.height ? frame.maxX - width : frame.midX - width / 2
+        return CGRect(x: x - homeOrigin.x, y: frame.midY - height / 2 - homeOrigin.y + drag, width: width, height: height)
+    }
+
+    /// The card's picture as the row shows it now, for the flight (``OverviewSession/flightFrom``): its animation's frame
+    /// while it plays, else its still.
+    private func cardPicture(_ app: HostApp, wide: Bool) -> CGImage? {
+        AnimatedFrames.last(art.animationKey(hostID: hostID, appID: app.id, kind: wide ? .wide : .cover))
+            ?? art.cachedCard(hostID: hostID, app: app, wide: wide)
     }
 
     /// The focused cover's game, when the focus is on one.
@@ -268,6 +291,11 @@ struct HomeScreen: View {
         guard overview == nil, !sheetOpen, metadata.hasOverview(app), let source = cardFrame(app, drag: drag) else { return }
         let session = OverviewSession(hostID: hostID, app: app, coverID: AnyHashable(GameLibrary.id(app)), source: source,
                                       details: metadata.details(for: app))
+        // The pictures come from memory: nothing loads or restarts while the card flies
+        session.wide = source.width > source.height
+        session.coverStill = art.cachedCard(hostID: hostID, app: app, wide: false)
+        session.flightFrom = cardPicture(app, wide: session.wide)
+        session.flightTo = session.coverStill
         overview = session
         actions.layers.feedback?.play(.open)
         let ms = reducedMotion ? 280.0 : OverviewMotion.flight
@@ -300,6 +328,11 @@ struct HomeScreen: View {
             }
             session.ring.hide()
             if let source = cardFrame(session.app) { session.source = source }
+            // The header's picture as it shows now (its animation's frame) flies back into the card's still (the library's
+            // animations were released while the overview was open)
+            session.wide = session.source.width > session.source.height
+            session.flightTo = AnimatedFrames.last(art.animationKey(hostID: hostID, appID: session.app.id, kind: .cover)) ?? session.coverStill
+            session.flightFrom = art.cachedCard(hostID: hostID, app: session.app, wide: session.wide)
             session.landed = false
             withAnimation(reducedMotion ? .easeIn(duration: 0.24) : .timingCurve(0.65, 0, 0.35, 1, duration: OverviewMotion.flightBack / 1000)) { session.flight = 0 }
             session.shown = false
@@ -315,6 +348,7 @@ struct HomeScreen: View {
         focus.focus(GameLibrary.id(app))
         let session = OverviewSession(hostID: hostID, app: app, coverID: AnyHashable(GameLibrary.id(app)), source: current.source,
                                       details: metadata.details(for: app))
+        session.coverStill = art.cachedCard(hostID: hostID, app: app, wide: false)
         session.flight = 1
         session.landed = true
         session.phase = .open
@@ -591,7 +625,6 @@ struct GameLibrary: View {
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
     @Environment(\.overviewDescent) private var descent
-    @Environment(\.overviewLauncher) private var launcher
     @State private var position = ScrollPosition(edge: .leading)
     /// The glide of the focus steps (the wrap is an animation of its own).
     @State private var follow = ScrollGlide(pace: LibraryScroll.pace)
@@ -625,13 +658,14 @@ struct GameLibrary: View {
         ZStack(alignment: .topLeading) {
             GameInfo(hostID: hostID, app: focused, pcName: host?.name ?? "", running: running == focused.id,
                      virtualDisplay: VirtualDisplayChip.shows(app: focused, support: host?.virtualDisplay),
-                     playtime: actions.playtime(hostID: hostID, appID: focused.id), metrics: metrics)
+                     playtime: actions.playtime(hostID: hostID, appID: focused.id), metrics: metrics,
+                     titleAway: descent.appID != nil)
                 .padding(.leading, stage.px(metrics.infoStart))
                 .padding(.top, stage.px(metrics.titleTop))
                 // Behind an open context menu the info block dims to 40 %
                 .opacity(CoverTone.info(menuOpen: menuOpen))
                 .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: menuOpen)
-                // The overview opens: the info row rises out and the title leaves (it flies into the header)
+                // The overview opens: the info row rises out and the title leaves at once (it flies into the header)
                 .offset(y: descent.active && !reduceMotion ? stage.px(OverviewMotion.infoLift) : 0)
                 .opacity(descent.active ? 0 : 1)
                 .animation(descent.active ? Motion.out(OverviewMotion.homeOut) : .timingCurve(0.65, 0, 0.35, 1, duration: OverviewMotion.flightBack / 1000),
@@ -696,16 +730,6 @@ struct GameLibrary: View {
                 guard focusedIndex == nil, !apps.isEmpty else { return }
                 focus.focus(Self.id(apps[LibraryFocus.afterRemoval(count: now.count, lastIndex: lastIndex)]))
             }
-            // The Game info hint under the focused cover, for the kind of input in use
-            let hintWidth = current == 0 ? covers.wide : covers.tile
-            GameInfoHint(kind: ControllerGlyphs.shared.kind) { if let launcher, launcher.canOpen(focused) { launcher.open(focused, 0) } }
-                .frame(width: stage.px(hintWidth))
-                .padding(.leading, stage.px(start))
-                .padding(.top, stage.px(metrics.coverTop + covers.height + 30))
-                .opacity(metadata.hasOverview(focused) && !descent.active && !metrics.compact ? 1 : 0)
-                .offset(y: metadata.hasOverview(focused) && !descent.active ? 0 : -stage.px(8))
-                .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.5), value: metadata.hasOverview(focused) && !descent.active)
-                .allowsHitTesting(metadata.hasOverview(focused) && !descent.active)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         // The covers register after the screen shows, and the model would take whichever comes first: the game that had
@@ -884,6 +908,8 @@ private struct GameInfo: View {
     let virtualDisplay: Bool
     let playtime: Playtime
     let metrics: HomeMetrics
+    /// The title is in the game overview (its flight there and back): hidden here, at once, until it has flown back.
+    let titleAway: Bool
     @Environment(GameMetadataModel.self) private var metadata
     @Environment(HomeArt.self) private var art
     @Environment(\.matchGameColors) private var matchGameColors
@@ -900,6 +926,7 @@ private struct GameInfo: View {
         let gameColors = matchGameColors ? art.gameColors(GameArt.key(hostID, app.id)) : nil
         VStack(alignment: .leading, spacing: 0) {
             GameTitle(hostID: hostID, app: app, metrics: metrics, width: metrics.infoWidth)
+                .opacity(titleAway ? 0 : 1)
             Spacer().frame(height: stage.px(metrics.titleGap))
             InfoRow(playtime: playtime, height: metrics.infoHeight,
                     hasFacts: running || hdr != nil || completion != nil || virtualDisplay,
@@ -945,13 +972,10 @@ private struct GameTitle: View {
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduceMotion
     @Environment(\.artMotion) private var artMotion
-    @Environment(\.displayScale) private var displayScale
     @State private var logo: CGImage?
     @State private var resolved = false
     /// The logo's animation when it is one.
     @State private var animation: AnimatedSource?
-    /// The animation has faded in over the logo: the still under it is hidden.
-    @State private var animating = false
 
     var body: some View {
         let key = GameArt.key(hostID, app.id)
@@ -959,17 +983,8 @@ private struct GameTitle: View {
             if let logo {
                 let box = CGSize(width: stage.px(min(metrics.logoWidth(stageWidth: stage.width), width)),
                                  height: stage.px(metrics.titleBox - 2 * metrics.logoPad))
-                Image(decorative: logo, scale: 1)
-                    .resizable()
-                    .scaledToFit()
-                    .opacity(animating ? 0 : 1)
-                    .frame(maxWidth: box.width, maxHeight: box.height, alignment: .leading)
-                    // The chosen animated logo plays over its first frame, fitted into the same box (start-aligned like the still)
-                    // while anything may play: the focused game's logo is always on screen
-                    .overlay {
-                        AnimatedArtLayer(source: animation, playing: artMotion, width: Int(box.width * displayScale),
-                                         height: Int(box.height * displayScale), fit: true, alignment: .leading, covering: $animating)
-                    }
+                // The chosen animated logo plays while anything may play: the focused game's logo is always on screen
+                LogoArt(logo: logo, animation: animation, box: box, playing: artMotion)
                     .accessibilityElement()
                     .accessibilityLabel(app.title)
                     .modifier(TitleEntrance(key: key + "/logo", reduced: reduceMotion))
@@ -992,22 +1007,41 @@ private struct GameTitle: View {
         .frame(height: stage.px(metrics.titleBox), alignment: .leading)
         .task(id: "\(key)#\(art.artwork.version)") {
             animation = nil
-            // Bundled entries keep their name as the logo
-            if BundledArtwork.kind(app) != nil {
-                logo = nil
-                resolved = true
-                return
-            }
-            let cached = art.cachedImage(hostID: hostID, appID: app.id, kind: .logo)
-            logo = cached
-            resolved = cached != nil || !art.artwork.enabled
-            guard art.artwork.enabled else { return }
-            if cached == nil {
-                logo = await art.image(hostID: hostID, appID: app.id, kind: .logo)
+            // DELOS's own entries keep their name as the logo; without SteamGridDB the name shows at once
+            let lookup = BundledArtwork.kind(app) == nil && art.artwork.enabled
+            logo = art.cachedLogo(hostID: hostID, app: app)
+            resolved = logo != nil || !lookup
+            guard lookup else { return }
+            if logo == nil {
+                logo = await art.logo(hostID: hostID, app: app)
                 resolved = true
             }
             if logo != nil { animation = await art.animation(hostID: hostID, app: app, kind: .logo) }
         }
+    }
+}
+
+/// A game's logo fitted into [box] at its start (the title box's look), its animation playing over the still first frame
+/// (fitted and start-aligned the same) while [playing].
+struct LogoArt: View {
+    let logo: CGImage
+    let animation: AnimatedSource?
+    let box: CGSize
+    let playing: Bool
+    @Environment(\.displayScale) private var displayScale
+    /// The animation has faded in over the logo: the still under it is hidden.
+    @State private var animating = false
+
+    var body: some View {
+        Image(decorative: logo, scale: 1)
+            .resizable()
+            .scaledToFit()
+            .opacity(animating ? 0 : 1)
+            .frame(maxWidth: box.width, maxHeight: box.height, alignment: .leading)
+            .overlay {
+                AnimatedArtLayer(source: animation, playing: playing, width: Int(box.width * displayScale),
+                                 height: Int(box.height * displayScale), fit: true, alignment: .leading, covering: $animating)
+            }
     }
 }
 
@@ -1060,6 +1094,20 @@ enum CoverBadge {
     var label: String { self == .running ? L("home_badge_running") : L("home_badge_last_played") }
 }
 
+extension PlaceholderArt {
+    /// The placeholder art of a library cover ([wide]: the first, three covers wide) at the covers' [scale]: a compact
+    /// stage's small covers set the title smaller (the wide one at most 40 %, the others at most 20 %, then fitted to
+    /// their longest word), with the cover's own inset.
+    init(cover app: HostApp, hostID: String, wide: Bool, scale s: Double) {
+        let art = GameArt(hostID: hostID, app: app)
+        self.init(
+            hue: art.hue, hue2: art.hue2, icon: art.icon,
+            glyphSize: (wide ? 420 : 320) * s, glyphRight: (wide ? 40 : -36) * s, glyphTop: wide ? 0.04 : 0.24,
+            title: app.title, titleSize: (wide ? 72 : 34) * min(max(s, wide ? 0.6 : 0.8), 1),
+            titleInset: (wide ? 44 : 26) * s, titleBottom: (wide ? 40 : 26) * s, titleFit: s < 1)
+    }
+}
+
 /// A cover: the SteamGridDB cover (the wide cover for the first one), else, while a SteamGridDB lookup is still
 /// expected, the placeholder art (so the PC's box art is not shown only to be replaced), else the PC's box art, else
 /// the placeholder art with the title (`GameTile`, `tileArtSource`).
@@ -1077,6 +1125,8 @@ private struct Cover: View {
     var geometry = CoverGeometry.standard
     @Environment(HostStore.self) private var hosts
     @Environment(HomeArt.self) private var art
+    @Environment(GameMetadataModel.self) private var metadata
+    @Environment(\.overviewLauncher) private var launcher
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.artMotion) private var artMotion
@@ -1096,7 +1146,8 @@ private struct Cover: View {
         let width = wide ? geometry.wide : geometry.tile
         let tone = CoverTone.of(focused: focused, menuOpen: menuOpen)
         let shape = RoundedRectangle(cornerRadius: stage.px(geometry.corner))
-        let placeholder = GameArt(hostID: hostID, app: app)
+        // The Game info hint inside the focused cover, at its bottom (not on a compact stage, whose covers are small)
+        let hint = focused && !stage.compact && metadata.hasOverview(app)
         ZStack(alignment: .topLeading) {
             shape.fill(colors.surface2.color)
             ZStack {
@@ -1118,14 +1169,7 @@ private struct Cover: View {
                         .animation(.timingCurve(0.25, 0.1, 0.25, 1, duration: Motion.fade / 1000), value: menuOpen)
                         .transition(.opacity)
                 } else {
-                    // A compact stage's small covers set the placeholder's title smaller (the wide one at most 40 %, the others at most
-                    // 20 %, then fitted to their longest word), with the cover's own inset
-                    let s = geometry.scale
-                    PlaceholderArt(
-                        hue: placeholder.hue, hue2: placeholder.hue2, icon: placeholder.icon,
-                        glyphSize: (wide ? 420 : 320) * s, glyphRight: (wide ? 40 : -36) * s, glyphTop: wide ? 0.04 : 0.24,
-                        title: app.title, titleSize: (wide ? 72 : 34) * min(max(s, wide ? 0.6 : 0.8), 1),
-                        titleInset: (wide ? 44 : 26) * s, titleBottom: (wide ? 40 : 26) * s, titleFit: s < 1)
+                    PlaceholderArt(cover: app, hostID: hostID, wide: wide, scale: geometry.scale)
                 }
             }
             .animation(Motion.fastOutSlowIn(400), value: shown.map(ObjectIdentifier.init))
@@ -1162,6 +1206,21 @@ private struct Cover: View {
                 .background(Capsule().fill(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0.55)))
                 .padding(stage.px(18))
             }
+            ZStack(alignment: .bottom) {
+                if hint {
+                    // A soft scrim keeps the chip readable over any art
+                    LinearGradient(colors: [.clear, Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0.6)],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: stage.px(geometry.height * 0.36))
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                    GameInfoHint(kind: ControllerGlyphs.shared.kind, onOpen: openInfo)
+                        .padding(.bottom, stage.px(22))
+                        .transition(.opacity.combined(with: .offset(y: stage.px(8))))
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.5), value: hint)
         }
         .frame(width: stage.px(width), height: stage.px(geometry.height))
         .onScrollVisibilityChange(threshold: 0.01) { visible = $0 }
@@ -1176,6 +1235,12 @@ private struct Cover: View {
         // The picture says nothing to VoiceOver: the cover reads as the game's name, its badge and its corner marks
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(([app.title, badge?.label].compactMap { $0 } + marks.map(\.label)).joined(separator: ", "))
+        .accessibilityActions { if hint { Button(L("overview_game_info"), action: openInfo) } }
+    }
+
+    /// Opens the game's overview (the Game info chip).
+    private func openInfo() {
+        if let launcher, launcher.canOpen(app) { launcher.open(app, 0) }
     }
 
     private func load() async {

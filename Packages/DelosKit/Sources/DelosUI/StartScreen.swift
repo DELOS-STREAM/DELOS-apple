@@ -246,6 +246,9 @@ public struct DelosRoot: View {
                             // The interface scale zooms the whole bar
                             .modifier(ZoomedBar())
                             .modifier(LayerBackdropBlur(active: librarySheetOpen))
+                            // Over the game overview its pills are plain fills: the page is masked out under the bar, so glass
+                            // there would only blur the still backdrop (the prototype's `.sb-nav`)
+                            .environment(\.glassFlat, navigator.screenHints.overview)
                             // The navigation's buttons belong to the focus of the screen shown
                             .id(ObjectIdentifier(entry.focus))
                     }
@@ -337,6 +340,7 @@ public struct DelosRoot: View {
         .environment(\.shellCoversArt, sideMenu != nil || actions.connection.portal != nil)
         // Material You colors leave the game's colors out, as on Android
         .environment(\.matchGameColors, appearance.matchGameColors && !colors.materialYou)
+        .environment(\.heroLook, HeroLook(appearance))
         .onChange(of: systemReduceMotion || appearance.reducedMotion, initial: true) { _, now in
             actions.connection.reducedMotion = now
             router.reducedMotion = now

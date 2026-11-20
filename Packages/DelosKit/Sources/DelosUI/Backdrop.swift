@@ -16,6 +16,25 @@ struct ShellBackdrop: View {
     }
 }
 
+/// The game background as the profile shows it behind the library (Settings → Appearance): its blur (stage pixels) and
+/// opacity (0...1). The game overview starts from the same blur and deepens it.
+struct HeroLook: Equatable {
+    let blur: Int
+    let opacity: Double
+
+    /// [appearance]'s, nil when the game background is off.
+    init?(_ appearance: Appearance) {
+        guard appearance.heroBackground, appearance.heroOpacity > 0 else { return nil }
+        blur = appearance.heroBlur
+        opacity = Double(appearance.heroOpacity) / 100
+    }
+}
+
+extension EnvironmentValues {
+    /// The profile's game background look (the root sets it), nil when it is off.
+    @Entry var heroLook: HeroLook? = nil
+}
+
 /// The layered background behind every screen, as `Backdrop` in DELOS for Android (`shell/ui/Backdrop.kt`): the theme
 /// color, the focused game's background ("hero", blurred, at the game background's opacity, faded into the theme color
 /// at the bottom and on the left), and the animated background of `appearance.background` drawn on a 960 × 540 canvas

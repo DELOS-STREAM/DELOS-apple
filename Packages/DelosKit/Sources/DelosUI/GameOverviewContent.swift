@@ -263,8 +263,8 @@ enum OverviewMotion {
     static let inOutCurve = CubicBezier(0.65, 0, 0.35, 1)
     /// The flight rises this far above the straight line at its middle and grows by this much.
     static let arc = 30.0, midScale = 1.04
-    /// The page rises from this far below.
-    static let pageRise = 120.0
+    /// The page rises from this far below with the flight, and sinks back there over [pageSink] ms as it closes.
+    static let pageRise = 120.0, pageSink = 560.0
     /// The other covers lift away: 160 px plus 30 per cover of distance, to 92 %, 45 ms apart; the info row rises 90 px.
     static func coverLift(distance: Int) -> Double { -160 - Double(distance) * 30 }
     static let coverLiftScale = 0.92, coverLiftStagger = 45.0, homeOut = 620.0, infoLift = -90.0
@@ -274,6 +274,17 @@ enum OverviewMotion {
     static let deepBlurScroll = 520.0
     static func heroDrift(_ scroll: Double) -> Double { -min(scroll, 700) * 0.1 }
     static func heroZoom(_ scroll: Double) -> Double { 1 + min(max(scroll, 0), 900) / 9000 }
+    /// The deep blur the hero reaches while the page scrolls: 40 px beyond the dashboard's (the profile's game background
+    /// blur, where the overview starts), as the prototype's 56 px is beyond its dashboard's 16.
+    static func deepBlur(from dashboard: Int) -> Int { max(dashboard, 0) + 40 }
+    /// The header's logo box (the dashboard's 900 × 180 box at 80 %, the same shape, so the logo flies by one scale).
+    static let logoWidth = 720.0, logoHeight = 144.0
+
+    /// How much larger a logo of [aspect] (width / height) shows fitted into [from] than into [to] (the title flight's scale).
+    static func logoScale(aspect: Double, from: CGSize, to: CGSize) -> Double {
+        func fitted(_ box: CGSize) -> Double { min(box.width, box.height * max(aspect, 0.01)) }
+        return fitted(from) / max(fitted(to), 0.01)
+    }
     /// The screenshots move against the carousel by 7 % of their distance from its middle.
     static let parallax = 0.07
     /// Touch: pulling the page down this far at its top closes the overview; a cover swiped up this far opens it.
@@ -283,15 +294,31 @@ enum OverviewMotion {
     /// The finger's travel the dragged cover follows, with resistance.
     static func swipeFollow(_ travel: Double) -> Double { travel >= 0 ? travel * 0.15 : -pow(-travel, 0.85) }
 
-    /// The flight's transform at [progress] (0 at the card, 1 at the header slot): the offset from the slot's origin and
-    /// the scale of each axis, along a slight arc that grows at its middle. [from], [to]: the card's and the slot's frames.
-    static func flightTransform(from: CGRect, to: CGRect, progress t: Double) -> (dx: Double, dy: Double, sx: Double, sy: Double) {
-        let sx0 = from.width / max(to.width, 1), sy0 = from.height / max(to.height, 1)
-        let dx0 = from.minX - to.minX, dy0 = from.minY - to.minY
+    /// The flying cover's frame at [progress] (0 at the card, 1 at the header slot): its size runs from the card's to the
+    /// slot's and grows a little at the middle, its centre runs along a slight arc [lift] points high. [from], [to]: the
+    /// card's and the slot's frames.
+    static func flightFrame(from: CGRect, to: CGRect, progress t: Double, lift: Double) -> CGRect {
         // A quadratic through the start, the lifted middle and the end
         let u = 1 - t
-        let lift = arc * 4 * t * u
         let grow = 1 + (midScale - 1) * 4 * t * u
-        return (dx: dx0 * u, dy: dy0 * u - lift, sx: (sx0 * u + t) * grow, sy: (sy0 * u + t) * grow)
+        let width = (from.width * u + to.width * t) * grow, height = (from.height * u + to.height * t) * grow
+        let x = from.midX * u + to.midX * t, y = from.midY * u + to.midY * t - lift * 4 * t * u
+        return CGRect(x: x - width / 2, y: y - height / 2, width: width, height: height)
+    }
+
+    /// A picture of [aspect] (width / height) filling [frame] as `scaledToFill` does, centred: drawn at [base] (its size
+    /// filling the slot), it is scaled by [scale] (the same on both axes: never stretched) and moved by [dx], [dy].
+    static func fill(aspect: Double, base: CGSize, frame: CGRect) -> (scale: Double, dx: Double, dy: Double) {
+        let a = max(aspect, 0.01)
+        let width = max(frame.width, frame.height * a)
+        let scale = width / max(base.width, 0.01)
+        return (scale, frame.midX - width / 2, frame.midY - width / a / 2)
+    }
+
+    /// The size a picture of [aspect] has filling [box] (`scaledToFill`).
+    static func fillSize(aspect: Double, box: CGSize) -> CGSize {
+        let a = max(aspect, 0.01)
+        let width = max(box.width, box.height * a)
+        return CGSize(width: width, height: width / a)
     }
 }

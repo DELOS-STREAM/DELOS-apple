@@ -262,7 +262,9 @@ struct AnimatedArtLayer: View {
         ZStack {
             if let player {
                 TimelineView(.animation(paused: !foreground)) { context in
-                    Image(decorative: player.frame(at: context.date), scale: 1)
+                    let frame = player.frame(at: context.date)
+                    let _ = source.map { AnimatedFrames.shown($0.key, frame) }
+                    Image(decorative: frame, scale: 1)
                         .resizable()
                         .aspectRatio(contentMode: fit ? .fit : .fill)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
@@ -277,13 +279,32 @@ struct AnimatedArtLayer: View {
             shown = false
             player = nil
             covering?.wrappedValue = false
-            guard playing, let source else { return }
+            guard playing, let source else {
+                if let source { AnimatedFrames.forget(source.key) }
+                return
+            }
             guard let loaded = await AnimationPlayer.load(source.data, label: source.key, maxWidth: width, maxHeight: height, fit: fit) else { return }
             player = loaded
             withAnimation(Motion.fadeIn) { shown = true } completion: { if shown { covering?.wrappedValue = true } }
         }
         .onChange(of: foreground) { _, now in if now { player?.restart() } }
+        .onDisappear { if let source { AnimatedFrames.forget(source.key) } }
     }
+}
+
+/// The frame each playing animation showed last, by its source's key: a cover that starts flying (the game overview's
+/// shared cover) takes the frame its card shows instead of jumping back to the still first frame. One image per
+/// playing animation, replaced at every display frame and dropped when its layer releases it.
+@MainActor
+enum AnimatedFrames {
+    private static var frames: [String: CGImage] = [:]
+
+    static func shown(_ key: String, _ frame: CGImage) { frames[key] = frame }
+
+    static func forget(_ key: String) { frames[key] = nil }
+
+    /// The frame the animation [key] showed last, nil when none plays.
+    static func last(_ key: String) -> CGImage? { frames[key] }
 }
 
 extension Motion {
