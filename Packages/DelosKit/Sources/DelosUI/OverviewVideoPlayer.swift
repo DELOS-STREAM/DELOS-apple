@@ -66,6 +66,24 @@ final class OverviewVideo {
     @ObservationIgnored private(set) var reported = false
     /// Runs JavaScript in the player's page; nil while there is no player.
     @ObservationIgnored var run: (@MainActor (String) -> Void)?
+    let controls = OverviewViewerControls()
+    @ObservationIgnored private(set) var generation = 0
+    @ObservationIgnored private var active = true
+    @ObservationIgnored private var wantsPlayback = true
+
+    /// Revokes pending autoplay as well as current playback. Foregrounding alone does not restart a paused trailer.
+    func setActive(_ value: Bool) {
+        active = value
+        if !value {
+            wantsPlayback = false
+            state = 2
+        }
+        applyPlayback()
+    }
+
+    private func applyPlayback() {
+        run?("if(window.setPlaybackAllowed){setPlaybackAllowed(\(active),\(wantsPlayback));}")
+    }
 
     var playing: Bool { state == 1 || state == 3 }
 
@@ -84,6 +102,7 @@ final class OverviewVideo {
 
     /// A fresh state for the player of [videoID] (nil: the player goes away).
     func reset(_ videoID: String?) {
+        generation += 1
         self.videoID = videoID
         state = -1
         time = 0
@@ -93,6 +112,7 @@ final class OverviewVideo {
         error = nil
         reported = false
         run = nil
+        wantsPlayback = active
     }
 
     private struct Message: Decodable {
@@ -108,13 +128,19 @@ final class OverviewVideo {
     func receive(_ json: String) {
         guard videoID != nil, let message = try? JSONDecoder().decode(Message.self, from: Data(json.utf8)) else { return }
         switch message.type {
+        case "ready":
+            applyPlayback()
         case "status":
             reported = true
             if let value = message.state, value != state { state = value }
+            if !active || !wantsPlayback {
+                if state == 1 || state == 3 { applyPlayback() }
+                state = 2
+            }
             if let value = message.time, value != time { time = value }
             if let value = message.duration, value != duration { duration = value }
             if let value = message.muted, value != muted { muted = value }
-            if playing, !started { started = true }
+            if state == 1, !started { started = true }
         case "error":
             fail(message.code ?? -1)
         default: break
@@ -124,6 +150,7 @@ final class OverviewVideo {
     /// The player cannot play the video: the error shows instead of it; a video that never can is left out from now on.
     func fail(_ code: Int) {
         guard error == nil, let videoID else { return }
+        pause()
         error = code
         run = nil
         if Self.unplayable(code: code) { OverviewVideos.shared.markUnplayable(videoID) }
@@ -131,10 +158,18 @@ final class OverviewVideo {
 
     /// A: play or pause; at the end, from the start again.
     func toggle() {
-        if state == 0 { send("player.seekTo(0,true);player.playVideo()") } else if playing { send("player.pauseVideo()") } else { send("player.playVideo()") }
+        guard active, error == nil else { return }
+        wantsPlayback = !playing
+        if state == 0 { send("player.seekTo(0,true);player.playVideo()") }
+        else if wantsPlayback { send("player.playVideo()") }
+        else { send("player.pauseVideo()") }
     }
 
-    func pause() { send("player.pauseVideo()") }
+    func pause() {
+        wantsPlayback = false
+        state = 2
+        applyPlayback()
+    }
 
     func seek(by seconds: Double) { send("player.seekTo(Math.max(0,player.getCurrentTime()+\(seconds)),true)") }
 
@@ -144,7 +179,7 @@ final class OverviewVideo {
 
     private func send(_ command: String) {
         guard error == nil else { return }
-        run?("if(player&&player.getPlayerState){\(command);status();}")
+        run?("if(window.playbackAllowed&&player&&player.getPlayerState){\(command);status();}")
     }
 }
 
@@ -166,13 +201,14 @@ struct OverviewVideoPlayer {
         <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
         <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#p{position:absolute;inset:0;width:100%;height:100%}</style></head>
         <body><div id="p"></div><script>
-        var player,timer;
+        var player,timer,ready=false,playbackAllowed=false;
         function post(o){webkit.messageHandlers.delos.postMessage(JSON.stringify(o));}
-        function status(){ if(!player||!player.getPlayerState)return; post({type:'status',state:player.getPlayerState(),time:player.getCurrentTime()||0,duration:player.getDuration()||0,muted:player.isMuted()}); }
+        function status(){ if(!ready||!player.getPlayerState)return; post({type:'status',state:player.getPlayerState(),time:player.getCurrentTime()||0,duration:player.getDuration()||0,muted:player.isMuted()}); }
+        function setPlaybackAllowed(allowed,wanted){playbackAllowed=allowed;if(!ready)return;if(allowed&&wanted)player.playVideo();else player.pauseVideo();}
         function onYouTubeIframeAPIReady(){
          player=new YT.Player('p',{host:'https://www.youtube-nocookie.com',videoId:'\(videoID)',
-          playerVars:{playsinline:1,rel:0,controls:0,fs:0,disablekb:1,iv_load_policy:3,autoplay:1,enablejsapi:1,origin:'\(origin)'},
-          events:{onReady:function(){player.playVideo();status();timer=setInterval(status,500);},
+          playerVars:{playsinline:1,rel:0,controls:0,fs:0,disablekb:1,iv_load_policy:3,autoplay:0,enablejsapi:1,origin:'\(origin)'},
+          events:{onReady:function(){ready=true;post({type:'ready'});status();timer=setInterval(status,500);},
                   onStateChange:function(){status();},
                   onError:function(e){post({type:'error',code:e.data});}}});
         }
@@ -193,11 +229,32 @@ struct OverviewVideoPlayer {
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         let video: OverviewVideo
+        let generation: Int
+        private(set) var attached = true
         var firstLoad = true
         var navigation: WKNavigation?
         var watchdog: Task<Void, Never>?
 
-        init(video: OverviewVideo) { self.video = video }
+        init(video: OverviewVideo) {
+            self.video = video
+            generation = video.generation
+        }
+
+        var current: Bool { attached && generation == video.generation }
+
+        func receive(_ message: String) {
+            guard current else { return }
+            video.receive(message)
+        }
+
+        func invalidate() {
+            attached = false
+            watchdog?.cancel()
+            if generation == video.generation {
+                video.setActive(false)
+                video.run = nil
+            }
+        }
 
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                      decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
@@ -209,14 +266,14 @@ struct OverviewVideoPlayer {
         }
 
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
-            if navigation == self.navigation { video.fail(-1) }
+            if current, navigation == self.navigation { video.fail(-1) }
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
-            if navigation == self.navigation { video.fail(-1) }
+            if current, navigation == self.navigation { video.fail(-1) }
         }
 
-        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { video.fail(-1) }
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { if current { video.fail(-1) } }
 
         func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction,
                      windowFeatures: WKWindowFeatures) -> WKWebView? { nil }
@@ -228,7 +285,7 @@ struct OverviewVideoPlayer {
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let body = message.body as? String else { return }
-            coordinator?.video.receive(body)
+            coordinator?.receive(body)
         }
     }
 
@@ -254,21 +311,28 @@ struct OverviewVideoPlayer {
         web.scrollView.backgroundColor = .black
         web.scrollView.isScrollEnabled = false
         web.scrollView.contentInsetAdjustmentBehavior = .never
+        web.isUserInteractionEnabled = false
+        web.accessibilityElementsHidden = true
         #else
         web.underPageBackgroundColor = .black
         #endif
-        video.run = { [weak web] script in web?.evaluateJavaScript(script, completionHandler: nil) }
+        video.run = { [weak web, weak coordinator] script in
+            guard coordinator?.current == true else { return }
+            web?.evaluateJavaScript(script, completionHandler: nil)
+        }
         coordinator.navigation = web.loadHTMLString(Self.html(videoID: videoID, origin: Self.origin), baseURL: URL(string: Self.origin))
         // No status within 15 s: the player did not load
-        coordinator.watchdog = Task { @MainActor [video] in
+        coordinator.watchdog = Task { @MainActor [weak coordinator] in
             try? await Task.sleep(for: .seconds(15))
-            if !Task.isCancelled, !video.reported { video.fail(-1) }
+            guard !Task.isCancelled, let coordinator, coordinator.current else { return }
+            if !coordinator.video.reported { coordinator.video.fail(-1) }
         }
         return web
     }
 
     private static func dismantle(_ web: WKWebView, _ coordinator: Coordinator) {
-        coordinator.watchdog?.cancel()
+        coordinator.invalidate()
+        web.evaluateJavaScript("if(window.setPlaybackAllowed){setPlaybackAllowed(false,false)}", completionHandler: nil)
         web.pauseAllMediaPlayback(completionHandler: nil)
         web.stopLoading()
         web.navigationDelegate = nil
@@ -291,8 +355,7 @@ extension OverviewVideoPlayer: NSViewRepresentable {
 }
 #endif
 
-/// The player's controls, a glass pill under the video (nothing of DELOS lies over the player): back 10 s, play or pause,
-/// forward 10 s, the elapsed time, the progress (a click or a tap on it seeks there), the duration and the sound.
+/// The viewer's overlay controls: back/forward, playback, elapsed time, seek, duration and mute.
 struct OverviewVideoBar: View {
     let video: OverviewVideo
     @Environment(\.stage) private var stage
