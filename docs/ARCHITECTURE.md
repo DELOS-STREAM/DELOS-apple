@@ -1203,12 +1203,14 @@ An image ImageIO reads as more than one frame (animated WebP, GIF, APNG) on a ca
 animation over the still view, cropped or fitted the same way and fading in once its first frame is decoded; the still is
 hidden once it has faded in (a transparent animation never shows the first frame through it) and back as soon as it stops.
 `AnimatedFrameDecoder` decodes one frame at a time off the main actor, no larger than `AnimatedPlayback.decodeSize` gives
-for the view's pixels (an Artwork tile at most 520 px across, a game background frame at most 1050), and holds the shown
-frame and the next one. `FrameClock` times the frames: each lasts the delay its file gives (ImageIO's unclamped delay; a
-GIF delay of 10 ms or less is 100 ms, any other is kept, 0 included), measured from when it was due, at most one frame
-changes per display frame (`TimelineView(.animation)`), and a frame that came late keeps its whole time. A layer exists
-only while it plays, so a paused one costs no memory and starts from its first frame again; it restarts too when the app
-comes back to the foreground.
+for the view's pixels (an Artwork tile at most 520 px across, a game background frame at most 1050), in play order, and
+`AnimationPlayer` holds the shown frame and at most two decoded after it (`AnimationPlayer.lookahead`; Android's platform
+player keeps one, but its decoder thread hands frames over without waiting for a busy main thread). `FrameClock` times
+the frames: each lasts the delay its file gives (ImageIO's unclamped delay; a GIF delay of 10 ms or less is 100 ms, any
+other is kept, 0 included), measured from when it was due, at most one frame changes per display frame
+(`TimelineView(.animation)`), and a frame that came late keeps its whole time. A layer exists only while it plays, so a
+paused one costs no memory and starts from its first frame again; it restarts too when the app comes back to the
+foreground.
 
 What plays (`AnimatedPlayback.shouldPlay`): in the library, the covers on screen (`onScrollVisibilityChange`) and the
 focused game's logo, while no dialog, filter sheet, side menu or portal covers the screen (a context menu does not:
@@ -1216,10 +1218,20 @@ the covers beside it keep playing) and motion is not reduced (the profile's Anim
 the Artwork screen, the animated choices on screen while no sheet or layer is open, each fetching its thumbnail, else the
 full file of a WebP, PNG or GIF, once (`ArtworkStore.animation(of:)`, the download's progress in
 `animationProgress`). The game background (`HeroArt`) starts after the game has stayed focused for 500 ms, renders every
-frame like the still one (`HeroRender.frame`, over the still first frame's extension), and loops through
+frame like the still one (`HeroFrameRender`: `HeroRender.frame` over the still first frame's extension), and loops through
 `LoopedAnimation`: a pass of 1.5 s or more plays once and the next pass, decoded 500 ms before, fades in over its last
 700 ms (a third of the loop at most, `HeroLoopTimeline`); a shorter one repeats by itself. When it stops while the game
-background stays (a portal opens, motion is reduced) it holds its frame for 1 s before the still returns.
+background stays (a portal opens, motion is reduced) it holds its frame for 1 s before the still returns. The render of
+a frame (`Bitmap`) is CoreGraphics' and Accelerate's work only, about 3 ms in a debug build on an M6 Mac besides the
+frame's decoding: a loop over the pixels in Swift costs about 100 ms a frame unoptimized, which played the background at
+4 frames a second on the iPad.
+
+`AnimatedArtBenchmark` (DelosUITests, `DELOS_ART_BENCH=1` or `DELOS_ART_BENCH=<file>:<file>`) plays animated files through
+these players in real time at 120 Hz for 2 s, with the main thread idle and busy, and prints the frames presented
+against the file's timing and what a frame costs to decode and render. On a device, debug builds log each playing
+animation once a second under the os_log category `ArtFPS` (subsystem `io.github.meitoncz.delos`, `ArtFPS` in DelosUI):
+the frames shown a second against the file's rate, the display frames that waited for a decode, and the time from asking
+for a frame to having it on the main actor.
 
 ### Bundled artwork
 

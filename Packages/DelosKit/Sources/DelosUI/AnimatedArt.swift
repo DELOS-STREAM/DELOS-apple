@@ -66,6 +66,8 @@ struct FrameClock: Equatable {
     private(set) var index = 0
     /// The pass ended on the last frame (only without [repeats]); a single frame never moves.
     private(set) var finished: Bool
+    /// At the last display frame the next frame was due but not decoded yet.
+    private(set) var waiting = false
     /// The animation's own time, which runs while it is drawn.
     private var time: Double
     private var lastDraw: Double
@@ -82,14 +84,21 @@ struct FrameClock: Equatable {
     }
 
     /// The frame that shows next, nil once the pass has ended.
-    var nextIndex: Int? { finished ? nil : (index + 1) % durations.count }
+    var nextIndex: Int? { finished ? nil : index(after: index) }
+
+    /// The frame after [frame] in play order: nil after the last one of a pass that does not repeat.
+    func index(after frame: Int) -> Int? {
+        repeats || frame + 1 < durations.count ? (frame + 1) % durations.count : nil
+    }
 
     /// A display frame at [now]: the clock runs on, and the next frame shows if it is due and [ready] (decoded). True when
     /// it does.
     mutating func draw(at now: Double, ready: Bool) -> Bool {
         time += now - lastDraw
         lastDraw = now
-        guard let next = nextIndex, ready, time >= due else { return false }
+        let isDue = nextIndex != nil && time >= due
+        waiting = isDue && !ready
+        guard let next = nextIndex, ready, isDue else { return false }
         let shownAt = due
         index = next
         if !repeats, index == durations.count - 1 {
@@ -103,31 +112,44 @@ struct FrameClock: Equatable {
     }
 }
 
-/// One playing animation: the frame shown and the next one, decoded ahead, nothing more (a frame of a tile is a few MB). The
-/// view draws ``frame(at:)`` at every display frame while it plays; ``restart()`` plays it from the first frame again.
+/// One playing animation: the frame shown and at most ``lookahead`` frames after it, decoded in order, one at a time, as
+/// soon as there is room (a frame of a tile is about a megabyte). The view draws ``frame(at:)`` at every display frame while
+/// it plays; ``restart()`` plays it from the first frame again. [label] names it in the debug build's ``ArtFPS`` lines.
 @MainActor
 final class AnimationPlayer {
+    /// The frames decoded ahead of the one shown: two, so a frame keeps the time of two to be decoded and handed to the
+    /// main actor, and a 60 fps animation keeps its pace while the main thread is busy (one was not enough for a 62.5 fps
+    /// cover with 5 ms of a 120 Hz display frame taken; `AnimatedArtBenchmark`).
+    static let lookahead = 2
+
     let info: AnimatedImageInfo
+    private let label: String
     private let decoder: AnimatedFrameDecoder
     /// The first frame, kept for a restart.
     private let first: CGImage
+    private let fileRate: Double
     private var repeats: Bool
     private var clock: FrameClock?
     private var current: CGImage
-    private var next: (index: Int, image: CGImage)?
+    /// The frames decoded after the one shown, in play order.
+    private var ahead: [(index: Int, image: CGImage)] = []
     private var decoding: Int?
+    /// Changes at every restart, so a frame still being decoded for the earlier start is dropped.
+    private var generation = 0
 
-    private init(info: AnimatedImageInfo, decoder: AnimatedFrameDecoder, first: CGImage, repeats: Bool) {
+    private init(info: AnimatedImageInfo, label: String, decoder: AnimatedFrameDecoder, first: CGImage, repeats: Bool) {
         self.info = info
+        self.label = label
         self.decoder = decoder
         self.first = first
         self.repeats = repeats
         current = first
+        fileRate = Double(info.frameCount) * 1000 / Double(max(info.loopMillis, 1))
     }
 
     /// The animation of [data] decoded for a view of [maxWidth] × [maxHeight] pixels (``AnimatedPlayback/decodeSize``) with
     /// its first frame ready; nil when it does not play or cannot be decoded. [repeats]: forever, else once.
-    static func load(_ data: Data, maxWidth: Int, maxHeight: Int = .max, fit: Bool = false, repeats: Bool = true,
+    static func load(_ data: Data, label: String, maxWidth: Int, maxHeight: Int = .max, fit: Bool = false, repeats: Bool = true,
                      render: (@Sendable (CGImage) -> CGImage?)? = nil) async -> AnimationPlayer? {
         let loaded = await Task.detached(priority: .userInitiated) { () -> (AnimatedImageInfo, AnimatedFrameDecoder, CGImage)? in
             guard let info = AnimatedImageInfo.of(data) else { return nil }
@@ -137,13 +159,14 @@ final class AnimationPlayer {
             return (info, decoder, first)
         }.value
         guard let loaded, !Task.isCancelled else { return nil }
-        return AnimationPlayer(info: loaded.0, decoder: loaded.1, first: loaded.2, repeats: repeats)
+        return AnimationPlayer(info: loaded.0, label: label, decoder: loaded.1, first: loaded.2, repeats: repeats)
     }
 
     /// Repeats forever from now on (a looped hero whose next pass could not be decoded).
     func repeatForever() {
         repeats = true
         clock?.repeats = true
+        prefetch()
     }
 
     /// The pass has ended on its last frame.
@@ -158,11 +181,10 @@ final class AnimationPlayer {
             return current
         }
         let upcoming = clock.nextIndex
-        if clock.draw(at: now, ready: upcoming != nil && next?.index == upcoming), let next {
-            current = next.image
-            self.next = nil
-        }
+        let shown = clock.draw(at: now, ready: upcoming != nil && ahead.first?.index == upcoming)
+        if shown { current = ahead.removeFirst().image }
         self.clock = clock
+        ArtFPS.drew(label, at: now, shown: shown, waited: clock.waiting, width: first.width, height: first.height, fileRate: fileRate)
         prefetch()
         return current
     }
@@ -171,18 +193,32 @@ final class AnimationPlayer {
     func restart() {
         clock = nil
         current = first
-        next = nil
+        ahead = []
         decoding = nil
+        generation += 1
     }
 
+    /// Decodes the frame after the last one decoded, while fewer than ``lookahead`` are; each decoded frame asks for the
+    /// next one at once, a frame that cannot be decoded is asked for again at the next display frame.
     private func prefetch() {
-        guard let index = clock?.nextIndex, next?.index != index, decoding != index else { return }
+        guard decoding == nil, ahead.count < Self.lookahead, let clock, !clock.finished,
+              let index = clock.index(after: ahead.last?.index ?? clock.index) else { return }
         decoding = index
+        let generation = generation
+        #if DEBUG
+        let asked = ContinuousClock.now
+        #endif
         Task { [weak self, decoder] in
             let image = await decoder.frame(index)
-            guard let self, self.decoding == index else { return }
+            guard let self, self.generation == generation else { return }
             self.decoding = nil
-            if let image { self.next = (index, image) }
+            guard let image else { return }
+            #if DEBUG
+            let waited = ContinuousClock.now - asked
+            ArtFPS.decoded(label, millis: Double(waited.components.seconds) * 1000 + Double(waited.components.attoseconds) / 1e15)
+            #endif
+            ahead.append((index, image))
+            prefetch()
         }
     }
 }
@@ -242,7 +278,7 @@ struct AnimatedArtLayer: View {
             player = nil
             covering?.wrappedValue = false
             guard playing, let source else { return }
-            guard let loaded = await AnimationPlayer.load(source.data, maxWidth: width, maxHeight: height, fit: fit) else { return }
+            guard let loaded = await AnimationPlayer.load(source.data, label: source.key, maxWidth: width, maxHeight: height, fit: fit) else { return }
             player = loaded
             withAnimation(Motion.fadeIn) { shown = true } completion: { if shown { covering?.wrappedValue = true } }
         }

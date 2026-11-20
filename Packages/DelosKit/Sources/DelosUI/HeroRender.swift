@@ -102,7 +102,37 @@ enum HeroRender {
     }
 }
 
-/// An RGBA bitmap, 8 bits per channel, premultiplied, its first row at the top.
+/// How the frames of an animated game background are made (`HeroLive`): decoded no wider than the render draws them (and
+/// never above ``AnimatedPlayback/heroWidth``), then rendered exactly like the still one (``HeroRender/frame(_:blur:area:extension:)``),
+/// over the still first frame's extension for a wide hero.
+struct HeroFrameRender: Sendable {
+    /// The longest side a frame is decoded at, at most (``AnimationPlayer/load(_:maxWidth:maxHeight:fit:repeats:render:)``'s maxWidth).
+    let decodeWidth: Int
+    private let blur: Int
+    private let area: HeroArea
+    private let underlay: CGImage?
+
+    /// The frames of the animation whose still first frame is [still]; nil when a wide hero's extension cannot be made. Renders
+    /// that extension: call off the main thread.
+    init?(still: CGImage, blur: Int, area: HeroArea) {
+        let layout = HeroGeometry.layout(area, width: still.width, height: still.height)
+        underlay = layout.extended ? HeroRender.extensionImage(still, area: area) : nil
+        if layout.extended, underlay == nil { return nil }
+        let drawn = Int((layout.width * Double(blur > 0 ? HeroRender.width : HeroRender.sharpWidth) / area.width).rounded())
+        decodeWidth = min(AnimatedPlayback.heroWidth, max(drawn, 1))
+        self.blur = blur
+        self.area = area
+    }
+
+    /// Decoded frame [image], rendered.
+    func frame(_ image: CGImage) -> CGImage? {
+        HeroRender.frame(image, blur: blur, area: area, extension: underlay)
+    }
+}
+
+/// An RGBA bitmap, 8 bits per channel, premultiplied, its first row at the top. What runs on every frame of an animated
+/// game background is CoreGraphics' or Accelerate's work, never a loop over the pixels in Swift: unoptimized (a debug
+/// build) such loops took about 100 ms a frame, and the background played at a few frames a second.
 struct Bitmap {
     let width: Int
     let height: Int
@@ -117,6 +147,53 @@ struct Bitmap {
 
     private static let space = CGColorSpace(name: CGColorSpace.sRGB)!
     private static let info = CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+
+    /// Runs [body] with the pixels as a vImage buffer.
+    private mutating func withBuffer(_ body: (vImage_Buffer) -> Void) {
+        let (w, h) = (width, height)
+        pixels.withUnsafeMutableBytes { bytes in
+            body(vImage_Buffer(data: bytes.baseAddress, height: vImagePixelCount(h), width: vImagePixelCount(w), rowBytes: w * 4))
+        }
+    }
+
+    /// Multiplies every row by its opacity, which [opacity] gives for row y: the same across the row (`left == right`) or
+    /// running linearly from `left` (the first pixel) to `right` (the last one), within 0 to 1. The channels are rounded,
+    /// or truncated without [rounded]. A row at full opacity is not touched, one at none is cleared.
+    private mutating func fade(rounded: Bool, _ opacity: (_ y: Int) -> (left: Double, right: Double)) {
+        let (w, h, count) = (width, height, width * 4)
+        var scratch = [Double](repeating: 0, count: count + w)
+        pixels.withUnsafeMutableBufferPointer { pixels in
+            scratch.withUnsafeMutableBufferPointer { scratch in
+                guard let first = pixels.baseAddress, let values = scratch.baseAddress else { return }
+                let ramp = values + count
+                var (low, high) = (0.0, 1.0)
+                for y in 0..<h {
+                    let (left, right) = opacity(y)
+                    if left >= 1, right >= 1 { continue }
+                    let row = first + y * count
+                    if left <= 0, right <= 0 {
+                        row.update(repeating: 0, count: count)
+                        continue
+                    }
+                    vDSP_vfltu8D(row, 1, values, 1, vDSP_Length(count))
+                    if left == right || w == 1 {
+                        var k = min(max(left, 0), 1)
+                        vDSP_vsmulD(values, 1, &k, values, 1, vDSP_Length(count))
+                    } else {
+                        var (start, step) = (left, (right - left) / Double(w - 1))
+                        vDSP_vrampD(&start, &step, ramp, 1, vDSP_Length(w))
+                        vDSP_vclipD(ramp, 1, &low, &high, ramp, 1, vDSP_Length(w))
+                        for channel in 0..<4 { vDSP_vmulD(values + channel, 4, ramp, 1, values + channel, 4, vDSP_Length(w)) }
+                    }
+                    if rounded {
+                        vDSP_vfixru8D(values, 1, row, 1, vDSP_Length(count))
+                    } else {
+                        vDSP_vfixu8D(values, 1, row, 1, vDSP_Length(count))
+                    }
+                }
+            }
+        }
+    }
 
     /// Draws [image] into [rect], given from the top-left corner.
     mutating func draw(_ image: CGImage, in rect: CGRect) {
@@ -146,17 +223,22 @@ struct Bitmap {
         }
     }
 
-    /// Android's `ColorMatrix.setSaturation`: the luminance weights 0.213, 0.715, 0.072.
+    /// Android's `ColorMatrix.setSaturation`: the luminance weights 0.213, 0.715, 0.072; a color never above its alpha.
     mutating func saturate(_ s: Double) {
         let inv = 1 - s
-        let r = 0.213 * inv, g = 0.715 * inv, b = 0.072 * inv
-        for i in stride(from: 0, to: pixels.count, by: 4) {
-            let red = Double(pixels[i]), green = Double(pixels[i + 1]), blue = Double(pixels[i + 2])
-            let limit = Double(pixels[i + 3])
-            func clamp(_ v: Double) -> UInt8 { UInt8(min(max(v, 0), limit).rounded()) }
-            pixels[i] = clamp((r + s) * red + g * green + b * blue)
-            pixels[i + 1] = clamp(r * red + (g + s) * green + b * blue)
-            pixels[i + 2] = clamp(r * red + g * green + (b + s) * blue)
+        let weights = [0.213 * inv, 0.715 * inv, 0.072 * inv]
+        // Pixels are rows multiplied by the matrix (a source channel's row, a result channel's column), in 1/16384ths
+        let divisor: Int32 = 1 << 14
+        var matrix = [Int16](repeating: 0, count: 16)
+        for from in 0..<3 {
+            for to in 0..<3 { matrix[from * 4 + to] = Int16(((weights[from] + (from == to ? s : 0)) * Double(divisor)).rounded()) }
+        }
+        matrix[15] = Int16(divisor)
+        let rounding = [Int32](repeating: divisor / 2, count: 4)
+        withBuffer { buffer in
+            var (src, dest) = (buffer, buffer)
+            vImageMatrixMultiply_ARGB8888(&src, &dest, matrix, divisor, nil, rounding, vImage_Flags(kvImageNoFlags))
+            vImageClipToAlpha_RGBA8888(&src, &dest, vImage_Flags(kvImageNoFlags))
         }
     }
 
@@ -174,22 +256,22 @@ struct Bitmap {
     /// Fades the rows from [start] (opaque) to [end] (gone) along ``HeroGeometry/fadeStops``; rows below [end] are cleared.
     mutating func fadeRows(from start: Double, to end: Double) {
         let length = max(end - start, 1)
-        for y in 0..<height {
+        fade(rounded: true) { y in
             let center = Double(y) + 0.5
-            guard center > start else { continue }
-            let k = HeroGeometry.fadeOpacity((center - start) / length)
-            for i in stride(from: y * width * 4, to: (y + 1) * width * 4, by: 1) {
-                pixels[i] = UInt8((Double(pixels[i]) * k).rounded())
-            }
+            let k = center > start ? HeroGeometry.fadeOpacity((center - start) / length) : 1
+            return (k, k)
         }
     }
 
     /// [top] drawn over this bitmap (both premultiplied, same size).
     mutating func composite(_ top: Bitmap) {
-        for i in stride(from: 0, to: pixels.count, by: 4) {
-            let keep = 255 - Int(top.pixels[i + 3])
-            for c in 0..<4 {
-                pixels[i + c] = UInt8(min(255, Int(top.pixels[i + c]) + (Int(pixels[i + c]) * keep + 127) / 255))
+        top.pixels.withUnsafeBytes { above in
+            withBuffer { below in
+                // Read only: the top image is the blend's first source
+                var src = vImage_Buffer(data: UnsafeMutableRawPointer(mutating: above.baseAddress), height: below.height,
+                                        width: below.width, rowBytes: below.rowBytes)
+                var (under, dest) = (below, below)
+                vImagePremultipliedAlphaBlend_BGRA8888(&src, &under, &dest, vImage_Flags(kvImageNoFlags))
             }
         }
     }
@@ -213,18 +295,12 @@ struct Bitmap {
         }
     }
 
-    /// Opaque in the top-right corner, gone in the bottom-left one (gradient stops 0.3 → 0.95, `fadeDiagonally`).
+    /// Opaque in the top-right corner, gone in the bottom-left one (gradient stops 0.3 → 0.95, `fadeDiagonally`), along the
+    /// diagonal between them.
     mutating func fadeDiagonally() {
-        let dx = -Double(width), dy = Double(height)
+        let (w, dx, dy) = (width, -Double(width), Double(height))
         let length2 = dx * dx + dy * dy
-        for y in 0..<height {
-            for x in 0..<width {
-                let t = (Double(x - width) * dx + Double(y) * dy) / length2
-                let a = min(max((0.95 - t) / 0.65, 0), 1)
-                guard a < 1 else { continue }
-                let i = (y * width + x) * 4
-                for c in 0..<4 { pixels[i + c] = UInt8(Double(pixels[i + c]) * a) }
-            }
-        }
+        func opacity(_ x: Int, _ y: Int) -> Double { (0.95 - (Double(x - w) * dx + Double(y) * dy) / length2) / 0.65 }
+        fade(rounded: false) { y in (opacity(0, y), opacity(w - 1, y)) }
     }
 }

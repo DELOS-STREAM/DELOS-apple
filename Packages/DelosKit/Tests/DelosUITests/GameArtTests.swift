@@ -214,6 +214,37 @@ import Testing
         stripe.boxBlur(radius: 1, passes: 1)
         #expect(stripe.pixels[4 * 4] == 85 && stripe.pixels[3 * 4] == 85 && stripe.pixels[0] == 0)
     }
+
+    @Test func theBandFadesAlongItsStopsAndIsLaidOverTheExtension() throws {
+        var band = try #require(Bitmap(width: 4, height: 20))
+        band.pixels = [UInt8](repeating: 255, count: 4 * 20 * 4)
+        band.fadeRows(from: 5, to: 15)
+        let row = { (y: Int) in band.pixels[y * 16 + 3] }
+        // Opaque above the fade, gone below it, and on the smoothstep between (row 9's centre: 0.569)
+        #expect(row(4) == 255 && row(15) == 0 && row(19) == 0)
+        #expect(abs(Int(row(9)) - 145) <= 3, "row 9 \(row(9))")
+        #expect((5..<15).allSatisfy { row($0) >= row($0 + 1) })
+        var under = try #require(Bitmap(width: 1, height: 1))
+        under.pixels = [0, 0, 255, 255]
+        var top = try #require(Bitmap(width: 1, height: 1))
+        top.pixels = [128, 0, 0, 128]
+        under.composite(top)
+        #expect(under.pixels == [128, 0, 127, 255])
+    }
+
+    @Test func aLiveFrameOfTheFirstFrameLooksExactlyLikeTheStill() throws {
+        for (width, height) in [(1920, 620), (600, 900)] {
+            let source = try image(width: width, height: height, left: (220, 30, 30), right: (30, 60, 220))
+            let area = HeroArea.of(stageWidth: 1920, stageHeight: 1440)
+            let still = try #require(HeroRender.render(source, blur: 5, area: area)?.image)
+            let live = try #require(HeroFrameRender(still: source, blur: 5, area: area)?.frame(source))
+            var a = try #require(Bitmap(width: still.width, height: still.height))
+            var b = try #require(Bitmap(width: live.width, height: live.height))
+            a.draw(still, in: CGRect(x: 0, y: 0, width: still.width, height: still.height))
+            b.draw(live, in: CGRect(x: 0, y: 0, width: live.width, height: live.height))
+            #expect(a.pixels == b.pixels, "\(width)x\(height)")
+        }
+    }
 }
 
 @Suite struct BackdropTintsTests {

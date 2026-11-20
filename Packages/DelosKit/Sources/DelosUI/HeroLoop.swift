@@ -68,13 +68,13 @@ final class LoopedAnimation {
     }
 
     /// The looping animation of [data] decoded no wider than [maxWidth], each frame passed through [render]; nil when it does
-    /// not play.
-    static func load(_ data: Data, maxWidth: Int, render: @escaping @Sendable (CGImage) -> CGImage?) async -> LoopedAnimation? {
-        guard let first = await AnimationPlayer.load(data, maxWidth: maxWidth, repeats: false, render: render) else { return nil }
+    /// not play. [label] names it (all its passes) in the debug build's ``ArtFPS`` lines.
+    static func load(_ data: Data, label: String, maxWidth: Int, render: @escaping @Sendable (CGImage) -> CGImage?) async -> LoopedAnimation? {
+        guard let first = await AnimationPlayer.load(data, label: label, maxWidth: maxWidth, repeats: false, render: render) else { return nil }
         let timeline = HeroLoopTimeline.of(loopMillis: first.info.loopMillis)
         if timeline == nil { first.repeatForever() }
         return LoopedAnimation(first: first, timeline: timeline) {
-            await AnimationPlayer.load(data, maxWidth: maxWidth, repeats: false, render: render)
+            await AnimationPlayer.load(data, label: label, maxWidth: maxWidth, repeats: false, render: render)
         }
     }
 
