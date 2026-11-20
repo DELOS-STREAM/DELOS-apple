@@ -230,15 +230,36 @@ import Testing
         shell.press(.toastAction)
         await shell.host.until { shell.navigator.screenModal != nil }
         let sheet = try! #require(shell.navigator.screenModal)
-        await shell.host.until { sheet.registeredFrames[LibraryFilterIDs.done] != nil }
-        // B and Y close it anywhere, A on Done
-        if close == .accept { sheet.focus(LibraryFilterIDs.done) }
+        await shell.host.until { sheet.registeredFrames[LibraryFilterIDs.show] != nil }
+        // B and Y close it anywhere, A on the "Show N apps" pill
+        if close == .accept { sheet.focus(LibraryFilterIDs.show) }
         shell.letGatesPass()
         shell.press(close)
         await shell.host.until { shell.navigator.screenModal == nil }
         #expect(shell.navigator.screenModal == nil)
         #expect(shell.focused == "app-1")
         await shell.expectTheDPadMovesTheLibrary(from: "app-1")
+    }
+
+    @Test(arguments: [MenuCommand.back, .toastAction])
+    func theSheetsChoicesFilterTheLibraryOnlyOnceConfirmed(_ close: MenuCommand) async {
+        let shell = await library(seeded: true)
+        let filters = shell.fx.actions.libraryFilters
+        shell.press(.toastAction)
+        await shell.host.until { shell.navigator.screenModal != nil }
+        let sheet = try! #require(shell.navigator.screenModal)
+        await shell.host.until { sheet.registeredFrames[LibraryFilterIDs.genre(31)] != nil }
+        shell.letGatesPass()
+        // Two genres and HDR: the chips toggle, the library stays as it is
+        for chip in [LibraryFilterIDs.genre(5), LibraryFilterIDs.genre(31), LibraryFilterIDs.hdr(.hdr)] {
+            sheet.focus(chip)
+            shell.press(.accept)
+        }
+        #expect(filters.filters(hostID: hostID) == MetadataFilters())
+        // B drops the choices, Y applies them
+        shell.press(close)
+        await shell.host.until { shell.navigator.screenModal == nil }
+        #expect(filters.filters(hostID: hostID) == (close == .toastAction ? MetadataFilters(genres: [5, 31], hdr: [.hdr]) : MetadataFilters()))
     }
 
     // MARK: The portal

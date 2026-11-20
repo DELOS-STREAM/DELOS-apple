@@ -426,6 +426,7 @@ public struct DelosRoot: View {
         let input = MenuInput { command, repeatCount in router.route(command, repeatCount: repeatCount) }
         #endif
         input.typing = navigator.isEditingText
+        router.input = input
         input.start()
         self.input = input
         // A controller whose Home button the system keeps: the notice, once per launch, on the interface or over a stream

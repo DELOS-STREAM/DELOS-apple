@@ -129,28 +129,72 @@ public struct GameMetadataState: Equatable, Sendable {
     }
 }
 
-public enum HDRFilter: String, Codable, Sendable { case any, hdr, sdr, unknown }
-public enum LengthFilter: String, Codable, Sendable { case any, under10, from10To30, from30To60, over60, unknown }
+public enum HDRFilter: String, Codable, Sendable, CaseIterable { case hdr, sdr, unknown }
+public enum LengthFilter: String, Codable, Sendable, CaseIterable { case under10, from10To30, from30To60, over60, unknown }
+
+/// The library filter: each row (genres, themes, HDR support, length) keeps the values chosen in it. A game matches a row with
+/// any of its values (an empty row matches every game) and the filter when it matches every row.
 public struct MetadataFilters: Codable, Equatable, Sendable {
-    public var genreID: Int?
-    public var themeID: Int?
-    public var hdr: HDRFilter
-    public var length: LengthFilter
-    public init(genreID: Int? = nil, themeID: Int? = nil, hdr: HDRFilter = .any, length: LengthFilter = .any) {
-        self.genreID = genreID; self.themeID = themeID; self.hdr = hdr; self.length = length
+    public var genres: Set<Int>
+    public var themes: Set<Int>
+    public var hdr: Set<HDRFilter>
+    public var length: Set<LengthFilter>
+    public init(genres: Set<Int> = [], themes: Set<Int> = [], hdr: Set<HDRFilter> = [], length: Set<LengthFilter> = []) {
+        self.genres = genres; self.themes = themes; self.hdr = hdr; self.length = length
     }
-    public var activeCount: Int { (genreID == nil ? 0 : 1) + (themeID == nil ? 0 : 1) + (hdr == .any ? 0 : 1) + (length == .any ? 0 : 1) }
+    /// How many values narrow the library, over all rows (two genres and HDR: 3).
+    public var activeCount: Int { genres.count + themes.count + hdr.count + length.count }
     public var active: Bool { activeCount > 0 }
+
+    public mutating func toggleGenre(_ id: Int) { Self.toggle(id, in: &genres) }
+    public mutating func toggleTheme(_ id: Int) { Self.toggle(id, in: &themes) }
+    public mutating func toggleHDR(_ value: HDRFilter) { Self.toggle(value, in: &hdr) }
+    public mutating func toggleLength(_ value: LengthFilter) { Self.toggle(value, in: &length) }
+
+    private static func toggle<T>(_ value: T, in set: inout Set<T>) {
+        if set.remove(value) == nil { set.insert(value) }
+    }
+
     public func matches(_ metadata: GameMetadata?, builtIn: Bool = false) -> Bool {
         if builtIn { return !active }
-        if let genreID, metadata?.candidate?.genres.contains(where: { $0.id == genreID }) != true { return false }
-        if let themeID, metadata?.candidate?.themes.contains(where: { $0.id == themeID }) != true { return false }
+        if !genres.isEmpty, metadata?.candidate?.genres.contains(where: { genres.contains($0.id) }) != true { return false }
+        if !themes.isEmpty, metadata?.candidate?.themes.contains(where: { themes.contains($0.id) }) != true { return false }
         let support = metadata?.hdr.support ?? .unknown
-        if hdr != .any, hdr.rawValue != support.rawValue { return false }
+        if !hdr.isEmpty, !hdr.contains(where: { $0.rawValue == support.rawValue }) { return false }
         let seconds = metadata?.completion?.seconds ?? 0
+        return length.isEmpty || length.contains { $0.matches(seconds) }
+    }
+
+    private enum CodingKeys: String, CodingKey { case genres, themes, hdr, length, genreID, themeID }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(genres.sorted(), forKey: .genres)
+        try c.encode(themes.sorted(), forKey: .themes)
+        try c.encode(hdr.map(\.rawValue).sorted(), forKey: .hdr)
+        try c.encode(length.map(\.rawValue).sorted(), forKey: .length)
+    }
+
+    /// Also reads a filter kept while a row held one value (`genreID`, `themeID`, and one name for HDR and length, "any" for none).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func names(_ key: CodingKeys) -> [String] {
+            (try? c.decodeIfPresent([String].self, forKey: key)) ?? (try? c.decodeIfPresent(String.self, forKey: key)).map { [$0] } ?? []
+        }
+        func ids(_ key: CodingKeys, old: CodingKeys) -> Set<Int> {
+            if let ids = try? c.decodeIfPresent([Int].self, forKey: key) { return Set(ids) }
+            return Set((try? c.decodeIfPresent(Int.self, forKey: old)).map { [$0] } ?? [])
+        }
+        self.init(
+            genres: ids(.genres, old: .genreID), themes: ids(.themes, old: .themeID),
+            hdr: Set(names(.hdr).compactMap(HDRFilter.init(rawValue:))), length: Set(names(.length).compactMap(LengthFilter.init(rawValue:))))
+    }
+}
+
+private extension LengthFilter {
+    func matches(_ seconds: Int64) -> Bool {
         let known = seconds > 0
-        switch length {
-        case .any: return true
+        switch self {
         case .unknown: return !known
         case .under10: return known && seconds < 36_000
         case .from10To30: return known && seconds >= 36_000 && seconds < 108_000

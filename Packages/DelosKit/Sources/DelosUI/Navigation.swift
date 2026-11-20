@@ -157,6 +157,9 @@ public final class Navigator {
     /// Whether the command being handled is the Siri Remote's Menu or Play/Pause (tvOS): not a button of a game
     /// controller, whose buttons the stream sends to the PC.
     @ObservationIgnored public internal(set) var commandFromRemote = false
+    /// Whether the command being handled (an accept) is the keyboard's Return or Enter, not Space, A or a click: the library
+    /// filter applies its choices with it.
+    @ObservationIgnored public internal(set) var commandFromReturn = false
 
     public init(root: Screen, focus: AnyHashable? = nil) {
         stack = [Entry(screen: root, focus: FocusModel(initial: focus))]

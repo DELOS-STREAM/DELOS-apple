@@ -95,6 +95,8 @@ struct HomeScreen: View {
     /// The library filter's sheet (Y, or a tap on the hint bar's Filter): its focus is new each time it opens.
     @State private var sheetOpen = false
     @State private var sheetFocus = FocusModel()
+    /// The sheet's choices while it is open: the library keeps the applied filter until they are confirmed.
+    @State private var draft = LibraryFilterDraft()
     /// The item that had the focus before the sheet opened, to return to it.
     @State private var origin: AnyHashable?
     /// The library has games and information about them to filter by: Y and the button are there.
@@ -149,7 +151,7 @@ struct HomeScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // The screen under the sheet blurs like under every layer
             .modifier(LayerBackdropBlur(active: sheetOpen))
-            sheet(filters: filters, listed: listed)
+            sheet(listed: listed)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .screenModal(sheetOpen ? sheetFocus : nil)
@@ -183,10 +185,10 @@ struct HomeScreen: View {
             offered = now
             if !now, sheetOpen { closeSheet(silently: true) }
         }
-        .onChange(of: filters.active) { was, now in
-            // Reset disables itself once nothing is filtered; if it had the focus, the focus goes back to the first option
+        .onChange(of: draft.filters.active) { was, now in
+            // Reset disables itself once nothing is chosen; if it had the focus, the focus goes to the pill that applies the choices
             if was, !now, sheetOpen, sheetFocus.focused == AnyHashable(LibraryFilterIDs.reset) {
-                sheetFocus.focus(LibraryFilterIDs.start(filters, genres: LibraryFilter.genres(listed.map { metadata.data(for: $0) })))
+                sheetFocus.focus(LibraryFilterIDs.show)
             }
         }
         .onChange(of: ScreenFilter(label: offeredNow ? LibraryFilter.hintLabel(filters) : nil, open: sheetOpen), initial: true) { _, now in
@@ -204,14 +206,16 @@ struct HomeScreen: View {
 
     // MARK: Filter sheet
 
-    @ViewBuilder private func sheet(filters: MetadataFilters, listed: [HostApp]) -> some View {
+    @ViewBuilder private func sheet(listed: [HostApp]) -> some View {
         if sheetOpen {
             let games = listed.map { metadata.data(for: $0) }
-            let matching = games.indices.count { filters.matches(games[$0], builtIn: BundledArtwork.kind(listed[$0]) != nil) }
+            let choices = draft.filters
+            // Counted at every toggle: the title and the pill show what the choices would leave
+            let matching = games.indices.count { choices.matches(games[$0], builtIn: BundledArtwork.kind(listed[$0]) != nil) }
             LayerScrim(onTap: { closeSheet() })
             LibraryFilterSheet(
-                state: LibraryFilterState(filters: filters, games: games, matching: matching), focus: sheetFocus,
-                onChange: { actions.libraryFilters.set($0, hostID: hostID) }, onReset: resetFilters, onClose: { closeSheet() })
+                state: LibraryFilterState(filters: choices, games: games, matching: matching), focus: sheetFocus,
+                onEdit: { $0(&draft.filters) }, onReset: resetChoices, onConfirm: confirmSheet)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .transition(popTransition)
         }
@@ -238,11 +242,13 @@ struct HomeScreen: View {
         let games = listed.map { metadata.data(for: $0) }
         actions.layers.feedback?.play(.open)
         origin = focus.focused
+        draft = LibraryFilterDraft(applied: filters)
         sheetFocus = FocusModel(initial: LibraryFilterIDs.start(filters, genres: LibraryFilter.genres(games)))
         navigator.armInputGate()
         withAnimation { sheetOpen = true }
     }
 
+    /// Closes the sheet; choices that were not confirmed are dropped (the next opening starts from the applied filter).
     private func closeSheet(silently: Bool = false) {
         guard sheetOpen else { return }
         if !silently { actions.layers.feedback?.play(.back) }
@@ -255,14 +261,29 @@ struct HomeScreen: View {
         if stillThere, let origin { focus.focus(origin) }
     }
 
+    /// Applies the sheet's choices to the library and closes it (the "Show N apps" pill, Y, Return on a chip).
+    private func confirmSheet() {
+        guard sheetOpen else { return }
+        if let confirmed = draft.confirmed { actions.libraryFilters.set(confirmed, hostID: hostID) }
+        closeSheet()
+    }
+
+    /// The filtered-empty library's reset: the applied filter goes at once.
     private func resetFilters() {
         guard filters.active else { return }
         actions.layers.feedback?.play(.select)
         actions.libraryFilters.set(MetadataFilters(), hostID: hostID)
     }
 
-    /// Y opens the filter; with the sheet open it has every command: X resets, Y and B close it. A toast that has its own
-    /// action keeps Y.
+    /// The sheet's Reset (X): clears the choices, which apply on confirm.
+    private func resetChoices() {
+        guard draft.filters.active else { return }
+        actions.layers.feedback?.play(.select)
+        draft.reset()
+    }
+
+    /// Y opens the filter; with the sheet open it has every command: A (Space) toggles a chip, X resets the choices, Y and
+    /// Return on a chip apply them, B drops them. A toast that has its own action keeps Y.
     private func capture(_ command: MenuCommand) -> Bool {
         if sheetOpen { return captureSheet(command) }
         guard command == .toastAction, offered, actions.toasts.current?.action == nil else { return false }
@@ -273,12 +294,16 @@ struct HomeScreen: View {
     private func captureSheet(_ command: MenuCommand) -> Bool {
         let feedback = actions.layers.feedback
         switch command {
-        case .back, .toastAction:
+        case .back:
             closeSheet()
+        case .toastAction:
+            confirmSheet()
         case .options:
-            resetFilters()
+            resetChoices()
         case .accept:
             guard !navigator.swallowsAccept() else { break }
+            // The keyboard's Return on a chip applies the choices; Space and A toggle the chip, Return on a pill presses it
+            if navigator.commandFromReturn, LibraryFilterIDs.section(of: sheetFocus.focused) != nil { confirmSheet(); break }
             if let feedback { feedback.activate(sheetFocus.acceptCue) { sheetFocus.handle(.accept) } } else { sheetFocus.handle(.accept) }
         case .up, .down, .left, .right:
             if sheetFocus.handle(command) { feedback?.play(.move) }

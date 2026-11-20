@@ -24,6 +24,8 @@ final class ShellRouter {
     @ObservationIgnored let actions: ShellActions
     /// The sounds and haptics; nil until the input starts (the commands then play nothing).
     @ObservationIgnored var feedback: Feedback?
+    /// The controller and keyboard input, read for where the command being routed comes from (``MenuInput/fromReturn``).
+    @ObservationIgnored weak var input: MenuInput?
     /// A quick setting of the side menu stepped by a direction (1 or -1): applied and kept with the current profile's
     /// appearance by the root, which owns it. False when nothing changed.
     @ObservationIgnored var stepQuickSetting: (_ id: String, _ direction: Int) -> Bool = { _, _ in false }
@@ -188,6 +190,7 @@ final class ShellRouter {
         }
         navigator.commandRepeat = repeatCount
         navigator.commandFromRemote = fromRemote
+        navigator.commandFromReturn = input?.fromReturn ?? false
         if let sideMenu {
             // The side menu takes every command while it is open
             switch command {

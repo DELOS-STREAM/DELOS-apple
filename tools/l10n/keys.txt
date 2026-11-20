@@ -223,7 +223,7 @@ filters_length_30_60
 filters_length_over_60
 filters_length_unknown
 filters_reset
-filters_done
+filters_show
 metadata_filtered_title
 metadata_filtered_note
 metadata_filtered_reset
@@ -794,6 +794,7 @@ pan_zoom_mode_disabled
 
 # Hint bar (button hints, shown with the connected controller's glyphs) and the library note
 shell_hint_select
+shell_hint_apply
 shell_hint_back
 shell_hint_back_to_library
 shell_hint_close

@@ -1466,7 +1466,8 @@ pointer, touch) and, for a controller, the glyph family (`PadFamily`). The hint 
   once. A tappable hint (the library's Filter) stays a pill for touch and pointer and becomes its key (F) for the
   keyboard. The toast's action shows its Y button only for a controller; a finger or a pointer presses the chip.
 - **Key map** (`MenuInput.keyCommand`, the keys are positions, HID usages, the same on every layout): the arrows move;
-  Return, Enter and Space are A (start, select, change); Esc is B (back, close); Tab is the left menu button (the side
+  Return, Enter and Space are A (start, select, change; in the library filter Space toggles a chip and Return on a chip
+  applies the choices, `MenuInput.fromReturn`, `Navigator.commandFromReturn`); Esc is B (back, close); Tab is the left menu button (the side
   menu, and Tab or Esc closes it); O and the PC keyboard's menu key are the right menu button and X (the context menu,
   Options; a custom app setting's reset; the Artwork screen's search by name); F is Y (the library's filter, the Settings
   search, the Artwork filter, a toast's Undo); [ and ] are L1 and R1 (the tabs of Settings, app settings and Artwork);
@@ -1507,8 +1508,9 @@ pointer, touch) and, for a controller, the glyph family (`PadFamily`). The hint 
   the row is bottom anchored), and never lower than the glyphs clear the bottom safe edge.
 ### The library filter
 
-`LibraryFilters` (DelosUI, `@Observable`, UserDefaults) keeps each PC's `MetadataFilters` (genre, theme, HDR support,
-duration), the one Android keeps for all. `LibraryFilter.apply` lets the games through that `MetadataFilters.matches` accepts;
+`LibraryFilters` (DelosUI, `@Observable`, UserDefaults) keeps each PC's `MetadataFilters` (sets of genres, themes, HDR support
+and durations; a filter kept with one value per row is read as those values), the one Android keeps for all. A game matches
+a row with any of its values and the filter when it matches every row. `LibraryFilter.apply` lets the games through that `MetadataFilters.matches` accepts;
 DELOS's own entries pass only while nothing is filtered. The home screen (`HomeScreen`) asks `GameMetadataModel.ensureLibrary`
 for the whole library when it opens (the cached records first, then the due ones three at a time) so the chips are
 complete, shows the library through the filter and, while the service is configured and the library has games, offers the
@@ -1516,9 +1518,11 @@ filter: Y (`MenuCommand.toastAction`, which a toast with its own action keeps) o
 is a 52 px glass pill with the filter symbol before its label, so it reads as a button (`Hint.tappable`, `Hint.icon`,
 `HintBar.onTap`, faded in and out by the input kind), and presses the screen's Y. `LibraryFilterSheet` is Android's `FilterModal`: a glass panel (1240 stage
 pixels, the compact stage's margin of 48) with a title and the live count, a section per criterion with one row of chips
-that scrolls sideways (the genre and theme chips with their icon and the number of games), and Reset (X) and Done (Y, B)
-under them; the sections scroll when they do not fit and the focused one is brought into view. The choices apply at
-once, the focus starts on the selected genre, one focus ring glides over all chips, the screen behind the sheet blurs
+that scrolls sideways (the genre and theme chips with their icon and the number of games), and Reset (X) and "Show N apps"
+(Y, the live count of what the choices let through) under them; the sections scroll when they do not fit and the focused
+one is brought into view. A chip toggles its value in `LibraryFilterDraft`; the library changes only when the choices are
+confirmed, B drops them and Reset clears them; down from the last row goes to the pill. The focus starts on the first
+selected genre, one focus ring glides over all chips, the screen behind the sheet blurs
 under the layers' scrim. The sheet is the screen's own (like the Artwork screen's): `HomeScreen` captures the commands
 while it is open (`navigator.commandCapture`), tells the hint bar through `ScreenHints.filterLabel` and `sheetOpen`, and
 puts the library's focus back on the cover it had if the filter did not remove it. A filter that leaves nothing shows
