@@ -15,9 +15,10 @@ import UIKit
 /// key already (`MacAppDelegate`), and tvOS wants the system's focus engine.
 public enum MenuKeys {
     /// The four arrows, Space, Page Up and Down, Home and End: the keys that scroll (and, for the arrows, move the
-    /// focus of) every UIKit scroll view.
+    /// focus of) every UIKit scroll view; and Tab, which moves the iPad's keyboard focus between groups and is the side
+    /// menu's key here.
     public enum Key: CaseIterable, Sendable {
-        case upArrow, downArrow, leftArrow, rightArrow, space, pageUp, pageDown, home, end
+        case upArrow, downArrow, leftArrow, rightArrow, space, pageUp, pageDown, home, end, tab
 
         public var keyCode: GCKeyCode {
             switch self {
@@ -30,6 +31,7 @@ public enum MenuKeys {
             case .pageDown: .pageDown
             case .home: .home
             case .end: .end
+            case .tab: .tab
             }
         }
     }
@@ -54,6 +56,7 @@ extension MenuKeys.Key {
         case .pageDown: UIKeyCommand.inputPageDown
         case .home: UIKeyCommand.inputHome
         case .end: UIKeyCommand.inputEnd
+        case .tab: "\t"
         }
     }
 }

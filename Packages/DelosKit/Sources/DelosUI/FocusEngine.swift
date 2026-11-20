@@ -84,6 +84,15 @@ extension FocusGeometry {
             return ka < kb
         }?.key
     }
+
+    /// The candidate under the pointer at [point] (global points): of those whose frame holds it, the smallest (an item laid
+    /// over a bigger one is the one seen), ties to the smaller id. Nil over no item.
+    public static func item<ID: Hashable>(at point: CGPoint, candidates: [ID: CGRect]) -> ID? {
+        candidates.filter { $0.value.contains(point) }.min { a, b in
+            let (sa, sb) = (a.value.width * a.value.height, b.value.width * b.value.height)
+            return sa != sb ? sa < sb : "\(a.key)" < "\(b.key)"
+        }?.key
+    }
 }
 
 /// The focus of one screen on iPhone, iPad and Mac, where a game controller does not move SwiftUI's focus: the items
@@ -229,6 +238,15 @@ public final class FocusModel {
         guard let focused, let frame = frames[focused], let menu = menus[focused]?() else { return nil }
         return (menu, frame)
     }
+
+    /// The item under the pointer at [point] (global points) and its frame; nil over none (``FocusGeometry/item(at:candidates:)``).
+    func item(at point: CGPoint) -> (id: AnyHashable, frame: CGRect)? {
+        guard let id = FocusGeometry.item(at: point, candidates: frames), let frame = frames[id] else { return nil }
+        return (id, frame)
+    }
+
+    /// Whether [id] registered a context menu (it may still build none when it opens).
+    func hasMenu(_ id: AnyHashable) -> Bool { menus[id] != nil }
 
     /// Waits until [id]'s frame stops moving (the focus scrolled it into view: the library row glides the focused cover to
     /// its place), at most [limit]; a menu opened at once would stand where the item was before the scroll.
@@ -426,6 +444,11 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
     @Environment(\.focusReveal) private var reveal
     @State private var pressed = false
     @State private var release: Task<Void, Never>?
+    @Environment(\.modalFocus) private var modalFocus
+
+    /// A layer or the side menu is open and it is not this item's: the item cannot take the focus (tvOS: the system
+    /// focus; elsewhere the pointer's hover).
+    private var blocked: Bool { modalFocus != nil && modalFocus !== model }
 
     /// - Parameters:
     ///   - moves: where a direction leads from this item instead of the nearest item that way (iPhone, iPad and Mac;
@@ -510,11 +533,7 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
 
     #if os(tvOS)
     @FocusState private var systemFocused: Bool
-    @Environment(\.modalFocus) private var modalFocus
     @Environment(\.focusNamespace) private var scope
-
-    /// A layer or the side menu is open and it is not this item's: the item cannot take the system focus.
-    private var blocked: Bool { modalFocus != nil && modalFocus !== model }
 
     /// Asks the focus engine for the focus on this item, and again a moment later: it ignores a request made while the
     /// item has just appeared or the item that had the focus is going away (a layer opened), and then keeps the old
@@ -588,14 +607,25 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
             .onChange(of: focused) { _, now in if now { revealed(AnyHashable(id)) } }
             .onAppear { revealed(model.focused, animated: false) }
             .onTapGesture {
-                let wasFocused = model.focused == AnyHashable(id)
-                model.focus(AnyHashable(id))
+                let key = AnyHashable(id)
+                // The pointer focused the item when it moved over it: a click is never only the first tap that focuses
+                let wasFocused = model.focused == key || ControllerGlyphs.shared.kind == .pointer
+                model.focus(key)
                 if let tap {
                     pulse()
                     tap(wasFocused)
                 } else {
                     activate(action)
                 }
+            }
+            // The pointer moving over the item focuses it (docs/ARCHITECTURE.md, "Pointer"): global points, so content that
+            // scrolls under a pointer at rest does not take the focus
+            .onContinuousHover(coordinateSpace: .global) { phase in
+                guard case .active(let point) = phase, !blocked, PointerHover.shared.moved(to: point) else { return }
+                let key = AnyHashable(id)
+                guard model.focused != key else { return }
+                model.focus(key)
+                if PointerHover.shared.cues(at: .now) { layers?.feedback?.play(.move) }
             }
             .modifier(accessibility)
             .environment(\.pressed, pressed)

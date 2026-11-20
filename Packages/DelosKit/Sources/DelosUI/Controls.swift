@@ -188,6 +188,12 @@ func focusScale(focused: Bool, pressed: Bool, focus: Double) -> Double {
     pressed ? Motion.pressScale : focused ? focus : 1
 }
 
+/// The glow blur of a focusable element (CSS blur, stage pixels): a press pulses it to ``Motion/pressGlow`` times [blur],
+/// and it comes back with the squeeze.
+func focusGlow(_ blur: Double, pressed: Bool) -> Double {
+    pressed ? blur * Motion.pressGlow : blur
+}
+
 extension Animation {
     /// How the scale of a focusable element moves: the press in 120 ms, the focus 420 ms, both on the prototype's spring;
     /// nil (a jump) with reduced motion.
@@ -232,7 +238,7 @@ private struct FocusLook: ViewModifier {
                         }
                     }
                     .padding(-stage.px(glowSpread))
-                    .blur(radius: stage.px(glowBlur / 2))
+                    .blur(radius: stage.px(focusGlow(glowBlur, pressed: pressed) / 2))
                     .offset(y: stage.px(glowY))
                     .opacity(focused ? 1 : 0)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -277,7 +283,8 @@ private struct FocusLook: ViewModifier {
                     if let corner { SweepLight(shape: RoundedRectangle(cornerRadius: stage.px(corner)), focused: focused) } else { SweepLight(shape: Capsule(), focused: focused) }
                 }
             }
-            .shadow(color: focused && glowBlur > 0 && glowSpread == 0 ? colors.glow.color : .clear, radius: stage.px(glowBlur / 2), y: stage.px(glowY))
+            .shadow(color: focused && glowBlur > 0 && glowSpread == 0 ? colors.glow.color : .clear,
+                    radius: stage.px(focusGlow(glowBlur, pressed: pressed) / 2), y: stage.px(glowY))
             .animation(.focusRing(focused: focused), value: focused)
             .scaleEffect(focusScale(focused: focused, pressed: pressed, focus: scale), anchor: anchor)
             .zIndex(focused ? 1 : 0)

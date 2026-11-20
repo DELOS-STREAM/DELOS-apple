@@ -26,6 +26,34 @@ import Testing
         #expect(MenuInput.keyCommand(.application) == .options)
         #expect(MenuInput.keyCommand(.keyA) == nil)
     }
+
+    @Test func everyShellButtonHasAKey() {
+        // The keyboard reaches every action of the shell (#16): Tab the side menu, O the context menu, F the filter and
+        // search, [ and ] the tabs
+        #expect(MenuInput.keyCommand(.tab) == .menu)
+        #expect(MenuInput.keyCommand(.keyO) == .options)
+        #expect(MenuInput.keyCommand(.keyF) == .toastAction)
+        #expect(MenuInput.keyCommand(.openBracket) == .previousTab)
+        #expect(MenuInput.keyCommand(.closeBracket) == .nextTab)
+        #expect(MenuInput.keyCommand(.keypadEnter) == .accept)
+        #expect(MenuInput.keyCommand(.spacebar) == .accept)
+    }
+
+    @Test func aTextFieldKeepsItsLettersAndTabButNotTheArrowsReturnAndEscape() {
+        for key in [GCKeyCode.tab, .keyO, .keyF, .openBracket, .closeBracket, .application] {
+            #expect(MenuInput.keyCommand(key, typing: true) == nil, "\(key.rawValue)")
+        }
+        #expect(MenuInput.keyCommand(.escape, typing: true) == .back)
+        #expect(MenuInput.keyCommand(.returnOrEnter, typing: true) == .accept)
+        #expect(MenuInput.keyCommand(.downArrow, typing: true) == .down)
+    }
+
+    @Test func aKeyWithCommandControlOrOptionIsAShortcutNotOurs() {
+        // Command-Tab switches apps: it must not open the side menu on the way
+        #expect(MenuInput.keyCommand(.tab, modified: true) == nil)
+        #expect(MenuInput.keyCommand(.keyF, modified: true) == nil)
+        #expect(MenuInput.keyCommand(.leftArrow, modified: true) == nil)
+    }
 }
 
 @Suite struct MenuKeysTests {
@@ -42,7 +70,9 @@ import Testing
 
     @Test func theKeysThatScrollAreOwnedAndTheOthersAreNot() {
         for code in [GCKeyCode.pageUp, .pageDown, .home, .end] { #expect(MenuKeys.isOwned(code)) }
+        // Tab moves the iPad's keyboard focus between groups: it is the side menu's key here
+        #expect(MenuKeys.isOwned(.tab))
         // Return and Escape do not scroll, and a letter is a letter
-        for code in [GCKeyCode.returnOrEnter, .escape, .keyA, .tab] { #expect(!MenuKeys.isOwned(code)) }
+        for code in [GCKeyCode.returnOrEnter, .escape, .keyA, .keyF, .keyO] { #expect(!MenuKeys.isOwned(code)) }
     }
 }

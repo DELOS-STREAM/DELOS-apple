@@ -127,7 +127,8 @@ private struct TabPressStyle: ButtonStyle {
     }
 }
 
-/// The previous / next tab hint beside a row of tabs (the connected controller's L1 / R1, LB / RB, L / R); its border sits ``outset`` inside the room it takes (`ShoulderLabel`).
+/// The previous / next tab hint beside a row of tabs (the connected controller's L1 / R1, LB / RB, L / R; the keyboard's [ and
+/// ], ``KeyCap/of(_:)``); its border sits ``outset`` inside the room it takes (`ShoulderLabel`).
 struct ShoulderLabel: View {
     /// The room outside the border: the visible ends of a tab row sit this far inside the row (stage px, `SHOULDER_OUTSET`).
     static let outset = 10.0
@@ -136,7 +137,8 @@ struct ShoulderLabel: View {
     @Environment(\.stage) private var stage
 
     var body: some View {
-        Text(ControllerGlyphs.shared.mark(role).text ?? "")
+        let keyboard = ControllerGlyphs.shared.kind == .keyboard
+        Text(keyboard ? (role == .leftShoulder ? "[" : "]") : ControllerGlyphs.shared.mark(role).text ?? "")
             .font(DelosFonts.figtree(stage.tpx(18), .bold))
             .foregroundStyle(colors.text3.color)
             .padding(.horizontal, stage.px(12))

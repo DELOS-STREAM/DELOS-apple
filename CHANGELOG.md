@@ -9,6 +9,13 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Pointer (Magic Keyboard's trackpad, a mouse) in the shell, outside a stream: moving over an item focuses it with the
+  gliding focus ring, a click activates it with the press, a right click or a two-finger click opens the item's context
+  menu (Control-click on the Mac), and on the iPad the pointer hides over the items. The hint bar shows the trackpad's (iPad)
+  or the mouse's (Mac) click and secondary click.
+- Keyboard keys for every shell action, shown on the hint bar with key caps when the keyboard was used last: Tab the side
+  menu, O the context menu, F the filter and the Settings search, [ and ] the tabs, beside Return, Esc and the arrows.
+  Keys with Command, Control or Option, and the letters while a text field is typed in, are left alone.
 - The app icon: the mark of DELOS for Android (the gold ring and the blue moon on the dark background), drawn from its
   vector for iPhone and iPad (with a dark and a tinted variant), for the Mac (the rounded shape at every size) and for
   Apple TV (the layered icon and the Top Shelf images).
@@ -306,6 +313,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - Frame pacing lists Warp Drive and Warp 2 last (Phase Lock, Balanced, Balanced with FPS limit, Smoothest video, Warp
   Drive, Warp 2), and the video codec lists H.264, HEVC, AV1, then PyroWave after Automatic, so the familiar choices
   come first.
+- The press of an activation (A, Return, a tap, a click) squeezes the item to 0.96 (was 0.97) and pulses its focus glow
+  to 1.6 times its blur, then springs back.
 - The GPU impact chip shows the chip icon again instead of a graphics card, as in DELOS for Android: Apple devices have a
   system on a chip rather than a separate graphics card. The icon fonts and `Symbols.swift` are synced from Android.
 - Video frame pacing: Steady low latency takes the place of Lowest latency. Each frame is shown at the earliest refresh

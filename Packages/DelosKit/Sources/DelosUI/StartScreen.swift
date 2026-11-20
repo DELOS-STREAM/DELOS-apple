@@ -382,14 +382,18 @@ public struct DelosRoot: View {
                 await DemoHarness.waitForTarget(navigator: navigator, actions: actions)
                 if DemoHarness.streamMenu(step.command, navigator: navigator, router: router) { continue }
                 if await DemoHarness.sideDrag(step.command, router: router) { continue }
+                if await DemoHarness.secondaryClick(step.command, router: router) { continue }
                 if let command = DemoHarness.command(step.command) { router.route(command, repeatCount: 0) }
             }
         }
         #endif
-        // The keys that scroll or move the system focus (arrows, Space, Page, Home, End) are the interface's alone
+        // The keys that scroll or move the system focus (arrows, Space, Page, Home, End, Tab) are the interface's alone; the
+        // letters, Tab and the brackets are a text field's while it is typed in
         .ownsMenuKeys(typing: navigator.isEditingText)
-        // A touch or the pointer changes the kind of input the hints and the back arrow are drawn for
-        .tracksInputKind()
+        .onChange(of: navigator.isEditingText) { _, now in input?.typing = now }
+        // A touch or the pointer changes the kind of input the hints and the back arrow are drawn for; the pointer's right
+        // click and its look over the items go to the router
+        .tracksInputKind(router: router)
         // An "up" of a key may never come after the app lost the keyboard
         .onChange(of: scenePhase, initial: true) { _, now in
             if now != .active { input?.forgetDown() }
@@ -420,6 +424,7 @@ public struct DelosRoot: View {
         #else
         let input = MenuInput { command, repeatCount in router.route(command, repeatCount: repeatCount) }
         #endif
+        input.typing = navigator.isEditingText
         input.start()
         self.input = input
         // A controller whose Home button the system keeps: the notice, once per launch, on the interface or over a stream
