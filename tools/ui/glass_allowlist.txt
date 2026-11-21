@@ -71,6 +71,7 @@ ToastHost.swift | .background(Capsule().fill(gold.opacity(0.16).color)) | action
 # The base under cover art and images: the picture covers it
 ArtworkScreen.swift | shape.fill(colors.surface2.color) | a tile's base under its image
 GameOverviewParts.swift | Rectangle().fill(colors.surface2.color) | a remote image's base
+GameOverview.swift | Rectangle().fill(colors.surface2.color) | a trailer tile's base under its still
 HomeScreen.swift | shape.fill(colors.surface2.color) | a cover's base under its art
 
 # Before iOS, iPadOS, tvOS and macOS 26: a material where Liquid Glass is not available
