@@ -23,6 +23,14 @@ final class OverviewSession {
     var shown = false
     /// The flight has landed: the header's own cover shows instead of the flying one.
     var landed = false
+    /// The flight back has landed: the card shows again under the flying cover, which fades out before the overview goes.
+    var handedBack = false
+    /// Where the closing flight starts at the header when the page was pulled down to close it: the pulled cover's frame
+    /// (nil: the header slot).
+    var flightSlot: CGRect?
+    /// How the finger let go of the page it pulled down to close the overview: how far it was pulled and how fast it was
+    /// moving down (points, points per second); nil when Back closed it.
+    @ObservationIgnored var release: (pull: Double, speed: Double)?
     /// The card is the library's wide first cover (its own wide art in a landscape frame).
     @ObservationIgnored var wide = false
     /// The header cover's still picture (the card art: the SteamGridDB cover, else the PC's box art), from memory when the
@@ -99,21 +107,37 @@ struct OverviewDescent: Equatable {
 }
 
 /// What the dashboard's covers and hint ask of the overview: open it for a game, and the finger's drag of the focused
-/// cover (swipe up), which the cover follows with resistance before the flight starts from where the finger left it.
+/// cover (swipe up), which the cover follows on a rubber band before the flight starts from where the finger left it.
 @MainActor
 @Observable
 final class OverviewLauncher {
+    /// The cover a finger is swiping.
     var dragApp: Int?
+    /// The cover that shows the drag: the swiped one, also while it springs back.
+    var shownApp: Int?
+    /// How far the cover follows the finger (points, negative: up), how much of its rubber band that is (0…1) and how
+    /// near the swipe is to opening the overview on release (0…1).
     var dragOffset = 0.0
+    var dragShare = 0.0
+    var dragReady = 0.0
     @ObservationIgnored var open: (HostApp, Double) -> Void = { _, _ in }
     @ObservationIgnored var canOpen: (HostApp) -> Bool = { _ in false }
 
-    /// A drag of [app]'s focused cover moved by [translation] (points).
-    func drag(_ app: HostApp, translation: CGSize, slop: CGFloat) {
+    /// A drag of [app]'s focused cover moved by [translation] (points); [cap] is the most the cover rises and
+    /// [threshold] the finger's travel that opens the overview (points).
+    func drag(_ app: HostApp, translation: CGSize, slop: CGFloat, cap: CGFloat, threshold: CGFloat) {
         guard canOpen(app), translation.height < 0 || dragApp == app.id else { return }
         guard dragApp == app.id || CoverDragDirection.of(translation: translation, minimumDistance: slop) == .verticalSwipe else { return }
         dragApp = app.id
-        dragOffset = OverviewMotion.swipeFollow(translation.height)
+        shownApp = app.id
+        dragOffset = OverviewMotion.swipeFollow(translation.height, cap: cap)
+        dragShare = cap > 0 ? min(max(-dragOffset / cap, 0), 1) : 0
+        dragReady = threshold > 0 ? min(max(-translation.height / threshold, 0), 1) : 0
+    }
+
+    /// How far [appID]'s cover follows a drag (points), how much of its rubber band that is and how ready it is to open.
+    func follow(_ appID: Int) -> (offset: Double, share: Double, ready: Double) {
+        shownApp == appID ? (dragOffset, dragShare, dragReady) : (0, 0, 0)
     }
 
     /// The drag ended: far enough up opens the overview from there, else the cover springs back.
@@ -121,18 +145,31 @@ final class OverviewLauncher {
         guard dragApp == app.id else { return }
         if -translation.height > threshold {
             open(app, dragOffset)
-            dragOffset = 0
-            dragApp = nil
+            reset()
         } else {
             cancel(app)
         }
     }
 
-    /// A recognizer lost its touch: settle only its own cover and never turn a cancelled swipe into an open.
+    /// A recognizer lost its touch: settle only its own cover (the settle spring) and never turn a cancelled swipe into
+    /// an open.
     func cancel(_ app: HostApp) {
         guard dragApp == app.id else { return }
-        withAnimation(Motion.spring(500)) { dragOffset = 0 }
         dragApp = nil
+        withAnimation(OverviewMotion.settle) {
+            dragOffset = 0
+            dragShare = 0
+            dragReady = 0
+        }
+    }
+
+    /// No cover follows a drag any more (the overview took the swiped one, or it closed).
+    func reset() {
+        dragApp = nil
+        shownApp = nil
+        dragOffset = 0
+        dragShare = 0
+        dragReady = 0
     }
 }
 
@@ -165,13 +202,8 @@ struct GameOverview: View {
         }
         ZStack(alignment: .topLeading) {
             OverviewBackdrop(session: session)
-            let covers = HomeMetrics(stage: stage).covers
-            OverviewFlight(hostID: session.hostID, app: session.app, from: session.source,
-                           to: CGRect(x: stage.px(150 + stage.safe.leading), y: stage.px(150), width: stage.px(340), height: stage.px(510)),
-                           fromCorner: stage.px(covers.corner * CoverGeometry.focusScale), toCorner: stage.px(30),
-                           fromArt: session.flightFrom, toArt: session.flightTo, wide: session.wide, coverScale: covers.scale,
-                           progress: session.flight)
-                .opacity(session.landed ? 0 : 1)
+            // Its own view: the flight's start and the swap of covers do not evaluate the page again
+            OverviewFlightLayer(session: session)
             // The page rises with the flight (the settle spring) and sinks back as it closes (`page.animate`), transforms
             // only; its parts fade in and out on their own (``Rise``), the title flies and the cover lands
             page(content)
@@ -233,9 +265,13 @@ struct GameOverview: View {
             let pull = max(-now, 0)
             if pull != session.pull { session.pull = pull }
         }
-        .onScrollPhaseChange { old, now in
-            // Pulling the page down at its top closes the overview
-            if old == .interacting, now != .interacting, -session.scroll > stage.px(OverviewMotion.pullClose) { onClose() }
+        .onScrollPhaseChange { old, now, context in
+            // Pulling the page down at its top closes the overview: the cover flies back from where the finger left it,
+            // at its speed (the content offset's velocity is negative while the page moves down)
+            if old == .interacting, now != .interacting, -session.scroll > stage.px(OverviewMotion.pullClose) {
+                session.release = (pull: session.pull, speed: max(-(context.velocity?.dy ?? 0), 0))
+                onClose()
+            }
         }
         // The page fades out under the status bar and at the bottom (`.a-view`'s mask)
         .mask {
@@ -947,7 +983,7 @@ struct OverviewCover: View {
             .clipShape(RoundedRectangle(cornerRadius: stage.px(30), style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: stage.px(30), style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: stage.px(1)))
             .shadow(color: .black.opacity(0.7), radius: stage.px(60), y: stage.px(50))
-            .scaleEffect(1 - min(pull, 300) / 2400)
+            .scaleEffect(OverviewMotion.pullScale(pull))
             .opacity(session.landed ? 1 : 0)
             .accessibilityHidden(true)
     }
@@ -1111,7 +1147,7 @@ struct TitleCrossfade: ViewModifier {
 
     func body(content: Content) -> some View {
         let visible = here == shown
-        // Out over the first 40 % of the flight, in over its last 50 % (585 ms opening, 480 ms closing)
+        // Out over the first 40 % of the flight, in over its last 50 % (780 ms opening, 640 ms closing)
         let flight = (shown ? OverviewMotion.flight : OverviewMotion.flightBack) / 1000
         content
             .opacity(visible ? 1 : 0)
@@ -1261,6 +1297,23 @@ private struct OverviewCarousel: View {
     }
 }
 
+/// The session's flying cover (``OverviewFlight``), hidden while the header's own cover shows (landed) and once the
+/// flight back has handed the cover to the card.
+private struct OverviewFlightLayer: View {
+    let session: OverviewSession
+    @Environment(\.stage) private var stage
+
+    var body: some View {
+        let covers = HomeMetrics(stage: stage).covers
+        OverviewFlight(hostID: session.hostID, app: session.app, from: session.source,
+                       to: session.flightSlot ?? OverviewMotion.headerSlot(stage),
+                       fromCorner: stage.px(covers.corner * CoverGeometry.focusScale), toCorner: stage.px(30),
+                       fromArt: session.flightFrom, toArt: session.flightTo, wide: session.wide, coverScale: covers.scale,
+                       progress: session.flight)
+            .opacity(session.landed || session.handedBack ? 0 : 1)
+    }
+}
+
 /// The cover flying between the dashboard and the header (`Flight.cover`): a frame running from the card's place and size
 /// to the header slot's along a slight arc, its corners rounding from the card's to the slot's, and in it the pictures
 /// filling it as the cover does (cropped, the same scale on both axes, never stretched): the card's own picture (the wide
@@ -1370,8 +1423,12 @@ private struct FlightClip: Shape {
     }
 
     func path(in rect: CGRect) -> Path {
+        #if DEBUG && canImport(UIKit)
+        let drawn = progress
+        MainActor.assumeIsolated { OverviewFrameLog.shared.progress(drawn) }
+        #endif
         // The spring may pass its end a little; the corners never do
-        RoundedRectangle(cornerRadius: Motion.lerp(fromCorner, toCorner, min(max(progress, 0), 1)), style: .continuous).path(in: path.frame(progress))
+        return RoundedRectangle(cornerRadius: Motion.lerp(fromCorner, toCorner, min(max(progress, 0), 1)), style: .continuous).path(in: path.frame(progress))
     }
 }
 
@@ -1425,8 +1482,8 @@ struct CoverDescent: ViewModifier {
     func body(content: Content) -> some View {
         let mine = descent.appID == app.id
         let lift = descent.active && !mine && !reduced
-        let dragged = launcher?.dragApp == app.id ? launcher?.dragOffset ?? 0 : 0
-        // Away with the settle spring, 34 ms apart; back all together with the closing flight's spring
+        let follow = launcher?.follow(app.id) ?? (offset: 0, share: 0, ready: 0)
+        // Away with the settle spring, 45 ms apart; back all together with the closing flight's spring
         let motion = reduced ? OverviewMotion.reducedFade
             : descent.active ? OverviewMotion.settle.delay(Double(distance) * OverviewMotion.coverLiftStagger / 1000) : OverviewMotion.flightCloseSpring
         content
@@ -1435,31 +1492,67 @@ struct CoverDescent: ViewModifier {
             .opacity(descent.active ? 0 : 1)
             .animation(motion, value: descent.active)
             .animation(nil) { $0.opacity(mine ? 0 : 1) }
-            .offset(y: dragged)
+            // A swiped cover rises on its rubber band, grows by up to 3 % and fades a little near the top of it (never
+            // clipped)
+            .scaleEffect(1 + 0.03 * follow.share)
+            .offset(y: follow.offset)
+            .opacity(OverviewMotion.swipeOpacity(follow.share))
             #if os(iOS)
             .gesture(CoverSwipeGesture(
                 app: app, launcher: launcher, enabled: distance == 0 && !descent.active,
-                minimumDistance: OverviewMotion.swipeSlop, threshold: stage.px(OverviewMotion.swipeOpen)))
+                minimumDistance: OverviewMotion.swipeSlop, threshold: stage.px(OverviewMotion.swipeOpen), cap: stage.px(OverviewMotion.swipeCap)))
             #endif
+    }
+}
+
+/// The art inside a cover a finger swipes up: it zooms in by up to 7 % and sinks up to 12 px against the drag with the
+/// rubber band (``OverviewLauncher/follow(_:)``), inside the cover's clip.
+struct CoverSwipeArt: ViewModifier {
+    let appID: Int
+    @Environment(\.overviewLauncher) private var launcher
+    @Environment(\.stage) private var stage
+
+    func body(content: Content) -> some View {
+        let share = launcher?.follow(appID).share ?? 0
+        content
+            .scaleEffect(1 + 0.07 * share)
+            .offset(y: stage.px(12 * share))
     }
 }
 
 extension OverviewMotion {
     /// The cover's flight is a spring (interruptible: Back mid-flight turns it around from where it is, at its speed):
-    /// response 0.42 s, damping 0.72 out to the header (it overshoots by about 3.8 % and settles once); 0.36 s, 0.80
-    /// back to the card (about 1.5 %). The overshoot only grows the cover (``flightFrame(from:to:progress:lift:)``);
+    /// response 0.62 s, damping 0.74 out to the header (it overshoots by about 3.2 % and settles once); 0.55 s, 0.78
+    /// back to the card (about 2 %). The overshoot only grows the cover (``flightFrame(from:to:progress:lift:)``);
     /// the corners and the crossfades are clamped.
-    static let flightOpenSpring = Animation.spring(response: 0.42, dampingFraction: 0.72)
-    static let flightCloseSpring = Animation.spring(response: 0.36, dampingFraction: 0.8)
-    /// The page and its parts land with the same family: response 0.45 s, damping 0.78. An opacity it drives is
+    static let flightOpenSpring = Animation.spring(response: 0.62, dampingFraction: 0.74)
+    static let flightClose = Spring(response: 0.55, dampingRatio: 0.78)
+    static let flightCloseSpring = Animation.spring(flightClose)
+    /// The closing flight after the page was pulled down: the same spring, starting at the finger's [velocity] (flights
+    /// per second towards the card, ``pullHandoff(slot:pull:scale:speed:card:)``).
+    static func pullCloseSpring(velocity: Double) -> Animation { .interpolatingSpring(flightClose, initialVelocity: velocity) }
+    /// The page and its parts land with the same family: response 0.6 s, damping 0.8. An opacity it drives is
     /// clamped to 0…1 by the renderer, so it never overshoots.
-    static let settle = Animation.spring(response: 0.45, dampingFraction: 0.78)
-    /// The chips beside the ratings pop with response 0.4 s, damping 0.7.
-    static let chipSpring = Animation.spring(response: 0.4, dampingFraction: 0.7)
-    /// The header's parts leave with an ease-in over 180 ms.
-    static let leave = Animation.timingCurve(0.5, 0, 0.75, 0, duration: 0.18)
+    static let settle = Animation.spring(response: 0.6, dampingFraction: 0.8)
+    /// The tags, badges and chips pop with response 0.5 s, damping 0.7.
+    static let chipSpring = Animation.spring(response: 0.5, dampingFraction: 0.7)
+    /// The flying cover fades out over the card in 120 ms once the flight back has landed.
+    static let handBack = Animation.easeOut(duration: 0.12)
+    /// The header's parts leave with an ease-in over 240 ms.
+    static let leave = Animation.timingCurve(0.5, 0, 0.75, 0, duration: 0.24)
     /// Reduced motion: no springs, 280 ms fades.
     static let reducedFade = Animation.easeOut(duration: 0.28)
+
+    /// The header cover's slot (where the flight lands), points.
+    static func headerSlot(_ stage: Stage) -> CGRect {
+        CGRect(x: stage.px(150 + stage.safe.leading), y: stage.px(150), width: stage.px(340), height: stage.px(510))
+    }
+
+    /// The swiped cover's opacity at [share] of its rubber band: whole up to half of it, then down to 70 % at its top.
+    static func swipeOpacity(_ share: Double) -> Double {
+        let u = min(max((share - 0.5) / 0.5, 0), 1)
+        return 1 - 0.3 * u * u * (3 - 2 * u)
+    }
 }
 
 /// The overview's horizontal rows (Screenshots and videos, Similar games) move like the dashboard's covers: each step of

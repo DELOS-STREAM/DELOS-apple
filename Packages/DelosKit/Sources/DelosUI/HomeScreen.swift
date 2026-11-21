@@ -149,7 +149,9 @@ struct HomeScreen: View {
                         // animations are released meanwhile
                         GameLibrary(hostID: hostID, apps: visible, focus: focus, actions: actions)
                             .environment(\.artMotion, artMotion(visible: !sheetOpen && overview == nil))
-                            .environment(\.overviewDescent, OverviewDescent(active: overview?.shown ?? false, appID: overview?.app.id,
+                            // The card hides while it flies, and shows again under the flying cover once that has landed
+                            .environment(\.overviewDescent, OverviewDescent(active: overview?.shown ?? false,
+                                                                         appID: overview.flatMap { $0.handedBack ? nil : $0.app.id },
                                                                          visibleCoverDistance: overview?.visibleCoverDistance ?? 0))
                             .environment(\.overviewLauncher, launcher)
                     }
@@ -326,18 +328,31 @@ struct HomeScreen: View {
     }
 
     /// Back to the dashboard, the opening reversed: the page scrolls to its top, the cover flies back into its card, the
-    /// other covers return. Back while still opening reverses the flight at once, from where the cover is.
+    /// other covers return. Back while still opening reverses the flight at once, from where the cover is. Pulled down
+    /// by a finger, the cover flies back from where the finger left it, at its speed.
+    ///
+    /// The flying cover takes the header cover's place one frame before anything moves: that frame draws its pictures
+    /// and shadow for the first time and takes the page's and the row's update, and both stalled the flight's first
+    /// frames when they came with it (the cover stopped, then jumped). Landed, the card shows under the flying cover,
+    /// which fades out over it before the overview goes (its removal, the close's heaviest frame, then lands on a still
+    /// card instead of holding the flying one and popping the card's chip and badges in after it).
     private func closeOverview() {
         guard let session = overview, session.phase != .closing else { return }
         let wasOpen = session.phase == .open
         session.phase = .closing
+        let release = session.release
+        session.release = nil
+        #if DEBUG && canImport(UIKit)
+        OverviewFrameLog.shared.start("close")
+        #endif
         actions.layers.feedback?.play(.back)
         Task { @MainActor in
-            if wasOpen, session.scroll > 1 {
+            if wasOpen, release == nil, session.scroll > 1 {
                 withAnimation(reducedMotion ? nil : .timingCurve(0.65, 0, 0.35, 1, duration: 0.42)) { session.position.scrollTo(y: 0) }
                 try? await Task.sleep(for: .milliseconds(reducedMotion ? 0 : 430))
             }
             session.ring.hide()
+            var velocity = 0.0
             if wasOpen {
                 if let source = cardFrame(session.app) { session.source = source }
                 // The header's picture as it shows now (its animation's frame) flies back into the card's still (the
@@ -345,31 +360,61 @@ struct HomeScreen: View {
                 session.wide = session.source.width > session.source.height
                 session.flightTo = AnimatedFrames.last(art.animationKey(hostID: hostID, appID: session.app.id, kind: .cover)) ?? session.coverStill
                 session.flightFrom = art.cachedCard(hostID: hostID, app: session.app, wide: session.wide)
+                if let release, !reducedMotion {
+                    let handoff = OverviewMotion.pullHandoff(
+                        slot: OverviewMotion.headerSlot(stage), pull: release.pull, scale: OverviewMotion.pullScale(release.pull / stage.scale),
+                        speed: release.speed, card: session.source)
+                    session.flightSlot = handoff.frame
+                    velocity = handoff.velocity
+                }
+                session.landed = false
+                #if DEBUG && canImport(UIKit)
+                OverviewFrameLog.shared.mark("swap")
+                #endif
+                try? await Task.sleep(for: .milliseconds(16))
             }
-            session.landed = false
             #if DEBUG && canImport(UIKit)
-            OverviewFrameLog.shared.start("close")
+            OverviewFrameLog.shared.mark(String(format: "flight(v=%.2f)", velocity))
             #endif
-            withAnimation(reducedMotion ? .easeIn(duration: 0.24) : OverviewMotion.flightCloseSpring, completionCriteria: .logicallyComplete) {
+            let spring: Animation = reducedMotion ? .easeIn(duration: 0.24)
+                : release != nil && wasOpen ? OverviewMotion.pullCloseSpring(velocity: velocity) : OverviewMotion.flightCloseSpring
+            withAnimation(spring, completionCriteria: .logicallyComplete) {
                 session.flight = 0
             } completion: {
-                #if DEBUG && canImport(UIKit)
-                OverviewFrameLog.shared.stop()
-                #endif
-                finishClose(session)
+                handBack(session)
             }
             session.shown = false
         }
     }
 
-    /// The flight back has landed: the overview goes; the focus stays on the card, or an owned similar game's card takes
-    /// it (the row brings it in) and its own overview opens from there.
+    /// The flight back has landed: the card shows again under the flying cover, which fades out over it; then the
+    /// overview goes.
+    private func handBack(_ session: OverviewSession) {
+        guard overview === session else { return }
+        #if DEBUG && canImport(UIKit)
+        OverviewFrameLog.shared.mark("handBack")
+        #endif
+        withAnimation(reducedMotion ? nil : OverviewMotion.handBack) { session.handedBack = true }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(reducedMotion ? 0 : 140))
+            #if DEBUG && canImport(UIKit)
+            OverviewFrameLog.shared.mark("removed")
+            #endif
+            finishClose(session)
+            #if DEBUG && canImport(UIKit)
+            try? await Task.sleep(for: .milliseconds(250))
+            OverviewFrameLog.shared.stop()
+            #endif
+        }
+    }
+
+    /// The overview has gone: the focus stays on the card, or an owned similar game's card takes it (the row brings it
+    /// in) and its own overview opens from there.
     private func finishClose(_ session: OverviewSession) {
         guard overview === session else { return }
         overview = nil
         // A swipe that opened it may have left its drag state behind (its end never came): the row's own drags are free
-        launcher.dragApp = nil
-        launcher.dragOffset = 0
+        launcher.reset()
         guard let target = session.jumpTarget else {
             focus.focus(session.coverID)
             return
@@ -1210,6 +1255,7 @@ private struct Cover: View {
                 }
             }
             .animation(Motion.fastOutSlowIn(400), value: shown.map(ObjectIdentifier.init))
+            .modifier(CoverSwipeArt(appID: app.id))
             if art.artwork.isBusy(hostID: hostID, appID: app.id) {
                 RingSpinner(size: 32)
                     .frame(width: stage.px(56), height: stage.px(56))
@@ -1251,7 +1297,7 @@ private struct Cover: View {
                         .frame(height: stage.px(geometry.height * 0.36))
                         .allowsHitTesting(false)
                         .transition(.opacity)
-                    GameInfoHint(kind: ControllerGlyphs.shared.kind, onOpen: openInfo, active: visible && artMotion)
+                    GameInfoHint(kind: ControllerGlyphs.shared.kind, onOpen: openInfo, active: visible && artMotion, appID: app.id)
                         .padding(.bottom, stage.px(22))
                         .transition(.opacity.combined(with: .offset(y: stage.px(8))))
                 }

@@ -359,6 +359,14 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   rating pop in. The motion is smoother: nothing below the header is laid out while the cover flies and the flying
   cover's shadow is no longer re-blurred every frame. With reduced motion everything only fades. Opening "Read the
   story" fades the text out at its edge while more of it continues below.
+- The game overview's motion is calmer and springier ([#27](https://github.com/DELOS-STREAM/DELOS-apple/issues/27)):
+  the timeline is back at the prototype's own pace, the cover flies out with response 0.62 s and damping 0.74 and
+  back with 0.55 s and 0.78, and the page, the header's parts and the dashboard settle with 0.6 s and 0.8, each with
+  one gentle overshoot. The rating rings' arcs swing past their score once, slower and rounder (about 7 % at most),
+  while their numbers count up with a plain ease-out over 1.1 s and never pass the score; tags and badges pop gently.
+- A cover swiped up rides a rubber band (at most 60 % of the finger's travel, capped) and fades a little near its top
+  instead of being cut off; its art zooms in and sinks against the drag, and the swipe hint's chevrons go solid and
+  glow as it goes ([#25](https://github.com/DELOS-STREAM/DELOS-apple/issues/25)).
 - The changelog and the README describe DELOS for Apple on its own; `tools/docs/check_platform.py`, run by
   `tools/test.sh`, fails when either names another platform.
 - The library filter takes several values in every row (for example two genres, a theme and Native HDR): a chip toggles
@@ -467,6 +475,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   saved about 0.07 ms a frame, and motion that was a frame old made the picture drift.
 
 ### Fixed
+
+- Closing the game overview no longer stops the cover and then jumps it: the flying cover takes the header cover's
+  place a frame before anything moves, and once back it fades out over the card, which already shows its chip and
+  badges, before the overview goes. Pulled down by a finger, the cover flies back from where the finger left it, at its
+  speed ([#25](https://github.com/DELOS-STREAM/DELOS-apple/issues/25)).
 
 - Horizontal finger drags scroll the dashboard cover row again; the cover gesture claims only clear upward swipes, while focus-first taps remain unchanged ([#24](https://github.com/DELOS-STREAM/DELOS-apple/issues/24)).
 
