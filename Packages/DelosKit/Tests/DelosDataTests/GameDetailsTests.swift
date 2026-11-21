@@ -4,7 +4,8 @@ import Testing
 @testable import DelosData
 
 /// The game overview's details: the Worker's shape (tools/metadata-worker/README.md "Game details"), the URLs built from
-/// IGDB's image ids, the record that keeps them (schema 7, the 7-day refresh, the backoff) and the image disk cache.
+/// IGDB's image ids, Steam's media, the record that keeps them (schema 8, the 7-day refresh, the backoff) and the image
+/// disk cache.
 @Suite struct GameDetailsTests {
     /// The Worker's normalized answer for a complete game (its test's `NORMALIZED`, abridged).
     static let complete = Data("""
@@ -54,6 +55,48 @@ import Testing
         let d = try GameDetails.parse(Data(#"{"id":5,"name":"X","screenshots":[{"imageId":"ok1"},{"width":3},7],"genres":["A",null,"B"]}"#.utf8))
         #expect(d.screenshots.map(\.imageId) == ["ok1"])
         #expect(d.genres == ["A", "B"])
+    }
+
+    /// The Worker's `steam` (Dredge's answer, abridged): a new-style movie (HLS and DASH only), an old-style one (MP4 and
+    /// WebM over `http`), one that is not Steam's, a malformed one.
+    static let steam = Data("""
+    {"id":164867,"name":"DREDGE","steam":{"appId":1562430,"movies":[
+     {"id":257052901,"name":"DREDGE: Complete Edition Trailer","thumbnail":"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/257052901/movie.293x165.jpg?t=1725614790",
+      "hls":"https://video.akamai.steamstatic.com/store_trailers/1562430/751913/a/1750701525/hls_264_master.m3u8?t=1725614790",
+      "dash":"https://video.akamai.steamstatic.com/store_trailers/1562430/751913/a/1750701525/dash_h264.mpd?t=1725614790","highlight":true},
+     {"id":256,"name":"Old","mp4":"http://cdn.akamai.steamstatic.com/steam/apps/256/movie_max.mp4","webm":"http://cdn.akamai.steamstatic.com/steam/apps/256/movie_max.webm"},
+     {"id":257,"hls":"https://evil.example/hls_264_master.m3u8"},
+     {"name":"no id"}],
+     "screenshots":[{"id":0,"thumbnail":"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1562430/ss_70f8.600x338.jpg?t=1",
+                     "full":"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1562430/ss_70f8.1920x1080.jpg?t=1"},{"id":1}]}}
+    """.utf8)
+
+    @Test func parsesSteamsMedia() throws {
+        let steam = try #require(try GameDetails.parse(Self.steam).steam)
+        #expect(steam.appId == 1562430 && steam.movies.count == 3 && steam.screenshots.count == 1)
+        let new = steam.movies[0], old = steam.movies[1]
+        #expect(new.highlight && new.mp4 == nil && new.webm == nil && new.dash != nil)
+        #expect(new.stream?.absoluteString.hasSuffix("hls_264_master.m3u8?t=1725614790") == true)
+        #expect(!old.highlight && old.hls == nil && old.stream?.absoluteString == "https://cdn.akamai.steamstatic.com/steam/apps/256/movie_max.mp4")
+        #expect(steam.movies[2].stream == nil)
+        // No `steam`: no Steam match; an answer from before it is read the same way
+        #expect(try GameDetails.parse(Self.complete).steam == nil)
+        // Absent fields stay absent when the record is written and read back
+        let again = try JSONDecoder().decode(GameDetails.self, from: JSONEncoder().encode(GameDetails.parse(Self.steam)))
+        #expect(again.steam == steam)
+        let written = try #require(String(data: JSONEncoder().encode(old), encoding: .utf8))
+        #expect(!written.contains("hls") && !written.contains("null"))
+    }
+
+    @Test func steamMediaURLs() throws {
+        #expect(SteamMedia.url("http://cdn.akamai.steamstatic.com/a.mp4")?.absoluteString == "https://cdn.akamai.steamstatic.com/a.mp4")
+        #expect(SteamMedia.url("https://steamstatic.com.evil.example/a.jpg") == nil)
+        #expect(SteamMedia.url("ftp://cdn.akamai.steamstatic.com/a.jpg") == nil)
+        #expect(SteamMedia.url(nil) == nil && SteamMedia.url("") == nil)
+        let poster = try #require(SteamMedia.url("https://shared.akamai.steamstatic.com/x/257052901/movie.293x165.jpg?t=1"))
+        #expect(SteamMedia.width(poster) == 293)
+        #expect(SteamMedia.width(try #require(URL(string: "https://shared.akamai.steamstatic.com/x/ss_70f8.600x338.jpg"))) == 600)
+        #expect(SteamMedia.width(try #require(URL(string: "https://shared.akamai.steamstatic.com/x/movie.jpg"))) == nil)
     }
 
     @Test func rejectsWhatIsNotAGame() {
@@ -127,7 +170,7 @@ import Testing
         #expect(first?.name == "Hollow Meridian")
         _ = await store.details(title: "Hollow Meridian")
         #expect(await providers.calls == 1)
-        // Written as schema 7 and read back by a new store without a request
+        // Written as schema 8 and read back by a new store without a request
         let again = MetadataStore(providers: providers, cache: cache, now: { clock.now })
         #expect(await again.details(title: "Hollow Meridian") == first)
         #expect(await providers.calls == 1)
@@ -147,6 +190,22 @@ import Testing
         try await cache.store(Data(old.utf8), for: MetadataPolicy.literalKey("Game"))
         let state = await MetadataStore(providers: DetailsProviders(), cache: cache).state(for: "Game")
         #expect(state.data?.candidate?.id == 1 && state.data?.details == nil)
+        try? FileManager.default.removeItem(at: directory)
+    }
+
+    @Test func schemaSevenDetailsAreFetchedAgainForSteamsMedia() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("details-schema-" + UUID().uuidString)
+        let cache = DiskCache(directory: directory, budget: 1 << 20, maxEntryBytes: 1 << 18)
+        let providers = DetailsProviders()
+        // Details fetched a minute ago, before the Worker gave Steam's media: still shown, but due
+        let now: Int64 = 10_000_000_000
+        let old = #"{"schema":7,"data":{"candidate":{"id":214337,"name":"Hollow Meridian"},"updatedAt":1,"details":{"id":214337,"name":"Hollow Meridian"},"detailsUpdatedAt":\#(now - 60_000)}}"#
+        try await cache.store(Data(old.utf8), for: MetadataPolicy.literalKey("Hollow Meridian"))
+        let store = MetadataStore(providers: providers, cache: cache, now: { now })
+        let state = await store.state(for: "Hollow Meridian")
+        #expect(state.data?.details?.name == "Hollow Meridian" && state.data?.detailsUpdatedAt == 0)
+        #expect(await store.details(title: "Hollow Meridian")?.summary == "A salvage diver wakes.")
+        #expect(await providers.calls == 1)
         try? FileManager.default.removeItem(at: directory)
     }
 

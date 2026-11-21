@@ -228,8 +228,8 @@ struct GameOverview: View {
                 withAnimation(.easeOut(duration: 0.3)) { session.details = details }
             }
             session.detailsSettled = true
-            // Check which videos YouTube lets play in the app.
-            await OverviewVideos.shared.check(session.details?.videos.map(\.videoId) ?? [])
+            // Check which videos YouTube lets play in the app (only the fallback's: Steam's movies play natively).
+            await OverviewVideos.shared.check(session.details.map(OverviewContent.youTubeVideos)?.map(\.videoId) ?? [])
         }
     }
 

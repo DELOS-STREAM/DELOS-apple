@@ -491,19 +491,22 @@ struct RemoteImage: View {
 }
 
 /// What the overview loads a screenshot's thumbnail and its full view at: `screenshot_med` thumbs on a 1080p stage, the
-/// `screenshot_big` ones on the 4:3 one (an iPad's density), `screenshot_huge` or `1080p` in the viewer.
+/// `screenshot_big` ones on the 4:3 one (an iPad's density), `screenshot_huge` or `1080p` in the viewer. Steam's media
+/// come in one size each: the 600 × 338 thumbnail and the 1920 × 1080 picture.
 enum OverviewImageSizes {
     static func thumb(_ media: OverviewContent.Media, tall: Bool) -> URL? {
+        if let steam = media.steam { return steam.thumb }
         switch media.kind {
-        case .video: IGDBImage.videoThumbnail(media.id)
-        case .screenshot: IGDBImage.url(media.id, size: tall ? .screenshotBig : .screenshotMed)
+        case .video: return IGDBImage.videoThumbnail(media.id)
+        case .screenshot: return IGDBImage.url(media.id, size: tall ? .screenshotBig : .screenshotMed)
         }
     }
 
     static func full(_ media: OverviewContent.Media, tall: Bool) -> URL? {
+        if let steam = media.steam { return steam.full }
         switch media.kind {
-        case .video: IGDBImage.videoThumbnailMax(media.id)
-        case .screenshot: IGDBImage.url(media.id, size: tall ? .full : .screenshotHuge)
+        case .video: return IGDBImage.videoThumbnailMax(media.id)
+        case .screenshot: return IGDBImage.url(media.id, size: tall ? .full : .screenshotHuge)
         }
     }
 }
