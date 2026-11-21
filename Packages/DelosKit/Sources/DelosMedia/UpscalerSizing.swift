@@ -41,20 +41,37 @@ public struct UpscalerSizes: Sendable, Equatable {
     /// (``PictureGeometry``), the internal size (``UpscalerDimensions/plan(source:presentation:maxTextureSize:supersamplingLevel:)``:
     /// supersampling only when the stream already has the picture's size and the larger size fits the limits) and MetalFX's
     /// output, which keeps the stream's aspect ratio and the scaler's largest factor (``MetalUpscaler/scalerOutput(input:target:scales:)``).
+    /// Neural enlarges by the factor ``NeuralUpscaling/factor(needed:offered:)`` picks from `neuralFactors` (the stream is
+    /// assumed 8-bit SDR) and MetalFX Spatial does the rest; a stream it does not take plans as MetalFX Spatial.
     public static func plan(
         stream: (width: Int, height: Int), view: (width: Int, height: Int), scaleMode: VideoScaleMode, mode: UpscalerMode,
-        supersamplingLevel: Int, support: MetalFXSupport = .system, maxTextureSize: Int = 16_384
+        supersamplingLevel: Int, support: MetalFXSupport = .system, maxTextureSize: Int = 16_384,
+        neuralFactors: (Int, Int) -> [Float] = NeuralUpscaling.factors
     ) -> UpscalerSizes {
         let geometry = PictureGeometry.make(video: stream, target: view, mode: scaleMode)
         let presentation = (width: geometry.presentationWidth, height: geometry.presentationHeight)
-        let mode = support.effectiveMode(mode)
+        var mode = support.effectiveMode(mode)
+        let d = UpscalerDimensions.plan(
+            source: stream, presentation: presentation, maxTextureSize: maxTextureSize, supersamplingLevel: supersamplingLevel)
+        if mode == .neural {
+            let needed = min(Float(d.internalWidth) / Float(max(1, stream.width)), Float(d.internalHeight) / Float(max(1, stream.height)))
+            if let factor = NeuralUpscaling.factor(needed: needed, offered: neuralFactors(stream.width, stream.height)) {
+                let enlarged = NeuralUpscaling.output(width: stream.width, height: stream.height, factor: factor)
+                let rest = support.spatial
+                    ? MetalUpscaler.scalerOutput(input: enlarged, target: (d.internalWidth, d.internalHeight), scales: support.scales(.spatial))
+                    : nil
+                let internalSize = rest ?? enlarged
+                return UpscalerSizes(
+                    mode: mode, internalWidth: internalSize.width, internalHeight: internalSize.height,
+                    presentationWidth: d.presentationWidth, presentationHeight: d.presentationHeight)
+            }
+            mode = support.effectiveMode(.spatial)
+        }
         guard mode != .sharpen else {
             return UpscalerSizes(
                 mode: mode, internalWidth: stream.width, internalHeight: stream.height,
                 presentationWidth: presentation.width, presentationHeight: presentation.height)
         }
-        let d = UpscalerDimensions.plan(
-            source: stream, presentation: presentation, maxTextureSize: maxTextureSize, supersamplingLevel: supersamplingLevel)
         let output = MetalUpscaler.scalerOutput(
             input: stream, target: (d.internalWidth, d.internalHeight), scales: support.scales(mode))
         // Without an enlargement the stream is sampled into the picture directly; the drawing reports the planned size

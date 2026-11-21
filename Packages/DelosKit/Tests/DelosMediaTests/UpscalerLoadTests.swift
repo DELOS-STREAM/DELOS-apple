@@ -115,8 +115,10 @@ import Testing
         #expect(UpscalerMode(value: "high") == .spatial)
         #expect(UpscalerMode(value: "temporal") == .temporal && UpscalerMode(value: "temporal-quality") == .temporal)
         #expect(UpscalerMode(value: "sharpen") == .sharpen && UpscalerMode(value: "newer") == .spatial)
-        #expect(UpscalerMode.allCases == [.spatial, .temporal, .sharpen])
-        #expect(UpscalerMode(index: 9) == .sharpen && UpscalerMode.sharpen.index == 2 && UpscalerMode(index: -1) == .spatial)
+        #expect(UpscalerMode(value: "neural") == .neural && UpscalerMode.neural.rawValue == "neural")
+        #expect(UpscalerMode.allCases == [.spatial, .temporal, .sharpen, .neural])
+        #expect(UpscalerMode(index: 9) == .neural && UpscalerMode.sharpen.index == 2 && UpscalerMode(index: -1) == .spatial)
+        #expect(UpscalerMode.neural.scales && !UpscalerMode.neural.isTemporal)
         #expect(!UpscalerMode.sharpen.scales && UpscalerMode.temporal.isTemporal && !UpscalerMode.spatial.isTemporal)
     }
 }

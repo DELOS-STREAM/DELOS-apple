@@ -1056,6 +1056,7 @@ help_seekbar_trackpad_sensitivity_x
 help_seekbar_trackpad_sensitivity_y
 help_upscaler_mode_metalfx_spatial
 help_upscaler_mode_metalfx_temporal
+help_upscaler_mode_neural
 help_upscaler_sharpness
 help_video_format_pyrowave_gpu
 mouse_mode_absolute_touch
@@ -1202,6 +1203,7 @@ title_virtual_trackpad_settings
 title_vrr
 upscaler_mode_metalfx_spatial
 upscaler_mode_metalfx_temporal
+upscaler_mode_neural
 video_scale_mode_fill
 video_scale_mode_fit
 video_scale_mode_stretch

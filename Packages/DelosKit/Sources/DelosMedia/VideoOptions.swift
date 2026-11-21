@@ -15,8 +15,8 @@ public enum VideoScaleMode: String, CaseIterable, Sendable {
     }
 }
 
-/// The upscaler's methods (`list_sgsr_quality`; the stored values are those of earlier builds: `standard`, `temporal`,
-/// `sharpen`). The declaration order is the stream menu's Mode row order, and ``index`` the renderers' mode number.
+/// The upscaler's methods (`list_sgsr_quality`: `standard`, `temporal` and `sharpen`, the values of earlier builds, and
+/// `neural`). The declaration order is the stream menu's Mode row order, and ``index`` the renderers' mode number.
 public enum UpscalerMode: String, CaseIterable, Sendable {
     /// MetalFX Spatial (`MTLFXSpatialScaler`) on the current frame.
     case spatial = "standard"
@@ -24,6 +24,9 @@ public enum UpscalerMode: String, CaseIterable, Sendable {
     case temporal
     /// No scaling: one contrast-adaptive sharpen pass at the stream's own resolution.
     case sharpen
+    /// VideoToolbox's low-latency super resolution (``NeuralUpscaling``) on the current frame, MetalFX Spatial for the rest
+    /// of the enlargement. Pictures it does not take (10-bit, HDR, full range, too large) go through MetalFX Spatial.
+    case neural
 
     /// The stored value's mode. The two retired modes map to their successors (`high` to Spatial, `temporal-quality` to
     /// Temporal); anything unknown (a newer build's value) is Spatial.

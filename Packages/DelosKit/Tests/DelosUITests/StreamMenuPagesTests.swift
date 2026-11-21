@@ -69,9 +69,11 @@ import Testing
         #expect(upscaler.status.pill == L("stream_menu_upscaler_unavailable"))
         upscaler.setSharpness(30)
         #expect(upscaler.sharpness == 30)
-        #expect(UpscalerMode.sharpen.next(1) == .spatial && UpscalerMode.spatial.next(-1) == .sharpen)
+        #expect(UpscalerMode.sharpen.next(1) == .neural && UpscalerMode.neural.next(1) == .spatial)
+        #expect(UpscalerMode.spatial.next(-1) == .neural)
         #expect(UpscalerSave.values(upscaler)[.upscalerMode] == .text("sharpen"))
         #expect(UpscalerMode.sharpen.label == L("sgsr_quality_sharpen"))
+        #expect(UpscalerMode.neural.label == L("upscaler_mode_neural"))
     }
 
     @Test func helpParagraphsFlowIntoOneLine() {

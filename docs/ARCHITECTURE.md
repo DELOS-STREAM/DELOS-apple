@@ -393,16 +393,18 @@ watchdog compares it with the frames it submitted over a window of a second or m
 
 The upscaler (Settings → Display: `checkbox_sgsr`, `list_sgsr_quality`, `seekbar_sgsr_sharpness`,
 `list_sgsr_supersampling_level`; the storage keys and the stored mode values `standard`, `temporal`, `sharpen` are those
-of earlier builds, and `SettingKey.migrated` maps the retired `high` and `temporal-quality` to `standard` and `temporal`)
-is MetalFX plus the passes of `UpscalerShaders.metal` (`MetalUpscaler`). The input is the decoded picture converted to
-RGB at the stream's size: 8-bit, or half floats for 10-bit streams, which keep HDR's encoded PQ/HLG values in 0–1, so
-both scalers run in MetalFX's perceptual colour mode and without exposure.
+of earlier builds, `neural` is new, and `SettingKey.migrated` maps the retired `high` and `temporal-quality` to `standard`
+and `temporal`) is MetalFX plus the passes of `UpscalerShaders.metal` (`MetalUpscaler`), and for Neural VideoToolbox's
+low-latency super resolution (`NeuralScaler`). The MetalFX input is the decoded picture converted to RGB at the stream's
+size: 8-bit, or half floats for 10-bit streams, which keep HDR's encoded PQ/HLG values in 0–1, so both scalers run in
+MetalFX's perceptual colour mode and without exposure.
 
 | Mode (`UpscalerMode`) | Passes |
 |---|---|
 | MetalFX Spatial (`standard`) | `MTLFXSpatialScaler` from the stream's RGB picture to the scaler size, then `casFragment` (FidelityFX CAS on the five-sample cross at the sharpness) samples it into the picture's place |
 | MetalFX Temporal (`temporal`) | `VideoMotion` builds current/previous four-level luma pyramids (`videoLumaPyramid`: initial 3 × 3 binomial smoothing), independent backward/forward inverse-compositional Lucas–Kanade flow on an 8-pixel grid (`videoFlow`), and a whole-frame cut mask (`videoSceneChange`). `videoMotion` selects per-pixel backward displacement in input pixels (`rg16Float`, motion scale 1) and initial rejection; `videoReactiveMask` adds contrast-gated rejection at conflicting motion layers without averaging away existing rejection. `MTLFXTemporalScaler` reconstructs with jitter 0, a constant depth plane and the final `r16Float` reactive mask; presentation sharpening never enters its history |
 | Sharpen only (`sharpen`) | No scaling: `casFragment` at the stream's size, then a plain bilinear presentation |
+| Neural (`neural`) | `VTLowLatencySuperResolutionScaler` enlarges the decoded `420v` picture by one factor in a command buffer of its own; an `MTLEvent` makes the drawing's command buffer wait for it. The enlarged picture is converted to RGB, `MTLFXSpatialScaler` enlarges the rest to the scaler size, then `casFragment` as in MetalFX Spatial |
 
 Motion upsampling starts from interpolated flow. At conflicting cells, an adjacent actual cell vector or zero motion
 can replace it only when the five-sample luma patch error improves by both 20 % and 0.003, without worsening the
@@ -423,6 +425,32 @@ dropped (`reset`) on the first frame, after a gap of more than 50 ms between two
 order, after a change between SDR and HDR, with a new mode and with a new scaler. A cut is found on the GPU in the frame it
 happens, too late for the CPU's `reset` of that frame's encoding, so it makes the whole reactive mask 1, which tells
 MetalFX to ignore the history at every pixel.
+
+Neural (`NeuralUpscaling`, `NeuralScaler`): VideoToolbox's `VTFrameProcessor` with
+`VTLowLatencySuperResolutionScalerConfiguration` (OS 26 and later; not in the simulator SDKs), a machine-learning scaler
+for real-time video that reconstructs detail from the current frame. Temporal upscalers gain detail from the sub-pixel
+jitter a renderer gives each frame; decoded video has none, so a still picture gives MetalFX Temporal the same samples
+every frame. The factor is the largest the scaler offers for the stream's size up to the enlargement to the internal size
+(`supportedScaleFactors(frameWidth:frameHeight:)`), else its smallest. It reads and writes only 8-bit 4:2:0 video range
+(`420v`): 10-bit, HDR and full-range pictures, and streams over its limits, go through MetalFX Spatial, reported as Spatial
+(not as unavailable), and the reason is one StreamPerf line per stream (`neural fallback=format` or `=size`). Its session
+loads a model on a queue of its own (Apple: this can take longer than a frame); until it is ready frames go through MetalFX
+Spatial. `VTFrameProcessor.process(with:parameters:)` encodes it into a Metal command buffer, outside the GPU's shaders;
+StreamPerf's `nn` is that buffer's commit-to-completion time. The scaler's input must have the layout of its
+`sourcePixelBufferAttributes`, which adds rows of padding below a height that is not a multiple of 16
+(`ExtendedPixelsBottom` 8 for 360 rows); without them it writes nothing (error -19730). A decoded picture without that
+padding is blitted into a padded one from a pool in the same command buffer. The output picture takes the source's colour
+attachments and is drawn by the same conversion.
+
+| Limit (macOS 27.2, Apple M6) | Value |
+|---|---|
+| Factors | 1.5, 2, 4 |
+| Largest stream side / pixels | 1.5×: 1280 / 1,638,400; 2×: 960 / 921,600; 4×: 480 / 230,400 |
+| `process` p50 / p95 | 1280 × 720 → 1920 × 1080: 1.37 / 1.49 ms; 960 × 540 → 1920 × 1080: 0.88 / 0.98 ms |
+| Session start | 0.45–2.1 s |
+
+These values come from a standalone probe on the development Mac; the limits and times of an iPhone or iPad are not
+measured.
 
 `UpscalerDimensions` gives the presentation size (the picture's rectangle, even) and the internal size: a stream that
 already has the presentation size (within 2 pixels) is supersampled at 4/3 of it at level 1 ("1.33×") and twice it at

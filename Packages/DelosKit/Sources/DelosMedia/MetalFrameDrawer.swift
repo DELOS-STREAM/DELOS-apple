@@ -82,6 +82,8 @@ final class MetalFrameDrawer: @unchecked Sendable {
     let cache: MetalPipelineCache
     private let textureCache: CVMetalTextureCache
     private let upscaler: MetalUpscaler
+    /// Neural's session (``NeuralScaler``), kept while the upscaler is on.
+    private let neural = NeuralScaler()
     /// The arrival pass's source (``LaunchArrival``), kept from frame to frame while it runs.
     private var arrivalTexture: (any MTLTexture)?
     /// The picture converted to RGB at its own size, the upscaler's input (Android's `colorTexture`).
@@ -197,8 +199,11 @@ final class MetalFrameDrawer: @unchecked Sendable {
     ) -> Bool {
         let settings = request.settings
         // Without the mode's MetalFX scaler Sharpen only stands in, and the status says the upscaler is unavailable
-        let mode = upscaler.support.effectiveMode(settings.mode)
-        let fellBack = mode != settings.mode
+        var mode = upscaler.support.effectiveMode(settings.mode)
+        // Neural takes this picture, or MetalFX Spatial does: a picture it does not take, or while its session starts
+        let neuralKey = mode == .neural ? readyNeuralKey(pixelBuffer, size: size, geometry: geometry, settings: settings) : nil
+        if mode == .neural && neuralKey == nil { mode = upscaler.support.effectiveMode(.spatial) }
+        let fellBack = mode == .sharpen && settings.mode != .sharpen
         let format: MTLPixelFormat = wide ? .rgba16Float : .rgba8Unorm
         if upscaledMode != mode {
             // A new mode starts with a fresh history
@@ -216,23 +221,37 @@ final class MetalFrameDrawer: @unchecked Sendable {
             picture = upscaled.picture
             report = UpscaleReport(mode: mode, dimensions: picture.dimensions, fresh: false, fellBack: fellBack)
         } else {
-            if sourceTexture?.width != size.width || sourceTexture?.height != size.height || sourceTexture?.pixelFormat != format {
-                sourceTexture = cache.texture(format, width: size.width, height: size.height, usage: MetalUpscaler.sourceUsage)
+            // Neural enlarges the decoded picture in a command buffer of its own first; the conversion reads its output
+            var input = pixelBuffer, inputSize = size
+            if let neuralKey {
+                guard let pass = queue.makeCommandBuffer(),
+                      let enlarged = neural.encode(pixelBuffer, key: neuralKey, commandBuffer: pass),
+                      neural.order(pass, before: commandBuffer)
+                else { return false }
+                pass.commit()
+                input = enlarged
+                inputSize = (CVPixelBufferGetWidth(enlarged), CVPixelBufferGetHeight(enlarged))
+            }
+            if sourceTexture?.width != inputSize.width || sourceTexture?.height != inputSize.height
+                || sourceTexture?.pixelFormat != format {
+                sourceTexture = cache.texture(format, width: inputSize.width, height: inputSize.height, usage: MetalUpscaler.sourceUsage)
             }
             guard let source = sourceTexture else { return false }
             let sharpenOnly = mode == .sharpen
             // Sharpen only measures its preparation and its pass apart, each in a command buffer of its own
             guard let preparation = sharpenOnly ? queue.makeCommandBuffer() : commandBuffer else { return false }
-            let whole = MTLViewport(originX: 0, originY: 0, width: Double(size.width), height: Double(size.height), znear: 0, zfar: 1)
-            guard convert(pixelBuffer, conversion: conversion, into: source, viewport: whole, crop: MetalPipelineCache.wholePicture,
+            let whole = MTLViewport(
+                originX: 0, originY: 0, width: Double(inputSize.width), height: Double(inputSize.height), znear: 0, zfar: 1)
+            guard convert(input, conversion: conversion, into: source, viewport: whole, crop: MetalPipelineCache.wholePicture,
                           commandBuffer: preparation)
             else { return false }
             if sharpenOnly { preparation.commit() }
+            // MetalFX Spatial enlarges the rest of a neural picture, planned from the stream's size
             guard var made = upscaler.upscale(
-                source: source, mode: mode,
+                source: source, mode: mode == .neural ? .spatial : mode,
                 presentation: (geometry.presentationWidth, geometry.presentationHeight),
                 supersamplingLevel: settings.supersamplingLevel, frameTime: request.frameTime, hdr: conversion.isHDR,
-                commandBuffer: commandBuffer)
+                stream: mode == .neural ? size : nil, commandBuffer: commandBuffer)
             else { return false }
             report = UpscaleReport(mode: mode, dimensions: made.dimensions, fresh: true, fellBack: fellBack)
             if sharpenOnly {
@@ -270,12 +289,33 @@ final class MetalFrameDrawer: @unchecked Sendable {
         return true
     }
 
+    /// Neural's session key for `pixelBuffer` when its session is ready; nil when the picture goes through MetalFX Spatial
+    /// instead (its format or size, written once to the log, or the session still starting).
+    private func readyNeuralKey(
+        _ pixelBuffer: CVPixelBuffer, size: (width: Int, height: Int), geometry: PictureGeometry, settings: UpscalerSettings
+    ) -> NeuralScaler.Key? {
+        let planned = UpscalerDimensions.plan(
+            source: size, presentation: (geometry.presentationWidth, geometry.presentationHeight),
+            maxTextureSize: upscaler.maxTextureSize, supersamplingLevel: settings.supersamplingLevel)
+        switch NeuralUpscaling.plan(
+            pixelFormat: CVPixelBufferGetPixelFormatType(pixelBuffer), width: size.width, height: size.height,
+            target: (planned.internalWidth, planned.internalHeight)) {
+        case .success(let factor):
+            let key = NeuralScaler.Key(width: size.width, height: size.height, factor: factor)
+            return neural.prepare(key) ? key : nil
+        case .failure(let reason):
+            neural.note("fallback=\(reason.rawValue) \(size.width)x\(size.height)")
+            return nil
+        }
+    }
+
     /// The upscaler is off: its textures, scalers and history go.
     private func releaseUpscaler() {
         guard upscaled != nil || sourceTexture != nil || upscaledMode != nil else { return }
         upscaled = nil
         upscaledMode = nil
         sourceTexture = nil
+        neural.release()
         sharpenedTexture = nil
         upscaler.releaseResources()
     }
