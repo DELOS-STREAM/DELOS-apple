@@ -38,17 +38,21 @@ import Testing
     }
 
     @Test func scrollBrowseLocksItsFirstNonZeroAxis() {
+        // A mutating call inside #expect does not compile: each result is taken first
         var vertical = ViewerScrollAxis()
-        #expect(!vertical.follows(x: 0, y: 0))
-        #expect(vertical.horizontal == nil)
-        #expect(!vertical.follows(x: 1, y: 2))
-        #expect(!vertical.follows(x: 200, y: 3))
+        let still = vertical.follows(x: 0, y: 0)
+        #expect(!still && vertical.horizontal == nil)
+        let up = vertical.follows(x: 1, y: 2)
+        let later = vertical.follows(x: 200, y: 3)
+        #expect(!up && !later)
         var horizontal = ViewerScrollAxis()
-        #expect(horizontal.follows(x: -2, y: 1))
-        #expect(horizontal.follows(x: -3, y: 200))
+        let side = horizontal.follows(x: -2, y: 1)
+        let drift = horizontal.follows(x: -3, y: 200)
+        #expect(side && drift)
         var diagonal = ViewerScrollAxis()
-        #expect(!diagonal.follows(x: 1, y: 1))
-        #expect(!diagonal.follows(x: 10, y: 1))
+        let even = diagonal.follows(x: 1, y: 1)
+        let after = diagonal.follows(x: 10, y: 1)
+        #expect(!even && !after)
     }
 
     @Test func swipeVelocityUsesOnlyRecentTravel() {
