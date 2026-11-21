@@ -57,7 +57,7 @@ public final class Feedback {
 
     public func play(_ cue: Cue) {
         playedCount += 1
-        if soundsEnabled { sounds.play(cue) }
+        if soundsEnabled, !Self.debugMuted { sounds.play(cue) }
         #if os(iOS)
         guard hapticsEnabled else { return }
         switch cue {
@@ -67,6 +67,13 @@ public final class Feedback {
         }
         #endif
     }
+
+    /// DEBUG only: `-DelosMuteMedia YES` keeps simulator runs silent (no interface cues).
+    #if DEBUG
+    private static let debugMuted = UserDefaults.standard.bool(forKey: "DelosMuteMedia")
+    #else
+    private static let debugMuted = false
+    #endif
 
 }
 

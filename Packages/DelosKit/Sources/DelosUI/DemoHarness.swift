@@ -27,7 +27,7 @@ import UniformTypeIdentifiers
 ///   -DelosDemoApps <n>                  how many apps (default 16; 0 empty)
 ///   -DelosDemoInput controller|touch|keyboard|pointer   the kind of input the hints and the back arrow start with (controller: a pad counts as connected)
 ///   -DelosDemoProblem YES               the offer to report a crash of the last run (``ProblemOfferCard``) over the first screen
-///   -DelosMuteMedia YES                 every trailer of the overview starts muted (Steam's and YouTube's): simulators stay silent
+///   -DelosMuteMedia YES                 every trailer of the overview starts muted (Steam's and YouTube's) and the interface cues are silent: simulators stay silent
 enum DemoHarness {
     static var on: Bool { UserDefaults.standard.bool(forKey: "DelosDemo") }
     static let hostID = "demo-pc"

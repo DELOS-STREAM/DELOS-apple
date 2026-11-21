@@ -111,13 +111,69 @@ import Testing
         #expect(OverviewMotion.ratingFill(ms: 0) == 0)
         #expect(OverviewMotion.ratingFill(ms: OverviewMotion.ratingRun) == 1)
         let samples = stride(from: 0.0, through: OverviewMotion.ratingRun, by: 4).map(OverviewMotion.ratingFill(ms:))
-        // About 5.5 % past the target at most, reached near the spring's peak (≈ 438 ms)
+        // About 7.3 % past the target at most (under the 8 % cap), reached near the spring's peak (≈ 599 ms)
         let peak = samples.max() ?? 0
-        #expect(peak > 1.04 && peak < 1.06)
-        // No second bounce: once past its peak it only comes down, never below the target
+        #expect(peak > 1.06 && peak < 1.08)
         let index = samples.firstIndex(of: peak) ?? 0
-        #expect(abs(Double(index) * 4 - 438) < 12)
+        #expect(abs(Double(index) * 4 - 599) < 12)
+        // No second bounce: once past its peak it only comes down, never below the target
         for (a, b) in zip(samples[index...], samples[(index + 1)...]) { #expect(b <= a + 1e-9 && b >= 1) }
+        // One overshoot only: the curve has a single local maximum, and it settles at its end without a jump
+        let maxima = samples.indices.dropFirst().dropLast().filter { samples[$0] > samples[$0 - 1] && samples[$0] >= samples[$0 + 1] }
+        #expect(maxima.count == 1)
+        #expect(OverviewMotion.ratingFill(ms: OverviewMotion.ratingRun - 1) - 1 < 0.002)
+    }
+
+    @Test func ratingNumberCountsUpWithoutOvershoot() {
+        #expect(OverviewMotion.ratingNumber(ms: 0) == 0)
+        #expect(OverviewMotion.ratingNumber(ms: OverviewMotion.ratingCount) == 1)
+        #expect(OverviewMotion.ratingNumber(ms: OverviewMotion.ratingRun) == 1)
+        let samples = stride(from: 0.0, through: OverviewMotion.ratingRun, by: 4).map(OverviewMotion.ratingNumber(ms:))
+        // Rising all the way (CSS's ease-out: fast first), never past the rating
+        for (a, b) in zip(samples, samples.dropFirst()) { #expect(b >= a && b <= 1) }
+        #expect(OverviewMotion.ratingNumber(ms: OverviewMotion.ratingCount / 2) > 0.65)
+    }
+
+    @Test func swipedCoverRidesARubberBand() {
+        let cap = 100.0
+        // At most 60 % of the finger's travel, never past the cap, rising all the way
+        var previous = 0.0
+        for travel in stride(from: 0.0, through: 2000, by: 10) {
+            let follow = OverviewMotion.swipeFollow(-travel, cap: cap)
+            #expect(-follow <= travel * OverviewMotion.swipeShare + 1e-9 && -follow < cap)
+            #expect(follow <= previous)
+            previous = follow
+        }
+        // 60 % at first, then easing towards the cap
+        #expect(abs(OverviewMotion.swipeFollow(-1, cap: cap) + 0.6) < 0.01)
+        #expect(OverviewMotion.swipeFollow(-400, cap: cap) < -90)
+        // Down it barely gives
+        #expect(abs(OverviewMotion.swipeFollow(40, cap: cap) - 6) < 1e-9)
+        // It fades only near the top of its band, to 70 %
+        #expect(OverviewMotion.swipeOpacity(0) == 1 && OverviewMotion.swipeOpacity(0.5) == 1)
+        #expect(abs(OverviewMotion.swipeOpacity(1) - 0.7) < 1e-9 && OverviewMotion.swipeOpacity(0.75) < 1)
+    }
+
+    /// Regression (#25): pulled down to close, the cover stopped where the finger left it, then jumped back to the slot
+    /// and flew from there. The flight now starts at the pulled cover's frame with the finger's speed.
+    @Test func pullCloseHandsTheFingersPositionAndSpeedToTheFlight() {
+        let slot = CGRect(x: 150, y: 150, width: 340, height: 510), card = CGRect(x: 150, y: 900, width: 340, height: 510)
+        let still = OverviewMotion.pullHandoff(slot: slot, pull: 0, scale: 1, speed: 0, card: card)
+        #expect(still.frame == slot && still.velocity == 0)
+        let scale = OverviewMotion.pullScale(200)
+        #expect(abs(scale - (1 - 200.0 / 2400)) < 1e-12)
+        let pulled = OverviewMotion.pullHandoff(slot: slot, pull: 200, scale: scale, speed: 1100, card: card)
+        // The pulled cover's frame: moved down by the pull, shrunk about its middle
+        #expect(abs(pulled.frame.midX - slot.midX) < 1e-9 && abs(pulled.frame.midY - (slot.midY + 200)) < 1e-9)
+        #expect(abs(pulled.frame.width - slot.width * scale) < 1e-9 && abs(pulled.frame.height - slot.height * scale) < 1e-9)
+        // Straight down to the card: the speed over the remaining distance, in flights per second
+        #expect(abs(pulled.velocity - 1100.0 / (card.midY - pulled.frame.midY)) < 1e-9)
+        // The flight's frame at its header end is the pulled cover's
+        let end = OverviewMotion.flightFrame(from: card, to: pulled.frame, progress: 1, lift: 30)
+        #expect(abs(end.minX - pulled.frame.minX) < 1e-9 && abs(end.minY - pulled.frame.minY) < 1e-9 && abs(end.width - pulled.frame.width) < 1e-9)
+        // Moving up (or not at all) adds no speed; a fling is capped
+        #expect(OverviewMotion.pullHandoff(slot: slot, pull: 200, scale: scale, speed: -500, card: card).velocity == 0)
+        #expect(OverviewMotion.pullHandoff(slot: slot, pull: 200, scale: scale, speed: 1e6, card: card).velocity == 4)
     }
 
     /// Regression (#23): flying back into the wide first cover stretched the portrait art to the landscape frame; the
@@ -162,16 +218,18 @@ import Testing
         launcher.open = { app, drag in opened = (app.id, drag) }
         let app = HostApp(id: 7, title: "Hades")
         // Sideways is the row's, not a swipe
-        launcher.drag(app, translation: CGSize(width: 40, height: -12), slop: 10)
+        launcher.drag(app, translation: CGSize(width: 40, height: -12), slop: 10, cap: 100, threshold: 90)
         #expect(launcher.dragApp == nil)
-        launcher.drag(app, translation: CGSize(width: 2, height: -60), slop: 10)
-        #expect(launcher.dragApp == 7 && launcher.dragOffset < 0 && launcher.dragOffset > -60)
+        launcher.drag(app, translation: CGSize(width: 2, height: -60), slop: 10, cap: 100, threshold: 90)
+        #expect(launcher.dragApp == 7 && launcher.dragOffset < 0 && launcher.dragOffset > -36)
+        // The rubber band's share and how near opening it is (60 of 90 points) for this cover only
+        #expect(launcher.follow(7).share > 0 && abs(launcher.follow(7).ready - 60.0 / 90) < 1e-9 && launcher.follow(8).offset == 0)
         launcher.end(app, translation: CGSize(width: 2, height: -120), threshold: 90)
         #expect(opened?.0 == 7 && (opened?.1 ?? 0) < 0)
         #expect(launcher.dragApp == nil)
         // Short of the threshold the cover springs back
         opened = nil
-        launcher.drag(app, translation: CGSize(width: 0, height: -40), slop: 10)
+        launcher.drag(app, translation: CGSize(width: 0, height: -40), slop: 10, cap: 100, threshold: 90)
         launcher.end(app, translation: CGSize(width: 0, height: -40), threshold: 90)
         #expect(opened == nil && launcher.dragApp == nil)
     }
@@ -182,11 +240,11 @@ import Testing
         var opened = false
         launcher.canOpen = { _ in true }
         launcher.open = { _, _ in opened = true }
-        launcher.drag(app, translation: CGSize(width: 2, height: -50), slop: 10)
+        launcher.drag(app, translation: CGSize(width: 2, height: -50), slop: 10, cap: 100, threshold: 90)
         launcher.cancel(HostApp(id: 8, title: "Other"))
         #expect(launcher.dragApp == app.id && launcher.dragOffset < 0)
         launcher.cancel(app)
-        #expect(launcher.dragApp == nil && launcher.dragOffset == 0 && !opened)
+        #expect(launcher.dragApp == nil && launcher.dragOffset == 0 && launcher.dragShare == 0 && launcher.dragReady == 0 && !opened)
         launcher.end(app, translation: CGSize(width: 0, height: -150), threshold: 90)
         #expect(!opened)
     }

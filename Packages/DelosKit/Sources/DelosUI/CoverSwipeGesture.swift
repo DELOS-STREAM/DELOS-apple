@@ -11,6 +11,8 @@ struct CoverSwipeGesture: UIGestureRecognizerRepresentable {
     let enabled: Bool
     let minimumDistance: CGFloat
     let threshold: CGFloat
+    /// The most the cover rises on its rubber band (points).
+    let cap: CGFloat
 
     func makeUIGestureRecognizer(context: Context) -> CoverSwipeRecognizer {
         let recognizer = CoverSwipeRecognizer(app: app, launcher: launcher, minimumDistance: minimumDistance)
@@ -29,7 +31,7 @@ struct CoverSwipeGesture: UIGestureRecognizerRepresentable {
         guard let launcher else { return }
         switch recognizer.state {
         case .began, .changed:
-            launcher.drag(app, translation: recognizer.translation, slop: minimumDistance)
+            launcher.drag(app, translation: recognizer.translation, slop: minimumDistance, cap: cap, threshold: threshold)
         case .ended:
             launcher.end(app, translation: recognizer.translation, threshold: threshold)
         case .cancelled:

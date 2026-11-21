@@ -300,27 +300,28 @@ enum OverviewNavigation {
 }
 
 /// The overview's motion numbers (stage pixels and milliseconds; the springs are in ``OverviewMotion/flightOpenSpring``
-/// and its siblings). The timeline runs at 0.75 times the prototype's, matching the faster spring flight.
+/// and its siblings). The timeline runs at the prototype's own pace (1.0 times its table).
 enum OverviewMotion {
     /// How long the cover's flight takes to look landed out to the header and back (the springs' perceived length): the
     /// title's crossfade is timed by it (out over its first 40 %, in over its last 50 %).
-    static let flight = 585.0, flightBack = 480.0
+    static let flight = 780.0, flightBack = 640.0
     /// The flight rises this far above the straight line at its middle and grows by this much.
     static let arc = 30.0, midScale = 1.04
     /// The page rises from this far below with the flight, and sinks back there over [pageSink] ms as it closes.
-    static let pageRise = 120.0, pageSink = 420.0
-    /// The header's parts rise one after another, [headerStagger] ms apart from [headerDelay] (the cue from [cueDelay]).
-    static let headerDelay = 195.0, cueDelay = 375.0, headerStagger = 36.0
+    static let pageRise = 120.0, pageSink = 560.0
+    /// The header's parts rise one after another, [headerStagger] ms apart from [headerDelay]; the cue, the sixth step,
+    /// counts from [cueDelay] (it starts at 730 ms).
+    static let headerDelay = 260.0, cueDelay = 500.0, headerStagger = 46.0
     /// The hero fades in over [heroIn] ms and out over [heroOut] ms; the header's buttons take input after [buttonsDelay].
-    static let heroIn = 675.0, heroOut = 480.0, buttonsDelay = 300.0
-    /// The other covers lift away: 160 px plus 30 per cover of distance, to 92 %, 34 ms apart; the info row rises 90 px.
+    static let heroIn = 900.0, heroOut = 640.0, buttonsDelay = 400.0
+    /// The other covers lift away: 160 px plus 30 per cover of distance, to 92 %, 45 ms apart; the info row rises 90 px.
     static func coverLift(distance: Int) -> Double { -160 - Double(distance) * 30 }
-    static let coverLiftScale = 0.92, coverLiftStagger = 34.0, infoLift = -90.0
+    static let coverLiftScale = 0.92, coverLiftStagger = 45.0, infoLift = -90.0
     /// The streaming card's count-up and bars run over this long; the ratings start this long after the opening, the
     /// second ring [ratingStagger] ms after the first.
-    static let ratings = 1300.0, ratingsDelay = 285.0, ratingStagger = 90.0
-    /// A ring's overshoot is softly capped near this share of its target (tanh: about 5.5 % at most).
-    static let ratingOvershoot = 0.06
+    static let ratings = 1300.0, ratingsDelay = 380.0, ratingStagger = 90.0
+    /// A ring's overshoot is softly capped near this share of its target (tanh: about 7.3 % at most).
+    static let ratingOvershoot = 0.08
     /// The ring and its number grow from this scale; a chip pops from [chipFrom].
     static let ratingFrom = 0.92, chipFrom = 0.9
     /// The hero blurs fully over this much scroll, drifts at 10 % of it (up to 700 px) and zooms by 1/9000 per pixel.
@@ -334,11 +335,36 @@ enum OverviewMotion {
     /// The screenshots move against the carousel by 7 % of their distance from its middle.
     static let parallax = 0.07
     /// Touch: pulling the page down this far at its top closes the overview; a cover swiped up this far opens it.
-    static let pullClose = 150.0, swipeOpen = 90.0
+    static let pullClose = 150.0, swipeOpen = 72.0
     /// A drag counts as a swipe of the cover once it moved this far, mostly vertically.
     static let swipeSlop = 10.0
-    /// The finger's travel the dragged cover follows, with resistance.
-    static func swipeFollow(_ travel: Double) -> Double { travel >= 0 ? travel * 0.15 : -pow(-travel, 0.85) }
+    /// The swiped cover's rubber band: it follows the finger up at [swipeShare] of its travel at first and eases towards
+    /// [swipeCap] stage pixels, never past it (nor nearer the screen's top).
+    static let swipeShare = 0.6, swipeCap = 120.0
+
+    /// How far the dragged cover follows a finger that moved [travel] points (negative: up), with [cap] the most it rises
+    /// (points): up it is a rubber band, at most [swipeShare] of the travel and never past [cap]; down it barely gives.
+    static func swipeFollow(_ travel: Double, cap: Double) -> Double {
+        guard travel < 0, cap > 0 else { return max(travel, 0) * 0.15 }
+        return -cap * (1 - exp(-swipeShare * -travel / cap))
+    }
+
+    /// The header cover's scale while the page is pulled down [pull] stage pixels past its top.
+    static func pullScale(_ pull: Double) -> Double { 1 - min(max(pull, 0), 300) / 2400 }
+
+    /// The closing flight's start when the finger let go of the page it pulled down: the header cover's frame as it shows
+    /// ([slot] moved down by [pull] points and shrunk by [scale] about its middle) and the spring's initial velocity, in
+    /// flights per second towards the card ([card]): the cover's downward [speed] (points per second) along the way to
+    /// the card, so the flight carries on from the finger's motion without a stop.
+    static func pullHandoff(slot: CGRect, pull: Double, scale: Double, speed: Double, card: CGRect) -> (frame: CGRect, velocity: Double) {
+        let width = slot.width * scale, height = slot.height * scale
+        let frame = CGRect(x: slot.midX - width / 2, y: slot.midY + max(pull, 0) - height / 2, width: width, height: height)
+        let dx = card.midX - frame.midX, dy = card.midY - frame.midY
+        let distance = (dx * dx + dy * dy).squareRoot()
+        guard distance > 1, dy > 0 else { return (frame, 0) }
+        // Only the part of the speed that heads towards the card counts, at most 4 flights per second
+        return (frame, min(max(speed, 0) * dy / distance / distance, 4))
+    }
 
     /// The flying cover's frame at [progress] (0 at the card, 1 at the header slot): its size runs from the card's to the
     /// slot's and grows a little at the middle, its centre runs along a slight arc [lift] points high. [from], [to]: the
@@ -355,12 +381,13 @@ enum OverviewMotion {
         return CGRect(x: x - width / 2, y: y - height / 2, width: width, height: height)
     }
 
-    /// The ratings' spring: response 0.7 s, damping 0.6, run over [ratingRun] ms (a ring's own clock, from its start).
-    static let ratingResponse = 0.7, ratingDamping = 0.6, ratingRun = 1300.0
+    /// The ring arc's spring: response 1.0 s, damping 0.55, settled exactly at [ratingRun] ms (a ring's own clock, from
+    /// its start); its number counts up with a plain ease-out over [ratingCount] ms.
+    static let ratingResponse = 1.0, ratingDamping = 0.55, ratingRun = 1600.0, ratingCount = 1100.0
 
-    /// A rating ring's fill at [ms] into its spring, 1 being its target: the spring's step response up to its peak
-    /// (π/ωd ≈ 438 ms), then the peak's overshoot decays as (1 + x)·e^(−x), x = (t − peak)·ω, with no second bounce; an
-    /// overshoot is softly capped by 1 + 0.06·tanh(over / 0.06) (about 5.5 % at most).
+    /// A rating ring's arc at [ms] into its spring, 1 being its target: the spring's step response up to its peak
+    /// (π/ωd ≈ 599 ms), then the peak's overshoot decays as (1 + x)·e^(−x), x = (t − peak)·ω, with no second bounce; an
+    /// overshoot is softly capped by 1 + 0.08·tanh(over / 0.08) (about 7.3 % at most).
     static func ratingFill(ms: Double) -> Double {
         guard ms > 0 else { return 0 }
         guard ms < ratingRun else { return 1 }
@@ -375,6 +402,22 @@ enum OverviewMotion {
             over = (step(peak) - 1) * (1 + x) * exp(-x)
         }
         return over > 0 ? 1 + ratingOvershoot * tanh(over / ratingOvershoot) : 1 + over
+    }
+
+    /// A rating's number at [ms] into its ring's clock, 1 being the rating: CSS's ease-out (`cubic-bezier(0, 0, .58, 1)`)
+    /// over [ratingCount] ms, never past it.
+    static func ratingNumber(ms: Double) -> Double {
+        let u = ms / ratingCount
+        guard u > 0 else { return 0 }
+        guard u < 1 else { return 1 }
+        // The curve's parameter where its x is [u] (x rises with it), then its y there
+        var low = 0.0, high = 1.0
+        for _ in 0..<40 {
+            let s = (low + high) / 2
+            if 3 * (1 - s) * s * s * 0.58 + s * s * s < u { low = s } else { high = s }
+        }
+        let s = (low + high) / 2
+        return min(3 * (1 - s) * s * s + s * s * s, 1)
     }
 
     /// A picture of [aspect] (width / height) filling [frame] as `scaledToFill` does, centred: drawn at [base] (its size

@@ -202,10 +202,11 @@ struct CountUpText: View, Animatable {
 }
 
 /// The rating ring (`.rring`): once [active] (after [delay] ms), the ring's clock runs linearly over
-/// ``OverviewMotion/ratingRun`` ms and everything follows ``OverviewMotion/ratingFill(ms:)``: the arc fills past the
-/// rating by about 5.5 % at most and settles back without a second bounce, the number counts with it (never past 100)
-/// and both grow from 92 %. Reduced motion fades them in at their values over 280 ms. Without a rating a dash in an
-/// empty track. The clock is read in the drawing only (the arc's path, the scale's transform, the number's text).
+/// ``OverviewMotion/ratingRun`` ms. The arc follows ``OverviewMotion/ratingFill(ms:)``: it fills past the rating by
+/// about 7.3 % at most and settles back without a second bounce; the number counts up to the rating with a plain
+/// ease-out (``OverviewMotion/ratingNumber(ms:)``), never past it; both grow from 92 % with the arc. Reduced motion
+/// fades them in at their values over 280 ms. Without a rating a dash in an empty track. The clock is read in the
+/// drawing only (the arc's path, the scale's transform, the number's text).
 struct RatingRing: View {
     let value: Double?
     let size: Double
@@ -277,7 +278,7 @@ private struct RingScale: GeometryEffect {
     }
 }
 
-/// The ring's number: the rating times the arc's fill, rounded (so it passes the rating and returns with it, never past 100).
+/// The ring's number: the rating times its ease-out count, rounded (it never passes the rating).
 private struct RingNumber: View, Animatable {
     let target: Double
     var clock: Double
@@ -290,7 +291,7 @@ private struct RingNumber: View, Animatable {
     }
 
     var body: some View {
-        Text(min(100, (target * OverviewMotion.ratingFill(ms: clock)).rounded()).formatted(.number.precision(.fractionLength(0))))
+        Text((target * OverviewMotion.ratingNumber(ms: clock)).rounded().formatted(.number.precision(.fractionLength(0))))
             .font(font)
             .monospacedDigit()
             .foregroundStyle(color)
@@ -520,6 +521,9 @@ struct GameInfoHint: View {
     let kind: InputKind
     let onOpen: () -> Void
     var active = true
+    /// The game whose cover the hint is in: a finger swiping that cover up fills the touch chevrons as it goes.
+    var appID: Int?
+    @Environment(\.overviewLauncher) private var launcher
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduced
@@ -573,14 +577,25 @@ struct GameInfoHint: View {
                 .foregroundStyle(.white)
                 .modifier(Bob(up: false, paused: bobPaused))
         case .touch:
-            // A finger with two stacked chevrons rising above it (swipe the cover up)
+            // A finger with two stacked chevrons rising above it (swipe the cover up); while the cover is swiped they
+            // stop bobbing and fill as the swipe nears opening: the lower one over its first half, the upper one over
+            // its second, each going solid and bright, rising, growing and glowing
+            let ready = appID.flatMap { launcher?.follow($0).ready } ?? 0
+            let lower = min(ready / 0.5, 1), upper = min(max((ready - 0.5) / 0.5, 0), 1)
             HStack(spacing: stage.px(2)) {
                 SymbolView(symbol: Symbols.touchApp, size: 26, color: RGBA(red: 1, green: 1, blue: 1), filled: true)
                 VStack(spacing: -stage.px(15)) {
                     SymbolView(symbol: Symbols.expandLess, size: 22, color: colors.accent, filled: true)
-                    SymbolView(symbol: Symbols.expandLess, size: 22, color: colors.accent, filled: true).opacity(0.6)
+                        .brightness(0.35 * upper)
+                        .shadow(color: colors.accent.color.opacity(0.9 * upper), radius: stage.px(10 * upper))
+                    SymbolView(symbol: Symbols.expandLess, size: 22, color: colors.accent, filled: true)
+                        .opacity(0.6 + 0.4 * lower)
+                        .brightness(0.35 * lower)
+                        .shadow(color: colors.accent.color.opacity(0.9 * lower), radius: stage.px(10 * lower))
                 }
-                .modifier(Bob(up: true, paused: bobPaused))
+                .scaleEffect(1 + 0.25 * ready, anchor: .bottom)
+                .offset(y: -stage.px(8 * ready))
+                .modifier(Bob(up: true, paused: bobPaused || ready > 0))
             }
         case .pointer:
             SymbolView(symbol: Symbols.expandMore, size: 26, color: colors.accent, filled: true)
