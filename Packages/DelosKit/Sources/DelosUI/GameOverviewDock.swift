@@ -28,46 +28,88 @@ struct OverviewDock: View {
     }
 
     var body: some View {
-        VStack(spacing: stage.px(14)) {
-            if playable {
-                HStack(spacing: stage.px(22)) {
-                    Text(OverviewVideo.clock(video.time))
-                        .frame(width: stage.px(104), alignment: .trailing)
-                    DockTimeline(video: video)
-                        .stop(.timeline, focus: controls.focus, ring: ring)
-                    Text("\u{2212}" + OverviewVideo.clock(max(0, video.duration - video.time)))
-                        .frame(width: stage.px(104), alignment: .leading)
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let panelWidth = playable ? width : max(stage.px(600), width - stage.px(120))
+            let panelHeight = stage.px(playable ? 248 : 150)
+            let rowY = stage.px(playable ? 94 : 78)
+            let middleWidth = playable ? stage.px(564) : pageWidth + stage.px(204)
+            let infoWidth = max(0, (max(stage.px(600), width - stage.px(120)) - stage.px(148) - max(stage.px(564), pageWidth + stage.px(204))) / 2)
+            ZStack(alignment: .bottom) {
+                // Layout is fixed for the whole morph. Only layer transforms and opacity interpolate;
+                // neither the material nor any of its children re-lays out on animation frames.
+                DockGlass(radius: stage.px(46))
+                    .frame(width: width, height: stage.px(248))
+                    .scaleEffect(x: panelWidth / width, y: panelHeight / stage.px(248), anchor: .bottom)
+                info
+                    .frame(width: infoWidth, height: stage.px(96), alignment: .leading)
+                    .offset(x: -panelWidth / 2 + stage.px(44) + infoWidth / 2, y: -rowY + stage.px(48))
+                timeline
+                    .frame(width: width - stage.px(88), height: stage.px(52))
+                    .scaleEffect(y: playable || reduced ? 1 : 0.01, anchor: .bottom)
+                    .opacity(playable ? 1 : 0)
+                    .animation(OverviewViewerMotion.animation(reduced: reduced), value: playable)
+                    .offset(y: -stage.px(playable ? 172 : 124))
+                    .allowsHitTesting(playable)
+                    .accessibilityHidden(!playable)
+                navigation(.previous, symbol: Symbols.playerPrevious, enabled: index > 0) { go(index - 1) }
+                    .offset(x: -(middleWidth - stage.px(76)) / 2, y: -rowY + stage.px(38))
+                transport
+                    .scaleEffect(x: playable || reduced ? 1 : 0.01, y: playable || reduced ? 1 : 0.8)
+                    .opacity(playable ? 1 : 0)
+                    .animation(OverviewViewerMotion.animation(reduced: reduced), value: playable)
+                    .offset(y: -rowY + stage.px(62))
+                    .allowsHitTesting(playable)
+                    .accessibilityHidden(!playable)
+                pages
+                    .opacity(playable ? 0 : 1)
+                    .animation(OverviewViewerMotion.animation(reduced: reduced), value: playable)
+                    .offset(y: -rowY + stage.px(38))
+                    .allowsHitTesting(!playable)
+                    .accessibilityHidden(playable)
+                navigation(.next, symbol: Symbols.playerNext, enabled: index + 1 < media.count) { go(index + 1) }
+                    .offset(x: (middleWidth - stage.px(76)) / 2, y: -rowY + stage.px(38))
+                sound
+                    .scaleEffect(x: playable || reduced ? 1 : 0.01, anchor: .trailing)
+                    .opacity(playable ? 1 : 0)
+                    .animation(OverviewViewerMotion.animation(reduced: reduced), value: playable)
+                    .offset(x: panelWidth / 2 - stage.px(44 + 147), y: -rowY + stage.px(38))
+                    .allowsHitTesting(playable)
+                    .accessibilityHidden(!playable)
+            }
+            .frame(width: width, height: stage.px(248), alignment: .bottom)
+            .animation(reduced ? nil : OverviewViewerMotion.animation(reduced: false), value: playable)
+            .simultaneousGesture(TapGesture().onEnded { controls.onInput() })
+            .overlay {
+                if ringShown, controls.focus != .close {
+                    Capsule()
+                        .strokeBorder(colors.accent.color, lineWidth: stage.px(5))
+                        .padding(-stage.px(9))
+                        .matchedGeometryEffect(id: controls.focus, in: ring, properties: .frame, isSource: false)
+                        .animation(reduced ? nil : OverviewViewerMotion.animation(reduced: false), value: playable)
+                        .animation(reduced ? nil : OverviewViewerMotion.animation(reduced: false), value: controls.focus)
+                        .allowsHitTesting(false)
                 }
-                .font(DelosFonts.figtree(stage.tpx(22), .bold))
-                .foregroundStyle(colors.text.color)
-                .monospacedDigit()
-                .frame(height: stage.px(52))
-            }
-            // Info and sound take equal widths, so the transport is centred on the dock and the screen
-            HStack(spacing: stage.px(30)) {
-                info.frame(maxWidth: .infinity, alignment: .leading)
-                if playable { transport } else { pages }
-                sound.frame(maxWidth: .infinity, alignment: .trailing)
-            }
-            .frame(minHeight: stage.px(playable ? 128 : 96))
-        }
-        .padding(.top, stage.px(24))
-        .padding(.horizontal, stage.px(44))
-        .padding(.bottom, stage.px(30))
-        .background { DockGlass(radius: stage.px(46)) }
-        // Any press on the dock counts as input (the idle timer starts over)
-        .simultaneousGesture(TapGesture().onEnded { controls.onInput() })
-        .overlay {
-            // One ring that glides to the focused stop (`matchedGeometryEffect` on the stops' frames)
-            if ringShown, controls.focus != .close, OverviewDockFocus.rows(playable: playable).contains(where: { $0.contains(controls.focus) }) {
-                Capsule()
-                    .strokeBorder(colors.accent.color, lineWidth: stage.px(5))
-                    .padding(-stage.px(9))
-                    .matchedGeometryEffect(id: controls.focus, in: ring, properties: .frame, isSource: false)
-                    .animation(reduced ? nil : Motion.spring(Motion.focus), value: controls.focus)
-                    .allowsHitTesting(false)
             }
         }
+        .frame(height: stage.px(248))
+    }
+
+    private var timeline: some View {
+        HStack(spacing: stage.px(22)) {
+            Text(OverviewVideo.clock(video.time)).frame(width: stage.px(104), alignment: .trailing)
+            DockTimeline(video: video).stop(.timeline, focus: controls.focus, ring: ring)
+            Text("\u{2212}" + OverviewVideo.clock(max(0, video.duration - video.time)))
+                .frame(width: stage.px(104), alignment: .leading)
+        }
+        .font(DelosFonts.figtree(stage.tpx(22), .bold))
+        .foregroundStyle(colors.text.color)
+        .monospacedDigit()
+    }
+
+    private func navigation(_ focus: OverviewDockFocus, symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        DockButton(symbol: symbol, size: 76, label: L(focus == .previous ? "overview_previous" : "overview_next"), enabled: enabled, action: action)
+            .stop(focus, focus: controls.focus, ring: ring)
     }
 
     private var info: some View {
@@ -77,8 +119,8 @@ struct OverviewDock: View {
                 .tracking(stage.px(2))
                 .foregroundStyle(colors.text2.color)
             HStack(alignment: .firstTextBaseline, spacing: stage.px(8)) {
-                Text("\(index + 1)").font(DelosFonts.unbounded(stage.tpx(34), .bold)).foregroundStyle(colors.accent.color)
-                Text(L("overview_viewer_count", media.count, title))
+                Text("\(index + 1)").font(DelosFonts.unbounded(stage.tpx(34), .bold)).foregroundStyle(colors.accent.color).fixedSize()
+                MarqueeLabel(text: L("overview_viewer_count", media.count, title), active: true, bounce: true)
                     .font(DelosFonts.figtree(stage.tpx(30), .bold)).foregroundStyle(colors.text.color)
             }
             .monospacedDigit()
@@ -89,8 +131,6 @@ struct OverviewDock: View {
 
     private var transport: some View {
         HStack(spacing: stage.px(26)) {
-            DockButton(symbol: Symbols.playerPrevious, size: 76, label: L("overview_previous"), enabled: index > 0) { go(index - 1) }
-                .stop(.previous, focus: controls.focus, ring: ring)
             DockButton(symbol: Symbols.playerSeekBack, size: 92, label: L("overview_video_back"), ten: true) {
                 video.seek(by: -10)
                 controls.seekFlash(-1)
@@ -104,55 +144,46 @@ struct OverviewDock: View {
                 controls.seekFlash(1)
             }
             .stop(.forward, focus: controls.focus, ring: ring)
-            DockButton(symbol: Symbols.playerNext, size: 76, label: L("overview_next"), enabled: index + 1 < media.count) { go(index + 1) }
-                .stop(.next, focus: controls.focus, ring: ring)
         }
     }
 
     /// A screenshot: previous, one dot per item (videos as rings, the current one a gold bar) and next. Only L1 and R1
     /// browse with the controller; a dot is a touch and pointer target.
     private var pages: some View {
-        HStack(spacing: stage.px(26)) {
-            DockButton(symbol: Symbols.playerPrevious, size: 76, label: L("overview_previous"), enabled: index > 0) { go(index - 1) }
-                .stop(.previous, focus: controls.focus, ring: ring)
-            HStack(spacing: stage.px(14)) {
-                ForEach(media.indices, id: \.self) { k in
-                    let on = k == index
-                    Capsule()
-                        .fill(on ? colors.accent.color : (media[k].kind == .video ? Color.clear : Color.white.opacity(0.4)))
-                        .overlay {
-                            if !on, media[k].kind == .video { Capsule().strokeBorder(Color.white.opacity(0.55), lineWidth: stage.px(2)) }
-                        }
-                        .frame(width: stage.px(on ? 40 : 12), height: stage.px(12))
-                        .padding(.vertical, stage.px(18))
-                        .contentShape(Rectangle())
-                        .onTapGesture { go(k) }
-                }
+        ZStack {
+            ForEach(media.indices, id: \.self) { k in
+                let on = k == index
+                Capsule()
+                    .fill(on ? colors.accent.color : (media[k].kind == .video ? Color.clear : Color.white.opacity(0.4)))
+                    .overlay {
+                        if !on, media[k].kind == .video { Capsule().strokeBorder(Color.white.opacity(0.55), lineWidth: stage.px(2)) }
+                    }
+                    .frame(width: stage.px(40), height: stage.px(12))
+                    .scaleEffect(x: on ? 1 : 0.3)
+                    .offset(x: stage.px(Double(k) * 26 + (k > index ? 28 : (k == index ? 14 : 0)) + 6 - (Double(media.count) * 26 + 14) / 2))
+                    .padding(.vertical, stage.px(18))
+                    .contentShape(Rectangle())
+                    .onTapGesture { go(k) }
             }
-            .animation(reduced ? .easeOut(duration: 0.2) : Motion.spring(Motion.focus), value: index)
-            .padding(.horizontal, stage.px(30))
-            .frame(height: stage.px(76))
-            .background(Capsule().fill(Color.white.opacity(0.08)).overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: stage.px(1))))
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(index + 1) " + L("overview_viewer_count", media.count, title))
-            DockButton(symbol: Symbols.playerNext, size: 76, label: L("overview_next"), enabled: index + 1 < media.count) { go(index + 1) }
-                .stop(.next, focus: controls.focus, ring: ring)
         }
+        .padding(.horizontal, stage.px(30))
+        .animation(OverviewViewerMotion.animation(reduced: reduced), value: index)
+        .frame(width: pageWidth, height: stage.px(76))
+        .background(Capsule().fill(Color.white.opacity(0.08)).overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: stage.px(1))))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(index + 1) " + L("overview_viewer_count", media.count, title))
     }
 
-    @ViewBuilder private var sound: some View {
-        if playable {
-            HStack(spacing: stage.px(18)) {
-                DockButton(symbol: Self.speaker(muted: video.muted, volume: video.volume), size: 76,
-                           label: video.muted ? L("overview_hint_unmute") : L("overview_hint_mute")) { video.toggleMute() }
-                    .stop(.mute, focus: controls.focus, ring: ring)
-                DockVolume(video: video)
-                    .frame(width: stage.px(200), height: stage.px(52))
-                    .stop(.volume, focus: controls.focus, ring: ring)
-            }
-        } else {
-            // Keeps the info's width matched, so the page indicator stays centred
-            Color.clear.frame(height: 1)
+    private var pageWidth: CGFloat { stage.px(Double(media.count) * 26 + 74) }
+
+    private var sound: some View {
+        HStack(spacing: stage.px(18)) {
+            DockButton(symbol: Self.speaker(muted: video.muted, volume: video.volume), size: 76,
+                       label: video.muted ? L("overview_hint_unmute") : L("overview_hint_mute")) { video.toggleMute() }
+                .stop(.mute, focus: controls.focus, ring: ring)
+            DockVolume(video: video)
+                .frame(width: stage.px(200), height: stage.px(52))
+                .stop(.volume, focus: controls.focus, ring: ring)
         }
     }
 

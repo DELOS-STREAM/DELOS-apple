@@ -76,6 +76,16 @@ final class OverviewVideo {
     @ObservationIgnored private(set) var generation = 0
     @ObservationIgnored private var active = true
     @ObservationIgnored private var wantsPlayback = true
+    /// One still of the outgoing player; playback itself is released before the browse starts.
+    struct BrowseFrame {
+        let image: CGImage
+        let direction: Double
+        let serial: Int
+    }
+    var browseFrame: BrowseFrame?
+    @ObservationIgnored var snapshot: (@MainActor () async -> CGImage?)?
+    @ObservationIgnored var browseTask: Task<Void, Never>?
+    @ObservationIgnored var reducedBrowse = false
 
     /// Revokes pending autoplay as well as current playback. Foregrounding alone does not restart a paused trailer.
     func setActive(_ value: Bool) {
@@ -141,6 +151,7 @@ final class OverviewVideo {
         started = false
         error = nil
         reported = false
+        snapshot = nil
         run = nil
         native?.invalidate()
         native = nil
@@ -404,6 +415,15 @@ struct OverviewVideoPlayer {
         video.run = { [weak web, weak coordinator] script in
             guard coordinator?.current == true else { return }
             web?.evaluateJavaScript(script, completionHandler: nil)
+        }
+        video.snapshot = { [weak web, weak coordinator] in
+            guard let web, coordinator?.current == true else { return nil }
+            let image = try? await web.takeSnapshot(configuration: nil)
+            #if os(iOS)
+            return image?.cgImage
+            #else
+            return image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            #endif
         }
         coordinator.navigation = web.loadHTMLString(Self.html(videoID: videoID, origin: Self.origin), baseURL: URL(string: Self.origin))
         // No status within 15 s: the player did not load
