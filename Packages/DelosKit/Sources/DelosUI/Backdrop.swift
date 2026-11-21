@@ -60,20 +60,24 @@ struct Backdrop: View {
         // A game whose colors are not worked out yet keeps the previous game's, so nothing flashes in between
         let pending = matching && !(hero.map { art.colorsKnown($0.id) } ?? true)
         // The game background is larger than the screen (the tilt swings its margin into view): overlays, so it never
-        // makes the backdrop, and the screens over it, larger than the window
+        // makes the backdrop, and the screens over it, larger than the window. The game overview zooms and drifts all of
+        // it with its scroll (``OverviewDepth``)
+        let reduced = appearance.reducedMotion || systemReduceMotion
         colors.bg.color
             .overlay {
-                HeroLayer(art: heroOn ? hero : nil, blur: appearance.heroBlur, reduced: appearance.reducedMotion || systemReduceMotion,
+                HeroLayer(art: heroOn ? hero : nil, blur: appearance.heroBlur, reduced: reduced,
                           animate: animate && heroOn)
                     .opacity(heroOn ? Double(appearance.heroOpacity) / 100 : 0)
                     .animation(Motion.fastOutSlowIn(800), value: heroOn)
+                    .modifier(OverviewDepth(reduced: reduced))
             }
             .overlay {
                 HeroFade(bg: colors.bg)
                     .opacity(heroOn ? 1 : 0)
                     .animation(Motion.fastOutSlowIn(800), value: heroOn)
+                    .modifier(OverviewDepth(reduced: reduced))
             }
-            .overlay { animated(gameColors: gameColors, pending: pending, heroActive: heroOn) }
+            .overlay { animated(gameColors: gameColors, pending: pending, heroActive: heroOn).modifier(OverviewDepth(reduced: reduced)) }
             .clipped()
             .ignoresSafeArea()
     }
@@ -217,6 +221,22 @@ final class BackdropTintClock {
         last = date
         tints.advance(dt: dt, target: target, baseTarget: baseTarget)
         return (tints.game, tints.baseAlpha ?? baseTarget)
+    }
+}
+
+/// The game overview's depth on the background behind it (`BackdropDepth` of DELOS for Android): as the page scrolls, the
+/// whole background zooms by ``OverviewMotion/heroZoom(_:)`` and drifts up by ``OverviewMotion/heroDrift(_:)``; the
+/// overview's deeper render of the hero fades in over it with the same motion. Still with reduced motion.
+private struct OverviewDepth: ViewModifier {
+    let reduced: Bool
+    @Environment(HomeArt.self) private var art
+    @Environment(\.stage) private var stage
+
+    func body(content: Content) -> some View {
+        let scroll = reduced ? 0 : art.overviewScroll
+        content
+            .scaleEffect(OverviewMotion.heroZoom(scroll))
+            .offset(y: stage.px(OverviewMotion.heroDrift(scroll)))
     }
 }
 

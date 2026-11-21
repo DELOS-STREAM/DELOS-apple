@@ -227,8 +227,8 @@ import Testing
     }
 
     @Test func theHeroBlurDeepensFromTheDashboards() {
-        // 60 % of the former 40 px on top of the dashboard's
-        #expect(OverviewMotion.deepBlur(from: 0) == 24 && OverviewMotion.deepBlur(from: 20) == 44)
+        // 60 % of the former 40 px, never below the dashboard's own blur
+        #expect(OverviewMotion.deepBlur(from: 0) == 24 && OverviewMotion.deepBlur(from: 20) == 24 && OverviewMotion.deepBlur(from: 40) == 40)
     }
 
     @Test func homeMotionNumbers() {
