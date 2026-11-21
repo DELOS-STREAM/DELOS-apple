@@ -159,6 +159,7 @@ struct CoverScrollOpenGesture: UIGestureRecognizerRepresentable {
     }
 }
 
+/// A pan that only scroll events start (a trackpad's two fingers, a mouse wheel), never fingers on the screen.
 @MainActor
 final class CoverScrollRecognizer: UIPanGestureRecognizer, UIGestureRecognizerDelegate {
     /// This scroll has opened the overview: the rest of it does nothing.
@@ -178,6 +179,24 @@ final class CoverScrollRecognizer: UIPanGestureRecognizer, UIGestureRecognizerDe
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
         true
+    }
+}
+
+/// A trackpad's two-finger swipe sideways (or a tilt wheel) over the media viewer: [browse] once per swipe, to the next
+/// item (+1) when the content scrolls right (the fingers move left), to the previous one (−1) the other way.
+struct ViewerScrollBrowseGesture: UIGestureRecognizerRepresentable {
+    /// How far the content scrolls sideways before it browses (points).
+    let threshold: CGFloat
+    let browse: (Int) -> Void
+
+    func makeUIGestureRecognizer(context: Context) -> CoverScrollRecognizer { CoverScrollRecognizer() }
+
+    func handleUIGestureRecognizerAction(_ recognizer: CoverScrollRecognizer, context: Context) {
+        guard recognizer.state == .changed, !recognizer.fired else { return }
+        let t = recognizer.translation(in: recognizer.view)
+        guard abs(t.x) >= threshold, abs(t.x) > abs(t.y) else { return }
+        recognizer.fired = true
+        browse(t.x < 0 ? 1 : -1)
     }
 }
 #endif
