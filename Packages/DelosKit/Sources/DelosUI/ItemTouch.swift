@@ -1,3 +1,4 @@
+import CoreGraphics
 import DelosInput
 
 /// What a tap or a click on a ``FocusItem`` does (docs/ARCHITECTURE.md, "Focus" and "Pointer"), apart from SwiftUI and UIKit
@@ -29,4 +30,18 @@ enum ItemTouch: Equatable {
     /// noted the pointer before the item's tap read the kind (a cover's first tap started the game) and opened the context
     /// menu of the item under the finger (a PC's circle on the start screen).
     static func takesSecondaryClick(indirect: Bool) -> Bool { indirect }
+}
+
+/// The cover gesture decides its axis before recognition, not in an already-active drag callback.
+enum CoverDragDirection: Equatable {
+    case undecided, horizontalScroll, verticalSwipe
+
+    static func of(translation: CGSize, minimumDistance: CGFloat) -> Self {
+        let horizontal = abs(translation.width), vertical = abs(translation.height)
+        guard max(horizontal, vertical) >= minimumDistance else { return .undecided }
+        // Do not steal an almost-diagonal drag from the row while the player's intent is still unclear.
+        if horizontal > vertical * 1.2 { return .horizontalScroll }
+        if vertical > horizontal * 1.2 { return .verticalSwipe }
+        return .undecided
+    }
 }

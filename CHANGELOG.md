@@ -468,6 +468,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- Horizontal finger drags scroll the dashboard cover row again; the cover gesture claims only clear upward swipes, while focus-first taps remain unchanged ([#24](https://github.com/DELOS-STREAM/DELOS-apple/issues/24)).
+
 - The dashboard shows no back arrow, and game info keeps only the top bar's back button (the second one under it is gone).
 - Wrapped rows of game info's tags, badges and links, and the filter rows, keep the same focus gap between rows as
   between items.

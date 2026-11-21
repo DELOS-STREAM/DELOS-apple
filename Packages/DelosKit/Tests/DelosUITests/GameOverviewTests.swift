@@ -174,6 +174,21 @@ import Testing
         #expect(opened == nil && launcher.dragApp == nil)
     }
 
+    @Test func cancelledCoverSwipeSettlesWithoutOpeningOrCancellingAnotherCover() {
+        let launcher = OverviewLauncher()
+        let app = HostApp(id: 7, title: "Fixture")
+        var opened = false
+        launcher.canOpen = { _ in true }
+        launcher.open = { _, _ in opened = true }
+        launcher.drag(app, translation: CGSize(width: 2, height: -50), slop: 10)
+        launcher.cancel(HostApp(id: 8, title: "Other"))
+        #expect(launcher.dragApp == app.id && launcher.dragOffset < 0)
+        launcher.cancel(app)
+        #expect(launcher.dragApp == nil && launcher.dragOffset == 0 && !opened)
+        launcher.end(app, translation: CGSize(width: 0, height: -150), threshold: 90)
+        #expect(!opened)
+    }
+
     @Test func viewerIsEdgeToEdge() {
         let item = OverviewContent.Media(kind: .video, id: "v", name: nil)
         #expect(OverviewViewer.frame(item, width: 1920, height: 1080) == CGRect(x: 0, y: 0, width: 1920, height: 1080))
