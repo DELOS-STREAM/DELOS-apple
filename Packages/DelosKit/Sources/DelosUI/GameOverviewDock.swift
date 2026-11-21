@@ -37,11 +37,10 @@ struct OverviewDock: View {
             let middleWidth = playable ? stage.px(564) : pageWidth + stage.px(204)
             let infoWidth = Self.infoWidth(width: width, pageWidth: pageWidth, px: stage.px)
             ZStack(alignment: .bottom) {
-                // Layout is fixed for the whole morph. Only layer transforms and opacity interpolate;
-                // neither the glass nor any of its children re-lays out on animation frames.
+                // Only the glass changes its size through the morph (a scaled glass would squash its rounded corners); its
+                // children keep their layout and move by layer transforms and opacity.
                 DockGlass(radius: stage.px(46))
-                    .frame(width: width, height: stage.px(248))
-                    .scaleEffect(x: panelWidth / width, y: panelHeight / stage.px(248), anchor: .bottom)
+                    .frame(width: panelWidth, height: panelHeight)
                 info
                     .frame(width: infoWidth, height: stage.px(54), alignment: .leading)
                     .offset(x: -panelWidth / 2 + stage.px(44) + infoWidth / 2, y: -rowY - stage.px(1) + stage.px(27))
