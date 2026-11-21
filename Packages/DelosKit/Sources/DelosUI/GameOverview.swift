@@ -1207,9 +1207,11 @@ struct TitleCrossfade: ViewModifier {
     }
 }
 
-/// The hero behind the overview: the dashboard's own game background shows through at its configured blur and keeps
-/// playing when animated. Scrolling fades in a deeper render of that same hero, with parallax and a small zoom.
-/// Carousel focus never changes the image source.
+/// The hero behind the overview, as in DELOS for Android (`OverviewBackdrop`): the dashboard's own background shows
+/// through at its configured blur, keeps playing when animated, and zooms and drifts with the scroll
+/// (``HomeArt/overviewScroll``). Scrolling fades in a deeper render of that same hero over it, more saturated and darker,
+/// with the same zoom and drift; the shades under the text (the bottom one, and the left one below the top bar) deepen
+/// with it and stay in place. Carousel focus never changes the image source.
 private struct OverviewBackdrop: View {
     let session: OverviewSession
     @Environment(HomeArt.self) private var art
@@ -1228,23 +1230,34 @@ private struct OverviewBackdrop: View {
     var body: some View {
         let scroll = max(session.scroll, 0) / stage.scale
         let deep = min(1, scroll / OverviewMotion.deepBlurScroll)
+        let shade = (OverviewMotion.shade + deep * 0.25) * 0.7
         let area = HeroArea.of(stageWidth: stage.width, stageHeight: stage.height)
         // Sized by the screen, never by the pictures (filled pictures are larger than it)
         Color.clear.overlay {
-        ZStack {
-            if let deepImage, let look {
-                Image(decorative: deepImage, scale: 1).resizable().interpolation(.medium)
-                    .frame(width: stage.px(area.width), height: stage.px(area.height))
-                    .brightness(-0.25)
-                    .opacity(deep * look.opacity)
+            ZStack {
+                if let deepImage, look != nil {
+                    Image(decorative: deepImage, scale: 1).resizable().interpolation(.medium)
+                        .frame(width: stage.px(area.width), height: stage.px(area.height))
+                        .saturation(OverviewMotion.deepSaturation)
+                        .colorMultiply(Color(white: OverviewMotion.deepBrightness))
+                        .opacity(deep)
+                        .scaleEffect(reduced ? 1 : OverviewMotion.heroZoom(scroll))
+                        .offset(y: reduced ? 0 : stage.px(OverviewMotion.heroDrift(scroll)))
+                }
+                LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .clear, location: 0.42), .init(color: colors.bg.color, location: 1)],
+                               startPoint: .top, endPoint: .bottom)
+                    .opacity(shade)
+                // The left shade begins under the top bar: clear down to 140 px, whole from 260 px
+                LinearGradient(stops: [.init(color: colors.bg.color, location: 0), .init(color: .clear, location: 0.38)],
+                               startPoint: .leading, endPoint: .trailing)
+                    .mask {
+                        LinearGradient(stops: [.init(color: .clear, location: OverviewMotion.shadeTop / stage.height),
+                                               .init(color: .black, location: OverviewMotion.shadeSolid / stage.height)],
+                                       startPoint: .top, endPoint: .bottom)
+                    }
+                    .opacity(shade)
             }
-            LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .clear, location: 0.42), .init(color: colors.bg.color, location: 1)],
-                           startPoint: .top, endPoint: .bottom)
-                .opacity((0.62 + deep * 0.25) * 0.7)
         }
-        }
-        .scaleEffect(reduced ? 1 : OverviewMotion.heroZoom(scroll))
-        .offset(y: reduced ? 0 : stage.px(OverviewMotion.heroDrift(scroll)))
         .opacity(session.shown ? 1 : 0)
         .animation(session.shown ? Motion.out(OverviewMotion.heroIn)
                    : .timingCurve(0.65, 0, 0.35, 1, duration: OverviewMotion.heroOut / 1000), value: session.shown)
@@ -1252,6 +1265,8 @@ private struct OverviewBackdrop: View {
         .clipped()
         .allowsHitTesting(false)
         .ignoresSafeArea()
+        .onChange(of: scroll, initial: true) { _, now in art.overviewScroll = now }
+        .onDisappear { art.overviewScroll = 0 }
         .task(id: DeepKey(hero: art.hero, blur: look?.blur, area: area)) {
             guard let hero = art.hero, let look else {
                 deepImage = nil

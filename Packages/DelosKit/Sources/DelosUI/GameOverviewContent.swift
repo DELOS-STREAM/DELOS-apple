@@ -331,8 +331,14 @@ enum OverviewMotion {
     static let deepBlurScroll = 520.0
     static func heroDrift(_ scroll: Double) -> Double { -min(scroll, 700) * 0.1 }
     static func heroZoom(_ scroll: Double) -> Double { 1 + min(max(scroll, 0), 900) / 9000 }
-    /// Only the additional overview blur is capped; the dashboard's configured blur is unchanged.
-    static func deepBlur(from dashboard: Int) -> Int { max(dashboard, 0) + 24 }
+    /// The deeper render's blur: 60 % of the former 40 px maximum, never below the dashboard's own blur.
+    static func deepBlur(from dashboard: Int) -> Int { max(dashboard, 24) }
+    /// The deeper render is saturated by 1.35 and darkened to 62 %.
+    static let deepSaturation = 1.35, deepBrightness = 0.62
+    /// The shades under the text start at this opacity and deepen by a quarter with the scroll (then 70 % of that).
+    static let shade = 0.62
+    /// The left shade starts under the top bar at [shadeTop] and is whole from [shadeSolid] down (stage pixels).
+    static let shadeTop = 140.0, shadeSolid = 260.0
     /// The header's logo box (the dashboard's 900 × 180 box at 80 %).
     static let logoWidth = 720.0, logoHeight = 144.0
     /// A screenshot's or video's picture keeps the tile's 16:9: it is enlarged evenly by [mediaOverscan], leaving a rim for

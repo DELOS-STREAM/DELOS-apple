@@ -50,6 +50,10 @@ struct GameArt: Equatable {
 final class HomeArt {
     /// The focused game's art while the library shows; the backdrop draws it.
     var hero: GameArt?
+    /// How far the game overview's page is scrolled (stage pixels, 0 without an overview): the backdrop zooms and drifts
+    /// with it (``OverviewMotion/heroZoom(_:)``, ``OverviewMotion/heroDrift(_:)``), as the whole background does in DELOS
+    /// for Android.
+    var overviewScroll = 0.0
     /// The colors of each game's cover once worked out (a nil value: a grey cover), by game key.
     private(set) var coverColors: [String: GameColors?] = [:]
     /// The colors of each game's background once rendered.

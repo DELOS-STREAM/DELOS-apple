@@ -349,6 +349,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- The game overview's background behaves as on Android: as the page scrolls, the whole background (the game's picture
+  and the animated lines) zooms and drifts up, and the deeper blur fades in fully over it, saturated by 1.35 and darkened
+  to 62 %, at the larger of 24 px and the dashboard's own blur. The shades under the text stay in place, and a left one
+  starts below the top bar.
+
 - The game overview's full-screen viewer has a new overlay, the dock: a tall translucent glass panel (a real backdrop
   blur over the video and the screenshots) with the timeline (buffered and played, the remaining time), the count and
   title, a big centred transport (previous, back 10 s, play, forward 10 s, next) and the sound with a volume slider;
