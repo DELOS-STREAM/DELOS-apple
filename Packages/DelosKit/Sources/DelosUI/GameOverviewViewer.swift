@@ -232,8 +232,8 @@ struct OverviewViewer: View {
                     controls.onInput()
                     guard playable(item), ControllerGlyphs.shared.kind != .pointer else { return }
                     let third = proxy.size.width / 3
-                    if value.location.x < third { video.seek(by: -10); controls.seekFlash(-1) }
-                    else if value.location.x > 2 * third { video.seek(by: 10); controls.seekFlash(1) }
+                    if value.location.x < third { video.seek(by: -OverviewViewerControls.seekStep); controls.seekFlash(-1) }
+                    else if value.location.x > 2 * third { video.seek(by: OverviewViewerControls.seekStep); controls.seekFlash(1) }
                 }.exclusively(before: SpatialTapGesture().onEnded { _ in
                     if ControllerGlyphs.shared.kind == .pointer {
                         controls.onInput()
@@ -380,7 +380,7 @@ struct OverviewViewer: View {
             let step = command == .left ? -1 : 1
             switch focus {
             case .timeline:
-                video.seek(by: Double(10 * step))
+                video.seek(by: OverviewViewerControls.seekStep * Double(step))
                 controls.seekFlash(step)
             case .volume: video.setVolume(video.volume + Double(10 * step))
             default: if let next = focus.moved(command, playable: playable) { controls.focus = next }
@@ -393,10 +393,10 @@ struct OverviewViewer: View {
             switch focus {
             case .timeline, .play: if playable { video.toggle() }
             case .back:
-                video.seek(by: -10)
+                video.seek(by: -OverviewViewerControls.seekStep)
                 controls.seekFlash(-1)
             case .forward:
-                video.seek(by: 10)
+                video.seek(by: OverviewViewerControls.seekStep)
                 controls.seekFlash(1)
             case .previous: browse(-1)
             case .next: browse(1)
@@ -475,6 +475,9 @@ final class OverviewViewerControls {
         let serial: Int
     }
 
+    /// One seek: the ± buttons, a double tap at a side, Left and Right on the timeline (seconds; owner, 2026-11-21).
+    static let seekStep = 5.0
+
     /// How long a flash stays and how soon a repeated press adds to it.
     static let flashHold = Duration.milliseconds(900)
 
@@ -500,10 +503,11 @@ final class OverviewViewerControls {
         if !held, visible { visible = false }
     }
 
-    /// A seek of 10 s in [direction]: the flash on that side counts up while the presses come within ``flashHold``.
+    /// A seek of ``seekStep`` in [direction]: the flash on that side counts up while the presses come within ``flashHold``.
     func seekFlash(_ direction: Int, at now: ContinuousClock.Instant = .now) {
         let adds = flash?.direction == direction && flashAt.map { $0.duration(to: now) < Self.flashHold } == true
-        flash = SeekFlash(direction: direction, total: adds ? (flash?.total ?? 0) + 10 : 10, serial: (flash?.serial ?? 0) + 1)
+        let step = Int(Self.seekStep)
+        flash = SeekFlash(direction: direction, total: adds ? (flash?.total ?? 0) + step : step, serial: (flash?.serial ?? 0) + 1)
         flashAt = now
     }
 

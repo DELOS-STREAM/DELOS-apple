@@ -352,7 +352,7 @@ import Testing
         OverviewViewer.handle(.left, session: session, media: media)
         OverviewViewer.handle(.right, session: session, media: media)
         #expect(session.viewer == 0)
-        #expect(sent.count == 2 && sent[0].contains("getCurrentTime()+-10.0") && sent[1].contains("getCurrentTime()+10.0"))
+        #expect(sent.count == 2 && sent[0].contains("getCurrentTime()+-5.0") && sent[1].contains("getCurrentTime()+5.0"))
         OverviewViewer.handle(.accept, session: session, media: media)
         #expect(sent.last?.contains("player.playVideo()") == true)
         session.video.receive(#"{"type":"status","state":1,"time":12.5,"duration":90,"muted":false}"#)
@@ -436,11 +436,11 @@ import Testing
         let start = ContinuousClock.now
         controls.seekFlash(1, at: start)
         controls.seekFlash(1, at: start + .milliseconds(400))
-        #expect(controls.flash?.total == 20 && controls.flash?.direction == 1)
+        #expect(controls.flash?.total == 10 && controls.flash?.direction == 1)
         controls.seekFlash(-1, at: start + .milliseconds(500))
-        #expect(controls.flash?.total == 10 && controls.flash?.direction == -1)
+        #expect(controls.flash?.total == 5 && controls.flash?.direction == -1)
         controls.seekFlash(-1, at: start + .seconds(2))
-        #expect(controls.flash?.total == 10)
+        #expect(controls.flash?.total == 5)
         // Paused or dragging: the overlay stays
         controls.paused = true
         controls.hideIfIdle(at: .now + .seconds(10))

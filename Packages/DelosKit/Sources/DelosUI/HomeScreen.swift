@@ -300,11 +300,19 @@ struct HomeScreen: View {
             guard let frame = focus.registeredFrames[AnyHashable(GameLibrary.id(apps[index]))], frame.intersects(viewport) else { return nil }
             return abs(index - selectedIndex)
         }.max() ?? 0
-        // The pictures come from memory: nothing loads or restarts while the card flies
+        // The pictures come from memory: nothing loads or restarts while the card flies. A header cover that is not in
+        // memory yet (the first opening of a game whose card is its wide art) flies as the card's own picture instead of
+        // crossfading into the placeholder art, and loads meanwhile for the header it lands in
         session.wide = source.width > source.height
         session.coverStill = art.cachedCard(hostID: hostID, app: app, wide: false)
         session.flightFrom = cardPicture(app, wide: session.wide)
-        session.flightTo = session.coverStill
+        session.flightTo = session.coverStill ?? session.flightFrom
+        if session.coverStill == nil {
+            Task { @MainActor in
+                let still = await art.image(hostID: hostID, app: app, kind: .cover)
+                if session.coverStill == nil { session.coverStill = still }
+            }
+        }
         overview = session
         actions.layers.feedback?.play(.open)
         Task { @MainActor in

@@ -128,6 +128,58 @@ final class CoverSwipeRecognizer: UIGestureRecognizer, UIGestureRecognizerDelega
         other is UIPanGestureRecognizer && other.view is UIScrollView
     }
 }
+
+/// A mouse wheel or a trackpad scrolled down over the focused cover (a pointer focuses the cover it is on) opens its
+/// overview, as Down does with a controller; scrolling up or sideways is left to the row. Only scroll events reach it:
+/// fingers on the screen are the swipe's (``CoverSwipeGesture``).
+struct CoverScrollOpenGesture: UIGestureRecognizerRepresentable {
+    let app: HostApp
+    let launcher: OverviewLauncher?
+    let enabled: Bool
+    /// How far the content scrolls down before it opens (points): about one wheel notch.
+    let threshold: CGFloat
+
+    func makeUIGestureRecognizer(context: Context) -> CoverScrollRecognizer {
+        let recognizer = CoverScrollRecognizer()
+        recognizer.isEnabled = enabled && launcher != nil
+        return recognizer
+    }
+
+    func updateUIGestureRecognizer(_ recognizer: CoverScrollRecognizer, context: Context) {
+        recognizer.isEnabled = enabled && launcher != nil
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: CoverScrollRecognizer, context: Context) {
+        guard let launcher, recognizer.state == .changed, !recognizer.fired else { return }
+        let t = recognizer.translation(in: recognizer.view)
+        // Scrolling down moves the content up: a negative translation
+        guard -t.y >= threshold, abs(t.y) > abs(t.x), launcher.canSwipe(app) else { return }
+        recognizer.fired = true
+        launcher.open(app, nil)
+    }
+}
+
+@MainActor
+final class CoverScrollRecognizer: UIPanGestureRecognizer, UIGestureRecognizerDelegate {
+    /// This scroll has opened the overview: the rest of it does nothing.
+    var fired = false
+
+    init() {
+        super.init(target: nil, action: nil)
+        allowedScrollTypesMask = .all
+        allowedTouchTypes = []
+        delegate = self
+    }
+
+    override func reset() {
+        super.reset()
+        fired = false
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        true
+    }
+}
 #endif
 
 /// A finger's vertical speed from its last moves: the travel over the last [window] seconds before it lifted; a finger
