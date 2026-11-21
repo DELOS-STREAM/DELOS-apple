@@ -36230,61 +36230,61 @@
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zobrazí každý snímek při nejbližším obnovení, které spolehlivě stihne; čeká jen milisekundy."
+            "value": "Pozdrží každé obnovení kvůli opožděnému snímku. Jen MediaCodec."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zeigt jedes Bild bei der frühesten Bildwiederholung, die es sicher erreicht; wartet nur Millisekunden."
+            "value": "Hält jede Bildwiederholung für ein verspätetes Bild zurück. Nur MediaCodec."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Shows each frame at the earliest refresh it reliably makes; waits only milliseconds."
+            "value": "Holds each refresh for a late frame. MediaCodec only."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Muestra cada fotograma en el primer refresco que alcanza con seguridad; solo espera milisegundos."
+            "value": "Retiene cada actualización para un fotograma tardío. Solo MediaCodec."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Affiche chaque image au premier rafraîchissement qu’elle atteint à coup sûr ; n’attend que des millisecondes."
+            "value": "Retient chaque rafraîchissement pour une image tardive. MediaCodec uniquement."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "各フレームを、確実に間に合う最も早いリフレッシュで表示します。待つのは数ミリ秒だけです。"
+            "value": "遅れたフレームのために各リフレッシュを待たせます。MediaCodecのみ。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "각 프레임을 확실히 맞출 수 있는 가장 빠른 화면 갱신에 표시해요. 몇 밀리초만 기다려요."
+            "value": "늦은 프레임을 위해 화면 갱신마다 기다려요. MediaCodec에서만 사용해요."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mostra cada quadro na primeira atualização que ele alcança com segurança; espera só milissegundos."
+            "value": "Segura cada atualização para um quadro atrasado. Só MediaCodec."
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Показує кожен кадр на найближчому оновленні, яке він надійно встигає; чекає лише мілісекунди."
+            "value": "Притримує кожне оновлення для запізнілого кадру. Лише MediaCodec."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在每帧能稳定赶上的最早一次刷新时显示；只等待几毫秒。"
+            "value": "为迟到的帧推迟每次刷新。仅限 MediaCodec。"
           }
         }
       }
@@ -58689,61 +58689,61 @@
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Phase Lock"
+            "value": "Fázový zámek"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Phase Lock"
+            "value": "Phasensynchronisation"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Phase Lock"
+            "value": "Phase lock"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Phase Lock"
+            "value": "Bloqueo de fase"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Phase Lock"
+            "value": "Verrouillage de phase"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Phase Lock"
+            "value": "位相同期"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "Phase Lock"
+            "value": "위상 동기화"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Phase Lock"
+            "value": "Sincronização de fase"
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Phase Lock"
+            "value": "Фазова синхронізація"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Phase Lock"
+            "value": "相位锁定"
           }
         }
       }
@@ -111108,61 +111108,61 @@
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Neuronový"
+            "value": "Neuronový (experimentální, jen SDR)"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Neuronal"
+            "value": "Neuronal (experimentell, nur SDR)"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Neural"
+            "value": "Neural (experimental, SDR only)"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Neuronal"
+            "value": "Neuronal (experimental, solo SDR)"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Neuronal"
+            "value": "Neuronal (expérimental, SDR uniquement)"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ニューラル"
+            "value": "ニューラル（試験的・SDRのみ）"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "뉴럴"
+            "value": "뉴럴 (실험적, SDR 전용)"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Neural"
+            "value": "Neural (experimental, só SDR)"
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Нейронний"
+            "value": "Нейронний (експериментальний, лише SDR)"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "神经网络"
+            "value": "神经网络（实验性，仅 SDR）"
           }
         }
       }
