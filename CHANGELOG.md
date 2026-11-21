@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- In the game info's screenshots and videos viewer, a finger or a trackpad's two fingers moving sideways carry the item
+  with them and bring the next or previous one in from that side, under the dock; let go past 90 px (or with a flick)
+  it slides on into place, otherwise it springs back. Past either end the item only gives a little.
 - In the game info's screenshots and videos viewer, a trackpad's two-finger swipe sideways (or a tilt wheel) goes to
   the next or previous item, once per swipe.
 - A mouse wheel or a trackpad scrolled down over a cover opens its game info, as Down does with a controller;
@@ -514,6 +517,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- The viewer's dock keeps round corners while it morphs between a video's and a screenshot's size (its glass changes
+  size instead of being squashed).
 - The first opening of a game's info no longer shows the placeholder art in the middle of the cover's flight when the
   game's cover was not loaded yet (its card shows the wide art): the card's own picture flies, and the cover loads for
   the header meanwhile.

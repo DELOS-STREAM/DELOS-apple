@@ -182,21 +182,26 @@ final class CoverScrollRecognizer: UIPanGestureRecognizer, UIGestureRecognizerDe
     }
 }
 
-/// A trackpad's two-finger swipe sideways (or a tilt wheel) over the media viewer: [browse] once per swipe, to the next
-/// item (+1) when the content scrolls right (the fingers move left), to the previous one (−1) the other way.
+/// A trackpad's two-finger swipe sideways (or a tilt wheel) over the media viewer: the item follows it ([onChange], the
+/// sideways travel in points), and as it ends [onEnd] gets the travel and the sideways speed (points per second).
 struct ViewerScrollBrowseGesture: UIGestureRecognizerRepresentable {
-    /// How far the content scrolls sideways before it browses (points).
-    let threshold: CGFloat
-    let browse: (Int) -> Void
+    let onChange: (CGFloat) -> Void
+    let onEnd: (CGFloat, CGFloat) -> Void
 
     func makeUIGestureRecognizer(context: Context) -> CoverScrollRecognizer { CoverScrollRecognizer() }
 
     func handleUIGestureRecognizerAction(_ recognizer: CoverScrollRecognizer, context: Context) {
-        guard recognizer.state == .changed, !recognizer.fired else { return }
         let t = recognizer.translation(in: recognizer.view)
-        guard abs(t.x) >= threshold, abs(t.x) > abs(t.y) else { return }
-        recognizer.fired = true
-        browse(t.x < 0 ? 1 : -1)
+        switch recognizer.state {
+        case .began, .changed:
+            // Decided once, at the start: a sideways swipe follows, an upright one is the page's
+            if !recognizer.fired { recognizer.fired = abs(t.x) > abs(t.y) }
+            if recognizer.fired { onChange(t.x) }
+        case .ended, .cancelled:
+            if recognizer.fired { onEnd(t.x, recognizer.velocity(in: recognizer.view).x) }
+        default:
+            break
+        }
     }
 }
 #endif
