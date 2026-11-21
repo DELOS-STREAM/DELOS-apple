@@ -499,6 +499,15 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 - The dashboard shows no back arrow, and game info keeps only the top bar's back button (the second one under it is gone).
 - Wrapped rows of game info's tags, badges and links, and the filter rows, keep the same focus gap between rows as
   between items.
+- The viewer's dock stays tidy ([#28](https://github.com/DELOS-STREAM/DELOS-apple/issues/28)): its focus ring sits on
+  the focused control at once instead of gliding there; a long gallery shows a window of nine page dots around the
+  current item, whose gold pill widens its own slot instead of covering its neighbours; the title ends before the
+  previous button.
+- Game info's back button fades and scales in as game info opens and out as it closes, the DELOS brand gliding beside
+  it ([#28](https://github.com/DELOS-STREAM/DELOS-apple/issues/28)).
+- Screenshot and video tiles keep their 16:9 picture: it is enlarged evenly for the parallax, which stays within the
+  rim, and the viewer opens from and closes into a tile at that size, so the picture no longer grows as it lands
+  ([#28](https://github.com/DELOS-STREAM/DELOS-apple/issues/28)).
 - The game overview keeps the game's hero while browsing screenshots and videos, without media-background prefetch or
   full-screen image swaps. Its text dim gradient uses 30 % less opacity; hero scroll blur and the full-screen viewer's
   blurred still are unchanged ([#32](https://github.com/DELOS-STREAM/DELOS-apple/issues/32)).

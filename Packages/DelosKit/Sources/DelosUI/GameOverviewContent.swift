@@ -332,8 +332,30 @@ enum OverviewMotion {
     static func deepBlur(from dashboard: Int) -> Int { max(dashboard, 0) + 24 }
     /// The header's logo box (the dashboard's 900 × 180 box at 80 %).
     static let logoWidth = 720.0, logoHeight = 144.0
-    /// The screenshots move against the carousel by 7 % of their distance from its middle.
-    static let parallax = 0.07
+    /// A screenshot's or video's picture keeps the tile's 16:9: it is enlarged evenly by [mediaOverscan], leaving a rim for
+    /// its parallax, and moves against the carousel by [parallax] of its distance from the middle, never past the rim.
+    /// The viewer's flight to and from a tile shows the picture at that size.
+    static let parallax = 0.10, mediaOverscan = 1.28
+
+    /// How far a picture [width] points wide (enlarged by ``mediaOverscan``) moves in its tile when the tile is
+    /// [distance] points from the carousel's middle: against it, clamped to the rim.
+    static func parallaxShift(distance: Double, width: Double) -> Double {
+        let rim = width * (mediaOverscan - 1) / (2 * mediaOverscan)
+        return min(max(-distance * parallax, -rim), rim)
+    }
+
+    /// The viewer's picture at its tile, as a scale of the viewer's frame [target]: the picture (a video's filling the
+    /// frame, a screenshot's fitted 16:9 in it, [fills]) scaled to fill the [tile] and enlarged by ``mediaOverscan``, the
+    /// size the tile shows it at.
+    static func viewerFlightScale(tile: CGSize, target: CGSize, fills: Bool) -> Double {
+        guard target.width > 0, target.height > 0 else { return 1 }
+        let aspect = 16.0 / 9
+        let picture = fills ? target
+            : target.width / target.height > aspect ? CGSize(width: target.height * aspect, height: target.height)
+            : CGSize(width: target.width, height: target.width / aspect)
+        return max(tile.width / picture.width, tile.height / picture.height) * mediaOverscan
+    }
+
     /// Touch: pulling the page down this far at its top closes the overview; a cover swiped up this far opens it.
     static let pullClose = 150.0, swipeOpen = 72.0
     /// A drag counts as a swipe of the cover once it moved this far, mostly vertically.

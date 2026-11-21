@@ -255,6 +255,43 @@ import Testing
         #expect(OverviewViewer.frame(.init(kind: .screenshot, id: "s", name: nil), width: 1920, height: 1440) == CGRect(x: 0, y: 0, width: 1920, height: 1440))
     }
 
+    /// #28: a long gallery's dots are a window of nine around the current item, always holding it.
+    @Test func longGalleryShowsAWindowOfPageDots() {
+        #expect(OverviewDock.pageWindow(count: 5, shown: 4) == 0..<5)
+        #expect(OverviewDock.pageWindow(count: 29, shown: 2) == 0..<9)
+        #expect(OverviewDock.pageWindow(count: 29, shown: 5) == 1..<10)
+        #expect(OverviewDock.pageWindow(count: 29, shown: 28) == 20..<29)
+        for shown in 0..<29 { #expect(OverviewDock.pageWindow(count: 29, shown: shown).contains(shown)) }
+    }
+
+    /// #28: the screenshot dock's title column ends 24 px before the previous button, however wide the dots are.
+    @Test func dockTitleEndsBeforeTheTransport() {
+        let px: (Double) -> CGFloat = { CGFloat($0) }
+        for dots in [9, 3, 1] {
+            let pageWidth = Double(dots) * 26 + 28 + 74
+            let width = 1920.0, panel = width - 120
+            let info = OverviewDock.infoWidth(width: width, pageWidth: pageWidth, px: px)
+            // The column starts 44 px in from the panel's left edge; the previous button's left edge is half the middle in
+            let titleEnd = -panel / 2 + 44 + info, previousLeft = -(pageWidth + 204) / 2
+            #expect(info > 0 && titleEnd <= previousLeft - 24 + 1e-9)
+        }
+    }
+
+    /// #28: a tile's picture keeps 16:9, enlarged evenly; its parallax is 10 % of the distance, never past the rim; the
+    /// viewer's flight lands at the size the tile shows it.
+    @Test func carouselPictureKeepsItsShapeAndRim() {
+        let width = 520.0 * OverviewMotion.mediaOverscan, rim = (width - 520) / 2
+        #expect(abs(OverviewMotion.parallaxShift(distance: 100, width: width) + 10) < 1e-9)
+        #expect(abs(OverviewMotion.parallaxShift(distance: -5000, width: width) - rim) < 1e-9)
+        #expect(abs(OverviewMotion.parallaxShift(distance: 5000, width: width) + rim) < 1e-9)
+        // A screenshot fitted 16:9 in a 4:3 viewer: at the tile its picture is the tile's width, enlarged by the rim
+        let scale = OverviewMotion.viewerFlightScale(tile: CGSize(width: 520, height: 292.5), target: CGSize(width: 1920, height: 1440), fills: false)
+        #expect(abs(1920 * scale - 520 * OverviewMotion.mediaOverscan) < 1e-6)
+        // A video fills the 4:3 viewer: at the tile the frame covers it (its width the tile's), enlarged by the rim
+        let video = OverviewMotion.viewerFlightScale(tile: CGSize(width: 520, height: 292.5), target: CGSize(width: 1920, height: 1440), fills: true)
+        #expect(abs(1920 * video - 520 * OverviewMotion.mediaOverscan) < 1e-6 && 1440 * video > 292.5 * OverviewMotion.mediaOverscan)
+    }
+
     @MainActor @Test func viewerOverlayHidesAfterThreeIdleSeconds() {
         let start = ContinuousClock.now
         let controls = OverviewViewerControls(now: start)

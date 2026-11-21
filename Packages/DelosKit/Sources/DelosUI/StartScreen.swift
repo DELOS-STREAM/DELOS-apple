@@ -245,7 +245,8 @@ public struct DelosRoot: View {
                             onBack: navigator.current.showsTopBarBack(canGoBack: navigator.canGoBack, capturingBack: capturesBack) ? {
                                 if capturesBack { _ = navigator.commandCapture?(.back) }
                                 else { feedback?.play(.back); go { navigator.back() } }
-                            } : nil)
+                            } : nil,
+                            backMotion: navigator.current.animatesTopBarBack)
                             // The interface scale zooms the whole bar
                             .modifier(ZoomedBar())
                             .modifier(LayerBackdropBlur(active: librarySheetOpen))

@@ -310,7 +310,14 @@ struct TopBar: View {
     /// Shown on iPhone, iPad and Mac when the screen can go back: a touch or mouse user has no B button and the system has
     /// no back gesture of its own (on Android the system's back does it, so DELOS for Android has no such button).
     var onBack: (() -> Void)?
+    /// The back button comes and goes with a motion of its own on this screen (game info opening and closing on the
+    /// dashboard): it fades and scales in and out while the brand glides beside it.
+    var backMotion = false
     @Environment(\.stage) private var stage
+    @Environment(\.reducedMotion) private var reduced
+
+    /// The back button's coming and going (``backMotion``), else none.
+    static func backAnimation(_ motion: Bool, reduced: Bool) -> Animation? { motion && !reduced ? .spring(response: 0.45, dampingFraction: 0.85) : nil }
 
     var body: some View {
         VStack {
@@ -329,6 +336,7 @@ struct TopBar: View {
                             }
                             Spacer(minLength: 0)
                         }
+                        .animation(Self.backAnimation(backMotion, reduced: reduced), value: onBack != nil)
                         if let navigation { TopNav(buttons: navigation.buttons, focus: navigation.focus).tvFocusSection() }
                         StatusCluster(wifi: wifi, battery: battery, clock: clock)
                             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -363,6 +371,7 @@ private struct BackButton: View {
             .accessibilityLabel(L("shell_hint_back"))
             // A controller's B goes back: the arrow is for fingers, pointers and keyboards (the gap after it goes with it)
             .inputKindVisibility(.withoutController, gap: 24)
+            .transition(.opacity.combined(with: .scale(scale: 0.6)))
         }
         #endif
     }
@@ -376,6 +385,7 @@ private struct CompactStatusBar: View {
     @State private var widths: [String: Double] = [:]
     @Environment(\.stage) private var stage
     @Environment(\.statusBarEdges) private var edges
+    @Environment(\.reducedMotion) private var reduced
 
     private static func key(_ step: StatusBarStep) -> String { "\(step)" }
 
@@ -423,6 +433,7 @@ private struct CompactStatusBar: View {
                 }
             }
         }
+        .animation(TopBar.backAnimation(bar.backMotion, reduced: reduced), value: bar.onBack != nil)
     }
 
     private func cluster(_ step: StatusBarStep) -> some View {

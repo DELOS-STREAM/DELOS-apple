@@ -1273,13 +1273,13 @@ private struct OverviewCarousel: View {
         let shape = RoundedRectangle(cornerRadius: stage.px(22), style: .continuous)
         let focused = session.viewer == nil && session.focus.focused == AnyHashable(OverviewNavigation.media(media.firstIndex(of: item) ?? -1))
         return ZStack(alignment: .bottomLeading) {
-            // The picture is wider than its frame and moves against the carousel
+            // The picture keeps the tile's 16:9, enlarged evenly for its rim, and moves against the carousel within it
             RemoteImage(url: OverviewImageSizes.thumb(item, tall: tall), maxPixels: tall ? 900 : 600)
-                .frame(width: stage.px(520 * 1.28), height: stage.px(292))
+                .frame(width: stage.px(520 * OverviewMotion.mediaOverscan), height: stage.px(292 * OverviewMotion.mediaOverscan))
                 .visualEffect { content, proxy in
                     let frame = proxy.frame(in: .scrollView(axis: .horizontal))
                     let bounds = proxy.bounds(of: .scrollView(axis: .horizontal)) ?? .zero
-                    return content.offset(x: -(frame.midX - bounds.midX) * OverviewMotion.parallax)
+                    return content.offset(x: OverviewMotion.parallaxShift(distance: frame.midX - bounds.midX, width: proxy.size.width))
                 }
                 .frame(width: stage.px(520), height: stage.px(292))
                 .clipped()

@@ -34,7 +34,7 @@ struct OverviewDock: View {
             let panelHeight = stage.px(playable ? 248 : 150)
             let rowY = stage.px(playable ? 94 : 78)
             let middleWidth = playable ? stage.px(564) : pageWidth + stage.px(204)
-            let infoWidth = max(0, (max(stage.px(600), width - stage.px(120)) - stage.px(148) - max(stage.px(564), pageWidth + stage.px(204))) / 2)
+            let infoWidth = Self.infoWidth(width: width, pageWidth: pageWidth, px: stage.px)
             ZStack(alignment: .bottom) {
                 // Layout is fixed for the whole morph. Only layer transforms and opacity interpolate;
                 // neither the material nor any of its children re-lays out on animation frames.
@@ -87,7 +87,8 @@ struct OverviewDock: View {
                         .padding(-stage.px(9))
                         .matchedGeometryEffect(id: controls.focus, in: ring, properties: .frame, isSource: false)
                         .animation(reduced ? nil : OverviewViewerMotion.animation(reduced: false), value: playable)
-                        .animation(reduced ? nil : OverviewViewerMotion.animation(reduced: false), value: controls.focus)
+                        // The ring sits on the focused control at once: it never glides between the dock's controls
+                        .animation(nil, value: controls.focus)
                         .allowsHitTesting(false)
                 }
             }
@@ -147,34 +148,53 @@ struct OverviewDock: View {
         }
     }
 
-    /// A screenshot: previous, one dot per item (videos as rings, the current one a gold bar) and next. Only L1 and R1
-    /// browse with the controller; a dot is a touch and pointer target.
+    /// A screenshot: previous, the page dots (videos as rings, the current one a gold pill that widens its own slot; a
+    /// window of ``pageDots`` around the current item in a longer gallery) and next. Only L1 and R1 browse with the
+    /// controller; a dot is a touch and pointer target.
     private var pages: some View {
-        ZStack {
-            ForEach(media.indices, id: \.self) { k in
+        HStack(spacing: 0) {
+            ForEach(Array(Self.pageWindow(count: media.count, shown: index)), id: \.self) { k in
                 let on = k == index
                 Capsule()
                     .fill(on ? colors.accent.color : (media[k].kind == .video ? Color.clear : Color.white.opacity(0.4)))
                     .overlay {
                         if !on, media[k].kind == .video { Capsule().strokeBorder(Color.white.opacity(0.55), lineWidth: stage.px(2)) }
                     }
-                    .frame(width: stage.px(40), height: stage.px(12))
-                    .scaleEffect(x: on ? 1 : 0.3)
-                    .offset(x: stage.px(Double(k) * 26 + (k > index ? 28 : (k == index ? 14 : 0)) + 6 - (Double(media.count) * 26 + 14) / 2))
-                    .padding(.vertical, stage.px(18))
+                    .frame(width: stage.px(on ? 40 : 12), height: stage.px(12))
+                    .frame(width: stage.px(on ? 54 : 26), height: stage.px(76))
                     .contentShape(Rectangle())
                     .onTapGesture { go(k) }
             }
         }
-        .padding(.horizontal, stage.px(30))
-        .animation(OverviewViewerMotion.animation(reduced: reduced), value: index)
+        .animation(reduced ? nil : .spring(response: 0.36, dampingFraction: 0.6), value: index)
         .frame(width: pageWidth, height: stage.px(76))
         .background(Capsule().fill(Color.white.opacity(0.08)).overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: stage.px(1))))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(index + 1) " + L("overview_viewer_count", media.count, title))
     }
 
-    private var pageWidth: CGFloat { stage.px(Double(media.count) * 26 + 74) }
+    /// The dots' pill: 37 px inside each end, 26 px slots and the current item's 54 px one.
+    private var pageWidth: CGFloat { stage.px(Double(min(media.count, Self.pageDots)) * 26 + 28 + 74) }
+
+    /// At most this many page dots: a longer gallery shows a window of them around the current item.
+    static let pageDots = 9
+
+    /// The items whose dots show: ``pageDots`` around [shown], kept inside the gallery of [count] items.
+    static func pageWindow(count: Int, shown: Int) -> Range<Int> {
+        guard count > pageDots else { return 0..<max(count, 0) }
+        let first = min(max(shown - pageDots / 2, 0), count - pageDots)
+        return first..<first + pageDots
+    }
+
+    /// The title column's width (points, the dock [width] wide, [px] the stage's pixels): as wide as the video variant
+    /// gives it, and ending 24 px before the previous button in the screenshot variant, whose dots ([pageWidth]) sit
+    /// between previous and next, so the title never runs under the transport.
+    static func infoWidth(width: CGFloat, pageWidth: CGFloat, px: (Double) -> CGFloat) -> CGFloat {
+        let panel = max(px(600), width - px(120))
+        let video = (panel - px(148) - max(px(564), pageWidth + px(204))) / 2
+        let beforePrevious = panel / 2 - px(44) - (pageWidth + px(204)) / 2 - px(24)
+        return max(0, min(video, beforePrevious))
+    }
 
     private var sound: some View {
         HStack(spacing: stage.px(18)) {
