@@ -84,6 +84,15 @@ final class MetalFrameDrawer: @unchecked Sendable {
     private let upscaler: MetalUpscaler
     /// Neural's session (``NeuralScaler``), kept while the upscaler is on.
     private let neural = NeuralScaler()
+    private struct NeuralPlanKey: Equatable {
+        var format: OSType
+        var width: Int
+        var height: Int
+        var presentationWidth: Int
+        var presentationHeight: Int
+        var level: Int
+    }
+    private var neuralPlan: (key: NeuralPlanKey, result: Result<Float, NeuralUpscaling.Ineligible>)?
     /// The arrival pass's source (``LaunchArrival``), kept from frame to frame while it runs.
     private var arrivalTexture: (any MTLTexture)?
     /// The picture converted to RGB at its own size, the upscaler's input (Android's `colorTexture`).
@@ -203,35 +212,41 @@ final class MetalFrameDrawer: @unchecked Sendable {
         // Neural takes this picture, or MetalFX Spatial does: a picture it does not take, or while its session starts
         let neuralKey = mode == .neural ? readyNeuralKey(pixelBuffer, size: size, geometry: geometry, settings: settings) : nil
         if mode == .neural && neuralKey == nil { mode = upscaler.support.effectiveMode(.spatial) }
-        let fellBack = mode == .sharpen && settings.mode != .sharpen
+        // The report is finalized after a possible neural encoding fallback.
         let format: MTLPixelFormat = wide ? .rgba16Float : .rgba8Unorm
+        var key = UpscaleKey(
+            sequence: request.sequence, mode: mode, presentationWidth: geometry.presentationWidth,
+            presentationHeight: geometry.presentationHeight, level: settings.supersamplingLevel,
+            sharpness: mode == .sharpen ? settings.sharpness : 0, format: format)
+        // A failed neural pass must not drop a drawable frame: Spatial takes the original decoded picture.
+        var input = pixelBuffer, inputSize = size
+        if upscaled?.key != key, let neuralKey {
+            if let pass = queue.makeCommandBuffer(),
+               let enlarged = neural.encode(pixelBuffer, key: neuralKey, commandBuffer: pass),
+               neural.order(pass, before: commandBuffer) {
+                pass.commit()
+                input = enlarged
+                inputSize = (CVPixelBufferGetWidth(enlarged), CVPixelBufferGetHeight(enlarged))
+            } else {
+                neural.note("encode", width: size.width, height: size.height)
+                mode = upscaler.support.effectiveMode(.spatial)
+                key.mode = mode
+                key.sharpness = mode == .sharpen ? settings.sharpness : 0
+            }
+        }
         if upscaledMode != mode {
             // A new mode starts with a fresh history
             upscaledMode = mode
             upscaler.reset()
         }
-        let key = UpscaleKey(
-            sequence: request.sequence, mode: mode, presentationWidth: geometry.presentationWidth,
-            presentationHeight: geometry.presentationHeight, level: settings.supersamplingLevel,
-            sharpness: mode == .sharpen ? settings.sharpness : 0, format: format)
         let sharpness = Float(settings.sharpness) / 100
+        let fellBack = mode == .sharpen && settings.mode != .sharpen
         var report: UpscaleReport
         let picture: UpscaledPicture
         if let upscaled, upscaled.key == key {
             picture = upscaled.picture
             report = UpscaleReport(mode: mode, dimensions: picture.dimensions, fresh: false, fellBack: fellBack)
         } else {
-            // Neural enlarges the decoded picture in a command buffer of its own first; the conversion reads its output
-            var input = pixelBuffer, inputSize = size
-            if let neuralKey {
-                guard let pass = queue.makeCommandBuffer(),
-                      let enlarged = neural.encode(pixelBuffer, key: neuralKey, commandBuffer: pass),
-                      neural.order(pass, before: commandBuffer)
-                else { return false }
-                pass.commit()
-                input = enlarged
-                inputSize = (CVPixelBufferGetWidth(enlarged), CVPixelBufferGetHeight(enlarged))
-            }
             if sourceTexture?.width != inputSize.width || sourceTexture?.height != inputSize.height
                 || sourceTexture?.pixelFormat != format {
                 sourceTexture = cache.texture(format, width: inputSize.width, height: inputSize.height, usage: MetalUpscaler.sourceUsage)
@@ -294,17 +309,25 @@ final class MetalFrameDrawer: @unchecked Sendable {
     private func readyNeuralKey(
         _ pixelBuffer: CVPixelBuffer, size: (width: Int, height: Int), geometry: PictureGeometry, settings: UpscalerSettings
     ) -> NeuralScaler.Key? {
-        let planned = UpscalerDimensions.plan(
-            source: size, presentation: (geometry.presentationWidth, geometry.presentationHeight),
-            maxTextureSize: upscaler.maxTextureSize, supersamplingLevel: settings.supersamplingLevel)
-        switch NeuralUpscaling.plan(
-            pixelFormat: CVPixelBufferGetPixelFormatType(pixelBuffer), width: size.width, height: size.height,
-            target: (planned.internalWidth, planned.internalHeight)) {
+        let planKey = NeuralPlanKey(
+            format: CVPixelBufferGetPixelFormatType(pixelBuffer), width: size.width, height: size.height,
+            presentationWidth: geometry.presentationWidth, presentationHeight: geometry.presentationHeight,
+            level: settings.supersamplingLevel)
+        if neuralPlan?.key != planKey {
+            let planned = UpscalerDimensions.plan(
+                source: size, presentation: (geometry.presentationWidth, geometry.presentationHeight),
+                maxTextureSize: upscaler.maxTextureSize, supersamplingLevel: settings.supersamplingLevel)
+            neuralPlan = (planKey, NeuralUpscaling.plan(
+                pixelFormat: planKey.format, width: size.width, height: size.height,
+                target: (planned.internalWidth, planned.internalHeight)))
+        }
+        guard let result = neuralPlan?.result else { return nil }
+        switch result {
         case .success(let factor):
             let key = NeuralScaler.Key(width: size.width, height: size.height, factor: factor)
             return neural.prepare(key) ? key : nil
         case .failure(let reason):
-            neural.note("fallback=\(reason.rawValue) \(size.width)x\(size.height)")
+            neural.note(reason.rawValue, width: size.width, height: size.height)
             return nil
         }
     }

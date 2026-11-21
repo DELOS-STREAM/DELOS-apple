@@ -441,6 +441,10 @@ StreamPerf's `nn` is that buffer's commit-to-completion time. The scaler's input
 (`ExtendedPixelsBottom` 8 for 360 rows); without them it writes nothing (error -19730). A decoded picture without that
 padding is blitted into a padded one from a pool in the same command buffer. The output picture takes the source's colour
 attachments and is drawn by the same conversion.
+Eligibility is cached for the decoded format and size, presentation size and supersampling level; repeated drawings
+do not query scale factors again. Encoding or command-ordering failure falls back to Spatial on the original picture,
+with one `neural fallback=encode` log entry per size. Both texture caches flush every 60 draws or encoding attempts.
+A queued model start checks that its size and factor are still requested before loading the model.
 
 | Limit (macOS 27.2, Apple M6) | Value |
 |---|---|
