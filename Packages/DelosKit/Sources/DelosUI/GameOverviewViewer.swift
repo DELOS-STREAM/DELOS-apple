@@ -534,6 +534,8 @@ private struct ViewerImage: View {
             guard !Task.isCancelled, let url = OverviewImageSizes.full(item, tall: true) else { return }
             // YouTube's missing `maxresdefault` is a 120 × 90 placeholder: the thumbnail stays
             if let full = await load(url, pixels: maxPixels), full.width > 120, !Task.isCancelled { image = full }
+            // A Steam trailer's own still replaces the shared poster once it is made
+            if let still = item.steam?.still, let own = await load(still, pixels: maxPixels), !Task.isCancelled { image = own }
         }
     }
 

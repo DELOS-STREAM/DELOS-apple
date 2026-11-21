@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Each Steam trailer gets its own still in the carousel and as the viewer's blurred picture: the frame a sixth of the way
+  into the trailer (a third when that frame is dark), read from one segment of its 854 px stream (a few hundred kB) once
+  per trailer, at most three at a time, and kept with the overview's images. While it is made the tile shows a spinner
+  and no picture; a still that cannot be made falls back to the shared first screenshot.
 - Browsing the full-screen media viewer crossfades and slides the media on the overview spring. Its glass dock morphs
   between video controls and screenshot pages while shared controls and focus glide; reduced motion uses a 200 ms fade.
 - Long trailer titles use the shared back-and-forth marquee in focused carousel tiles and the viewer dock; reduced
