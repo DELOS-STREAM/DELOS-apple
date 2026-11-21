@@ -1673,6 +1673,7 @@ overview_video
 overview_video_back
 overview_video_blocked
 overview_video_failed
+overview_video_failed_steam
 overview_video_forward
 overview_video_unavailable
 overview_video_volume
