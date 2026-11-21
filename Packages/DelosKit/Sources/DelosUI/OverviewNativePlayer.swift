@@ -19,10 +19,8 @@ final class OverviewNativePlayback {
     private weak var layer: AVPlayerLayer?
     private var ended = false
     private var invalidated = false
-    private let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [
-        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-    ])
-    private static let imageContext = CIContext()
+    private let output = AVPlayerItemVideoOutput(pixelBufferAttributes: nil)
+    private nonisolated static let imageContext = CIContext()
 
     init(url: URL, video: OverviewVideo) {
         self.video = video
@@ -114,10 +112,14 @@ final class OverviewNativePlayback {
         refresh()
     }
     /// Copies a single decoded frame only when browsing away, never on playback ticks.
-    func snapshot() -> CGImage? {
+    func snapshot() async -> CGImage? {
         guard current, let buffer = output.copyPixelBuffer(forItemTime: player.currentTime(), itemTimeForDisplay: nil) else { return nil }
-        let image = CIImage(cvPixelBuffer: buffer)
-        return Self.imageContext.createCGImage(image, from: image.extent)
+        // The retained decoded buffer crosses only into the render task; AVPlayer stays on the main actor.
+        nonisolated(unsafe) let held = buffer
+        return await Task.detached(priority: .userInitiated) {
+            let image = CIImage(cvPixelBuffer: held)
+            return Self.imageContext.createCGImage(image, from: image.extent)
+        }.value
     }
 
     /// The player pauses and lets its item go; nothing is reported from now on.

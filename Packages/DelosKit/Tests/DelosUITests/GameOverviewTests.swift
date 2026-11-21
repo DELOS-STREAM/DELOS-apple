@@ -16,6 +16,62 @@ import Testing
     private let youTube = { var details = DemoOverview.complete(1); details.steam = nil; return details }()
     private let sparse = DemoOverview.sparse(3)
 
+    @Test func viewerSlideThresholdsAndNeighbors() {
+        #expect(ViewerSlide.outcome(x: -90, predicted: -500, width: 1000, px: 90, hasNeighbor: true) == 0)
+        #expect(ViewerSlide.outcome(x: -91, predicted: -91, width: 1000, px: 90, hasNeighbor: true) == 1)
+        #expect(ViewerSlide.outcome(x: 91, predicted: 91, width: 1000, px: 90, hasNeighbor: true) == -1)
+        #expect(ViewerSlide.outcome(x: -10, predicted: -501, width: 1000, px: 90, hasNeighbor: true) == 1)
+        #expect(ViewerSlide.outcome(x: 10, predicted: 501, width: 1000, px: 90, hasNeighbor: true) == -1)
+        #expect(ViewerSlide.outcome(x: -500, predicted: -900, width: 1000, px: 90, hasNeighbor: false) == 0)
+        #expect(ViewerSlide.outcome(x: 0, predicted: 900, width: 1000, px: 90, hasNeighbor: true) == 0)
+        #expect(ViewerSlide.outcome(x: 91, predicted: 91, width: 1000, px: 180, hasNeighbor: true) == 0)
+        #expect(ViewerSlide.follow(x: -400, hasNeighbor: false) == -100)
+        #expect(ViewerSlide.follow(x: 400, hasNeighbor: false) == 100)
+        #expect(ViewerSlide.follow(x: -400, hasNeighbor: true) == -400)
+    }
+
+    @Test func aSlideCannotLandAfterClosingOrAnIndexChange() {
+        #expect(ViewerSlide.canCommit(capturedIndex: 2, currentIndex: 2, closing: false))
+        #expect(!ViewerSlide.canCommit(capturedIndex: 2, currentIndex: 3, closing: false))
+        #expect(!ViewerSlide.canCommit(capturedIndex: 2, currentIndex: 2, closing: true))
+        #expect(!ViewerSlide.canCommit(capturedIndex: 2, currentIndex: nil, closing: false))
+    }
+
+    @Test func scrollBrowseLocksItsFirstNonZeroAxis() {
+        // A mutating call inside #expect does not compile: each result is taken first
+        var vertical = ViewerScrollAxis()
+        let still = vertical.follows(x: 0, y: 0)
+        #expect(!still && vertical.horizontal == nil)
+        let up = vertical.follows(x: 1, y: 2)
+        let later = vertical.follows(x: 200, y: 3)
+        #expect(!up && !later)
+        var horizontal = ViewerScrollAxis()
+        let side = horizontal.follows(x: -2, y: 1)
+        let drift = horizontal.follows(x: -3, y: 200)
+        #expect(side && drift)
+        var diagonal = ViewerScrollAxis()
+        let even = diagonal.follows(x: 1, y: 1)
+        let after = diagonal.follows(x: 10, y: 1)
+        #expect(!even && !after)
+    }
+
+    @Test func swipeVelocityUsesOnlyRecentTravel() {
+        var tracker = SwipeVelocity()
+        #expect(tracker.velocity(at: 1) == 0)
+        tracker.add(y: 0, at: 1)
+        #expect(tracker.velocity(at: 1) == 0)
+        tracker.add(y: -40, at: 1.05)
+        #expect(abs(tracker.velocity(at: 1.05) + 800) < 1e-9)
+        #expect(tracker.velocity(at: 1.2) == 0)
+        tracker.add(y: -40, at: 2)
+        tracker.add(y: -10, at: 2.05)
+        #expect(abs(tracker.velocity(at: 2.05) - 600) < 1e-9)
+        var tiny = SwipeVelocity()
+        tiny.add(y: 0, at: 0)
+        tiny.add(y: 100, at: 0.003)
+        #expect(tiny.velocity(at: 0.003) == 0)
+    }
+
     @Test func completeGameShowsEverySection() {
         let content = OverviewContent(details: complete, library: [HostApp(id: 9, title: "Hades")], region: "CZ")
         #expect(content.sections == [.about, .media, .details, .streaming, .links, .similar])

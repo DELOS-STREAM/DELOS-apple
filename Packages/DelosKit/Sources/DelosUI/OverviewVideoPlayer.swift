@@ -86,6 +86,7 @@ final class OverviewVideo {
     @ObservationIgnored var snapshot: (@MainActor () async -> CGImage?)?
     @ObservationIgnored var browseTask: Task<Void, Never>?
     @ObservationIgnored var reducedBrowse = false
+    @ObservationIgnored var slideCommitting = false
 
     /// Revokes pending autoplay as well as current playback. Foregrounding alone does not restart a paused trailer.
     func setActive(_ value: Bool) {
@@ -106,12 +107,13 @@ final class OverviewVideo {
     func attach(_ player: OverviewNativePlayback, generation: Int) {
         guard generation == self.generation, error == nil else { return }
         native = player
+        snapshot = { [weak player] in await player?.snapshot() }
         applyPlayback()
     }
 
     /// The native player [player] went away (its view was dismantled).
     func detach(_ player: OverviewNativePlayback) {
-        if native === player { native = nil }
+        if native === player { native = nil; snapshot = nil }
     }
 
     var playing: Bool { state == 1 || state == 3 }

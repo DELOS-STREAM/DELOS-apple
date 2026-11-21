@@ -102,7 +102,12 @@ final class NeuralScaler: @unchecked Sendable {
     private var event: (any MTLEvent)?
     private var signalled: UInt64 = 0
     /// Reasons already written to the log for this stream (one line each).
-    private var noted: Set<String> = []
+    private struct Note: Hashable {
+        var reason: String
+        var width: Int
+        var height: Int
+    }
+    private var noted: Set<Note> = []
     private static let starter = DispatchQueue(label: "io.github.meitoncz.delos.neural", qos: .userInitiated)
 
     /// Whether the session for `key` is ready; starts it when there is none for `key` (a failed one is not tried again).
@@ -142,9 +147,9 @@ final class NeuralScaler: @unchecked Sendable {
     }
 
     /// Writes `reason` once per stream to the StreamPerf log (debug builds).
-    func note(_ reason: String) {
-        guard noted.insert(reason).inserted else { return }
-        StreamPerf.standard?.note("neural \(reason)")
+    func note(_ reason: String, width: Int, height: Int) {
+        guard noted.insert(Note(reason: reason, width: width, height: height)).inserted else { return }
+        StreamPerf.standard?.note("neural fallback=\(reason) \(width)x\(height)")
     }
 
     /// The stream ended or the upscaler went off: the session goes (the drawings still in flight keep it until they finish).
@@ -156,6 +161,10 @@ final class NeuralScaler: @unchecked Sendable {
     private func start(_ key: Key) {
         lock.withLock { slot = .starting(key) }
         Self.starter.async { [weak self] in
+            guard let self, self.lock.withLock({
+                if case .starting(let requested)? = self.slot { return requested == key }
+                return false
+            }) else { return }
             let began = CACurrentMediaTime()
             #if targetEnvironment(simulator)
             let session: AnyObject? = nil
@@ -163,7 +172,6 @@ final class NeuralScaler: @unchecked Sendable {
             let session: AnyObject? = if #available(iOS 26, tvOS 26, macOS 26, *) { NeuralSession(key) } else { nil }
             #endif
             let milliseconds = Int(((CACurrentMediaTime() - began) * 1000).rounded())
-            guard let self else { return }
             // A newer request (another size, or a release) replaced this one while it started: it is dropped
             let stored = self.lock.withLock { () -> Bool in
                 guard case .starting(let startingKey)? = self.slot, startingKey == key else { return false }
@@ -192,6 +200,7 @@ private final class NeuralSession {
     let padding: (right: Int, bottom: Int)
     private var textureCache: CVMetalTextureCache?
     private var frame: Int64 = 0
+    private var encodes = 0
 
     init?(_ key: NeuralScaler.Key) {
         let configuration = VTLowLatencySuperResolutionScalerConfiguration(
@@ -214,6 +223,10 @@ private final class NeuralSession {
     deinit { processor.endSession() }
 
     func encode(_ decoded: CVPixelBuffer, commandBuffer: any MTLCommandBuffer) -> CVPixelBuffer? {
+        encodes += 1
+        defer {
+            if encodes % 60 == 0, let textureCache { CVMetalTextureCacheFlush(textureCache, 0) }
+        }
         guard let source = input(decoded, commandBuffer: commandBuffer) else { return nil }
         var output: CVPixelBuffer?
         guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &output) == kCVReturnSuccess, let output else { return nil }

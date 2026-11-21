@@ -112,13 +112,23 @@ actor TrailerStills {
     private let http: MetadataHTTP
     private var running = 0
     private var waiting: [CheckedContinuation<Void, Never>] = []
+    /// A movie that cannot yield a still is not downloaded again until the app restarts.
+    private var failed: Set<String> = []
 
     init(http: MetadataHTTP) { self.http = http }
 
     /// A JPEG still of the trailer at [stream]; nil when it cannot be made.
-    func make(stream: URL) async -> Data? {
+    func make(movie: String, stream: URL) async -> Data? {
+        guard !failed.contains(movie) else { return nil }
         await acquire()
         defer { release() }
+        guard !failed.contains(movie) else { return nil }
+        let result = await extract(stream: stream)
+        if result == nil { failed.insert(movie) }
+        return result
+    }
+
+    private func extract(stream: URL) async -> Data? {
         guard let masterText = await text(stream), let variant = HLSStill.variant(masterText),
               let playlistURL = Self.resolve(stream, variant), let playlistText = await text(playlistURL),
               let playlist = HLSStill.playlist(playlistText),

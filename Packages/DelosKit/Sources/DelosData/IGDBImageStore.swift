@@ -7,7 +7,7 @@ public actor IGDBImageStore {
     private let cache: DiskCache
     private let http: MetadataHTTP
     private let stills: TrailerStills
-    private var pending: [URL: Task<Data?, Never>] = [:]
+    private var pending: [String: Task<Data?, Never>] = [:]
 
     public static let budget: Int64 = 150 * 1024 * 1024
     public static let maxImageBytes: Int64 = 8 * 1024 * 1024
@@ -28,11 +28,11 @@ public actor IGDBImageStore {
         // A still is kept by its movie: the stream's URL carries an access token that changes
         let key = HLSStill.parse(url).map { "delos-still://\($0.movie)" } ?? url.absoluteString
         if let cached = await cache.data(for: key) { return cached }
-        if let running = pending[url] { return await running.value }
+        if let running = pending[key] { return await running.value }
         let task = Task<Data?, Never> { [http, cache, stills] in
             let data: Data?
             if let still = HLSStill.parse(url) {
-                data = await stills.make(stream: still.stream)
+                data = await stills.make(movie: still.movie, stream: still.stream)
             } else {
                 var request = URLRequest(url: url)
                 request.httpMethod = "GET"
@@ -42,8 +42,8 @@ public actor IGDBImageStore {
             try? await cache.store(data, for: key)
             return data
         }
-        pending[url] = task
-        defer { pending[url] = nil }
+        pending[key] = task
+        defer { pending[key] = nil }
         return await task.value
     }
 

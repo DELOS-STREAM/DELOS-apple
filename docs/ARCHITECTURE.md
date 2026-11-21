@@ -441,6 +441,10 @@ StreamPerf's `nn` is that buffer's commit-to-completion time. The scaler's input
 (`ExtendedPixelsBottom` 8 for 360 rows); without them it writes nothing (error -19730). A decoded picture without that
 padding is blitted into a padded one from a pool in the same command buffer. The output picture takes the source's colour
 attachments and is drawn by the same conversion.
+Eligibility is cached for the decoded format and size, presentation size and supersampling level; repeated drawings
+do not query scale factors again. Encoding or command-ordering failure falls back to Spatial on the original picture,
+with one `neural fallback=encode` log entry per size. Both texture caches flush every 60 draws or encoding attempts.
+A queued model start checks that its size and factor are still requested before loading the model.
 
 | Limit (macOS 27.2, Apple M6) | Value |
 |---|---|
@@ -1453,6 +1457,10 @@ shows its 600 × 338 thumbnail in the carousel and its 1920 × 1080 picture in t
 snapshot of that list (`OverviewSession.viewerMedia`), so its indices never shift while it is open. Screenshots and
 videos fill the whole stage (a screenshot fitted by its aspect, the player letterboxing the video); the thumbnail zooms
 from the item's carousel rectangle. The viewer covers the whole screen: the top bar fades out while it is open.
+Steam trailers try their own HLS still before a poster, seeded synchronously from the carousel's decoded-image key.
+The viewer also seeds screenshots from decoded memory, preserving the incoming neighbor through a swipe handoff.
+Failed still extraction is remembered by movie ID until restart; renewed stream URLs do not repeat a failed download.
+The two backdrop renders read the same scroll value, written with the page's scroll geometry.
 
 Videos play in the app, never in a browser, the Steam app or the YouTube app. Once the viewer has settled on a video (the
 opening zoom done, no browse running, not closing), its player is made exactly on the video rectangle; it goes when the
@@ -1467,6 +1475,8 @@ exact seek, mute, volume; at the end, play starts over). Until the layer shows i
 viewer shows the movie's picture blurred 16 px, which then fades out over 280 ms. An item that fails or is not ready
 within 15 s is the video's error. When the viewer leaves the movie the player pauses, drops its item and its observers.
 This works on every Apple platform, Apple TV included.
+Browse snapshots share the asynchronous `OverviewVideo.snapshot` path. AVPlayer's video output keeps its native pixel
+format; a single buffer is copied when browsing, and Core Image renders it outside the main actor.
 
 YouTube's videos play in `OverviewVideoPlayer`, a `WKWebView` that loads the YouTube IFrame player
 (`youtube-nocookie.com`, no YouTube controls, autoplay with sound) from an HTML string whose base
@@ -1484,7 +1494,7 @@ the bottom of the stage. Its glass is the system's `.ultraThinMaterial` (a real 
 the player's view and the video included) with a 0.20 tint of `#0A1020`, a top highlight and a hairline. A video
 that plays gets the timeline (elapsed, the track with the buffered share and the played
 share, the remaining time) over one row: the game, the count and the title on the left ("3 / 11 · Launch Trailer"),
-the transport (previous 76, back 10 s 92, play 124, forward 10 s 92, next 76 px) and the sound (mute, a volume slider
+the transport (previous 76, back `seekStep` 92, play 124, forward `seekStep` 92, next 76 px) and the sound (mute, a volume slider
 backed by the player's volume) on the right. Left and right take equal widths, so the transport is centred on the
 screen. A screenshot (or a video that cannot play) gets previous, a page indicator (one dot per item, videos as rings,
 the current one a gold bar; a tap on a dot opens it) and next. Close is a glass button top right.
@@ -1496,12 +1506,12 @@ expects. `GameOverviewTests.dockGlyphsAreCentred` renders each glyph and checks 
 The overlay hides after 3 s without input while a video plays or a screenshot shows (`OverviewViewerControls`); it
 stays while the video is paused, ended or loading and while a slider is dragged; any input brings it back, and the hint
 bar and the pointer hide with it. It rises 18 px in 420 ms and fades out in 240 ms; close drops in 92 ms later. Each
-press of a seek shows variant B's arc flash on its side with the running total (10 s, 20 s…) for 900 ms. With reduced
+press of a seek shows variant B's arc flash on its side with the running total of `OverviewViewerControls.seekStep` for 900 ms. With reduced
 motion the parts and the flash only fade.
 
 | Input | Screenshot, or a video that cannot play | A video that plays |
 |---|---|---|
-| D-pad | walks previous and next (Up: close) | the timeline first: Left / Right seek 10 s; Down: play, then Left / Right along the transport and the sound; Up: close |
+| D-pad | walks previous and next (Up: close) | the timeline first: Left / Right seek `seekStep`; Down: play, then Left / Right along the transport and the sound; Up: close |
 | L1 / R1 (`[` `]`) | previous / next item | previous / next item |
 | A (Return, Space) | presses the focused button | on the timeline play / pause; else presses the focused button |
 | Y (F, M) | nothing | mute / sound on |
@@ -1510,14 +1520,19 @@ motion the parts and the flash only fade.
 On the volume slider Left and Right change the volume by 10. A press while the overlay is hidden shows it with the focus
 back on its first stop, and acts. A gold ring glides to the focused stop for the controller and the keyboard.
 
-Touch: a tap shows or hides the overlay, a double tap in the left or right third seeks 10 s, a sideways swipe browses,
+Touch: a tap shows or hides the overlay, a double tap in the left or right third seeks `seekStep`, a sideways swipe browses,
 a swipe down closes, the sliders drag. While the overlay is hidden over a YouTube video, the player's web view takes the
 touches itself, so YouTube's own surface (an ad's Skip) keeps working; a tap there also brings the overlay back (a gesture
 recognizer that does not cancel the page's touches). Over a Steam movie, and while the overlay shows, its tap layer
-takes them. Pointer: moving shows the overlay, a click on the picture plays or pauses, hovering the timeline shows the
+takes them. Pointer: moving shows the overlay, a click on the picture shows or hides it as a tap does (Play is the dock's button), hovering the timeline shows the
 time under the pointer.
 The hint bar: L1 R1 Browse and Back on a screenshot; Seek, Play or Pause, Mute or Sound on, L1, R1 and Back on a video
 that plays.
+The swipe offset is observed only by the media track, not the dock. `ViewerSlide` owns the release threshold and
+end-of-list rubber band; a commit ignores further browsing until its spring lands and checks the captured index and
+closing state. On iOS a scroll's first non-zero translation locks its browse axis, and cancellation springs back.
+macOS currently has pointer clicks and hover, but no wheel-to-open or two-finger scroll browsing.
+Viewer hint observation lives in a child of the library, so playback and dock focus do not invalidate the library body.
 
 A video that cannot play shows its thumbnail dimmed with a warning, "This video can't be played" and why (its owner does
 not allow other apps for the player's errors 101 and 150, YouTube couldn't load it for the rest, Steam couldn't load a

@@ -2,8 +2,8 @@ import DelosData
 import DelosInput
 import SwiftUI
 
-/// Full-viewport media. The native player, its loading thumbnail and the controls are independent siblings:
-/// effects and transitions belong only to images and overlays, never to the live native surface.
+/// Full-viewport media. Players and pictures share the swipe track; flight effects and browse crossfades apply only to
+/// still images, while the dock stays independent of the moving native surfaces.
 struct OverviewViewer: View {
     let session: OverviewSession
     /// The items as they were when the viewer opened (``OverviewSession/viewerMedia``).
@@ -20,7 +20,7 @@ struct OverviewViewer: View {
     @State private var drag = CGSize.zero
     /// How far a sideways swipe (a finger, a trackpad's two fingers) has moved the item (points): it follows them, and the
     /// next or previous item comes in from that side.
-    @State private var slide: CGFloat = 0
+    @State private var track = ViewerSlideState()
     /// The item just changed by a finished swipe: the new one is already in place, so it swaps without its transition.
     @State private var slid = false
     @State private var origin = CGPoint.zero
@@ -44,6 +44,7 @@ struct OverviewViewer: View {
             // Flying to or from its tile, the page shows through as the picture leaves it (the tile takes over as it lands)
             Color.black.ignoresSafeArea()
                 .opacity(flies(item, target: target) ? zoom : 1)
+            ViewerTrack(state: track) { slide in
             if item.kind == .video, settled == index, !closing, video.error == nil, video.videoID == item.id {
                 if let stream = item.steam?.stream {
                     // A Steam movie in AVPlayer: an ordinary view under the dock, whose glass blurs the video
@@ -92,6 +93,7 @@ struct OverviewViewer: View {
             if item.kind == .video, let error = video.error {
                 OverviewVideoError(code: error, steam: item.steam != nil).frame(width: target.width, height: target.height).offset(x: slide)
             }
+            }
             #if !os(tvOS)
             tapLayer(item)
             #endif
@@ -114,17 +116,17 @@ struct OverviewViewer: View {
         .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged {
             controls.onInput()
             // A slider's drag is not a swipe
-            guard !controls.dragging else { return }
+            guard !controls.dragging, !video.slideCommitting else { return }
             let t = $0.translation
-            if slide != 0 || (abs(t.width) > abs(t.height) && drag == .zero) {
+            if track.offset != 0 || (abs(t.width) > abs(t.height) && drag == .zero) {
                 follow(t.width)
             } else {
                 drag = t
             }
         }.onEnded { value in
             controls.onInput()
-            guard !controls.dragging else { return }
-            if slide != 0 {
+            guard !controls.dragging, !video.slideCommitting else { return }
+            if track.offset != 0 {
                 endSlide(value.translation.width, predicted: value.predictedEndTranslation.width, width: target.width)
                 return
             }
@@ -222,7 +224,7 @@ struct OverviewViewer: View {
         let playing = item.kind == .video && video.videoID == item.id && video.started && video.error == nil && !closing
         // A trailer's thumbnail fills the viewer like the video, blurred 16 px while the player loads; it fades out over
         // the sharp video once the player plays
-        return ViewerImage(item: item, maxPixels: max(1920, Int(max(target.width, target.height))))
+        return ViewerImage(item: item, tall: tall, maxPixels: max(1920, Int(max(target.width, target.height))))
             .frame(width: target.width, height: target.height)
             .blur(radius: item.kind == .video ? stage.px(16) : 0, opaque: true)
             .clipped()
@@ -242,8 +244,9 @@ struct OverviewViewer: View {
 
     #if !os(tvOS)
     /// Over the picture, under the dock. Touch: a tap shows or hides the overlay, a double tap in the left or right third
-    /// seeks ``OverviewViewerControls/seekStep``. Pointer: a click plays or pauses; a trackpad's two-finger swipe sideways
-    /// browses. While the overlay is hidden over a YouTube video it lets the touches through to YouTube's surface
+    /// seeks ``OverviewViewerControls/seekStep``. Pointer: a click shows or hides the overlay as a tap does (Play is the
+    /// dock's button); a trackpad's two-finger swipe sideways browses. While the overlay is hidden over a YouTube video it
+    /// lets the touches through to YouTube's surface
     /// (``OverviewVideoPlayer/interactive``); over a Steam movie it always takes them.
     private func tapLayer(_ item: OverviewContent.Media) -> some View {
         let controls = video.controls
@@ -257,10 +260,7 @@ struct OverviewViewer: View {
                     if value.location.x < third { video.seek(by: -OverviewViewerControls.seekStep); controls.seekFlash(-1) }
                     else if value.location.x > 2 * third { video.seek(by: OverviewViewerControls.seekStep); controls.seekFlash(1) }
                 }.exclusively(before: SpatialTapGesture().onEnded { _ in
-                    if ControllerGlyphs.shared.kind == .pointer {
-                        controls.onInput()
-                        if playable(item) { video.toggle() }
-                    } else if controls.visible {
+                    if controls.visible {
                         controls.hide()
                     } else {
                         controls.onInput()
@@ -358,7 +358,7 @@ struct OverviewViewer: View {
 
     /// The picture of an item a swipe brings in (a video's still, blurred as before it plays).
     private func neighbor(_ item: OverviewContent.Media, target: CGRect) -> some View {
-        ViewerImage(item: item, maxPixels: max(1920, Int(max(target.width, target.height))))
+        ViewerImage(item: item, tall: stage.height > 1200, maxPixels: max(1920, Int(max(target.width, target.height))))
             .frame(width: target.width, height: target.height)
             .blur(radius: item.kind == .video ? stage.px(16) : 0, opaque: true)
             .clipped()
@@ -369,39 +369,52 @@ struct OverviewViewer: View {
     /// The item follows a sideways swipe [x] points; past either end only a quarter of it, a rubber band.
     private func follow(_ x: CGFloat) {
         video.controls.onInput()
-        slide = neighbor(x) == nil ? x * 0.25 : x
+        guard !video.slideCommitting, !closing, !session.viewerClosing else { return }
+        track.offset = ViewerSlide.follow(x: x, hasNeighbor: neighbor(x) != nil)
     }
 
     /// A sideways swipe let go at [x], heading for [predicted]: past 90 px or half the width ([width]) the item slides
     /// out and the one beside it in (then they swap places without a transition); otherwise it springs back.
     private func endSlide(_ x: CGFloat, predicted: CGFloat, width: CGFloat) {
         video.controls.onInput()
-        guard let next = neighbor(x), abs(x) > stage.px(90) || abs(predicted) > width / 2 else {
-            withAnimation(reduced ? nil : Motion.spring(400)) { slide = 0 }
+        guard !video.slideCommitting, !closing, !session.viewerClosing else { return }
+        guard let next = neighbor(x),
+              ViewerSlide.outcome(x: x, predicted: predicted, width: width, px: stage.px(90), hasNeighbor: true) != 0 else {
+            withAnimation(reduced ? nil : Motion.spring(400)) { track.offset = 0 }
             return
         }
         let distance = (x < 0 ? -1 : 1) * (width + stage.px(Self.slideGap))
+        let capturedIndex = index
+        video.slideCommitting = true
         let commit = {
+            defer { video.slideCommitting = false }
+            guard ViewerSlide.canCommit(capturedIndex: capturedIndex, currentIndex: session.viewer,
+                                        closing: session.viewerClosing || closing) else {
+                track.offset = 0
+                return
+            }
             slid = true
             var instant = Transaction()
             instant.disablesAnimations = true
-            withTransaction(instant) { slide = 0 }
+            withTransaction(instant) { track.offset = 0 }
             Self.browse(to: next, session: session, media: media, slid: true)
             Task { @MainActor in slid = false }
         }
         if reduced { commit(); return }
-        withAnimation(.spring(response: 0.34, dampingFraction: 0.92)) { slide = distance } completion: { commit() }
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.92)) { track.offset = distance } completion: { commit() }
     }
 
     /// Both pointer and controller browsing use one transaction, including focus migration. [slid]: a swipe has already
     /// brought the item in, so no still of the leaving video crossfades over it.
     private static func browse(to next: Int, session: OverviewSession, media: [OverviewContent.Media], slid: Bool = false) {
-        guard let index = session.viewer, media.indices.contains(next), next != index else { return }
+        guard !session.viewerClosing, slid || !session.video.slideCommitting,
+              let index = session.viewer, media.indices.contains(next), next != index else { return }
         let video = session.video
         let generation = video.generation
         video.browseTask?.cancel()
         func finish(_ image: CGImage?) {
-            guard video.generation == generation, session.viewer == index, !session.viewerClosing else { return }
+            guard video.generation == generation, session.viewer == index, !session.viewerClosing,
+                  slid || !video.slideCommitting else { return }
             let direction = next > index ? 1.0 : -1.0
             if let image {
                 video.browseFrame = .init(image: image, direction: direction, serial: generation)
@@ -418,8 +431,6 @@ struct OverviewViewer: View {
         }
         if slid {
             finish(nil)
-        } else if video.started, let native = video.native {
-            finish(native.snapshot())
         } else if video.started, let snapshot = video.snapshot {
             video.browseTask = Task { @MainActor in
                 let image = await snapshot()
@@ -445,7 +456,7 @@ struct OverviewViewer: View {
     }
 
     /// A command while the viewer is open, always taken. The dock's focus starts on the timeline of a video (Left and
-    /// Right seek 10 s, A plays or pauses) or on next; elsewhere the D-pad walks the rows. Y (or M) mutes, L1 and R1 (only
+    /// Right seek ``OverviewViewerControls/seekStep``, A plays or pauses) or on next; elsewhere the D-pad walks the rows. Y (or M) mutes, L1 and R1 (only
     /// they) browse, B closes. A press while the overlay is hidden shows it with the focus back home, and acts.
     static func handle(_ command: MenuCommand, session: OverviewSession, media: [OverviewContent.Media]) {
         guard let index = session.viewer, media.indices.contains(index) else { return }
@@ -496,6 +507,36 @@ struct OverviewViewer: View {
     }
 }
 
+@MainActor
+@Observable
+private final class ViewerSlideState {
+    var offset: CGFloat = 0
+}
+
+/// Only the moving media observes the per-event offset; the viewer and its dock do not.
+private struct ViewerTrack<Content: View>: View {
+    let state: ViewerSlideState
+    @ViewBuilder var content: (CGFloat) -> Content
+
+    var body: some View {
+        ZStack(alignment: .topLeading) { content(state.offset) }
+    }
+}
+
+/// Sideways travel in points: +1 browses forward, -1 backward, zero springs back.
+enum ViewerSlide {
+    static func outcome(x: CGFloat, predicted: CGFloat, width: CGFloat, px: CGFloat, hasNeighbor: Bool) -> Int {
+        guard x != 0, hasNeighbor, abs(x) > px || abs(predicted) > width / 2 else { return 0 }
+        return x < 0 ? 1 : -1
+    }
+
+    static func follow(x: CGFloat, hasNeighbor: Bool) -> CGFloat { hasNeighbor ? x : x * 0.25 }
+
+    static func canCommit(capturedIndex: Int, currentIndex: Int?, closing: Bool) -> Bool {
+        !closing && currentIndex == capturedIndex
+    }
+}
+
 /// A stop of the viewer's dock for the controller and the keyboard.
 enum OverviewDockFocus: Hashable, Sendable {
     case close, timeline, previous, back, play, forward, next, mute, volume
@@ -543,7 +584,7 @@ enum OverviewDockFocus: Hashable, Sendable {
 final class OverviewViewerControls {
     private(set) var visible = true
     var focus = OverviewDockFocus.timeline
-    /// The running total of the last seek presses in one direction (B's arc flash: 10, 20…); nil: none showing.
+    /// The running total of seekStep presses in one direction (B's arc flash); nil: none showing.
     private(set) var flash: SeekFlash?
     /// A video that is paused, ended or not started: the overlay does not hide.
     @ObservationIgnored var paused = false
@@ -556,7 +597,7 @@ final class OverviewViewerControls {
     struct SeekFlash: Equatable {
         /// -1 back, 1 forward.
         let direction: Int
-        /// Seconds, a multiple of 10.
+        /// Seconds, a multiple of seekStep.
         let total: Int
         let serial: Int
     }
@@ -606,8 +647,27 @@ final class OverviewViewerControls {
 private struct ViewerImage: View {
     let item: OverviewContent.Media
     let maxPixels: Int
+    let tall: Bool
     @Environment(GameMetadataModel.self) private var metadata
     @State private var image: CGImage?
+
+    init(item: OverviewContent.Media, tall: Bool, maxPixels: Int) {
+        self.item = item
+        self.tall = tall
+        self.maxPixels = maxPixels
+        _image = State(initialValue: Self.cached(item, tall: tall, maxPixels: maxPixels))
+    }
+
+    private static func cached(_ item: OverviewContent.Media, tall: Bool, maxPixels: Int) -> CGImage? {
+        if let still = item.steam?.still {
+            return OverviewImageMemory.image("\(still.absoluteString)#\(tall ? 900 : 600)")
+                ?? OverviewImageMemory.image("\(still.absoluteString)#\(maxPixels)")
+        }
+        if let full = OverviewImageSizes.full(item, tall: tall),
+           let cached = OverviewImageMemory.image("\(full.absoluteString)#\(maxPixels)") { return cached }
+        guard let thumb = OverviewImageSizes.thumb(item, tall: tall) else { return nil }
+        return OverviewImageMemory.image("\(thumb.absoluteString)#\(tall ? 900 : 600)")
+    }
 
     var body: some View {
         ZStack {
@@ -621,15 +681,22 @@ private struct ViewerImage: View {
             }
         }
         .task(id: item.id) {
-            image = nil
-            if let url = OverviewImageSizes.thumb(item, tall: true) {
-                image = await load(url, pixels: 900)
+            image = Self.cached(item, tall: tall, maxPixels: maxPixels)
+            // Keep the tile's own still through the flight; the poster is only a failed-still fallback.
+            if let still = item.steam?.still {
+                if let own = await load(still, pixels: maxPixels), !Task.isCancelled {
+                    image = own
+                    return
+                }
+                guard !Task.isCancelled else { return }
+                if image != nil { return }
             }
-            guard !Task.isCancelled, let url = OverviewImageSizes.full(item, tall: true) else { return }
-            // YouTube's missing `maxresdefault` is a 120 × 90 placeholder: the thumbnail stays
+            if image == nil, let url = OverviewImageSizes.thumb(item, tall: tall) {
+                image = await load(url, pixels: tall ? 900 : 600)
+            }
+            guard !Task.isCancelled, let url = OverviewImageSizes.full(item, tall: tall) else { return }
+            // YouTube's missing `maxresdefault` is a 120 × 90 placeholder: the thumbnail stays.
             if let full = await load(url, pixels: maxPixels), full.width > 120, !Task.isCancelled { image = full }
-            // A Steam trailer's own still replaces the shared poster once it is made
-            if let still = item.steam?.still, let own = await load(still, pixels: maxPixels), !Task.isCancelled { image = own }
         }
     }
 
