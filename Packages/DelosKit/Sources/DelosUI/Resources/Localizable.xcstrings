@@ -36230,61 +36230,61 @@
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pozdrží každé obnovení kvůli opožděnému snímku. Jen MediaCodec."
+            "value": "Pozdrží každé obnovení kvůli opožděnému snímku."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hält jede Bildwiederholung für ein verspätetes Bild zurück. Nur MediaCodec."
+            "value": "Hält jede Bildwiederholung für ein verspätetes Bild zurück."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Holds each refresh for a late frame. MediaCodec only."
+            "value": "Holds each refresh for a frame that is just late."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Retiene cada actualización para un fotograma tardío. Solo MediaCodec."
+            "value": "Retiene cada actualización para un fotograma tardío."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Retient chaque rafraîchissement pour une image tardive. MediaCodec uniquement."
+            "value": "Retient chaque rafraîchissement pour une image tardive."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "遅れたフレームのために各リフレッシュを待たせます。MediaCodecのみ。"
+            "value": "遅れたフレームのために各リフレッシュを待たせます。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "늦은 프레임을 위해 화면 갱신마다 기다려요. MediaCodec에서만 사용해요."
+            "value": "늦은 프레임을 위해 화면 갱신마다 기다려요."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Segura cada atualização para um quadro atrasado. Só MediaCodec."
+            "value": "Segura cada atualização para um quadro atrasado."
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Притримує кожне оновлення для запізнілого кадру. Лише MediaCodec."
+            "value": "Притримує кожне оновлення для запізнілого кадру."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "为迟到的帧推迟每次刷新。仅限 MediaCodec。"
+            "value": "为迟到的帧推迟每次刷新。"
           }
         }
       }
