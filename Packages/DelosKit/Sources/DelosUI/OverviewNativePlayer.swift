@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreImage
 import DelosData
 import SwiftUI
 
@@ -18,12 +19,17 @@ final class OverviewNativePlayback {
     private weak var layer: AVPlayerLayer?
     private var ended = false
     private var invalidated = false
+    private let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [
+        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+    ])
+    private static let imageContext = CIContext()
 
     init(url: URL, video: OverviewVideo) {
         self.video = video
         generation = video.generation
         let item = AVPlayerItem(url: url)
         player = AVPlayer(playerItem: item)
+        item.add(output)
         player.isMuted = video.muted || OverviewVideo.startsMuted
         player.volume = Float(video.volume / 100)
         #if os(iOS) || os(tvOS)
@@ -106,6 +112,12 @@ final class OverviewNativePlayback {
         player.volume = Float(min(max(value, 0), 1))
         if value > 0 { player.isMuted = false }
         refresh()
+    }
+    /// Copies a single decoded frame only when browsing away, never on playback ticks.
+    func snapshot() -> CGImage? {
+        guard current, let buffer = output.copyPixelBuffer(forItemTime: player.currentTime(), itemTimeForDisplay: nil) else { return nil }
+        let image = CIImage(cvPixelBuffer: buffer)
+        return Self.imageContext.createCGImage(image, from: image.extent)
     }
 
     /// The player pauses and lets its item go; nothing is reported from now on.

@@ -1269,6 +1269,7 @@ private struct OverviewCarousel: View {
     let media: [OverviewContent.Media]
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduced
+    @Environment(\.delosColors) private var colors
     @State private var position = ScrollPosition(x: 0)
 
     var body: some View {
@@ -1321,6 +1322,7 @@ private struct OverviewCarousel: View {
 
     private func thumb(_ item: OverviewContent.Media, tall: Bool) -> some View {
         let shape = RoundedRectangle(cornerRadius: stage.px(22), style: .continuous)
+        let focused = session.viewer == nil && session.focus.focused == AnyHashable(OverviewNavigation.media(media.firstIndex(of: item) ?? -1))
         return ZStack(alignment: .bottomLeading) {
             // The picture is wider than its frame and moves against the carousel
             RemoteImage(url: OverviewImageSizes.thumb(item, tall: tall), maxPixels: tall ? 900 : 600)
@@ -1333,12 +1335,20 @@ private struct OverviewCarousel: View {
                 .frame(width: stage.px(520), height: stage.px(292))
                 .clipped()
             if item.kind == .video {
-                SymbolView(symbol: Symbols.videoPlay, size: 64, color: RGBA(red: 1, green: 1, blue: 1), filled: true)
-                    .shadow(color: .black.opacity(0.6), radius: stage.px(8))
+                InkSymbol(symbol: Symbols.playerPlay, size: 32, color: colors.accent, filled: true, centroid: true)
+                    .shadow(color: colors.accent.color.opacity(focused ? 0.7 : 0.35), radius: stage.px(focused ? 16 : 10))
+                    .frame(width: stage.px(72), height: stage.px(72))
+                    .background {
+                        GlassShape(Circle(), tint: .overArt(0.20), share: 1)
+                            .overlay(Circle().strokeBorder(Color.white.opacity(0.18), lineWidth: stage.px(1)))
+                    }
+                    .scaleEffect(focused && !reduced ? 1.08 : 1)
+                    .animation(reduced ? nil : OverviewMotion.chipSpring, value: focused)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if let name = item.name {
-                    Text(name).font(DelosFonts.figtree(stage.tpx(18), .bold)).foregroundStyle(.white)
-                        .shadow(color: .black.opacity(0.7), radius: stage.px(5)).padding(.leading, stage.px(16)).padding(.bottom, stage.px(14))
+                    MarqueeLabel(text: name, active: focused, bounce: true)
+                        .font(DelosFonts.figtree(stage.tpx(18), .bold)).foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.7), radius: stage.px(5)).padding(.horizontal, stage.px(16)).padding(.bottom, stage.px(14))
                 }
             }
         }

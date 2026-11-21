@@ -62,10 +62,17 @@ struct OverviewViewer: View {
             picture(item, tall: stage.height > 1200, target: target)
                 .id(index)
                 .transition(reduced ? .opacity : .asymmetric(
-                    insertion: .modifier(active: Slide(x: session.viewerDirection * stage.px(160), scale: 0.96, opacity: 0), identity: Slide(x: 0, scale: 1, opacity: 1))
-                        .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.56)),
-                    removal: .modifier(active: Slide(x: -session.viewerDirection * stage.px(90), scale: 0.94, opacity: 0), identity: Slide(x: 0, scale: 1, opacity: 1))
-                        .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42))))
+                    insertion: .offset(x: session.viewerDirection * target.width * 0.04).combined(with: .opacity),
+                    removal: .offset(x: -session.viewerDirection * target.width * 0.04).combined(with: .opacity)))
+            if let frame = video.browseFrame {
+                ViewerVideoStill(frame: frame, reduced: reduced) {
+                    if video.browseFrame?.serial == frame.serial { video.browseFrame = nil }
+                }
+                .frame(width: target.width, height: target.height)
+                .id(frame.serial)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
             if item.kind == .video, let error = video.error {
                 OverviewVideoError(code: error, steam: item.steam != nil).frame(width: target.width, height: target.height)
             }
@@ -84,6 +91,7 @@ struct OverviewViewer: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .ignoresSafeArea()
+        .animation(OverviewViewerMotion.animation(reduced: reduced), value: index)
         .contentShape(Rectangle())
         .onGeometryChange(for: CGPoint.self) { $0.frame(in: .global).origin } action: { origin = $0 }
         #if !os(tvOS)
@@ -116,6 +124,7 @@ struct OverviewViewer: View {
         .onChange(of: session.viewerClosing) { _, now in if now { close() } }
         .onChange(of: scenePhase) { _, now in video.setActive(now == .active) }
         .onChange(of: controls.visible, initial: true) { _, visible in onControlsVisibilityChanged(visible) }
+        .onChange(of: reduced, initial: true) { _, now in video.reducedBrowse = now }
         .task(id: controls.visible) {
             while controls.visible {
                 do { try await Task.sleep(for: controls.remaining()) } catch { return }
@@ -124,13 +133,14 @@ struct OverviewViewer: View {
         }
         .task(id: index) {
             let playable = item.kind == .video && video.error == nil
-            if !OverviewDockFocus.rows(playable: playable).contains(where: { $0.contains(controls.focus) }) {
-                controls.focus = OverviewDockFocus.home(playable: playable)
-            }
+            controls.focus = controls.focus.surviving(playable: playable, direction: session.viewerDirection)
             settled = nil
             video.reset(nil)
             controls.onInput()
-            do { try await Task.sleep(for: .milliseconds(reduced ? 280 : 560)) } catch { return }
+            do { try await Task.sleep(for: .milliseconds(reduced ? 200 : 600)) } catch { return }
+            #if DEBUG && canImport(UIKit)
+            OverviewFrameLog.shared.stop()
+            #endif
             guard !Task.isCancelled, session.viewer == index, !closing else { return }
             video.reset(item.kind == .video ? item.id : nil)
             settled = index
@@ -154,6 +164,8 @@ struct OverviewViewer: View {
         }
         .onDisappear {
             video.setActive(false)
+            video.browseTask?.cancel()
+            video.browseFrame = nil
             video.reset(nil)
             onControlsVisibilityChanged(true)
         }
@@ -279,12 +291,47 @@ struct OverviewViewer: View {
     func go(_ k: Int) {
         video.controls.onInput()
         guard media.indices.contains(k), k != index else { return }
-        session.viewerDirection = k > index ? 1 : -1
-        withAnimation(reduced ? .easeOut(duration: 0.28) : nil) { session.viewer = k }
+        Self.browse(to: k, session: session, media: media)
+    }
+
+    /// Both pointer and controller browsing use one transaction, including focus migration.
+    private static func browse(to next: Int, session: OverviewSession, media: [OverviewContent.Media]) {
+        guard let index = session.viewer, media.indices.contains(next), next != index else { return }
+        let video = session.video
+        let generation = video.generation
+        video.browseTask?.cancel()
+        func finish(_ image: CGImage?) {
+            guard video.generation == generation, session.viewer == index, !session.viewerClosing else { return }
+            let direction = next > index ? 1.0 : -1.0
+            if let image {
+                video.browseFrame = .init(image: image, direction: direction, serial: generation)
+            }
+            session.viewerDirection = direction
+            video.reset(nil)
+            withAnimation(OverviewViewerMotion.animation(reduced: video.reducedBrowse)) {
+                video.controls.focus = video.controls.focus.surviving(playable: media[next].kind == .video, direction: direction)
+                session.viewer = next
+            }
+            #if DEBUG && canImport(UIKit)
+            OverviewFrameLog.shared.start("viewer-browse")
+            #endif
+        }
+        if video.started, let native = video.native {
+            finish(native.snapshot())
+        } else if video.started, let snapshot = video.snapshot {
+            video.browseTask = Task { @MainActor in
+                let image = await snapshot()
+                guard !Task.isCancelled else { return }
+                finish(image)
+            }
+        } else {
+            finish(nil)
+        }
     }
 
     func close() {
         guard !closing else { return }
+        video.browseTask?.cancel()
         video.controls.onInput()
         closing = true
         session.viewerClosing = true
@@ -309,10 +356,7 @@ struct OverviewViewer: View {
         }
         controls.onInput()
         func browse(_ step: Int) {
-            guard media.indices.contains(index + step) else { return }
-            session.viewerDirection = Double(step)
-            session.viewer = index + step
-            controls.focus = OverviewDockFocus.home(playable: media[index + step].kind == .video)
+            Self.browse(to: index + step, session: session, media: media)
         }
         let focus = controls.focus
         switch command {
@@ -363,6 +407,15 @@ enum OverviewDockFocus: Hashable, Sendable {
 
     /// Where the focus starts: the timeline of a video, else next.
     static func home(playable: Bool) -> OverviewDockFocus { playable ? .timeline : .next }
+    /// Keep shared stops in place. A disappearing video stop lands on its closest surviving neighbour.
+    func surviving(playable: Bool, direction: Double) -> Self {
+        if Self.rows(playable: playable).contains(where: { $0.contains(self) }) { return self }
+        switch self {
+        case .back: return .previous
+        case .forward, .mute, .volume: return .next
+        default: return direction < 0 ? .previous : .next
+        }
+    }
 
     /// The stop a direction leads to from [self]; nil: none that way. Up and Down land on the first stop of the new row
     /// (the app's rule for rows), except that the transport row is entered on play (its middle, the main control).
@@ -490,9 +543,34 @@ private struct DockRise: ViewModifier {
     func body(content: Content) -> some View { content.offset(y: stage.px(y)).opacity(opacity) }
 }
 
-private struct Slide: ViewModifier {
-    let x: Double
-    let scale: Double
-    let opacity: Double
-    func body(content: Content) -> some View { content.offset(x: x).scaleEffect(scale).opacity(opacity) }
+/// The one spring used by the media layers and all dock geometry.
+enum OverviewViewerMotion {
+    static func animation(reduced: Bool) -> Animation {
+        reduced ? .easeOut(duration: 0.2) : .spring(response: 0.6, dampingFraction: 0.8)
+    }
+}
+
+/// The released player's last frame participates in the transition, not its native surface.
+private struct ViewerVideoStill: View {
+    let frame: OverviewVideo.BrowseFrame
+    let reduced: Bool
+    let finished: () -> Void
+    @State private var leaving = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            Image(decorative: frame.image, scale: 1).resizable().scaledToFit()
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .background(Color.black)
+                .offset(x: leaving && !reduced ? -frame.direction * proxy.size.width * 0.04 : 0)
+                .opacity(leaving ? 0 : 1)
+        }
+        .onAppear {
+            withAnimation(OverviewViewerMotion.animation(reduced: reduced)) { leaving = true }
+        }
+        .task {
+            do { try await Task.sleep(for: .milliseconds(reduced ? 200 : 600)) } catch { return }
+            finished()
+        }
+    }
 }

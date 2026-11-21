@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- Browsing the full-screen media viewer crossfades and slides the media on the overview spring. Its glass dock morphs
+  between video controls and screenshot pages while shared controls and focus glide; reduced motion uses a 200 ms fade.
+- Long trailer titles use the shared back-and-forth marquee in focused carousel tiles and the viewer dock; reduced
+  motion keeps the edge fade without scrolling. Trailer tiles have a gold play glyph on a circular Liquid Glass badge.
 - The game overview below the dashboard: Down on a game's cover (a swipe of the cover up, or the Game info hint under
   it) continues the dashboard downward. The cover flies into the header beside the title, ratings, age rating, Play and
   App settings; About with the storyline, Screenshots and videos with a full-screen viewer, Details, Your streaming,
