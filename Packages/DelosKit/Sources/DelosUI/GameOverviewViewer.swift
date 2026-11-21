@@ -221,8 +221,9 @@ struct OverviewViewer: View {
 
     #if !os(tvOS)
     /// Over the picture, under the dock. Touch: a tap shows or hides the overlay, a double tap in the left or right third
-    /// seeks 10 s. Pointer: a click plays or pauses. While the overlay is hidden over a YouTube video it lets the touches
-    /// through to YouTube's surface (``OverviewVideoPlayer/interactive``); over a Steam movie it always takes them.
+    /// seeks ``OverviewViewerControls/seekStep``. Pointer: a click plays or pauses; a trackpad's two-finger swipe sideways
+    /// browses. While the overlay is hidden over a YouTube video it lets the touches through to YouTube's surface
+    /// (``OverviewVideoPlayer/interactive``); over a Steam movie it always takes them.
     private func tapLayer(_ item: OverviewContent.Media) -> some View {
         let controls = video.controls
         return GeometryReader { proxy in
@@ -244,6 +245,9 @@ struct OverviewViewer: View {
                         controls.onInput()
                     }
                 }))
+                #if os(iOS)
+                .gesture(ViewerScrollBrowseGesture(threshold: 40) { step in go(index + step) })
+                #endif
         }
         .allowsHitTesting(controls.visible || item.kind != .video || item.steam != nil || video.videoID != item.id)
         .accessibilityHidden(true)

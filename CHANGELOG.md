@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- In the game info's screenshots and videos viewer, a trackpad's two-finger swipe sideways (or a tilt wheel) goes to
+  the next or previous item, once per swipe.
 - A mouse wheel or a trackpad scrolled down over a cover opens its game info, as Down does with a controller;
   scrolling up or sideways still moves the library row.
 
