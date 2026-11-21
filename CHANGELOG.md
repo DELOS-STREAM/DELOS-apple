@@ -349,6 +349,13 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- The game overview viewer's dock is Liquid Glass. Its timeline is 10 px (16 px while focused, dragged or hovered) and
+  shows its knob only then, so the played line simply ends; the volume slider is 8 px with a white knob. Play has a gold
+  glow under it; a focused button grows to 1.08, lightens and fills its icon; the focus ring is a 4 px gold line over a
+  soft glow. The count and title share one line, the sound controls are 72 px and 170 px, and the close button is 76 px.
+- The game overview's pills, chips and cards are tinted instead of Liquid Glass: the background under them is blurred
+  already, and one glass pass per surface over a playing game background made the page stutter.
+
 - The game overview's background: as the page scrolls, the whole background (the game's picture
   and the animated lines) zooms and drifts up, and the deeper blur fades in fully over it, saturated by 1.35 and darkened
   to 62 %, at the larger of 24 px and the dashboard's own blur. The shades under the text stay in place, and a left one

@@ -21,6 +21,10 @@ extension EnvironmentValues {
     /// Motion (``DelosRoot`` sets it; `LocalReducedMotion` of DELOS for Android). The animated background keeps its
     /// pace, as on Android, and slows down only for the system setting.
     @Entry var reducedMotion = false
+    /// The surfaces here lie over a backdrop that is blurred already (the game overview's page): the tint alone, no Liquid
+    /// Glass. One glass pass per pill, chip and card over a playing game background cost the page its smoothness, and over
+    /// a blurred backdrop the glass shows nothing the tint does not.
+    @Entry var glassFlat = false
 }
 
 /// A surface of Liquid Glass where DELOS for Android blurs the background (`Modifier.glass`); iOS, iPadOS and tvOS 26
@@ -35,6 +39,7 @@ struct GlassShape<S: Shape>: View {
     /// alpha) on the glass, for the surfaces whose color the Android screenshots fix (the circles, the profile chip).
     let share: Double?
     @Environment(\.glassOverMedia) private var overMedia
+    @Environment(\.glassFlat) private var flat
     @Environment(\.delosColors) private var colors
 
     init(_ shape: S, tint: RGBA, role: GlassRole = .control, share: Double? = nil) {
@@ -46,7 +51,7 @@ struct GlassShape<S: Shape>: View {
 
     var body: some View {
         ZStack {
-            if #available(iOS 26, tvOS 26, macOS 26, *) {
+            if #available(iOS 26, tvOS 26, macOS 26, *), !flat {
                 Color.clear.glassEffect(glass, in: shape)
             } else {
                 shape.fill(tint.color)

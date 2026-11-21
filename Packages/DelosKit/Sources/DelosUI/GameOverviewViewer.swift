@@ -269,7 +269,7 @@ struct OverviewViewer: View {
                 .frame(width: stage.px(stage.width), height: stage.px(stage.height) - stage.px(tall ? 124 : 112), alignment: .bottom)
                 .transition(rise)
             closeButton
-                .position(x: stage.px(stage.width - 56 - 36), y: stage.px(40 + 36))
+                .position(x: stage.px(stage.width - 56 - 38), y: stage.px(40 + 38))
                 .transition(drop)
         }
     }
@@ -277,16 +277,20 @@ struct OverviewViewer: View {
     private var closeButton: some View {
         let focused = video.controls.focus == .close && [.controller, .keyboard].contains(ControllerGlyphs.shared.kind)
         return Button { close() } label: {
-            InkSymbol(symbol: Symbols.close, size: 32, color: colors.text)
-                .frame(width: stage.px(72), height: stage.px(72))
-                .background { DockGlass(radius: stage.px(36)) }
+            InkSymbol(symbol: Symbols.close, size: DockButton.glyph(76), color: colors.text, filled: focused)
+                .frame(width: stage.px(76), height: stage.px(76))
+                .background {
+                    DockGlass(radius: stage.px(38))
+                    if focused { Circle().fill(Color.white.opacity(0.26)) }
+                }
                 .contentShape(Circle())
+                .scaleEffect(focused && !reduced ? 1.08 : 1)
+                .animation(reduced ? nil : .spring(response: 0.42, dampingFraction: 0.6), value: focused)
         }
         .buttonStyle(.plain)
         .overlay {
-            Circle().strokeBorder(colors.accent.color, lineWidth: stage.px(5)).padding(-stage.px(9))
+            ViewerDockRing(inflate: stage.px(OverviewDock.ringInflate(.close)))
                 .opacity(focused ? 1 : 0)
-                .animation(.easeOut(duration: 0.14), value: focused)
                 .allowsHitTesting(false)
         }
         .accessibilityLabel(L("shell_hint_close"))
