@@ -164,6 +164,7 @@ struct CoverScrollOpenGesture: UIGestureRecognizerRepresentable {
 final class CoverScrollRecognizer: UIPanGestureRecognizer, UIGestureRecognizerDelegate {
     /// This scroll has opened the overview: the rest of it does nothing.
     var fired = false
+    var axis = ViewerScrollAxis()
 
     init() {
         super.init(target: nil, action: nil)
@@ -175,6 +176,7 @@ final class CoverScrollRecognizer: UIPanGestureRecognizer, UIGestureRecognizerDe
     override func reset() {
         super.reset()
         fired = false
+        axis = ViewerScrollAxis()
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
@@ -195,16 +197,27 @@ struct ViewerScrollBrowseGesture: UIGestureRecognizerRepresentable {
         switch recognizer.state {
         case .began, .changed:
             // Decided once, at the start: a sideways swipe follows, an upright one is the page's
-            if !recognizer.fired { recognizer.fired = abs(t.x) > abs(t.y) }
-            if recognizer.fired { onChange(t.x) }
-        case .ended, .cancelled:
-            if recognizer.fired { onEnd(t.x, recognizer.velocity(in: recognizer.view).x) }
+            if recognizer.axis.follows(x: t.x, y: t.y) { onChange(t.x) }
+        case .ended:
+            if recognizer.axis.horizontal == true { onEnd(t.x, recognizer.velocity(in: recognizer.view).x) }
+        case .cancelled:
+            if recognizer.axis.horizontal == true { onEnd(0, 0) }
         default:
             break
         }
     }
 }
 #endif
+
+/// A scroll's first non-zero travel locks its axis, including a vertical scroll that later drifts sideways.
+struct ViewerScrollAxis {
+    private(set) var horizontal: Bool?
+
+    mutating func follows(x: Double, y: Double) -> Bool {
+        if horizontal == nil, x != 0 || y != 0 { horizontal = abs(x) > abs(y) }
+        return horizontal == true
+    }
+}
 
 /// A finger's vertical speed from its last moves: the travel over the last [window] seconds before it lifted; a finger
 /// that rested longer than that before lifting has none.

@@ -312,6 +312,7 @@ struct GameOverview: View {
         .onGeometryChange(for: Double.self) { $0.frame(in: .global).minY } action: { globalTop = $0 }
         .onScrollGeometryChange(for: Double.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, now in
             session.scroll = now
+            art.overviewScroll = max(now, 0) / stage.scale
             let pull = max(-now, 0)
             if pull != session.pull { session.pull = pull }
             session.pullSpeed.add(y: pull, at: ProcessInfo.processInfo.systemUptime)
@@ -1235,7 +1236,7 @@ private struct OverviewBackdrop: View {
     }
 
     var body: some View {
-        let scroll = max(session.scroll, 0) / stage.scale
+        let scroll = art.overviewScroll
         let deep = min(1, scroll / OverviewMotion.deepBlurScroll)
         let shade = (OverviewMotion.shade + deep * 0.25) * 0.7
         let area = HeroArea.of(stageWidth: stage.width, stageHeight: stage.height)
@@ -1272,7 +1273,6 @@ private struct OverviewBackdrop: View {
         .clipped()
         .allowsHitTesting(false)
         .ignoresSafeArea()
-        .onChange(of: scroll, initial: true) { _, now in art.overviewScroll = now }
         .onDisappear { art.overviewScroll = 0 }
         .task(id: DeepKey(hero: art.hero, blur: look?.blur, area: area)) {
             guard let hero = art.hero, let look else {
@@ -1300,7 +1300,7 @@ private struct OverviewCarousel: View {
         ScrollView(.horizontal, showsIndicators: false) {
             // Not lazy: every thumbnail is registered, so the arrows can walk to one past the edge and the row follows
             HStack(spacing: stage.px(OverviewSpacing.mediaGap)) {
-                ForEach(Array(media.enumerated()), id: \.offset) { index, item in
+                ForEach(Array(media.enumerated()), id: \.element.id) { index, item in
                     OverviewFocusable(id: OverviewNavigation.media(index), focus: session.focus, corner: 22, pad: 0, scale: OverviewSpacing.mediaScale) {
                         thumb(item, tall: tall)
                             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { session.thumbFrames[item.id] = $0 }
@@ -1417,6 +1417,8 @@ private struct MediaThumb: View {
         .clipShape(shape)
         .overlay(shape.strokeBorder(Color.white.opacity(0.1), lineWidth: stage.px(1)))
         .task(id: item.steam?.still) {
+            still = nil
+            stillFailed = false
             guard let url = item.steam?.still else { return }
             let pixels = tall ? 900 : 600
             let key = "\(url.absoluteString)#\(pixels)"

@@ -80,4 +80,28 @@ struct HLSStillTests {
         #expect(HLSStill.isDark(try image(0.02)))
         #expect(!HLSStill.isDark(try image(0.4)))
     }
+
+    @Test func failedStillsAreRememberedByMovieNotStreamURL() async throws {
+        let transport = FailedStillTransport()
+        let stills = TrailerStills(http: MetadataHTTP(transport: transport))
+        let first = try #require(URL(string: "https://example.com/master.m3u8?t=1"))
+        let refreshed = try #require(URL(string: "https://example.com/master.m3u8?t=2"))
+        #expect(await stills.make(movie: "one", stream: first) == nil)
+        #expect(await stills.make(movie: "one", stream: refreshed) == nil)
+        #expect(await transport.requests == 1)
+        #expect(await stills.make(movie: "two", stream: first) == nil)
+        #expect(await transport.requests == 2)
+        let restarted = TrailerStills(http: MetadataHTTP(transport: transport))
+        #expect(await restarted.make(movie: "one", stream: first) == nil)
+        #expect(await transport.requests == 3)
+    }
+}
+
+private actor FailedStillTransport: MetadataTransport {
+    private(set) var requests = 0
+
+    func response(for request: URLRequest) async throws -> MetadataHTTPResponse {
+        requests += 1
+        return MetadataHTTPResponse(data: Data(), status: 403)
+    }
 }

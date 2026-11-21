@@ -162,6 +162,8 @@ struct HomeScreen: View {
             .modifier(LayerBackdropBlur(active: sheetOpen))
             sheet(listed: listed)
             overviewLayer(listed: listed)
+            HomeHintObserver(overview: overview, label: offeredNow ? LibraryFilter.hintLabel(filters) : nil,
+                             sheetOpen: sheetOpen, navigator: navigator, focus: focus)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onGeometryChange(for: CGPoint.self) { $0.frame(in: .global).origin } action: { homeOrigin = $0 }
@@ -202,11 +204,6 @@ struct HomeScreen: View {
                 sheetFocus.focus(LibraryFilterIDs.show)
             }
         }
-        .onChange(of: ScreenFilter(label: offeredNow ? LibraryFilter.hintLabel(filters) : nil, open: sheetOpen, overview: overview != nil,
-                                   viewer: viewerItem, viewerControlsVisible: overview?.viewerControlsVisible ?? true), initial: true) { _, now in
-            navigator.setHints(ScreenHints(sheetOpen: now.open, filterLabel: now.label, overview: now.overview, overviewViewer: now.viewer,
-                                           overviewViewerControlsVisible: now.viewerControlsVisible), from: focus)
-        }
         .onAppear {
             launcher.canOpen = { [metadata] app in metadata.hasOverview(app) }
             launcher.isFocused = { [focus] app in focus.focused == AnyHashable(GameLibrary.id(app)) }
@@ -216,22 +213,6 @@ struct HomeScreen: View {
         .onDisappear { navigator.releaseInput(focus) }
     }
 
-    /// What the hint bar needs: Y's label (nil: no filter here), whether the sheet or the overview is open, and what the
-    /// overview's viewer shows.
-    private struct ScreenFilter: Equatable {
-        let label: String?
-        let open: Bool
-        let overview: Bool
-        let viewer: OverviewViewerItem?
-        let viewerControlsVisible: Bool
-    }
-
-    /// The item of the overview's open viewer.
-    private var viewerItem: OverviewViewerItem? {
-        guard let session = overview, let index = session.viewer, session.viewerMedia.indices.contains(index) else { return nil }
-        guard session.viewerMedia[index].kind == .video else { return .screenshot }
-        return session.video.error == nil ? .video(playing: session.video.playing, muted: session.video.muted, focus: session.video.controls.focus) : .unplayable
-    }
 
     // MARK: Game overview
 
@@ -593,6 +574,42 @@ struct HomeScreen: View {
             break
         }
         return true
+    }
+}
+
+/// Dock changes invalidate only the hint publisher, not the library's artwork and cover row.
+private struct HomeHintObserver: View {
+    let overview: OverviewSession?
+    let label: String?
+    let sheetOpen: Bool
+    let navigator: Navigator
+    let focus: FocusModel
+
+    var body: some View {
+        Color.clear.frame(width: 0, height: 0)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .onChange(of: ScreenFilter(label: label, open: sheetOpen, overview: overview != nil,
+                                      viewer: viewerItem, viewerControlsVisible: overview?.viewerControlsVisible ?? true),
+                      initial: true) { _, now in
+                navigator.setHints(ScreenHints(sheetOpen: now.open, filterLabel: now.label, overview: now.overview,
+                                               overviewViewer: now.viewer, overviewViewerControlsVisible: now.viewerControlsVisible),
+                                   from: focus)
+            }
+    }
+
+    private struct ScreenFilter: Equatable {
+        let label: String?
+        let open: Bool
+        let overview: Bool
+        let viewer: OverviewViewerItem?
+        let viewerControlsVisible: Bool
+    }
+
+    private var viewerItem: OverviewViewerItem? {
+        guard let session = overview, let index = session.viewer, session.viewerMedia.indices.contains(index) else { return nil }
+        guard session.viewerMedia[index].kind == .video else { return .screenshot }
+        return session.video.error == nil ? .video(playing: session.video.playing, muted: session.video.muted, focus: session.video.controls.focus) : .unplayable
     }
 }
 

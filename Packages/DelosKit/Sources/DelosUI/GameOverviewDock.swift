@@ -545,7 +545,7 @@ struct DockVolume: View {
     }
 }
 
-/// The seek feedback (variant B's arc flash): a gold arc on the side of the seek with the running total (10, 20…), that
+/// The seek feedback (variant B's arc flash): a gold arc on the side of the seek with the running total of seekStep presses, that
 /// nudges outwards on each press and fades after ``OverviewViewerControls/flashHold``.
 struct SeekFlashView: View {
     let flash: OverviewViewerControls.SeekFlash
