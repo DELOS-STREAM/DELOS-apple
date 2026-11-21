@@ -1321,30 +1321,69 @@ private struct OverviewCarousel: View {
     }
 
     private func thumb(_ item: OverviewContent.Media, tall: Bool) -> some View {
-        let shape = RoundedRectangle(cornerRadius: stage.px(22), style: .continuous)
         let focused = session.viewer == nil && session.focus.focused == AnyHashable(OverviewNavigation.media(media.firstIndex(of: item) ?? -1))
-        return ZStack(alignment: .bottomLeading) {
-            // The picture keeps the tile's 16:9, enlarged evenly for its rim, and moves against the carousel within it
-            RemoteImage(url: OverviewImageSizes.thumb(item, tall: tall), maxPixels: tall ? 900 : 600)
-                .frame(width: stage.px(520 * OverviewMotion.mediaOverscan), height: stage.px(292 * OverviewMotion.mediaOverscan))
-                .visualEffect { content, proxy in
-                    let frame = proxy.frame(in: .scrollView(axis: .horizontal))
-                    let bounds = proxy.bounds(of: .scrollView(axis: .horizontal)) ?? .zero
-                    return content.offset(x: OverviewMotion.parallaxShift(distance: frame.midX - bounds.midX, width: proxy.size.width))
-                }
-                .frame(width: stage.px(520), height: stage.px(292))
-                .clipped()
-            if item.kind == .video {
-                InkSymbol(symbol: Symbols.playerPlay, size: 32, color: colors.accent, filled: true, centroid: true)
-                    .shadow(color: colors.accent.color.opacity(focused ? 0.7 : 0.35), radius: stage.px(focused ? 16 : 10))
-                    .frame(width: stage.px(72), height: stage.px(72))
-                    .background {
-                        GlassShape(Circle(), tint: .overArt(0.20), share: 1)
-                            .overlay(Circle().strokeBorder(Color.white.opacity(0.18), lineWidth: stage.px(1)))
+        return MediaThumb(item: item, tall: tall, focused: focused, reduced: reduced)
+    }
+}
+
+/// A carousel tile: its picture keeps the tile's 16:9, enlarged evenly for its rim, and moves against the carousel within
+/// it. A Steam trailer shows its own still (a frame a sixth of the way in, ``HLSStill``); while that is made the tile shows
+/// a spinner and no picture, and only a still that cannot be made falls back to the shared poster.
+private struct MediaThumb: View {
+    let item: OverviewContent.Media
+    let tall: Bool
+    let focused: Bool
+    let reduced: Bool
+    @Environment(\.stage) private var stage
+    @Environment(\.delosColors) private var colors
+    @Environment(GameMetadataModel.self) private var metadata
+    @State private var still: CGImage?
+    @State private var stillFailed = false
+
+    private var making: Bool { item.steam?.still != nil && still == nil && !stillFailed }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: stage.px(22), style: .continuous)
+        ZStack(alignment: .bottomLeading) {
+            Group {
+                if let still {
+                    ZStack {
+                        Rectangle().fill(colors.surface2.color)
+                        Image(decorative: still, scale: 1).resizable().scaledToFill()
                     }
-                    .scaleEffect(focused && !reduced ? 1.08 : 1)
-                    .animation(reduced ? nil : OverviewMotion.chipSpring, value: focused)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(.opacity)
+                } else if making {
+                    Rectangle().fill(colors.surface2.color)
+                } else {
+                    RemoteImage(url: OverviewImageSizes.thumb(item, tall: tall), maxPixels: tall ? 900 : 600)
+                }
+            }
+            .frame(width: stage.px(520 * OverviewMotion.mediaOverscan), height: stage.px(292 * OverviewMotion.mediaOverscan))
+            .visualEffect { content, proxy in
+                let frame = proxy.frame(in: .scrollView(axis: .horizontal))
+                let bounds = proxy.bounds(of: .scrollView(axis: .horizontal)) ?? .zero
+                return content.offset(x: OverviewMotion.parallaxShift(distance: frame.midX - bounds.midX, width: proxy.size.width))
+            }
+            .frame(width: stage.px(520), height: stage.px(292))
+            .clipped()
+            .animation(.easeOut(duration: 0.3), value: still.map(ObjectIdentifier.init))
+            if item.kind == .video {
+                Group {
+                    if making {
+                        RingSpinner(size: 48)
+                    } else {
+                        InkSymbol(symbol: Symbols.playerPlay, size: 32, color: colors.accent, filled: true, centroid: true)
+                            .shadow(color: colors.accent.color.opacity(focused ? 0.7 : 0.35), radius: stage.px(focused ? 16 : 10))
+                            .frame(width: stage.px(72), height: stage.px(72))
+                            .background {
+                                GlassShape(Circle(), tint: .overArt(0.20), share: 1)
+                                    .overlay(Circle().strokeBorder(Color.white.opacity(0.18), lineWidth: stage.px(1)))
+                            }
+                            .scaleEffect(focused && !reduced ? 1.08 : 1)
+                            .animation(reduced ? nil : OverviewMotion.chipSpring, value: focused)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if let name = item.name {
                     MarqueeLabel(text: name, active: focused, bounce: true)
                         .font(DelosFonts.figtree(stage.tpx(18), .bold)).foregroundStyle(.white)
@@ -1355,6 +1394,19 @@ private struct OverviewCarousel: View {
         .frame(width: stage.px(520), height: stage.px(292))
         .clipShape(shape)
         .overlay(shape.strokeBorder(Color.white.opacity(0.1), lineWidth: stage.px(1)))
+        .task(id: item.steam?.still) {
+            guard let url = item.steam?.still else { return }
+            let pixels = tall ? 900 : 600
+            let key = "\(url.absoluteString)#\(pixels)"
+            if let cached = OverviewImageMemory.image(key) { still = cached; return }
+            guard let data = await metadata.images.data(url), !Task.isCancelled else {
+                if !Task.isCancelled { stillFailed = true }
+                return
+            }
+            let decoded = await Task.detached(priority: .userInitiated) { OverviewImageMemory.decode(data, maxPixels: pixels) }.value
+            guard !Task.isCancelled else { return }
+            if let decoded { OverviewImageMemory.store(decoded, key); still = decoded } else { stillFailed = true }
+        }
     }
 }
 

@@ -32,11 +32,13 @@ struct OverviewContent: Equatable {
 
     struct Media: Equatable, Identifiable {
         enum Kind: Equatable { case video, screenshot }
-        /// Steam's media: the carousel's picture, the viewer's and a movie's stream (HLS, else MP4) for AVPlayer.
+        /// Steam's media: the carousel's picture, the viewer's and a movie's stream (HLS, else MP4) for AVPlayer; an HLS
+        /// movie's own still (``HLSStill``), made on first view, which replaces the shared poster once it exists.
         struct Steam: Equatable {
             let thumb: URL?
             let full: URL?
             var stream: URL? = nil
+            var still: URL? = nil
         }
         let kind: Kind
         /// IGDB's image id of a screenshot, the YouTube id of a video; `steam-movie-<id>` and `steam-shot-<id>` for Steam's.
@@ -157,8 +159,9 @@ struct OverviewContent: Equatable {
         let movies = (details.steam?.movies ?? []).compactMap { movie -> Media? in
             guard let stream = movie.stream else { return nil }
             let own = SteamMedia.url(movie.thumbnail).flatMap { (SteamMedia.width($0) ?? 0) >= posterWidth ? $0 : nil }
+            let still = stream.path.hasSuffix(".m3u8") ? HLSStill.url(movie: "\(movie.id)", stream: stream) : nil
             return Media(kind: .video, id: "steam-movie-\(movie.id)", name: movie.name,
-                         steam: .init(thumb: own ?? poster?.thumb, full: own ?? poster?.full, stream: stream))
+                         steam: .init(thumb: own ?? poster?.thumb, full: own ?? poster?.full, stream: stream, still: still))
         }
         #if os(tvOS)
         let youTube: [Media] = []
