@@ -254,7 +254,9 @@ struct GameOverview: View {
             OverviewFlightLayer(session: session)
             // The page rises with the flight (the settle spring) and sinks back as it closes (`page.animate`), transforms
             // only; its parts fade in and out on their own (``Rise``), the title flies and the cover lands
+            // Its surfaces are tinted, not glass: the backdrop under them is blurred already (``glassFlat``)
             page(content)
+                .environment(\.glassFlat, true)
                 .animation(session.shown ? OverviewMotion.settle
                            : .timingCurve(0.65, 0, 0.35, 1, duration: OverviewMotion.pageSink / 1000)) {
                     $0.offset(y: session.shown || reduced ? 0 : stage.px(OverviewMotion.pageRise))
@@ -812,19 +814,24 @@ struct GameOverview: View {
 
 }
 
-/// A glass card of the overview (`.a-card.glass`): real blur behind it (Liquid Glass, or a material before it).
+/// A card of the overview (`.a-card.glass`): on the page ([glassFlat]) its tint alone, the backdrop being blurred already;
+/// elsewhere Liquid Glass (or a material before it).
 struct OverviewCard: View {
     @Environment(\.delosColors) private var colors
     @Environment(\.stage) private var stage
+    @Environment(\.glassFlat) private var flat
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: stage.px(34), style: .continuous)
+        let tint = RGBA(red: 22 / 255, green: 32 / 255, blue: 60 / 255, alpha: 0.46)
         ZStack {
-            if #available(iOS 26, tvOS 26, macOS 26, *) {
-                GlassShape(shape, tint: RGBA(red: 22 / 255, green: 32 / 255, blue: 60 / 255, alpha: 0.46), role: .panel)
+            if flat {
+                shape.fill(tint.color)
+            } else if #available(iOS 26, tvOS 26, macOS 26, *) {
+                GlassShape(shape, tint: tint, role: .panel)
             } else {
                 shape.fill(.ultraThinMaterial)
-                shape.fill(Color(.sRGB, red: 22 / 255, green: 32 / 255, blue: 60 / 255, opacity: 0.46))
+                shape.fill(tint.color)
             }
             shape.strokeBorder(Color.white.opacity(0.1), lineWidth: stage.px(1))
         }

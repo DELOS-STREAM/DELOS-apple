@@ -28,12 +28,10 @@ ArtworkScreen.swift | opacity: 0x99 / 255 | a tile's download bar track
 GameOverviewParts.swift | Capsule().fill(Color.white.opacity(0.1)) | fill bar track
 LaunchScene.swift | Capsule().fill(colors.text.opacity(0.16).color) | progress track
 GameOverviewDock.swift | Capsule().fill(Color.white.opacity(0.18)) | the dock timeline's track
-GameOverviewDock.swift | Capsule().fill(Color.white.opacity(0.34)).frame(width: w * max(video.loaded, played)) | the dock timeline's buffered part
-GameOverviewDock.swift | Capsule().fill(Color.white.opacity(0.22)) | the dock volume slider's track
-GameOverviewDock.swift | shape.fill(.ultraThinMaterial) | the dock's own material (it is the glass)
-GameOverviewDock.swift | shape.fill(Color(red: 10 / 255, green: 16 / 255, blue: 32 / 255).opacity(0.20)) | the dock's tint over its material
+GameOverviewDock.swift | Capsule().fill(Color.white.opacity(0.32)).frame(width: w * min(max(video.loaded, 0), 1)) | the dock timeline's buffered part
 GameOverviewDock.swift | media[k].kind == .video ? Color.clear : Color.white.opacity(0.4) | page dot inside the dock's glass
-GameOverviewDock.swift | Circle().fill(Color.white.opacity(hovered ? 0.18 : 0.08)) | button disc inside the dock's glass
+GameOverviewDock.swift | Circle().fill(Color.white.opacity(focused ? 0.2 : hovered ? 0.18 : 0.08)) | button disc inside the dock's glass
+GameOverviewViewer.swift | if focused { Circle().fill(Color.white.opacity(0.26)) } | the close button's focused fill inside its glass
 GameOverviewDock.swift | .background(Capsule().fill(Color.black.opacity(0.55))) | hover time label inside the dock's glass
 RowPopover.swift | Capsule().fill(colors.surface3.color) | slider track
 ShellProgressPill.swift | .background(Capsule().fill(colors.surface2.color)) | progress track inside the glass pill
@@ -76,7 +74,6 @@ HomeScreen.swift | shape.fill(colors.surface2.color) | a cover's base under its 
 
 # Before iOS, iPadOS, tvOS and macOS 26: a material where Liquid Glass is not available
 GameOverview.swift | shape.fill(.ultraThinMaterial) | OverviewCard before 26
-GameOverview.swift | shape.fill(Color(.sRGB, red: 22 / 255, green: 32 / 255, blue: 60 / 255, opacity: 0.46)) | OverviewCard's tint before 26
 RowPopover.swift | shape.fill(.regularMaterial) | blur of the rows behind the popover before 26
 
 # Marks, separators and halos: no surface holds content

@@ -30,20 +30,21 @@ struct OverviewDock: View {
     var body: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
-            let panelWidth = playable ? width : max(stage.px(600), width - stage.px(120))
+            let panelWidth = playable ? width : max(stage.px(600), width - stage.px(128))
             let panelHeight = stage.px(playable ? 248 : 150)
-            let rowY = stage.px(playable ? 94 : 78)
+            // The middle of the lower row, up from the dock's bottom edge: 94 px on a video, 74 px on a screenshot
+            let rowY = stage.px(playable ? 94 : 74)
             let middleWidth = playable ? stage.px(564) : pageWidth + stage.px(204)
             let infoWidth = Self.infoWidth(width: width, pageWidth: pageWidth, px: stage.px)
             ZStack(alignment: .bottom) {
                 // Layout is fixed for the whole morph. Only layer transforms and opacity interpolate;
-                // neither the material nor any of its children re-lays out on animation frames.
+                // neither the glass nor any of its children re-lays out on animation frames.
                 DockGlass(radius: stage.px(46))
                     .frame(width: width, height: stage.px(248))
                     .scaleEffect(x: panelWidth / width, y: panelHeight / stage.px(248), anchor: .bottom)
                 info
-                    .frame(width: infoWidth, height: stage.px(96), alignment: .leading)
-                    .offset(x: -panelWidth / 2 + stage.px(44) + infoWidth / 2, y: -rowY + stage.px(48))
+                    .frame(width: infoWidth, height: stage.px(54), alignment: .leading)
+                    .offset(x: -panelWidth / 2 + stage.px(44) + infoWidth / 2, y: -rowY - stage.px(1) + stage.px(27))
                 timeline
                     .frame(width: width - stage.px(88), height: stage.px(52))
                     .scaleEffect(y: playable || reduced ? 1 : 0.01, anchor: .bottom)
@@ -73,7 +74,7 @@ struct OverviewDock: View {
                     .scaleEffect(x: playable || reduced ? 1 : 0.01, anchor: .trailing)
                     .opacity(playable ? 1 : 0)
                     .animation(OverviewViewerMotion.animation(reduced: reduced), value: playable)
-                    .offset(x: panelWidth / 2 - stage.px(44 + 147), y: -rowY + stage.px(38))
+                    .offset(x: panelWidth / 2 - stage.px(44 + 128), y: -rowY + stage.px(36))
                     .allowsHitTesting(playable)
                     .accessibilityHidden(!playable)
             }
@@ -82,9 +83,7 @@ struct OverviewDock: View {
             .simultaneousGesture(TapGesture().onEnded { controls.onInput() })
             .overlay {
                 if ringShown, controls.focus != .close {
-                    Capsule()
-                        .strokeBorder(colors.accent.color, lineWidth: stage.px(5))
-                        .padding(-stage.px(9))
+                    ViewerDockRing(inflate: stage.px(Self.ringInflate(controls.focus)))
                         .matchedGeometryEffect(id: controls.focus, in: ring, properties: .frame, isSource: false)
                         .animation(reduced ? nil : OverviewViewerMotion.animation(reduced: false), value: playable)
                         // The ring sits on the focused control at once: it never glides between the dock's controls
@@ -96,51 +95,63 @@ struct OverviewDock: View {
         .frame(height: stage.px(248))
     }
 
+    /// The focused control, for its look (the controller and the keyboard only).
+    private func focused(_ id: OverviewDockFocus) -> Bool { ringShown && controls.focus == id }
+
+    /// How far the focus ring stands out of [focus]'s frame (stage pixels): the sliders keep a margin, a button's ring
+    /// clears its 1.08 focus scale.
+    static func ringInflate(_ focus: OverviewDockFocus) -> Double {
+        switch focus {
+        case .timeline: 10
+        case .volume: 6
+        case .play: 124 * 0.04 + 4
+        case .back, .forward: 92 * 0.04 + 4
+        case .mute: 72 * 0.04 + 4
+        case .close, .previous, .next: 76 * 0.04 + 4
+        }
+    }
+
     private var timeline: some View {
         HStack(spacing: stage.px(22)) {
             Text(OverviewVideo.clock(video.time)).frame(width: stage.px(104), alignment: .trailing)
-            DockTimeline(video: video).stop(.timeline, focus: controls.focus, ring: ring)
+            DockTimeline(video: video, focused: focused(.timeline)).stop(.timeline, focus: controls.focus, ring: ring)
             Text("\u{2212}" + OverviewVideo.clock(max(0, video.duration - video.time)))
                 .frame(width: stage.px(104), alignment: .leading)
         }
         .font(DelosFonts.figtree(stage.tpx(22), .bold))
-        .foregroundStyle(colors.text.color)
+        .foregroundStyle(colors.text2.color)
         .monospacedDigit()
     }
 
     private func navigation(_ focus: OverviewDockFocus, symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
-        DockButton(symbol: symbol, size: 76, label: L(focus == .previous ? "overview_previous" : "overview_next"), enabled: enabled, action: action)
+        DockButton(symbol: symbol, size: 76, label: L(focus == .previous ? "overview_previous" : "overview_next"), enabled: enabled,
+                   focused: focused(focus), action: action)
             .stop(focus, focus: controls.focus, ring: ring)
     }
 
+    /// The count in gold and "N / M · title", on one line.
     private var info: some View {
-        VStack(alignment: .leading, spacing: stage.px(10)) {
-            Text(session.app.title.uppercased())
-                .font(DelosFonts.figtree(stage.tpx(18), .bold))
-                .tracking(stage.px(2))
-                .foregroundStyle(colors.text2.color)
-            HStack(alignment: .firstTextBaseline, spacing: stage.px(8)) {
-                Text("\(index + 1)").font(DelosFonts.unbounded(stage.tpx(34), .bold)).foregroundStyle(colors.accent.color).fixedSize()
-                MarqueeLabel(text: L("overview_viewer_count", media.count, title), active: true, bounce: true)
-                    .font(DelosFonts.figtree(stage.tpx(30), .bold)).foregroundStyle(colors.text.color)
-            }
-            .monospacedDigit()
+        HStack(alignment: .firstTextBaseline, spacing: stage.px(10)) {
+            Text("\(index + 1)").font(DelosFonts.unbounded(stage.tpx(34), .bold)).foregroundStyle(colors.accent.color).fixedSize()
+            MarqueeLabel(text: L("overview_viewer_count", media.count, title), active: true, bounce: true)
+                .font(DelosFonts.figtree(stage.tpx(28), .bold)).foregroundStyle(colors.text.color)
         }
+        .monospacedDigit()
         .lineLimit(1)
         .accessibilityElement(children: .combine)
     }
 
     private var transport: some View {
         HStack(spacing: stage.px(26)) {
-            DockButton(symbol: Symbols.playerSeekBack, size: 92, label: L("overview_video_back"), ten: true) {
+            DockButton(symbol: Symbols.playerSeekBack, size: 92, label: L("overview_video_back"), ten: true, focused: focused(.back)) {
                 video.seek(by: -10)
                 controls.seekFlash(-1)
             }
             .stop(.back, focus: controls.focus, ring: ring)
             DockButton(symbol: video.playing ? Symbols.playerPause : Symbols.playerPlay, size: 124,
-                       label: video.playing ? L("overview_hint_pause") : L("overview_hint_play"), primary: true) { video.toggle() }
+                       label: video.playing ? L("overview_hint_pause") : L("overview_hint_play"), primary: true, focused: focused(.play)) { video.toggle() }
                 .stop(.play, focus: controls.focus, ring: ring)
-            DockButton(symbol: Symbols.playerSeekForward, size: 92, label: L("overview_video_forward"), ten: true) {
+            DockButton(symbol: Symbols.playerSeekForward, size: 92, label: L("overview_video_forward"), ten: true, focused: focused(.forward)) {
                 video.seek(by: 10)
                 controls.seekFlash(1)
             }
@@ -190,19 +201,20 @@ struct OverviewDock: View {
     /// gives it, and ending 24 px before the previous button in the screenshot variant, whose dots ([pageWidth]) sit
     /// between previous and next, so the title never runs under the transport.
     static func infoWidth(width: CGFloat, pageWidth: CGFloat, px: (Double) -> CGFloat) -> CGFloat {
-        let panel = max(px(600), width - px(120))
+        let panel = max(px(600), width - px(128))
         let video = (panel - px(148) - max(px(564), pageWidth + px(204))) / 2
         let beforePrevious = panel / 2 - px(44) - (pageWidth + px(204)) / 2 - px(24)
         return max(0, min(video, beforePrevious))
     }
 
+    /// Mute (72 px) and the volume slider (170 px), 14 px apart.
     private var sound: some View {
-        HStack(spacing: stage.px(18)) {
-            DockButton(symbol: Self.speaker(muted: video.muted, volume: video.volume), size: 76,
-                       label: video.muted ? L("overview_hint_unmute") : L("overview_hint_mute")) { video.toggleMute() }
+        HStack(spacing: stage.px(14)) {
+            DockButton(symbol: Self.speaker(muted: video.muted, volume: video.volume), size: 72,
+                       label: video.muted ? L("overview_hint_unmute") : L("overview_hint_mute"), focused: focused(.mute)) { video.toggleMute() }
                 .stop(.mute, focus: controls.focus, ring: ring)
-            DockVolume(video: video)
-                .frame(width: stage.px(200), height: stage.px(52))
+            DockVolume(video: video, focused: focused(.volume))
+                .frame(width: stage.px(170), height: stage.px(44))
                 .stop(.volume, focus: controls.focus, ring: ring)
         }
     }
@@ -222,26 +234,37 @@ private extension View {
     }
 }
 
-/// The dock's glass: a light tint (0.20) over a real backdrop blur, the system material, which blurs whatever is drawn
-/// below it, the video's web view included; a top highlight and a hairline.
+/// The dock's glass: Liquid Glass with a light navy tint (0.20), which refracts whatever is drawn below it, the video's
+/// web view included. Before iOS, iPadOS and tvOS 26 the tint alone.
 struct DockGlass: View {
     let radius: CGFloat
-    @Environment(\.stage) private var stage
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        GlassShape(RoundedRectangle(cornerRadius: radius, style: .continuous),
+                   tint: RGBA(red: 10 / 255, green: 16 / 255, blue: 32 / 255, alpha: 0.20), role: .panel, share: 1)
+            .environment(\.colorScheme, .dark)
+    }
+}
+
+/// The gold focus ring of the controller and the keyboard: a 4 px ring over a soft 14 px glow, [inflate] outside the
+/// focused control's frame.
+struct ViewerDockRing: View {
+    let inflate: CGFloat
+    @Environment(\.stage) private var stage
+    @Environment(\.delosColors) private var colors
+
+    var body: some View {
         ZStack {
-            shape.fill(.ultraThinMaterial)
-            shape.fill(Color(red: 10 / 255, green: 16 / 255, blue: 32 / 255).opacity(0.20))
-            shape.fill(LinearGradient(colors: [Color.white.opacity(0.10), .clear], startPoint: .top, endPoint: .init(x: 0.5, y: 0.35)))
-            shape.strokeBorder(Color.white.opacity(0.14), lineWidth: stage.px(1))
+            Capsule().stroke(colors.accent.color.opacity(0.28), lineWidth: stage.px(14))
+            Capsule().stroke(colors.accent.color, lineWidth: stage.px(4))
         }
-        .environment(\.colorScheme, .dark)
+        .padding(-inflate)
     }
 }
 
 /// A round dock button: [size] stage pixels, its glyph optically centred (``InkSymbol``). The primary one (play) is the
-/// gold disc; [ten] draws "10" inside the seek arrows.
+/// gold disc with a gold glow under it; [ten] draws "10" inside the seek arrows. [focused] (the controller and the
+/// keyboard): it grows to 1.08 on a spring, its fill lightens and its glyph fills.
 struct DockButton: View {
     let symbol: String
     let size: Double
@@ -249,19 +272,21 @@ struct DockButton: View {
     var primary = false
     var ten = false
     var enabled = true
+    var focused = false
     let action: () -> Void
     @Environment(\.stage) private var stage
     @Environment(\.delosColors) private var colors
+    @Environment(\.reducedMotion) private var reduced
     @State private var hovered = false
 
     var body: some View {
         Button(action: action) {
             ZStack {
-                InkSymbol(symbol: symbol, size: Self.glyph(size), color: primary ? colors.onAccent : colors.text,
-                          filled: primary, centroid: symbol == Symbols.playerPlay)
+                InkSymbol(symbol: symbol, size: Self.glyph(size, ten: ten), color: primary ? colors.onAccent : colors.text,
+                          filled: primary || focused, centroid: symbol == Symbols.playerPlay)
                 if ten {
                     Text("10")
-                        .font(DelosFonts.figtree(stage.tpx(size * 0.17), .heavy))
+                        .font(DelosFonts.figtree(stage.tpx(size * 0.19), .heavy))
                         .foregroundStyle(colors.text.color)
                         .offset(y: stage.px(size * 0.02))
                 }
@@ -270,13 +295,16 @@ struct DockButton: View {
             .background {
                 if primary {
                     Circle().fill(colors.accent.color)
+                        .shadow(color: colors.accent.color.opacity(0.45), radius: stage.px(20 * size / 124), y: stage.px(14))
                 } else {
-                    Circle().fill(Color.white.opacity(hovered ? 0.18 : 0.08))
+                    Circle().fill(Color.white.opacity(focused ? 0.2 : hovered ? 0.18 : 0.08))
                         .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: stage.px(1)))
                 }
             }
             .contentShape(Circle())
-            .opacity(enabled ? 1 : 0.4)
+            .opacity(enabled ? 1 : 0.35)
+            .scaleEffect(focused && !reduced ? 1.08 : 1)
+            .animation(reduced ? nil : .spring(response: 0.42, dampingFraction: 0.6), value: focused)
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
@@ -286,8 +314,8 @@ struct DockButton: View {
         .accessibilityLabel(label)
     }
 
-    /// The glyph's em for a button [size] wide: about 0.44 of it.
-    static func glyph(_ size: Double) -> Double { (size * 0.44).rounded() }
+    /// The glyph's em for a button [size] wide: about 0.44 of it, 0.62 for the seek arrows around their "10".
+    static func glyph(_ size: Double, ten: Bool = false) -> Double { (size * (ten ? 0.62 : 0.44)).rounded() }
 }
 
 /// A Phosphor glyph drawn as its outline, placed so its ink is centred in the frame: the middle of its ink bounds, or with
@@ -396,12 +424,15 @@ enum InkGlyph {
     }
 }
 
-/// The dock's timeline: the track, the buffered and the played share, a knob. Dragging seeks where it is let go (the
-/// overlay holds meanwhile); the pointer's hover shows the time under it.
+/// The dock's timeline: the track, the buffered and the played share. It thickens from 10 to 16 px and shows a white
+/// knob while it is [focused], dragged or hovered; at rest the played line simply ends. Dragging seeks where it is let
+/// go (the overlay holds meanwhile); the pointer's hover shows the time under it.
 struct DockTimeline: View {
     let video: OverviewVideo
+    var focused = false
     @Environment(\.stage) private var stage
     @Environment(\.delosColors) private var colors
+    @Environment(\.reducedMotion) private var reduced
     @State private var scrub: Double?
     @State private var hover: CGFloat?
 
@@ -409,15 +440,22 @@ struct DockTimeline: View {
         GeometryReader { proxy in
             let w = max(proxy.size.width, 1)
             let played = scrub ?? (video.duration > 0 ? min(max(video.time / video.duration, 0), 1) : 0)
+            let active = focused || scrub != nil || hover != nil
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.white.opacity(0.18))
-                Capsule().fill(Color.white.opacity(0.34)).frame(width: w * max(video.loaded, played))
+                Capsule().fill(Color.white.opacity(0.32)).frame(width: w * min(max(video.loaded, 0), 1))
                 Capsule().fill(colors.accent.color).frame(width: w * played)
-                Circle().fill(colors.accent.color)
-                    .frame(width: stage.px(scrub == nil ? 22 : 30), height: stage.px(scrub == nil ? 22 : 30))
-                    .offset(x: w * played - stage.px(scrub == nil ? 11 : 15))
             }
-            .frame(height: stage.px(8))
+            .frame(height: stage.px(active ? 16 : 10))
+            .overlay(alignment: .leading) {
+                Circle().fill(Color.white)
+                    .shadow(color: .black.opacity(0.35), radius: stage.px(2), y: stage.px(2))
+                    .frame(width: stage.px(24), height: stage.px(24))
+                    .scaleEffect(active ? 1 : 0.01)
+                    .opacity(active ? 1 : 0)
+                    .offset(x: w * played - stage.px(12))
+            }
+            .animation(reduced ? nil : .easeInOut(duration: 0.3), value: active)
             .frame(maxHeight: .infinity)
             .overlay(alignment: .topLeading) {
                 if let x = hover ?? scrub.map({ CGFloat($0) * w }), video.duration > 0 {
@@ -462,24 +500,32 @@ struct DockTimeline: View {
     }
 }
 
-/// The dock's volume slider (0…100); dragging it holds the overlay.
+/// The dock's volume slider (0…100): an 8 px track, the level in white and a white knob that grows to 1.25 while it is
+/// [focused]; dragging it holds the overlay.
 struct DockVolume: View {
     let video: OverviewVideo
+    var focused = false
     @Environment(\.stage) private var stage
     @Environment(\.delosColors) private var colors
+    @Environment(\.reducedMotion) private var reduced
 
     var body: some View {
         GeometryReader { proxy in
             let w = max(proxy.size.width, 1)
             let level = video.muted ? 0 : video.volume / 100
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.22))
+                Capsule().fill(Color.white.opacity(0.18))
                 Capsule().fill(colors.text.color).frame(width: w * level)
-                Circle().fill(colors.text.color)
+            }
+            .frame(height: stage.px(8))
+            .overlay(alignment: .leading) {
+                Circle().fill(Color.white)
+                    .shadow(color: .black.opacity(0.35), radius: stage.px(2), y: stage.px(2))
                     .frame(width: stage.px(22), height: stage.px(22))
+                    .scaleEffect(focused ? 1.25 : 1)
+                    .animation(reduced ? nil : .spring(response: 0.31, dampingFraction: 0.55), value: focused)
                     .offset(x: w * level - stage.px(11))
             }
-            .frame(height: stage.px(6))
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
             #if !os(tvOS)
