@@ -5,8 +5,8 @@ import Foundation
 public actor MetadataStore {
     private struct Record: Codable { let schema: Int; let data: GameMetadata }
     /// The record format written now, and the ones still read.
-    static let schema = 7
-    static let readableSchemas: Set<Int> = [6, 7]
+    static let schema = 8
+    static let readableSchemas: Set<Int> = [6, 7, 8]
     private struct Pending { let id: UUID; let task: Task<GameMetadataState, Error> }
     private let providers: any MetadataProviders
     private let cache: DiskCache
@@ -46,8 +46,10 @@ public actor MetadataStore {
         let bytes = await cache.data(for: key)
         if let state = states[key] { return state }
         let record = bytes.flatMap { try? JSONDecoder().decode(Record.self, from: $0) }
-        // Schema 7 added the overview's details; a schema 6 record is the same record without them
-        let data = record.map { Self.readableSchemas.contains($0.schema) } == true ? record?.data : nil
+        // Schema 7 added the overview's details; a schema 6 record is the same record without them. Schema 8 details may
+        // carry Steam's media: older details stay shown but are due, so the next details lookup fetches them again
+        var data = record.map { Self.readableSchemas.contains($0.schema) } == true ? record?.data : nil
+        if let schema = record?.schema, schema < Self.schema { data?.detailsUpdatedAt = 0 }
         let state = GameMetadataState(data: data, resolved: data != nil, error: Self.problem(data))
         states[key] = state
         return state

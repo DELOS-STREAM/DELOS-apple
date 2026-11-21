@@ -128,16 +128,20 @@ The metadata data layer ports DELOS for Android's `GameMetadata`, policy and cli
 IGDB, PCGamingWiki and Steam tags are requested through the private DELOS metadata Worker, never with embedded
 provider credentials. HowLongToBeat is requested directly; its website is not an official public API and can change.
 Provider content remains subject to each service's terms. No service response is embedded in the app.
-The game overview's details come through the same Worker (`/v1/igdb/game-details`). Its screenshots and the covers of
-similar games outside the library load directly from IGDB's public image server (`images.igdb.com`), and video
-thumbnails from YouTube's (`i.ytimg.com`), without credentials: those servers see the device's IP address, as
-HowLongToBeat does. The images are kept in a 150 MB cache under Caches/igdb-images.
+The game overview's details come through the same Worker (`/v1/igdb/game-details`), Steam's trailers and screenshots
+among them (the Worker reads the Steam store's appdetails). Those trailers (HLS, else MP4) stream and those screenshots
+load directly from Steam's media servers (`*.steamstatic.com`) without credentials or cookies, the trailers in the
+system's AVPlayer; those servers see the device's IP address. When Steam has no trailer or no screenshot, IGDB's take
+their place: its screenshots and the covers of similar games outside the library load directly from IGDB's public image
+server (`images.igdb.com`), and video thumbnails from YouTube's (`i.ytimg.com`), without credentials: those servers see
+the device's IP address, as HowLongToBeat does. The images are kept in a 150 MB cache under Caches/igdb-images.
+For a game without Steam trailers,
 YouTube (`i.ytimg.com`, `youtube.com`, `youtube-nocookie.com`) sees the device's IP address and the video ids of the
 overview's thumbnails; the app asks YouTube's oEmbed endpoint (`youtube.com/oembed`, no cookies, no cache) once per video
 id and process whether the video may be embedded. When a video plays, the in-app player (the YouTube IFrame player in a
 web view of the app, on iPhone, iPad and the Mac) loads from `youtube-nocookie.com` in privacy-enhanced mode: no cookies
 until playback starts; once it plays, YouTube may set cookies and local storage on the device, in the app's web view,
-and YouTube plays its ads. The app never opens a browser or the YouTube app.
+and YouTube plays its ads. The app never opens a browser, the Steam app or the YouTube app.
 
 The HLTB search flow and payload derive from [howlongtobeatpy](https://github.com/ScrappyCocco/HowLongToBeat-PythonAPI)
 1.0.24, `HTMLRequests.py`, commit `4275a452b9ccd230b7c2a82b8d1a5d851285eb14`, MIT, Copyright (c) 2018 Michele.

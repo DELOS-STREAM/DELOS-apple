@@ -29,7 +29,7 @@ trap 'xcrun simctl shutdown "$udid" >/dev/null 2>&1 || true; xcrun simctl delete
 xcrun simctl boot "$udid"
 xcrun simctl bootstatus "$udid" -b >/dev/null
 xcrun simctl install "$udid" /tmp/delos-dd/Build/Products/Debug-iphonesimulator/DELOS.app
-xcrun simctl launch "$udid" io.github.meitoncz.delos.debug -DelosDemo YES -DelosScreen "$screen" \
+xcrun simctl launch "$udid" io.github.meitoncz.delos.debug -DelosDemo YES -DelosMuteMedia YES -DelosScreen "$screen" \
     -AppleLanguages "(en)" -AppleLocale en_US "$@" >/dev/null
 sleep "${DELOS_WALKTHROUGH_WAIT:-10}"
 xcrun simctl io "$udid" screenshot "$shot" >/dev/null 2>&1

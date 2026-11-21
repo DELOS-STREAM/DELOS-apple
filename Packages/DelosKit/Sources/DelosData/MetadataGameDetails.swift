@@ -74,6 +74,59 @@ public struct GameDetails: Codable, Equatable, Sendable {
         public let source: Int
         public init(uid: String, source: Int) { self.uid = uid; self.source = source }
     }
+    /// Steam's media of the game (the Worker's `steam`, from the store's appdetails); absent without a Steam match.
+    /// Absent fields of a movie stay nil; a malformed movie or screenshot is dropped.
+    public struct Steam: Codable, Equatable, Sendable {
+        public struct Movie: Codable, Equatable, Sendable {
+            public let id: Int64
+            public let name: String?
+            /// Steam's poster, 293 × 165 (`movie.293x165.jpg`).
+            public let thumbnail: String?
+            public let hls: String?
+            public let dash: String?
+            public let mp4: String?
+            public let webm: String?
+            public let highlight: Bool
+            public init(id: Int64, name: String? = nil, thumbnail: String? = nil, hls: String? = nil, dash: String? = nil,
+                        mp4: String? = nil, webm: String? = nil, highlight: Bool = false) {
+                self.id = id; self.name = name; self.thumbnail = thumbnail; self.hls = hls; self.dash = dash; self.mp4 = mp4
+                self.webm = webm; self.highlight = highlight
+            }
+            public init(from decoder: any Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                func text(_ key: CodingKeys) -> String? {
+                    ((try? c.decodeIfPresent(String.self, forKey: key)) ?? nil).flatMap { $0.isEmpty ? nil : $0 }
+                }
+                self.init(id: try c.decode(Int64.self, forKey: .id), name: text(.name), thumbnail: text(.thumbnail), hls: text(.hls),
+                          dash: text(.dash), mp4: text(.mp4), webm: text(.webm),
+                          highlight: (try? c.decodeIfPresent(Bool.self, forKey: .highlight)) ?? false)
+            }
+            /// What AVPlayer plays: the HLS master playlist, else the MP4; nil when Steam gave neither (DASH and WebM
+            /// do not play there).
+            public var stream: URL? { SteamMedia.url(hls) ?? SteamMedia.url(mp4) }
+        }
+        public struct Screenshot: Codable, Equatable, Sendable {
+            public let id: Int
+            /// 600 × 338.
+            public let thumbnail: String
+            /// 1920 × 1080.
+            public let full: String
+            public init(id: Int, thumbnail: String, full: String) { self.id = id; self.thumbnail = thumbnail; self.full = full }
+        }
+        public let appId: Int64
+        public var movies: [Movie]
+        public var screenshots: [Screenshot]
+        public init(appId: Int64, movies: [Movie] = [], screenshots: [Screenshot] = []) {
+            self.appId = appId; self.movies = movies; self.screenshots = screenshots
+        }
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            func list<T: Decodable>(_ key: CodingKeys) -> [T] {
+                ((try? c.decodeIfPresent([Lenient<T>].self, forKey: key)) ?? nil)?.compactMap(\.value) ?? []
+            }
+            self.init(appId: try c.decode(Int64.self, forKey: .appId), movies: list(.movies), screenshots: list(.screenshots))
+        }
+    }
 
     public let id: Int64
     public let name: String
@@ -105,6 +158,8 @@ public struct GameDetails: Codable, Equatable, Sendable {
     public var languages: [String]
     public var multiplayer: Multiplayer?
     public var externalGames: [ExternalGame]
+    /// Steam's trailers and screenshots; nil without a Steam match (older cached details lack it too).
+    public var steam: Steam?
 
     public init(id: Int64, name: String, summary: String? = nil, storyline: String? = nil, firstReleaseDate: Int64? = nil,
                 rating: Double? = nil, ratingCount: Int = 0, criticRating: Double? = nil, criticRatingCount: Int = 0,
@@ -112,20 +167,20 @@ public struct GameDetails: Codable, Equatable, Sendable {
                 platforms: [Platform] = [], companies: [Company] = [], ageRatings: [AgeRating] = [], screenshots: [Image] = [],
                 artworks: [Image] = [], videos: [Video] = [], websites: [Website] = [], similarGames: [SimilarGame] = [],
                 franchises: [String] = [], collections: [String] = [], engines: [String] = [], keywords: [String] = [],
-                languages: [String] = [], multiplayer: Multiplayer? = nil, externalGames: [ExternalGame] = []) {
+                languages: [String] = [], multiplayer: Multiplayer? = nil, externalGames: [ExternalGame] = [], steam: Steam? = nil) {
         self.id = id; self.name = name; self.summary = summary; self.storyline = storyline; self.firstReleaseDate = firstReleaseDate
         self.rating = rating; self.ratingCount = ratingCount; self.criticRating = criticRating; self.criticRatingCount = criticRatingCount
         self.genres = genres; self.themes = themes; self.modes = modes; self.perspectives = perspectives; self.platforms = platforms
         self.companies = companies; self.ageRatings = ageRatings; self.screenshots = screenshots; self.artworks = artworks
         self.videos = videos; self.websites = websites; self.similarGames = similarGames; self.franchises = franchises
         self.collections = collections; self.engines = engines; self.keywords = keywords; self.languages = languages
-        self.multiplayer = multiplayer; self.externalGames = externalGames
+        self.multiplayer = multiplayer; self.externalGames = externalGames; self.steam = steam
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, name, summary, storyline, firstReleaseDate, rating, ratingCount, criticRating, criticRatingCount, genres, themes, modes,
              perspectives, platforms, companies, ageRatings, screenshots, artworks, videos, websites, similarGames, franchises,
-             collections, engines, keywords, languages, multiplayer, externalGames
+             collections, engines, keywords, languages, multiplayer, externalGames, steam
     }
 
     /// Lenient past the identity: a list the Worker (or an older cache) lacks is empty, a malformed entry of a list is
@@ -153,7 +208,7 @@ public struct GameDetails: Codable, Equatable, Sendable {
                   platforms: list(.platforms), companies: list(.companies), ageRatings: list(.ageRatings), screenshots: list(.screenshots),
                   artworks: list(.artworks), videos: list(.videos), websites: list(.websites), similarGames: list(.similarGames),
                   franchises: list(.franchises), collections: list(.collections), engines: list(.engines), keywords: list(.keywords),
-                  languages: list(.languages), multiplayer: value(.multiplayer), externalGames: list(.externalGames))
+                  languages: list(.languages), multiplayer: value(.multiplayer), externalGames: list(.externalGames), steam: value(.steam))
     }
 
     /// Parses the Worker's answer; anything that is not one game object is ``MetadataError/malformedResponse``.
@@ -234,6 +289,25 @@ public enum IGDBImage {
     /// Whether [id] is safe to put in a URL path or a query: letters, digits, `_` and `-` only.
     public static func validVideoID(_ id: String) -> Bool {
         validID.firstMatch(in: id, range: NSRange(id.startIndex..., in: id)) != nil
+    }
+}
+
+/// Steam's media servers (`*.steamstatic.com`, `*.steampowered.com`): only their URLs are loaded, always over HTTPS (older
+/// appdetails answers give `http://` MP4s).
+public enum SteamMedia {
+    public static func url(_ string: String?) -> URL? {
+        guard let string, var parts = URLComponents(string: string), let host = parts.host?.lowercased(),
+              ["https", "http"].contains(parts.scheme?.lowercased() ?? ""),
+              ["steamstatic.com", "steampowered.com"].contains(where: { host == $0 || host.hasSuffix("." + $0) }) else { return nil }
+        parts.scheme = "https"
+        return parts.url
+    }
+
+    /// The pixel width an image's file name states (`movie.293x165.jpg`, `ss_….600x338.jpg`); nil when it states none.
+    public static func width(_ url: URL) -> Int? {
+        let name = url.lastPathComponent.split(separator: ".")
+        guard name.count >= 3, let size = name.dropLast().last?.split(separator: "x"), size.count == 2 else { return nil }
+        return Int(size[0])
     }
 }
 

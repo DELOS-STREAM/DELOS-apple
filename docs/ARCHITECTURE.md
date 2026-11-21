@@ -1413,14 +1413,35 @@ access and physical-device integration are not verified.
 
 ### The overview's screenshots and videos
 
-The overview's Screenshots and videos carousel lists the videos first, then the screenshots. `OverviewViewer` opens on a
+The overview's Screenshots and videos carousel lists the videos first, then the screenshots. Steam's media come first
+(`GameDetails.steam`, the Worker's `steam` from the store's appdetails): Steam's movies that AVPlayer can play (an HLS
+master playlist, else an MP4; DASH and WebM only are skipped), in the Worker's order (highlights first), then Steam's
+screenshots. IGDB's YouTube videos show only when Steam has no such movie (`OverviewContent.youTubeVideos`, and only
+those are asked about YouTube's oEmbed), IGDB's screenshots only when Steam has no screenshot. Steam's URLs are taken
+only from its own servers (`SteamMedia`: `*.steamstatic.com`, `*.steampowered.com`, always over HTTPS). A screenshot
+shows its 600 × 338 thumbnail in the carousel and its 1920 × 1080 picture in the viewer. Steam's own movie poster is
+293 × 165, too small to fill a thumbnail without stretching: a movie shows its poster only when the file states at least
+600 px, else Steam's first screenshot (its two sizes), else no picture. `OverviewViewer` opens on a
 snapshot of that list (`OverviewSession.viewerMedia`), so its indices never shift while it is open. Screenshots and
 videos fill the whole stage (a screenshot fitted by its aspect, the player letterboxing the video); the thumbnail zooms
 from the item's carousel rectangle. The viewer covers the whole screen: the top bar fades out while it is open.
 
-Videos play in the app, never in a browser or the YouTube app. Once the viewer has settled on a video (the opening zoom
-done, no browse running, not closing), `OverviewVideoPlayer` puts a `WKWebView` exactly on the video rectangle: it loads
-the YouTube IFrame player (`youtube-nocookie.com`, no YouTube controls, autoplay with sound) from an HTML string whose base
+Videos play in the app, never in a browser, the Steam app or the YouTube app. Once the viewer has settled on a video (the
+opening zoom done, no browse running, not closing), its player is made exactly on the video rectangle; it goes when the
+viewer browses away or starts closing, and the video pauses when the app goes to the background.
+
+A Steam movie plays in AVPlayer (`OverviewNativePlayer`, `OverviewNativePlayback`): an `AVPlayerLayer` view in the
+viewer's view tree (letterboxed on black, no input of its own), autoplaying with sound at the app's volume in the
+`playback` audio category (as a video, also with the silent switch on). The playback reports to `OverviewVideo` in
+YouTube's state codes every 250 ms and on each change of the player's or the item's status: the time, the length, the
+share loaded from the item's loaded ranges, mute and volume; DELOS's commands call the player directly (play, pause, an
+exact seek, mute, volume; at the end, play starts over). Until the layer shows its first frame (`isReadyForDisplay`) the
+viewer shows the movie's picture blurred 16 px, which then fades out over 280 ms. An item that fails or is not ready
+within 15 s is the video's error. When the viewer leaves the movie the player pauses, drops its item and its observers.
+This works on every Apple platform, Apple TV included.
+
+YouTube's videos play in `OverviewVideoPlayer`, a `WKWebView` that loads the YouTube IFrame player
+(`youtube-nocookie.com`, no YouTube controls, autoplay with sound) from an HTML string whose base
 URL and player `origin` are `https://` and the bundle id in lower case (the Referer YouTube requires). The page reports
 the player's state, time, duration, mute and errors through the `delos` script message handler (a weak proxy, so the
 web view does not keep the coordinator alive) to `OverviewVideo`; DELOS's commands go back with `evaluateJavaScript`. The
@@ -1428,16 +1449,15 @@ web view stays invisible until the player first plays; meanwhile the video's thu
 `hqdefault`: a missing `maxresdefault` is YouTube's 120 × 90 placeholder) fills the viewer, blurred 16 px, and fades out
 over 280 ms over the sharp video once the player reports playing. Every main-frame navigation except
 the page's own first load and `about:` pages is cancelled (the player's frame loads freely), new windows are never made
-(`createWebViewWith` returns nil), and the video pauses when the app goes to the background. The player goes when the
-viewer browses away or starts closing. Apple TV has no WebKit: there the overview lists no videos.
+(`createWebViewWith` returns nil). Apple TV has no WebKit: there the overview lists only Steam's movies.
 
 The overlay is the dock (`OverviewDock`, `GameOverviewDock.swift`): one glass panel 64 px from the sides, radius 46, over
 the bottom of the stage. Its glass is the system's `.ultraThinMaterial` (a real backdrop blur of whatever is under it,
-the player's web view and the video included) with a 0.20 tint of `#0A1020`, a top highlight and a hairline. A video
-that plays gets the timeline (elapsed, the track with the buffered share from `getVideoLoadedFraction` and the played
+the player's view and the video included) with a 0.20 tint of `#0A1020`, a top highlight and a hairline. A video
+that plays gets the timeline (elapsed, the track with the buffered share and the played
 share, the remaining time) over one row: the game, the count and the title on the left ("3 / 11 · Launch Trailer"),
 the transport (previous 76, back 10 s 92, play 124, forward 10 s 92, next 76 px) and the sound (mute, a volume slider
-backed by `setVolume`/`getVolume`) on the right. Left and right take equal widths, so the transport is centred on the
+backed by the player's volume) on the right. Left and right take equal widths, so the transport is centred on the
 screen. A screenshot (or a video that cannot play) gets previous, a page indicator (one dot per item, videos as rings,
 the current one a gold bar; a tap on a dot opens it) and next. Close is a glass button top right.
 
@@ -1463,16 +1483,18 @@ On the volume slider Left and Right change the volume by 10. A press while the o
 back on its first stop, and acts. A gold ring glides to the focused stop for the controller and the keyboard.
 
 Touch: a tap shows or hides the overlay, a double tap in the left or right third seeks 10 s, a sideways swipe browses,
-a swipe down closes, the sliders drag. While the overlay is hidden over a video, the player's web view takes the touches
-itself, so YouTube's own surface (an ad's Skip) keeps working; a tap there also brings the overlay back (a gesture
-recognizer that does not cancel the page's touches). While the overlay shows, its tap layer takes them. Pointer: moving
-shows the overlay, a click on the picture plays or pauses, hovering the timeline shows the time under the pointer.
+a swipe down closes, the sliders drag. While the overlay is hidden over a YouTube video, the player's web view takes the
+touches itself, so YouTube's own surface (an ad's Skip) keeps working; a tap there also brings the overlay back (a gesture
+recognizer that does not cancel the page's touches). Over a Steam movie, and while the overlay shows, its tap layer
+takes them. Pointer: moving shows the overlay, a click on the picture plays or pauses, hovering the timeline shows the
+time under the pointer.
 The hint bar: L1 R1 Browse and Back on a screenshot; Seek, Play or Pause, Mute or Sound on, L1, R1 and Back on a video
 that plays.
 
 A video that cannot play shows its thumbnail dimmed with a warning, "This video can't be played" and why (its owner does
-not allow other apps for the player's errors 101 and 150, YouTube couldn't load it for the rest); its controls hide.
-Videos that never can are skipped: when the details are known, every video id not yet asked about in this process is
+not allow other apps for the player's errors 101 and 150, YouTube couldn't load it for the rest, Steam couldn't load a
+Steam movie); its controls hide. YouTube videos that never can are skipped: when the details are known, every video id
+not yet asked about in this process is
 checked with YouTube's oEmbed endpoint (`YouTubeEmbed`, an ephemeral session without cookies or cache): 400, 401, 403 and
 404 mean not embeddable, anything else or no answer keeps the video. The player's errors 100, 101 and 150 add to the
 same set (`OverviewVideos`); the carousel leaves those videos out at once, the open viewer keeps its snapshot.

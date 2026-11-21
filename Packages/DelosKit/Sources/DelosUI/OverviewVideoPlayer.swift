@@ -46,8 +46,8 @@ final class OverviewVideos {
     }
 }
 
-/// The viewer's in-app YouTube player as DELOS sees it: the shown video's state as the player reports it (every 500 ms
-/// and on each change) and the commands DELOS's controls send to it.
+/// The viewer's video player as DELOS sees it, YouTube's in-app player or AVPlayer for a Steam movie: the shown video's
+/// state as the player reports it (every 500 ms and on each change) and the commands DELOS's controls send to it.
 @MainActor
 @Observable
 final class OverviewVideo {
@@ -68,8 +68,10 @@ final class OverviewVideo {
     private(set) var error: Int?
     /// A status has come since the player was made.
     @ObservationIgnored private(set) var reported = false
-    /// Runs JavaScript in the player's page; nil while there is no player.
+    /// Runs JavaScript in the YouTube player's page; nil while there is no such player.
     @ObservationIgnored var run: (@MainActor (String) -> Void)?
+    /// The native player of a Steam movie; nil while there is none.
+    @ObservationIgnored private(set) var native: OverviewNativePlayback?
     let controls = OverviewViewerControls()
     @ObservationIgnored private(set) var generation = 0
     @ObservationIgnored private var active = true
@@ -86,10 +88,32 @@ final class OverviewVideo {
     }
 
     private func applyPlayback() {
+        if let native { native.setPlaying(active && wantsPlayback); return }
         run?("if(window.setPlaybackAllowed){setPlaybackAllowed(\(active),\(wantsPlayback));}")
     }
 
+    /// The native player for the current video is ready: it takes the commands and starts when playback is allowed.
+    func attach(_ player: OverviewNativePlayback, generation: Int) {
+        guard generation == self.generation, error == nil else { return }
+        native = player
+        applyPlayback()
+    }
+
+    /// The native player [player] went away (its view was dismantled).
+    func detach(_ player: OverviewNativePlayback) {
+        if native === player { native = nil }
+    }
+
     var playing: Bool { state == 1 || state == 3 }
+
+    /// DEBUG only: `-DelosMuteMedia YES` starts every trailer muted, so a simulator stays silent.
+    static var startsMuted: Bool {
+        #if DEBUG
+        UserDefaults.standard.bool(forKey: "DelosMuteMedia")
+        #else
+        false
+        #endif
+    }
 
     /// The player's codes that mean the video can never play here: 100 (gone or private), 101 and 150 (its owner does
     /// not allow other apps).
@@ -118,6 +142,8 @@ final class OverviewVideo {
         error = nil
         reported = false
         run = nil
+        native?.invalidate()
+        native = nil
         wantsPlayback = active
     }
 
@@ -137,24 +163,38 @@ final class OverviewVideo {
         guard videoID != nil, let message = try? JSONDecoder().decode(Message.self, from: Data(json.utf8)) else { return }
         switch message.type {
         case "ready":
+            if Self.startsMuted { run?("if(window.player&&player.mute){player.mute();}") }
             applyPlayback()
         case "status":
-            reported = true
-            if let value = message.state, value != state { state = value }
-            if !active || !wantsPlayback {
-                if state == 1 || state == 3 { applyPlayback() }
-                state = 2
-            }
-            if let value = message.time, value != time { time = value }
-            if let value = message.duration, value != duration { duration = value }
-            if let value = message.muted, value != muted { muted = value }
-            if let value = message.loaded, value != loaded { loaded = min(max(value, 0), 1) }
-            if let value = message.volume, value != volume { volume = min(max(value, 0), 100) }
-            if state == 1, !started { started = true }
+            report(state: message.state, time: message.time, duration: message.duration, muted: message.muted,
+                   loaded: message.loaded, volume: message.volume)
         case "error":
             fail(message.code ?? -1)
         default: break
         }
+    }
+
+    /// A status of the player, YouTube's page or AVPlayer: the values it has. YouTube's player counts as started once it
+    /// plays; the native one once its first frame is on screen (``firstFrame()``).
+    func report(state newState: Int?, time newTime: Double?, duration newDuration: Double?, muted newMuted: Bool?,
+                loaded newLoaded: Double?, volume newVolume: Double?) {
+        reported = true
+        if let value = newState, value != state { state = value }
+        if !active || !wantsPlayback {
+            if state == 1 || state == 3 { applyPlayback() }
+            state = 2
+        }
+        if let value = newTime, value != time { time = value }
+        if let value = newDuration, value != duration { duration = value }
+        if let value = newMuted, value != muted { muted = value }
+        if let value = newLoaded, value != loaded { loaded = min(max(value, 0), 1) }
+        if let value = newVolume, value != volume { volume = min(max(value, 0), 100) }
+        if state == 1, !started, native == nil { started = true }
+    }
+
+    /// The native player shows its first frame: the sharp video replaces the blurred thumbnail.
+    func firstFrame() {
+        if !started { started = true }
     }
 
     /// The player cannot play the video: the error shows instead of it; a video that never can is left out from now on.
@@ -163,6 +203,8 @@ final class OverviewVideo {
         pause()
         error = code
         run = nil
+        native?.invalidate()
+        native = nil
         if Self.unplayable(code: code) { OverviewVideos.shared.markUnplayable(videoID) }
     }
 
@@ -170,6 +212,7 @@ final class OverviewVideo {
     func toggle() {
         guard active, error == nil else { return }
         wantsPlayback = !playing
+        if let native { native.setPlaying(wantsPlayback); return }
         if state == 0 { send("player.seekTo(0,true);player.playVideo()") }
         else if wantsPlayback { send("player.playVideo()") }
         else { send("player.pauseVideo()") }
@@ -181,17 +224,28 @@ final class OverviewVideo {
         applyPlayback()
     }
 
-    func seek(by seconds: Double) { send("player.seekTo(Math.max(0,player.getCurrentTime()+\(seconds)),true)") }
+    func seek(by seconds: Double) {
+        if let native, error == nil { native.seek(by: seconds); return }
+        send("player.seekTo(Math.max(0,player.getCurrentTime()+\(seconds)),true)")
+    }
 
-    func seek(to fraction: Double) { send("player.seekTo(\(min(max(fraction, 0), 1))*player.getDuration(),true)") }
+    func seek(to fraction: Double) {
+        let f = min(max(fraction, 0), 1)
+        if let native, error == nil { native.seek(to: f * duration); return }
+        send("player.seekTo(\(f)*player.getDuration(),true)")
+    }
 
-    func toggleMute() { send(muted ? "player.unMute()" : "player.mute()") }
+    func toggleMute() {
+        if let native, error == nil { native.setMuted(!muted); return }
+        send(muted ? "player.unMute()" : "player.mute()")
+    }
 
     /// Sets the volume to [value] (0…100); a volume above 0 turns the sound on.
     func setVolume(_ value: Double) {
         let v = min(max(value.rounded(), 0), 100)
-        guard error == nil, run != nil else { return }
+        guard error == nil, run != nil || native != nil else { return }
         volume = v
+        if let native { native.setVolume(v / 100); return }
         send("player.setVolume(\(Int(v)))" + (v > 0 ? ";player.unMute()" : ""))
     }
 
@@ -398,9 +452,11 @@ extension OverviewVideoPlayer: NSViewRepresentable {
 #endif
 #endif
 
-/// In place of a video that cannot play: the thumbnail dimmed, a warning and why.
+/// In place of a video that cannot play: the thumbnail dimmed, a warning and why. [steam]: a Steam movie AVPlayer could
+/// not load (no owner's choice there).
 struct OverviewVideoError: View {
     let code: Int
+    var steam = false
     @Environment(\.stage) private var stage
     @Environment(\.delosColors) private var colors
 
@@ -410,7 +466,7 @@ struct OverviewVideoError: View {
             VStack(spacing: stage.px(14)) {
                 SymbolView(symbol: Symbols.warning, size: 56, color: RGBA(red: 1, green: 1, blue: 1))
                 Text(L("overview_video_unavailable")).font(DelosFonts.unbounded(stage.tpx(28), .semibold)).foregroundStyle(.white)
-                Text(OverviewVideo.blocked(code: code) ? L("overview_video_blocked") : L("overview_video_failed"))
+                Text(steam ? L("overview_video_failed_steam") : OverviewVideo.blocked(code: code) ? L("overview_video_blocked") : L("overview_video_failed"))
                     .font(DelosFonts.figtree(stage.tpx(22), .medium)).foregroundStyle(.white.opacity(0.8))
             }
             .multilineTextAlignment(.center)
