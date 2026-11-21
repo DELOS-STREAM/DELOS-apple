@@ -244,8 +244,9 @@ struct OverviewViewer: View {
 
     #if !os(tvOS)
     /// Over the picture, under the dock. Touch: a tap shows or hides the overlay, a double tap in the left or right third
-    /// seeks ``OverviewViewerControls/seekStep``. Pointer: a click plays or pauses; a trackpad's two-finger swipe sideways
-    /// browses. While the overlay is hidden over a YouTube video it lets the touches through to YouTube's surface
+    /// seeks ``OverviewViewerControls/seekStep``. Pointer: a click shows or hides the overlay as a tap does (Play is the
+    /// dock's button); a trackpad's two-finger swipe sideways browses. While the overlay is hidden over a YouTube video it
+    /// lets the touches through to YouTube's surface
     /// (``OverviewVideoPlayer/interactive``); over a Steam movie it always takes them.
     private func tapLayer(_ item: OverviewContent.Media) -> some View {
         let controls = video.controls
@@ -259,10 +260,7 @@ struct OverviewViewer: View {
                     if value.location.x < third { video.seek(by: -OverviewViewerControls.seekStep); controls.seekFlash(-1) }
                     else if value.location.x > 2 * third { video.seek(by: OverviewViewerControls.seekStep); controls.seekFlash(1) }
                 }.exclusively(before: SpatialTapGesture().onEnded { _ in
-                    if ControllerGlyphs.shared.kind == .pointer {
-                        controls.onInput()
-                        if playable(item) { video.toggle() }
-                    } else if controls.visible {
+                    if controls.visible {
                         controls.hide()
                     } else {
                         controls.onInput()

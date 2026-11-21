@@ -1524,7 +1524,7 @@ Touch: a tap shows or hides the overlay, a double tap in the left or right third
 a swipe down closes, the sliders drag. While the overlay is hidden over a YouTube video, the player's web view takes the
 touches itself, so YouTube's own surface (an ad's Skip) keeps working; a tap there also brings the overlay back (a gesture
 recognizer that does not cancel the page's touches). Over a Steam movie, and while the overlay shows, its tap layer
-takes them. Pointer: moving shows the overlay, a click on the picture plays or pauses, hovering the timeline shows the
+takes them. Pointer: moving shows the overlay, a click on the picture shows or hides it as a tap does (Play is the dock's button), hovering the timeline shows the
 time under the pointer.
 The hint bar: L1 R1 Browse and Back on a screenshot; Seek, Play or Pause, Mute or Sound on, L1, R1 and Back on a video
 that plays.
