@@ -691,6 +691,17 @@ public struct FocusItem<ID: Hashable, Content: View>: View {
             .onChange(of: focused) { _, now in if now { revealed(AnyHashable(id)) } }
             .onAppear { revealed(model.focused, animated: false) }
             .onTapGesture { tapped() }
+            #if os(iOS)
+            // A finger's press squeezes the item from its touch down until it lifts or a drag takes the touch over
+            // (``TouchPress``); a first tap that only focuses the item does not squeeze it
+            .gesture(TouchPressGesture(squeezes: {
+                TouchPress.squeezes(ItemTouch.of(focused: model.focused == AnyHashable(id), kind: .touch, ownTap: tap != nil,
+                                                 firstTapFocuses: firstTapFocuses))
+            }, onChange: { now in
+                release?.cancel()
+                pressed = now
+            }))
+            #endif
             #if DEBUG
             // The demo harness's `tap`: the focused item's own tap (``DemoHarness/tap(router:)``)
             .onReceive(NotificationCenter.default.publisher(for: DemoHarness.tapNotification)) { note in

@@ -96,15 +96,44 @@ import Testing
         #expect(middle.midY < (from.midY + to.midY) / 2 - 29 && middle.width > (from.width + to.width) / 2)
     }
 
-    /// The open spring's overshoot only grows the cover around the slot, so the slot's edge never shows; the close
-    /// spring's does the same around the card.
-    @Test func flightOvershootOnlyGrowsAroundTheEnds() {
+    /// #108: past an end only the cover's position overshoots, along the half of the arc it arrived on, softly capped;
+    /// its size (and so its corners) stays the end's.
+    @Test func flightOvershootMovesOnlyThePosition() {
         let from = CGRect(x: 150, y: 520, width: 316.5, height: 474.75), to = CGRect(x: 150, y: 150, width: 340, height: 510)
-        let past = OverviewMotion.flightFrame(from: from, to: to, progress: 1.04, lift: 30)
-        #expect(past.contains(to) && abs(past.midX - to.midX) < 0.001 && abs(past.midY - to.midY) < 0.001)
-        #expect(abs(past.width - to.width * 1.04) < 0.001)
-        let before = OverviewMotion.flightFrame(from: from, to: to, progress: -0.015, lift: 30)
-        #expect(before.contains(from) && abs(before.midY - from.midY) < 0.001)
+        let past = OverviewMotion.flightFrame(from: from, to: to, progress: 1.04, lift: 30, cap: 40)
+        #expect(past.size == to.size && past.midY < to.midY)
+        let before = OverviewMotion.flightFrame(from: from, to: to, progress: -0.015, lift: 30, cap: 40)
+        #expect(before.size == from.size && before.midY > from.midY)
+        // Never more than the cap, however far the spring passes
+        let far = OverviewMotion.flightFrame(from: from, to: to, progress: 2, lift: 30, cap: 40)
+        #expect(hypot(far.midX - to.midX, far.midY - to.midY) < 40)
+    }
+
+    /// #108: sampled every millisecond, both springs carry the cover past its target exactly once (the next bounce is
+    /// under 0.05 px), by 4–6 % of the travel, with its size at the target's whenever it is past.
+    @Test func flightPositionOvershootsOnceOnBothSprings() {
+        let card = CGRect(x: 150, y: 520, width: 316.5, height: 474.75), slot = CGRect(x: 150, y: 150, width: 340, height: 510)
+        let travel = hypot(card.midX - slot.midX, card.midY - slot.midY)
+        for (spring, opening) in [(OverviewMotion.flightOpen, true), (OverviewMotion.flightClose, false)] {
+            let target = opening ? slot : card
+            // How far past the target the cover is, along the way it came (positive: past)
+            let way = CGPoint(x: target.midX - (opening ? card : slot).midX, y: target.midY - (opening ? card : slot).midY)
+            let length = hypot(way.x, way.y)
+            var excursions = 0, peak = 0.0, wasPast = false
+            for ms in stride(from: 0.0, through: 3000, by: 1) {
+                let moved = spring.value(target: 1.0, initialVelocity: 0, time: ms / 1000)
+                let progress = opening ? moved : 1 - moved
+                let frame = OverviewMotion.flightFrame(from: card, to: slot, progress: progress, lift: 30, cap: 40)
+                let past = ((frame.midX - target.midX) * way.x + (frame.midY - target.midY) * way.y) / length
+                let isPast = past > 0.05
+                if isPast && !wasPast { excursions += 1 }
+                wasPast = isPast
+                peak = max(peak, past)
+                if progress > 1 || progress < 0 { #expect(frame.size == target.size) }
+            }
+            #expect(excursions == 1)
+            #expect(peak > travel * 0.04 && peak < travel * 0.06)
+        }
     }
 
     @Test func ratingRingOvershootIsLimited() {
@@ -173,7 +202,7 @@ import Testing
         #expect(abs(end.minX - pulled.frame.minX) < 1e-9 && abs(end.minY - pulled.frame.minY) < 1e-9 && abs(end.width - pulled.frame.width) < 1e-9)
         // Moving up (or not at all) adds no speed; a fling is capped
         #expect(OverviewMotion.pullHandoff(slot: slot, pull: 200, scale: scale, speed: -500, card: card).velocity == 0)
-        #expect(OverviewMotion.pullHandoff(slot: slot, pull: 200, scale: scale, speed: 1e6, card: card).velocity == 4)
+        #expect(OverviewMotion.pullHandoff(slot: slot, pull: 200, scale: scale, speed: 1e6, card: card).velocity == 6)
     }
 
     /// Regression (#23): flying back into the wide first cover stretched the portrait art to the landscape frame; the
@@ -213,9 +242,10 @@ import Testing
 
     @Test func swipeUpOpensFromWhereTheFingerLeftIt() {
         let launcher = OverviewLauncher()
-        var opened: (Int, Double)?
+        var opened: (Int, OverviewSwipeRelease?)?
         launcher.canOpen = { _ in true }
-        launcher.open = { app, drag in opened = (app.id, drag) }
+        launcher.isFocused = { $0.id == 7 }
+        launcher.open = { app, release in opened = (app.id, release) }
         let app = HostApp(id: 7, title: "Hades")
         // Sideways is the row's, not a swipe
         launcher.drag(app, translation: CGSize(width: 40, height: -12), slop: 10, cap: 100, threshold: 90)
@@ -224,9 +254,13 @@ import Testing
         #expect(launcher.dragApp == 7 && launcher.dragOffset < 0 && launcher.dragOffset > -36)
         // The rubber band's share and how near opening it is (60 of 90 points) for this cover only
         #expect(launcher.follow(7).share > 0 && abs(launcher.follow(7).ready - 60.0 / 90) < 1e-9 && launcher.follow(8).offset == 0)
-        launcher.end(app, translation: CGSize(width: 2, height: -120), threshold: 90)
-        #expect(opened?.0 == 7 && (opened?.1 ?? 0) < 0)
-        #expect(launcher.dragApp == nil)
+        launcher.drag(app, translation: CGSize(width: 2, height: -300), slop: 10, cap: 100, threshold: 90)
+        let share = launcher.dragShare, offset = launcher.dragOffset
+        launcher.end(app, translation: CGSize(width: 2, height: -300), velocityY: -900, threshold: 90)
+        // The flight starts from the cover as the finger left it: its lift, growth, opacity and speed
+        #expect(opened?.0 == 7 && opened?.1 == OverviewSwipeRelease(offset: offset, share: share, opacity: OverviewMotion.swipeOpacity(share), velocityY: -900))
+        #expect((opened?.1?.opacity ?? 1) < 0.9 && abs((opened?.1?.scale ?? 1) - (1 + 0.03 * share)) < 1e-12)
+        #expect(launcher.dragApp == nil && launcher.follow(7).offset == 0)
         // Short of the threshold the cover springs back
         opened = nil
         launcher.drag(app, translation: CGSize(width: 0, height: -40), slop: 10, cap: 100, threshold: 90)
@@ -239,6 +273,7 @@ import Testing
         let app = HostApp(id: 7, title: "Fixture")
         var opened = false
         launcher.canOpen = { _ in true }
+        launcher.isFocused = { _ in true }
         launcher.open = { _, _ in opened = true }
         launcher.drag(app, translation: CGSize(width: 2, height: -50), slop: 10, cap: 100, threshold: 90)
         launcher.cancel(HostApp(id: 8, title: "Other"))

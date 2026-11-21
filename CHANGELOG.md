@@ -481,6 +481,14 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- Touch around game info works like a controller's ([#25](https://github.com/DELOS-STREAM/DELOS-apple/issues/25)):
+  a cover focused by a tap swipes up at once (before, only the cover focused when the row was last drawn did); the
+  swiped cover visibly fades towards 70 % near the top of its shorter rubber band and the flight starts from its
+  place, size, opacity and speed; the flight back lands exactly on the card at rest instead of above it and then
+  jumping; a finger resting on a focused item squeezes it until it lifts or a drag takes over.
+- The flying cover springs past its target and back once, by its position only (about 5 % of the way, at most 40 px);
+  its size never overshoots ([#25](https://github.com/DELOS-STREAM/DELOS-apple/issues/25)).
+
 - Closing the game overview no longer stops the cover and then jumps it: the flying cover takes the header cover's
   place a frame before anything moves, and once back it fades out over the card, which already shows its chip and
   badges, before the overview goes. Pulled down by a finger, the cover flies back from where the finger left it, at its
