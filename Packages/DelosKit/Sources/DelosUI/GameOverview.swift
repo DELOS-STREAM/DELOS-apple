@@ -1672,6 +1672,7 @@ struct CoverDescent: ViewModifier {
             .gesture(CoverSwipeGesture(
                 app: app, launcher: launcher, enabled: !descent.active,
                 minimumDistance: OverviewMotion.swipeSlop, threshold: stage.px(OverviewMotion.swipeOpen), cap: stage.px(OverviewMotion.swipeCap)))
+            .gesture(CoverScrollOpenGesture(app: app, launcher: launcher, enabled: !descent.active, threshold: 24))
             #endif
     }
 }

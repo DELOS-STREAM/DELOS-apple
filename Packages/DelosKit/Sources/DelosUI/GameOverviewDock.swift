@@ -144,7 +144,7 @@ struct OverviewDock: View {
     private var transport: some View {
         HStack(spacing: stage.px(26)) {
             DockButton(symbol: Symbols.playerSeekBack, size: 92, label: L("overview_video_back"), ten: true, focused: focused(.back)) {
-                video.seek(by: -10)
+                video.seek(by: -OverviewViewerControls.seekStep)
                 controls.seekFlash(-1)
             }
             .stop(.back, focus: controls.focus, ring: ring)
@@ -152,7 +152,7 @@ struct OverviewDock: View {
                        label: video.playing ? L("overview_hint_pause") : L("overview_hint_play"), primary: true, focused: focused(.play)) { video.toggle() }
                 .stop(.play, focus: controls.focus, ring: ring)
             DockButton(symbol: Symbols.playerSeekForward, size: 92, label: L("overview_video_forward"), ten: true, focused: focused(.forward)) {
-                video.seek(by: 10)
+                video.seek(by: OverviewViewerControls.seekStep)
                 controls.seekFlash(1)
             }
             .stop(.forward, focus: controls.focus, ring: ring)
@@ -263,7 +263,7 @@ struct ViewerDockRing: View {
 }
 
 /// A round dock button: [size] stage pixels, its glyph optically centred (``InkSymbol``). The primary one (play) is the
-/// gold disc with a gold glow under it; [ten] draws "10" inside the seek arrows. [focused] (the controller and the
+/// gold disc with a gold glow under it; [ten] draws the seek step's seconds inside the seek arrows. [focused] (the controller and the
 /// keyboard): it grows to 1.08 on a spring, its fill lightens and its glyph fills.
 struct DockButton: View {
     let symbol: String
@@ -283,9 +283,9 @@ struct DockButton: View {
         Button(action: action) {
             ZStack {
                 InkSymbol(symbol: symbol, size: Self.glyph(size, ten: ten), color: primary ? colors.onAccent : colors.text,
-                          filled: primary || focused, centroid: symbol == Symbols.playerPlay)
+                          filled: focused, centroid: symbol == Symbols.playerPlay)
                 if ten {
-                    Text("10")
+                    Text("\(Int(OverviewViewerControls.seekStep))")
                         .font(DelosFonts.figtree(stage.tpx(size * 0.19), .heavy))
                         .foregroundStyle(colors.text.color)
                         .offset(y: stage.px(size * 0.02))
@@ -314,7 +314,7 @@ struct DockButton: View {
         .accessibilityLabel(label)
     }
 
-    /// The glyph's em for a button [size] wide: about 0.44 of it, 0.62 for the seek arrows around their "10".
+    /// The glyph's em for a button [size] wide: about 0.44 of it, 0.62 for the seek arrows around their seconds.
     static func glyph(_ size: Double, ten: Bool = false) -> Double { (size * (ten ? 0.62 : 0.44)).rounded() }
 }
 
@@ -424,9 +424,9 @@ enum InkGlyph {
     }
 }
 
-/// The dock's timeline: the track, the buffered and the played share. It thickens from 10 to 16 px and shows a white
-/// knob while it is [focused], dragged or hovered; at rest the played line simply ends. Dragging seeks where it is let
-/// go (the overlay holds meanwhile); the pointer's hover shows the time under it.
+/// The dock's timeline: the track, the buffered and the played share, and a white knob at the playhead. It thickens from
+/// 10 to 16 px while it is [focused], dragged or hovered. Dragging seeks where it is let go (the overlay holds
+/// meanwhile); the pointer's hover shows the time under it.
 struct DockTimeline: View {
     let video: OverviewVideo
     var focused = false
@@ -451,8 +451,6 @@ struct DockTimeline: View {
                 Circle().fill(Color.white)
                     .shadow(color: .black.opacity(0.35), radius: stage.px(2), y: stage.px(2))
                     .frame(width: stage.px(24), height: stage.px(24))
-                    .scaleEffect(active ? 1 : 0.01)
-                    .opacity(active ? 1 : 0)
                     .offset(x: w * played - stage.px(12))
             }
             .animation(reduced ? nil : .easeInOut(duration: 0.3), value: active)
@@ -495,7 +493,7 @@ struct DockTimeline: View {
         .accessibilityLabel(L("overview_hint_seek"))
         .accessibilityValue(OverviewVideo.clock(video.time))
         .accessibilityAdjustableAction { direction in
-            video.seek(by: direction == .increment ? 10 : -10)
+            video.seek(by: direction == .increment ? OverviewViewerControls.seekStep : -OverviewViewerControls.seekStep)
         }
     }
 }

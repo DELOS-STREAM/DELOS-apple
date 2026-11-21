@@ -54498,61 +54498,61 @@
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Posun o 10 s"
+            "value": "Posun o 5 s"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "10 s springen"
+            "value": "5 s springen"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Seek 10 s"
+            "value": "Seek 5 s"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Saltar 10 s"
+            "value": "Saltar 5 s"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sauter 10 s"
+            "value": "Sauter 5 s"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "10秒移動"
+            "value": "5秒移動"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "10초 이동"
+            "value": "5초 이동"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pular 10 s"
+            "value": "Pular 5 s"
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Перемотати 10 с"
+            "value": "Перемотати 5 с"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "跳转 10 秒"
+            "value": "跳转 5 秒"
           }
         }
       }
@@ -57974,61 +57974,61 @@
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "O 10 sekund zpět"
+            "value": "O 5 sekund zpět"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "10 Sekunden zurück"
+            "value": "5 Sekunden zurück"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Back 10 seconds"
+            "value": "Back 5 seconds"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Retroceder 10 segundos"
+            "value": "Retroceder 5 segundos"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Reculer de 10 secondes"
+            "value": "Reculer de 5 secondes"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "10秒戻る"
+            "value": "5秒戻る"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "10초 뒤로"
+            "value": "5초 뒤로"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Voltar 10 segundos"
+            "value": "Voltar 5 segundos"
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Назад на 10 секунд"
+            "value": "Назад на 5 секунд"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "后退 10 秒"
+            "value": "后退 5 秒"
           }
         }
       }
@@ -58234,61 +58234,61 @@
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "O 10 sekund vpřed"
+            "value": "O 5 sekund vpřed"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "10 Sekunden vor"
+            "value": "5 Sekunden vor"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Forward 10 seconds"
+            "value": "Forward 5 seconds"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Avanzar 10 segundos"
+            "value": "Avanzar 5 segundos"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Avancer de 10 secondes"
+            "value": "Avancer de 5 secondes"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "10秒進む"
+            "value": "5秒進む"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "10초 앞으로"
+            "value": "5초 앞으로"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Avançar 10 segundos"
+            "value": "Avançar 5 segundos"
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Вперед на 10 секунд"
+            "value": "Вперед на 5 секунд"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "前进 10 秒"
+            "value": "前进 5 秒"
           }
         }
       }

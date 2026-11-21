@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- A mouse wheel or a trackpad scrolled down over a cover opens its game info, as Down does with a controller;
+  scrolling up or sideways still moves the library row.
+
 - Each Steam trailer gets its own still in the carousel and as the viewer's blurred picture: the frame a sixth of the way
   into the trailer (a third when that frame is dark), read from one segment of its 854 px stream (a few hundred kB) once
   per trailer, at most three at a time, and kept with the overview's images. While it is made the tile shows a spinner
@@ -349,6 +352,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- The viewer's timeline shows its white knob at the playhead all the time; Play shows its icon in outline, filled only
+  while it has the focus, as the other buttons.
+- The game overview viewer seeks 5 s instead of 10 s: the ± buttons (now marked "5"), a double tap at a side, Left and
+  Right on the timeline and the hint bar; repeated seeks count 5, 10, 15…
 - The game overview viewer's dock is Liquid Glass. Its timeline is 10 px (16 px while focused, dragged or hovered) and
   shows its knob only then, so the played line simply ends; the volume slider is 8 px with a white knob. Play has a gold
   glow under it; a focused button grows to 1.08, lightens and fills its icon; the focus ring is a 4 px gold line over a
@@ -504,6 +511,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   saved about 0.07 ms a frame, and motion that was a frame old made the picture drift.
 
 ### Fixed
+
+- The first opening of a game's info no longer shows the placeholder art in the middle of the cover's flight when the
+  game's cover was not loaded yet (its card shows the wide art): the card's own picture flies, and the cover loads for
+  the header meanwhile.
 
 - Touch around game info works like a controller's ([#25](https://github.com/DELOS-STREAM/DELOS-apple/issues/25)):
   a cover focused by a tap swipes up at once (before, only the cover focused when the row was last drawn did); the
