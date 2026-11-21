@@ -81,6 +81,7 @@ enum SettingsCatalog {
                 CatalogChoice(value: "standard", label: L("upscaler_mode_metalfx_spatial"), help: L("help_upscaler_mode_metalfx_spatial")),
                 CatalogChoice(value: "temporal", label: L("upscaler_mode_metalfx_temporal"), help: L("help_upscaler_mode_metalfx_temporal")),
                 CatalogChoice(value: "sharpen", label: L("sgsr_quality_sharpen"), help: L("help_list_sgsr_quality_sharpen")),
+                CatalogChoice(value: "neural", label: L("upscaler_mode_neural"), help: L("help_upscaler_mode_neural")),
             ]), dependency: "checkbox_sgsr"),
             CatalogSpec(
                 id: "seekbar_sgsr_sharpness", tab: .display, category: "category_video_settings", section: L("category_video_settings"), icon: Symbols.sharpness,

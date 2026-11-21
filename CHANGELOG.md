@@ -13,6 +13,10 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   between video controls and screenshot pages while shared controls and focus glide; reduced motion uses a 200 ms fade.
 - Long trailer titles use the shared back-and-forth marquee in focused carousel tiles and the viewer dock; reduced
   motion keeps the edge fade without scrolling. Trailer tiles have a gold play glyph on a circular Liquid Glass badge.
+- Upscaler mode Neural (OS 26 or later): Apple's machine-learning video super resolution (VideoToolbox) reconstructs
+  detail from each frame, and MetalFX Spatial enlarges the rest to the screen. It takes 8-bit SDR streams up to the size
+  the system's scaler accepts (1280 pixels a side on a Mac); HDR, 10-bit and larger streams, and the first moments while
+  its model loads, use MetalFX Spatial. Debug builds log its time per frame (`nn` in StreamPerf).
 - The game overview below the dashboard: Down on a game's cover (a swipe of the cover up, or the Game info hint under
   it) continues the dashboard downward. The cover flies into the header beside the title, ratings, age rating, Play and
   App settings; About with the storyline, Screenshots and videos with a full-screen viewer, Details, Your streaming,

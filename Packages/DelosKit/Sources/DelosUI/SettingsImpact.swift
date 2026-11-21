@@ -146,10 +146,13 @@ private func gpuLevel(_ ms: Double, _ periodMs: Double) -> ImpactLevel {
     return share < 0.35 ? .low : share < 0.70 ? .medium : .high
 }
 
-/// The upscaler mode row, and the on/off row while the upscaler is on.
+/// The upscaler mode row, and the on/off row while the upscaler is on. Neural: the neural pass runs outside the GPU's
+/// shaders but in each frame's path before the conversion (about 1.4 ms for 720p to 1080p on an M6 Mac; device time
+/// unmeasured), so latency Medium; its rest of the enlargement is MetalFX Spatial (GPU Low).
 private func upscalerMode(_ c: ImpactContext) -> SettingImpact {
     switch c.mode {
     case "sharpen", "standard": SettingImpact(gpu: .low, latency: .low, network: .none)
+    case "neural": SettingImpact(gpu: .low, latency: .medium, network: .none)
     default: temporalImpact(c)
     }
 }

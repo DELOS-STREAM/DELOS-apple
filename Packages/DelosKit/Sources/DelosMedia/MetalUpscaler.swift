@@ -125,14 +125,17 @@ struct CASUniforms {
     }
 }
 
-/// Which MetalFX scalers this GPU runs. MetalFX is part of iOS and iPadOS, of macOS (`supportsDevice` decides per GPU), and
-/// of tvOS from 27.1; the simulators' SDKs have no MetalFX at all. A mode whose scaler is missing runs as Sharpen only and
-/// reports the upscaler unavailable (``effectiveMode(_:)``).
+/// Which MetalFX scalers this GPU runs, and whether the system has the neural scaler (``NeuralUpscaling``). MetalFX is part
+/// of iOS and iPadOS, of macOS (`supportsDevice` decides per GPU), and of tvOS from 27.1; the simulators' SDKs have no MetalFX
+/// and no neural scaler at all. A mode whose MetalFX scaler is missing runs as Sharpen only and reports the upscaler
+/// unavailable; Neural without the neural scaler runs as MetalFX Spatial (``effectiveMode(_:)``).
 public struct MetalFXSupport: Sendable, Equatable {
     public var spatial: Bool
     public var temporal: Bool
     /// The temporal scaler's smallest and largest scale factor on this GPU.
     var temporalScale: ClosedRange<Float>
+    /// VideoToolbox's low-latency super resolution (OS 26 and later, not in a simulator).
+    public var neural = false
 
     /// No MetalFX: every mode runs as Sharpen only.
     public static let none = MetalFXSupport(spatial: false, temporal: false, temporalScale: 1...1)
@@ -148,7 +151,7 @@ public struct MetalFXSupport: Sendable, Equatable {
         let high = MTLFXTemporalScalerDescriptor.supportedInputContentMaxScale(device: device)
         return MetalFXSupport(
             spatial: MTLFXSpatialScalerDescriptor.supportsDevice(device), temporal: temporal,
-            temporalScale: temporal ? low...max(low, high) : 1...1)
+            temporalScale: temporal ? low...max(low, high) : 1...1, neural: NeuralUpscaling.isSupported)
         #else
         return .none
         #endif
@@ -159,11 +162,16 @@ public struct MetalFXSupport: Sendable, Equatable {
         case .spatial: spatial
         case .temporal: temporal
         case .sharpen: true
+        case .neural: neural
         }
     }
 
-    /// The mode that runs for `mode` on this GPU: Sharpen only stands in for a missing MetalFX scaler.
-    public func effectiveMode(_ mode: UpscalerMode) -> UpscalerMode { supports(mode) ? mode : .sharpen }
+    /// The mode that runs for `mode` on this GPU: MetalFX Spatial stands in for a missing neural scaler, Sharpen only for a
+    /// missing MetalFX scaler.
+    public func effectiveMode(_ mode: UpscalerMode) -> UpscalerMode {
+        if supports(mode) { return mode }
+        return mode == .neural ? effectiveMode(.spatial) : .sharpen
+    }
 
     /// The scale factors a scaler for `mode` takes: the temporal scaler's range, any enlargement for the spatial one.
     func scales(_ mode: UpscalerMode) -> ClosedRange<Float> {
@@ -233,10 +241,12 @@ final class MetalUpscaler {
 
     /// Encodes the upscaling of `source` for a picture of `presentation` pixels and returns what the presentation pass
     /// samples; nil when a texture, a scaler or a pass could not be made. `mode` is one this GPU runs
-    /// (``MetalFXSupport/effectiveMode(_:)``).
+    /// (``MetalFXSupport/effectiveMode(_:)``); for the rest of a neural enlargement it is Spatial, and `stream` is the size
+    /// the sizes are planned from (the stream's, while `source` is the neural scaler's larger picture). Without the mode's
+    /// scaler `source` is sampled into the picture directly.
     func upscale(
         source: any MTLTexture, mode: UpscalerMode, presentation: (width: Int, height: Int), supersamplingLevel: Int,
-        frameTime: Double, hdr: Bool, commandBuffer: any MTLCommandBuffer
+        frameTime: Double, hdr: Bool, stream planned: (width: Int, height: Int)? = nil, commandBuffer: any MTLCommandBuffer
     ) -> UpscaledPicture? {
         let stream = (width: source.width, height: source.height)
         if mode == .sharpen {
@@ -247,11 +257,18 @@ final class MetalUpscaler {
             return UpscaledPicture(texture: source, sharpenAtPresentation: false, dimensions: dimensions)
         }
         var dimensions = UpscalerDimensions.plan(
-            source: stream, presentation: presentation, maxTextureSize: maxTextureSize, supersamplingLevel: supersamplingLevel)
+            source: planned ?? stream, presentation: presentation, maxTextureSize: maxTextureSize,
+            supersamplingLevel: supersamplingLevel)
         guard let output = Self.scalerOutput(
             input: stream, target: (dimensions.internalWidth, dimensions.internalHeight), scales: support.scales(mode))
         else {
             // MetalFX only enlarges: a stream as large as the picture or larger is sampled into it directly
+            if planned != nil { (dimensions.internalWidth, dimensions.internalHeight) = stream }
+            return UpscaledPicture(texture: source, sharpenAtPresentation: true, dimensions: dimensions)
+        }
+        guard support.supports(mode) else {
+            // The rest of a neural enlargement on a GPU without MetalFX Spatial: the presentation enlarges it
+            (dimensions.internalWidth, dimensions.internalHeight) = stream
             return UpscaledPicture(texture: source, sharpenAtPresentation: true, dimensions: dimensions)
         }
         dimensions.internalWidth = output.width
@@ -375,7 +392,7 @@ final class MetalFXScaler {
             self.output = output
             self.depth = depth
             motionUsage = scaler.motionTextureUsage
-        case .sharpen:
+        case .sharpen, .neural:
             return nil
         }
         #else

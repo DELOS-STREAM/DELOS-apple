@@ -11,7 +11,7 @@ import Synchronization
 /// One-off lines (``note(_:)``) say what the launch asked for and how the display was planned. Nothing is counted in
 /// release builds.
 ///
-///     StreamPerf req=120 link=120 in=119.8 gap=0 host=120.0 mbps=38.2 fecfail=0 oos=0 asm=0.90/2.10 submit=0.08/0.30/0.90 dec=120/120 decfail=0 decq=1 dect=3.10/4.00 queue=120 selected=120 shown=120 draw=120 drawfail=0 drop=0 full=0 skip=0 gpu-busy=0 repeat=0 wait=0.40 tick=120 tickhz=120.0 lead=16.60 budget=8.30 lock=2.40/6.80/31 encode=0.40/0.60 over=0 gpu=0.40/0.60 gpufail=0 late=0 up=off conv=- flow=- fx=- sharp=- present=0.30/0.50 rest=0.05/0.10 glass=120 lost=0 off=0.02/0.10 thermal=nominal lpm=0
+///     StreamPerf req=120 link=120 in=119.8 gap=0 host=120.0 mbps=38.2 fecfail=0 oos=0 asm=0.90/2.10 submit=0.08/0.30/0.90 dec=120/120 decfail=0 decq=1 dect=3.10/4.00 queue=120 selected=120 shown=120 draw=120 drawfail=0 drop=0 full=0 skip=0 gpu-busy=0 repeat=0 wait=0.40 tick=120 tickhz=120.0 lead=16.60 budget=8.30 lock=2.40/6.80/31 encode=0.40/0.60 over=0 gpu=0.40/0.60 gpufail=0 late=0 up=off conv=- flow=- fx=- sharp=- present=0.30/0.50 rest=0.05/0.10 nn=- glass=120 lost=0 off=0.02/0.10 thermal=nominal lpm=0
 ///
 /// - `req`: the frame rate the stream negotiated; `link`: the rate the display link asks for.
 /// - `in`: frames per second from the core; `gap`: frame numbers that never arrived; `host`: the rate the host encoded at
@@ -32,10 +32,12 @@ import Synchronization
 ///   continue after that deadline; crossing it is not itself a GPU deadline miss.
 /// - `gpu`: summed command-buffer GPU durations, including intervening contention, not necessarily active shader time;
 ///   `gpufail`: failed command buffers; `late`: GPU completion after the estimated presentation time.
-/// - `up`: the upscaler that drew (`off`, `spatial`, `temporal`, `sharpen`). The drawing's passes (``GPUPassTimer``):
-///   `conv` the conversion to RGB, `flow` optical flow, `sharp` Sharpen only, `present` the pass into the drawable.
-///   Render samples cover the fragment stage, not the entire render pass. `fx` and `rest` are unclassified residual
-///   command-buffer time with/without MetalFX respectively, not measurements of MetalFX cost or compositor work.
+/// - `up`: the upscaler that drew (`off`, `spatial`, `temporal`, `sharpen`, `neural`). The drawing's passes
+///   (``GPUPassTimer``): `conv` the conversion to RGB, `flow` optical flow, `sharp` Sharpen only, `present` the pass into
+///   the drawable. Render samples cover the fragment stage, not the entire render pass. `fx` and `rest` are unclassified
+///   residual command-buffer time with/without MetalFX respectively, not measurements of MetalFX cost or compositor work.
+/// - `nn`: the neural scaler's command buffer from its commit to its completion handler (CPU clock; the scaler does not
+///   run as GPU passes, so it has no GPU timestamps). The drawing's own command buffer waits for it, so it is in `gpu` too.
 /// - `glass`: drawable callbacks with a positive system timestamp, including redraws; `lost`: callbacks reporting no
 ///   presentation; `off`: observed minus estimated presentation time. Simulators expose no presented time.
 ///
@@ -123,6 +125,7 @@ public final class StreamPerf: Sendable {
         var onGlass = 0
         var neverShown = 0
         var offTarget = Samples()
+        var neural = Samples()
 
         var isEmpty: Bool {
             received == 0 && ticks == 0 && decodeReturned == 0 && drawings == 0 && drawingFailures == 0
@@ -134,9 +137,10 @@ public final class StreamPerf: Sendable {
             var next = Window(lastFrameNumber: lastFrameNumber)
             next.assemble = assemble; next.submit = submit; next.decode = decode; next.lead = lead; next.budget = budget
             next.gpu = gpu; next.passes = passes; next.offTarget = offTarget; next.encode = encode
-            next.lockMargin = lockMargin; next.lockWindow = lockWindow
+            next.lockMargin = lockMargin; next.lockWindow = lockWindow; next.neural = neural
             next.assemble.reset(); next.submit.reset(); next.decode.reset(); next.lead.reset(); next.budget.reset()
             next.gpu.reset(); next.offTarget.reset(); next.encode.reset(); next.lockMargin.reset(); next.lockWindow.reset()
+            next.neural.reset()
             for index in next.passes.indices { next.passes[index].reset() }
             self = next
         }
@@ -335,6 +339,11 @@ public final class StreamPerf: Sendable {
         }
     }
 
+    /// The neural scaler's pass of one drawing, from its commit to its completion (``NeuralScaler/order(_:before:)``).
+    func neural(seconds: Double) {
+        state.withLock { $0.window.neural.add(max(0, seconds) * 1000) }
+    }
+
     /// CPU encoding/submission, measured separately from the GPU and system presentation.
     func drawingSubmitted(seconds: Double, late: Bool) {
         state.withLock { s in
@@ -363,7 +372,8 @@ public final class StreamPerf: Sendable {
                 if let time = passes[pass] { s.window.passes[pass.rawValue].add(time * 1000) }
             }
             // Residual time is not attributable: it can include unsampled stages, MetalFX and GPU contention.
-            let metalFX = upscaler == .spatial || upscaler == .temporal
+            // Neural's rest of the enlargement is MetalFX Spatial; its wait for the neural pass is in this residual too
+            let metalFX = upscaler == .spatial || upscaler == .temporal || upscaler == .neural
             s.window.passes[GPUPass.allCases.count + (metalFX ? 0 : 1)].add(max(0, seconds - passes.total) * 1000)
         }
     }
@@ -448,7 +458,7 @@ public final class StreamPerf: Sendable {
             + "encode=\(times(w.encode)) over=\(w.over) gpu=\(times(w.gpu)) gpufail=\(w.gpuFailures) late=\(w.late) "
             + "up=\(upscaler.map(name) ?? "off") "
             + "conv=\(pass(.conversion)) flow=\(pass(.flow)) fx=\(times(w.passes[extra])) sharp=\(pass(.sharpen)) "
-            + "present=\(pass(.present)) rest=\(times(w.passes[extra + 1])) "
+            + "present=\(pass(.present)) rest=\(times(w.passes[extra + 1])) nn=\(times(w.neural)) "
             + "glass=\(w.onGlass) lost=\(w.neverShown) off=\(times(w.offTarget)) "
             + "thermal=\(name(thermal)) lpm=\(lowPower ? 1 : 0)"
     }
@@ -458,6 +468,7 @@ public final class StreamPerf: Sendable {
         case .spatial: "spatial"
         case .temporal: "temporal"
         case .sharpen: "sharpen"
+        case .neural: "neural"
         }
     }
 

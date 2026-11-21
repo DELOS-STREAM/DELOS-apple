@@ -41099,6 +41099,71 @@
         }
       }
     },
+    "help_upscaler_mode_neural": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zvětšení aktuálního snímku strojovým učením: víc detailů. Pro SDR streamy do šířky 1280 pixelů; větší nebo HDR streamy používají MetalFX Spatial."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hochskalierung des aktuellen Frames per maschinellem Lernen: mehr Details. Für SDR-Streams bis 1280 Pixel Breite; größere oder HDR-Streams nutzen MetalFX Spatial."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Machine-learning upscaling of the current frame: more detail. For SDR streams up to 1280 pixels wide; larger or HDR streams use MetalFX Spatial."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escalado del fotograma actual con aprendizaje automático: más detalle. Para streams SDR de hasta 1280 píxeles de ancho; los streams más grandes o HDR usan MetalFX Spatial."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mise à l’échelle de l’image courante par apprentissage automatique : plus de détails. Pour les streams SDR jusqu’à 1280 pixels de large ; les streams plus grands ou HDR utilisent MetalFX Spatial."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "機械学習で現在のフレームをアップスケールし、より細部を描き出します。幅1280ピクセルまでのSDRストリームが対象です。それより大きいストリームやHDRストリームではMetalFX Spatialを使います。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "머신러닝으로 현재 프레임을 업스케일해서 디테일이 더 살아나요. 너비 1280픽셀까지의 SDR 스트림에 쓰여요. 그보다 크거나 HDR인 스트림은 MetalFX Spatial을 써요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upscaling do quadro atual com aprendizado de máquina: mais detalhes. Para streams SDR de até 1280 pixels de largura; streams maiores ou HDR usam o MetalFX Spatial."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Масштабування поточного кадру машинним навчанням: більше деталей. Для SDR-стрімів шириною до 1280 пікселів; більші або HDR-стріми використовують MetalFX Spatial."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用机器学习对当前帧进行超分，细节更多。适用于宽度不超过 1280 像素的 SDR 串流；更大或 HDR 的串流使用 MetalFX Spatial。"
+          }
+        }
+      }
+    },
     "help_upscaler_sharpness": {
       "extractionState": "manual",
       "localizations": {
@@ -111033,6 +111098,71 @@
           "stringUnit": {
             "state": "translated",
             "value": "MetalFX Temporal（实验性）"
+          }
+        }
+      }
+    },
+    "upscaler_mode_neural": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuronový"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuronal"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neural"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuronal"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuronal"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ニューラル"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "뉴럴"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neural"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нейронний"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "神经网络"
           }
         }
       }
