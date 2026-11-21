@@ -349,7 +349,7 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
-- The game overview's background behaves as on Android: as the page scrolls, the whole background (the game's picture
+- The game overview's background: as the page scrolls, the whole background (the game's picture
   and the animated lines) zooms and drifts up, and the deeper blur fades in fully over it, saturated by 1.35 and darkened
   to 62 %, at the larger of 24 px and the dashboard's own blur. The shades under the text stay in place, and a left one
   starts below the top bar.
