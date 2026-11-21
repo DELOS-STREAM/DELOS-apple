@@ -1691,7 +1691,10 @@ pointer, touch) and, for a controller, the glyph family (`PadFamily`). The hint 
   lift meanwhile (`focusScale(focused:pressed:focus:)`, or `focusLift` for an element that draws its own focus: the top
   navigation's buttons, the settings rows, the stream menu's back circle), so a pressed element stands at 0.96 of its size at rest, below
   every focus scale; a tap or a click runs the item's action once the
-  squeeze has landed (120 ms), so the press is seen before the action changes the screen (A runs at once). An element
+  squeeze has landed (120 ms), so the press is seen before the action changes the screen (A runs at once). A finger's
+  press (`TouchPress`, iPhone and iPad) squeezes the item from its touch down for as long as it rests, a long press
+  too, and lets go when the finger lifts, the touch is cancelled or a drag takes it over (past 10 points: the row's
+  scroll, a cover's swipe); a first tap that only focuses the item does not squeeze it. An element
   that is no `FocusItem` (a tappable hint pill, the back arrow, the Settings tabs, the reset pill of a game's row, the
   steppers' arrows, a slider's hold buttons and Enter, the context menu's back chip, the launch scene's Cancel) is a
   button of `pressButton()` (`PressButtonStyle`): the same press from the moment it is held, shown at least 250 ms, and

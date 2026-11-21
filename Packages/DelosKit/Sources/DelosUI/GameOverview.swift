@@ -3,6 +3,18 @@ import DelosHost
 import DelosInput
 import SwiftUI
 
+/// The flight's progress as its frame was last drawn: written by the drawing, read when a closing turns the flight
+/// around mid-way.
+final class FlightProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored = 0.0
+
+    var value: Double {
+        get { lock.withLock { stored } }
+        set { lock.withLock { stored = newValue } }
+    }
+}
+
 /// One opening of the game overview (variant A · Descent, DELOS-android#107): the dashboard continues downward into the
 /// game's page. Owned by ``HomeScreen``; [flight] runs the shared-element cover from the card (0) to the header (1) and
 /// back, [shown] drives everything else that moves with it (the other covers lifting away, the page rising, the
@@ -16,8 +28,18 @@ final class OverviewSession {
     let app: HostApp
     /// The library's focus id of the game's cover, which keeps the focus underneath.
     let coverID: AnyHashable
-    /// The card's frame where the flight starts and ends (the home's space, points, as it shows: focused and dragged).
+    /// The card's frame where the flight starts (the home's space, points, as it shows: focused, and lifted and grown when
+    /// a finger swiped it up).
     var source: CGRect
+    /// The card's frame at rest, where the closing flight lands (nil: [source]).
+    var back: CGRect?
+    /// The flight's progress where the closing began (1 from the open overview, less when Back turned the opening
+    /// around): the flight's start turns from [source] into [back] over it (``OverviewMotion/closingFrom``).
+    var closeStart = 1.0
+    /// The swiped card's opacity where the opening flight starts (``OverviewMotion/flightOpacity``).
+    var fromOpacity = 1.0
+    /// The flight's progress as it was last drawn (its animation's own value, for a closing that turns it around).
+    let drawn = FlightProbe()
     var phase = Phase.opening
     var flight = 0.0
     var shown = false
@@ -31,6 +53,8 @@ final class OverviewSession {
     /// How the finger let go of the page it pulled down to close the overview: how far it was pulled and how fast it was
     /// moving down (points, points per second); nil when Back closed it.
     @ObservationIgnored var release: (pull: Double, speed: Double)?
+    /// The page's pull past its top over its last moves (``SwipeVelocity``), for the speed a finger lets go of it at.
+    @ObservationIgnored var pullSpeed = SwipeVelocity()
     /// The card is the library's wide first cover (its own wide art in a landscape frame).
     @ObservationIgnored var wide = false
     /// The header cover's still picture (the card art: the SteamGridDB cover, else the PC's box art), from memory when the
@@ -106,8 +130,22 @@ struct OverviewDescent: Equatable {
     var visibleCoverDistance = 0
 }
 
+/// How a finger let go of a swiped cover past the open threshold: how far it had lifted it (points, negative: up), its
+/// rubber band's share (the cover's growth), its opacity there and how fast the finger moved (points per second,
+/// negative: up). The flight starts from all of them.
+struct OverviewSwipeRelease: Equatable {
+    var offset = 0.0
+    var share = 0.0
+    var opacity = 1.0
+    var velocityY = 0.0
+
+    /// The swiped cover's scale on top of its focus scale (it grows by up to 3 % with the rubber band).
+    var scale: Double { 1 + OverviewMotion.swipeGrow * share }
+}
+
 /// What the dashboard's covers and hint ask of the overview: open it for a game, and the finger's drag of the focused
 /// cover (swipe up), which the cover follows on a rubber band before the flight starts from where the finger left it.
+/// Only the focused cover swipes; that is asked when the finger starts ([isFocused]), never kept from an earlier focus.
 @MainActor
 @Observable
 final class OverviewLauncher {
@@ -120,14 +158,21 @@ final class OverviewLauncher {
     var dragOffset = 0.0
     var dragShare = 0.0
     var dragReady = 0.0
-    @ObservationIgnored var open: (HostApp, Double) -> Void = { _, _ in }
+    @ObservationIgnored var open: (HostApp, OverviewSwipeRelease?) -> Void = { _, _ in }
     @ObservationIgnored var canOpen: (HostApp) -> Bool = { _ in false }
+    /// Whether [app]'s cover has the library's focus now.
+    @ObservationIgnored var isFocused: (HostApp) -> Bool = { _ in false }
+    /// The covers' frames at rest by app id (global points, without a finger's lift or growth), as their row lays them out.
+    @ObservationIgnored var restFrames: [Int: CGRect] = [:]
+
+    /// Whether a finger may swipe [app]'s cover now: it has an overview and the focus.
+    func canSwipe(_ app: HostApp) -> Bool { canOpen(app) && isFocused(app) }
 
     /// A drag of [app]'s focused cover moved by [translation] (points); [cap] is the most the cover rises and
     /// [threshold] the finger's travel that opens the overview (points).
     func drag(_ app: HostApp, translation: CGSize, slop: CGFloat, cap: CGFloat, threshold: CGFloat) {
-        guard canOpen(app), translation.height < 0 || dragApp == app.id else { return }
-        guard dragApp == app.id || CoverDragDirection.of(translation: translation, minimumDistance: slop) == .verticalSwipe else { return }
+        guard translation.height < 0 || dragApp == app.id else { return }
+        guard dragApp == app.id || (canSwipe(app) && CoverDragDirection.of(translation: translation, minimumDistance: slop) == .verticalSwipe) else { return }
         dragApp = app.id
         shownApp = app.id
         dragOffset = OverviewMotion.swipeFollow(translation.height, cap: cap)
@@ -140,11 +185,14 @@ final class OverviewLauncher {
         shownApp == appID ? (dragOffset, dragShare, dragReady) : (0, 0, 0)
     }
 
-    /// The drag ended: far enough up opens the overview from there, else the cover springs back.
-    func end(_ app: HostApp, translation: CGSize, threshold: CGFloat) {
+    /// The drag ended with the finger moving [velocityY] points per second: far enough up opens the overview from where
+    /// the cover is (its lift, growth, opacity and speed), else the cover springs back.
+    func end(_ app: HostApp, translation: CGSize, velocityY: Double = 0, threshold: CGFloat) {
         guard dragApp == app.id else { return }
         if -translation.height > threshold {
-            open(app, dragOffset)
+            let release = OverviewSwipeRelease(offset: dragOffset, share: dragShare, opacity: OverviewMotion.swipeOpacity(dragShare),
+                                               velocityY: min(velocityY, 0))
+            open(app, release)
             reset()
         } else {
             cancel(app)
@@ -264,12 +312,15 @@ struct GameOverview: View {
             session.scroll = now
             let pull = max(-now, 0)
             if pull != session.pull { session.pull = pull }
+            session.pullSpeed.add(y: pull, at: ProcessInfo.processInfo.systemUptime)
         }
         .onScrollPhaseChange { old, now, context in
             // Pulling the page down at its top closes the overview: the cover flies back from where the finger left it,
-            // at its speed (the content offset's velocity is negative while the page moves down)
+            // at its speed (the content offset's velocity is negative while the page moves down; the scroll view gives
+            // none for a release past its top, so the pull's own last moves count too)
             if old == .interacting, now != .interacting, -session.scroll > stage.px(OverviewMotion.pullClose) {
-                session.release = (pull: session.pull, speed: max(-(context.velocity?.dy ?? 0), 0))
+                let tracked = session.pullSpeed.velocity(at: ProcessInfo.processInfo.systemUptime)
+                session.release = (pull: session.pull, speed: max(-(context.velocity?.dy ?? 0), tracked, 0))
                 onClose()
             }
         }
@@ -1316,10 +1367,10 @@ private struct OverviewFlightLayer: View {
     var body: some View {
         let covers = HomeMetrics(stage: stage).covers
         OverviewFlight(hostID: session.hostID, app: session.app, from: session.source,
-                       to: session.flightSlot ?? OverviewMotion.headerSlot(stage),
+                       to: session.flightSlot ?? OverviewMotion.headerSlot(stage), back: session.back, closeStart: session.closeStart,
                        fromCorner: stage.px(covers.corner * CoverGeometry.focusScale), toCorner: stage.px(30),
                        fromArt: session.flightFrom, toArt: session.flightTo, wide: session.wide, coverScale: covers.scale,
-                       progress: session.flight)
+                       fromOpacity: session.fromOpacity, probe: session.drawn, progress: session.flight)
             .opacity(session.landed || session.handedBack ? 0 : 1)
     }
 }
@@ -1335,6 +1386,9 @@ struct OverviewFlight: View {
     let app: HostApp
     let from: CGRect
     let to: CGRect
+    /// The card at rest where a closing lands, and the progress the closing began at (``OverviewMotion/closingFrom``).
+    var back: CGRect?
+    var closeStart = 1.0
     /// The card's corner radius as it shows (focused) and the slot's, points.
     let fromCorner: Double
     let toCorner: Double
@@ -1344,13 +1398,18 @@ struct OverviewFlight: View {
     let toArt: CGImage?
     let wide: Bool
     let coverScale: Double
+    /// The swiped card's opacity where the opening starts (whole by 30 % of the flight).
+    var fromOpacity = 1.0
+    /// Notes the progress each drawn frame had.
+    var probe: FlightProbe?
     let progress: Double
     @Environment(\.stage) private var stage
     @Environment(\.delosColors) private var colors
 
     var body: some View {
-        let path = FlightPath(from: from, to: to, lift: stage.px(OverviewMotion.arc))
-        let clip = FlightClip(path: path, fromCorner: fromCorner, toCorner: toCorner, progress: progress)
+        let path = FlightPath(from: from, to: to, back: back, closeStart: closeStart, lift: stage.px(OverviewMotion.arc),
+                              cap: stage.px(OverviewMotion.overshootCap))
+        let clip = FlightClip(path: path, fromCorner: fromCorner, toCorner: toCorner, probe: probe, progress: progress)
         let p = min(max(progress, 0), 1)
         ZStack(alignment: .topLeading) {
             // One shadow radius for the whole flight (an animated radius would re-blur it on every frame)
@@ -1368,6 +1427,7 @@ struct OverviewFlight: View {
                 .shadow(color: colors.glow.color.opacity(1 - p), radius: stage.px(30))
                 .opacity(1 - p)
         }
+        .modifier(FlightOpacity(from: fromOpacity, progress: progress))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -1409,14 +1469,19 @@ struct OverviewFlight: View {
     }
 }
 
-/// Where the flying cover is: ``OverviewMotion/flightFrame(from:to:progress:lift:)`` between two frames.
+/// Where the flying cover is: ``OverviewMotion/flightFrame(from:to:progress:lift:cap:)`` between two frames; closing, from
+/// a start that turns into the card at rest ([back]) on the way.
 private struct FlightPath {
     let from: CGRect
     let to: CGRect
+    var back: CGRect?
+    var closeStart = 1.0
     let lift: Double
+    let cap: Double
 
     func frame(_ progress: Double) -> CGRect {
-        OverviewMotion.flightFrame(from: from, to: to, progress: progress, lift: lift)
+        let start = back.map { OverviewMotion.closingFrom(progress: progress, start: closeStart, from: from, back: $0) } ?? from
+        return OverviewMotion.flightFrame(from: start, to: to, progress: progress, lift: lift, cap: cap)
     }
 }
 
@@ -1425,6 +1490,7 @@ private struct FlightClip: Shape {
     let path: FlightPath
     let fromCorner: Double
     let toCorner: Double
+    let probe: FlightProbe?
     var progress: Double
 
     var animatableData: Double {
@@ -1433,12 +1499,29 @@ private struct FlightClip: Shape {
     }
 
     func path(in rect: CGRect) -> Path {
+        probe?.value = progress
         #if DEBUG && canImport(UIKit)
         let drawn = progress
         MainActor.assumeIsolated { OverviewFrameLog.shared.progress(drawn) }
         #endif
         // The spring may pass its end a little; the corners never do
         return RoundedRectangle(cornerRadius: Motion.lerp(fromCorner, toCorner, min(max(progress, 0), 1)), style: .continuous).path(in: path.frame(progress))
+    }
+}
+
+/// The flying cover's opacity: a swiped card that left faded comes back to whole by 30 % of the flight
+/// (``OverviewMotion/flightOpacity(progress:from:)``), following the flight's own progress frame by frame.
+private struct FlightOpacity: ViewModifier, Animatable {
+    let from: Double
+    var progress: Double
+
+    nonisolated var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content.opacity(from < 1 ? OverviewMotion.flightOpacity(progress: progress, from: from) : 1)
     }
 }
 
@@ -1480,7 +1563,8 @@ private struct FlightFill: GeometryEffect {
 /// one after another with the settle spring (``OverviewMotion/settle``; up by 160 px plus 30 per cover of distance, to
 /// 92 %, 34 ms apart) and come back together with the closing flight's spring; the one in the overview hides while its
 /// card flies and shows again at once when the flight lands; with reduced motion they only fade. The focused cover
-/// follows a finger swiping it up.
+/// follows a finger swiping it up. Each cover reports its frame at rest (``OverviewLauncher/restFrames``), measured
+/// outside its lift and growth: the flight leaves from it and lands on it, never on a lifted frame.
 struct CoverDescent: ViewModifier {
     let app: HostApp
     let distance: Int
@@ -1502,14 +1586,17 @@ struct CoverDescent: ViewModifier {
             .opacity(descent.active ? 0 : 1)
             .animation(motion, value: descent.active)
             .animation(nil) { $0.opacity(mine ? 0 : 1) }
-            // A swiped cover rises on its rubber band, grows by up to 3 % and fades a little near the top of it (never
+            // A swiped cover rises on its rubber band, grows by up to 3 % and fades to 70 % near the top of it (never
             // clipped)
-            .scaleEffect(1 + 0.03 * follow.share)
+            .scaleEffect(1 + OverviewMotion.swipeGrow * follow.share)
             .offset(y: follow.offset)
             .opacity(OverviewMotion.swipeOpacity(follow.share))
+            // The layout frame: the transforms above (the lifts, the growth) do not move it
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { launcher?.restFrames[app.id] = $0 }
             #if os(iOS)
+            // Every cover has the recognizer; whether it swipes is asked when a finger starts (only the focused cover's)
             .gesture(CoverSwipeGesture(
-                app: app, launcher: launcher, enabled: distance == 0 && !descent.active,
+                app: app, launcher: launcher, enabled: !descent.active,
                 minimumDistance: OverviewMotion.swipeSlop, threshold: stage.px(OverviewMotion.swipeOpen), cap: stage.px(OverviewMotion.swipeCap)))
             #endif
     }
@@ -1533,11 +1620,15 @@ struct CoverSwipeArt: ViewModifier {
 extension OverviewMotion {
     /// The cover's flight is a spring (interruptible: Back mid-flight turns it around from where it is, at its speed):
     /// response 0.62 s, damping 0.74 out to the header (it overshoots by about 3.2 % and settles once); 0.55 s, 0.78
-    /// back to the card (about 2 %). The overshoot only grows the cover (``flightFrame(from:to:progress:lift:)``);
-    /// the corners and the crossfades are clamped.
-    static let flightOpenSpring = Animation.spring(response: 0.62, dampingFraction: 0.74)
+    /// back to the card (about 2 %). Past an end only the position overshoots, along the way it arrived
+    /// (``flightFrame(from:to:progress:lift:cap:)``); the size, the corners and the crossfades stay clamped.
+    static let flightOpen = Spring(response: 0.62, dampingRatio: 0.74)
+    static let flightOpenSpring = Animation.spring(flightOpen)
     static let flightClose = Spring(response: 0.55, dampingRatio: 0.78)
     static let flightCloseSpring = Animation.spring(flightClose)
+    /// The opening after a finger let go of a swiped cover: the same spring, starting at the finger's [velocity] (flights
+    /// per second towards the slot, ``openVelocity(velocityY:from:to:lift:)``).
+    static func swipeOpenSpring(velocity: Double) -> Animation { .interpolatingSpring(flightOpen, initialVelocity: velocity) }
     /// The closing flight after the page was pulled down: the same spring, starting at the finger's [velocity] (flights
     /// per second towards the card, ``pullHandoff(slot:pull:scale:speed:card:)``).
     static func pullCloseSpring(velocity: Double) -> Animation { .interpolatingSpring(flightClose, initialVelocity: velocity) }

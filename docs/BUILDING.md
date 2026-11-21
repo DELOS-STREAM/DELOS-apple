@@ -78,6 +78,12 @@ controller -DelosDemoCommands "w4 touch"` shows a touch with a pad connected). `
 fresh simulator, launches the demo on that screen, saves an upright screenshot and deletes the simulator. Not in the demo: a stream
 surface for the stream menu and the loader (they need a running stream).
 
+Real touches (taps, holds, swipes with their speed, a pull of a scroll view) come from [AXe](https://github.com/cameroncooke/AXe)
+(`brew tap cameroncooke/axe && brew install axe`), which drives a simulator's touch input: for example
+`axe swipe --start-x 330 --start-y 800 --end-x 330 --end-y 600 --duration 0.25 --udid <UDID>` swipes the focused cover up, and
+`axe touch -x 330 -y 800 --down --up --delay 1 --udid <UDID>` holds it. The touch checks of game info (#25) run with it on the
+demo in touch mode (`-DelosDemoInput touch -DelosMuteMedia YES`) while `xcrun simctl io <UDID> recordVideo` records the frames.
+
 The same arguments work on the Mac: `sh tools/mac.sh /tmp/shot.png 5 -DelosBackground nebula` ([below](#a-mac)).
 Apple TV: `sh tools/sim.sh tv /tmp/shot.png` shows the start screen in the Apple TV 4K simulator. The simulator has no remote
 input from `simctl`; a throwaway XCUITest bundle that calls `XCUIRemote.shared.press(.select)` and the like (and

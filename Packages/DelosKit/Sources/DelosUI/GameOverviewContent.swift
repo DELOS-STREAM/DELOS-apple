@@ -361,8 +361,9 @@ enum OverviewMotion {
     /// A drag counts as a swipe of the cover once it moved this far, mostly vertically.
     static let swipeSlop = 10.0
     /// The swiped cover's rubber band: it follows the finger up at [swipeShare] of its travel at first and eases towards
-    /// [swipeCap] stage pixels, never past it (nor nearer the screen's top).
-    static let swipeShare = 0.6, swipeCap = 120.0
+    /// [swipeCap] stage pixels, never past it; it grows by [swipeGrow] and fades to 70 % near the cap (the standard row's
+    /// numbers on every platform).
+    static let swipeShare = 0.6, swipeCap = 56.0, swipeGrow = 0.03
 
     /// How far the dragged cover follows a finger that moved [travel] points (negative: up), with [cap] the most it rises
     /// (points): up it is a rubber band, at most [swipeShare] of the travel and never past [cap]; down it barely gives.
@@ -384,23 +385,79 @@ enum OverviewMotion {
         let dx = card.midX - frame.midX, dy = card.midY - frame.midY
         let distance = (dx * dx + dy * dy).squareRoot()
         guard distance > 1, dy > 0 else { return (frame, 0) }
-        // Only the part of the speed that heads towards the card counts, at most 4 flights per second
-        return (frame, min(max(speed, 0) * dy / distance / distance, 4))
+        // Only the part of the speed that heads towards the card counts, at most 6 flights per second
+        return (frame, min(max(speed, 0) * dy / distance / distance, 6))
     }
+
+    /// The flight's position overshoot past an end: at most [overshootCap] stage pixels, with [overshootGainIn] times the
+    /// spring's overshoot (as a share of the travel) into the slot and [overshootGainOut] past the card.
+    static let overshootCap = 40.0, overshootGainIn = 1.6, overshootGainOut = 2.5
 
     /// The flying cover's frame at [progress] (0 at the card, 1 at the header slot): its size runs from the card's to the
     /// slot's and grows a little at the middle, its centre runs along a slight arc [lift] points high. [from], [to]: the
-    /// card's and the slot's frames. The spring's overshoot past either end only grows the frame around that end's centre
-    /// (by the overshoot), so it never uncovers the slot's or the card's edge.
-    static func flightFrame(from: CGRect, to: CGRect, progress: Double, lift: Double) -> CGRect {
+    /// card's and the slot's frames. Past either end (the spring's overshoot) only the position carries on, along the half
+    /// of the arc it arrived on, by [cap]·tanh(raw / [cap]) points (raw: the overshoot times the travel times
+    /// ``overshootGainIn`` or ``overshootGainOut``); the size stays the end's, so the slot's or the card's edge never shows
+    /// a bigger cover.
+    static func flightFrame(from: CGRect, to: CGRect, progress: Double, lift: Double, cap: Double = 0) -> CGRect {
         let t = min(max(progress, 0), 1)
-        let over = 1 + max(progress - 1, -progress, 0)
         // A quadratic through the start, the lifted middle and the end
         let u = 1 - t
-        let grow = (1 + (midScale - 1) * 4 * t * u) * over
+        let grow = 1 + (midScale - 1) * 4 * t * u
         let width = (from.width * u + to.width * t) * grow, height = (from.height * u + to.height * t) * grow
-        let x = from.midX * u + to.midX * t, y = from.midY * u + to.midY * t - lift * 4 * t * u
+        var x = from.midX * u + to.midX * t, y = from.midY * u + to.midY * t - lift * 4 * t * u
+        let over = progress - t
+        if over != 0, cap > 0 {
+            let midX = (from.midX + to.midX) / 2, midY = (from.midY + to.midY) / 2 - lift
+            let end = over > 0 ? CGPoint(x: to.midX, y: to.midY) : CGPoint(x: from.midX, y: from.midY)
+            let dx = end.x - midX, dy = end.y - midY, length = (dx * dx + dy * dy).squareRoot()
+            let travel = hypot(from.midX - to.midX, from.midY - to.midY)
+            if length > 0 {
+                let raw = abs(over) * (over > 0 ? overshootGainIn : overshootGainOut) * travel
+                let shift = cap * tanh(raw / cap)
+                x += dx / length * shift
+                y += dy / length * shift
+            }
+        }
         return CGRect(x: x - width / 2, y: y - height / 2, width: width, height: height)
+    }
+
+    /// The card as the row shows it, from the cover's frame at rest ([rest], its layout): focused (grown by the focus
+    /// scale about its middle; the wide first cover only to the left), then lifted [lift] points and grown by [scale]
+    /// about the item's middle as a finger left it.
+    static func cardFrame(rest: CGRect, lift: Double = 0, scale: Double = 1) -> CGRect {
+        let s = CoverGeometry.focusScale
+        let width = rest.width * s, height = rest.height * s
+        let x = rest.width > rest.height ? rest.maxX - width : rest.midX - width / 2
+        let focused = CGRect(x: x, y: rest.midY - height / 2, width: width, height: height)
+        return CGRect(x: rest.midX + (focused.minX - rest.midX) * scale, y: rest.midY + (focused.minY - rest.midY) * scale + lift,
+                      width: focused.width * scale, height: focused.height * scale)
+    }
+
+    /// The card the closing flight heads for at [progress]: the frame the opening left from ([from], where a finger had
+    /// lifted the card) at the progress the closing began at ([start]), turning into the card at rest ([back]) on the way,
+    /// so the flight lands exactly where the card is, without a jump where it began.
+    static func closingFrom(progress: Double, start: Double, from: CGRect, back: CGRect) -> CGRect {
+        guard start > 0, from != back else { return back }
+        let t = min(max(progress / start, 0), 1)
+        return CGRect(x: back.minX + (from.minX - back.minX) * t, y: back.minY + (from.minY - back.minY) * t,
+                      width: back.width + (from.width - back.width) * t, height: back.height + (from.height - back.height) * t)
+    }
+
+    /// The flying cover's opacity at [progress] of an opening whose card left at [from] (a swiped cover fades near the
+    /// top of its rubber band): back to whole by 30 % of the flight.
+    static func flightOpacity(progress: Double, from: Double) -> Double {
+        from + (1 - from) * min(max(progress / 0.3, 0), 1)
+    }
+
+    /// A finger's hand-off at the opening: the flight's initial velocity (flights per second, at most 6) that carries on
+    /// a cover let go of while it moved [velocityY] points per second (negative: up) from [from] towards the slot [to],
+    /// along the arc's start ([lift] points high). Only motion towards the slot carries over.
+    static func openVelocity(velocityY: Double, from: CGRect, to: CGRect, lift: Double) -> Double {
+        // d(centre y) / d(progress) at the card: the straight way plus the arc's rise
+        let slope = to.midY - from.midY - 4 * lift
+        guard abs(slope) >= 1 else { return 0 }
+        return min(max(velocityY / slope, 0), 6)
     }
 
     /// The ring arc's spring: response 1.0 s, damping 0.55, settled exactly at [ratingRun] ms (a ring's own clock, from
