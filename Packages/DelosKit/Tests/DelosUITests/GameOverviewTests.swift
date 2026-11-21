@@ -12,6 +12,8 @@ import Testing
 @MainActor
 @Suite struct GameOverviewTests {
     private let complete = DemoOverview.complete(1)
+    /// The complete game without Steam's media: YouTube's videos and IGDB's screenshots.
+    private let youTube = { var details = DemoOverview.complete(1); details.steam = nil; return details }()
     private let sparse = DemoOverview.sparse(3)
 
     @Test func completeGameShowsEverySection() {
@@ -207,8 +209,8 @@ import Testing
     }
 
     @Test func viewerCommands() {
-        let session = OverviewSession(hostID: "h", app: HostApp(id: 1, title: "G"), coverID: AnyHashable("app-1"), source: .zero, details: complete)
-        let media = OverviewContent(details: complete, library: [], region: nil).media
+        let session = OverviewSession(hostID: "h", app: HostApp(id: 1, title: "G"), coverID: AnyHashable("app-1"), source: .zero, details: youTube)
+        let media = OverviewContent(details: youTube, library: [], region: nil).media
         var sent: [String] = []
         func player(_ id: String) {
             session.video.reset(id)
@@ -258,8 +260,8 @@ import Testing
     }
 
     @Test func viewerDockFocusAndSeekFlash() {
-        let session = OverviewSession(hostID: "h", app: HostApp(id: 1, title: "G"), coverID: AnyHashable("app-1"), source: .zero, details: complete)
-        let media = OverviewContent(details: complete, library: [], region: nil).media
+        let session = OverviewSession(hostID: "h", app: HostApp(id: 1, title: "G"), coverID: AnyHashable("app-1"), source: .zero, details: youTube)
+        let media = OverviewContent(details: youTube, library: [], region: nil).media
         session.viewer = 0
         session.video.reset(media[0].id)
         var sent: [String] = []
@@ -357,10 +359,59 @@ import Testing
     }
 
     @Test func unplayableVideosLeftOut() {
-        let all = OverviewContent(details: complete, library: [], region: nil).media
-        let kept = OverviewContent(details: complete, library: [], region: nil, unplayable: ["x7mer01"]).media
+        let all = OverviewContent(details: youTube, library: [], region: nil).media
+        let kept = OverviewContent(details: youTube, library: [], region: nil, unplayable: ["x7mer01"]).media
         #expect(all.filter { $0.kind == .video }.map(\.id) == ["x7mer01", "x7mer02"])
         #expect(kept.filter { $0.kind == .video }.map(\.id) == ["x7mer02"] && kept.count == all.count - 1 && kept.first?.kind == .video)
+    }
+
+    @Test func steamMediaComeFirstAndYouTubeOnlyFallsBack() throws {
+        // Steam's movies, then Steam's screenshots; YouTube's videos and IGDB's screenshots are not shown
+        let media = OverviewContent(details: complete, library: [], region: nil).media
+        #expect(media.map(\.id).prefix(3) == ["steam-movie-257052901", "steam-movie-256938596", "steam-shot-0"])
+        #expect(media.count == 11 && media.allSatisfy { $0.steam != nil })
+        #expect(OverviewContent.youTubeVideos(complete).isEmpty)
+        // Steam's 293 px poster is never shown: a movie takes Steam's first screenshot (600 px in the carousel, 1920 px
+        // in the viewer); the screenshots their own two sizes
+        let shot = try #require(media.first { $0.kind == .screenshot }?.steam)
+        #expect(media[0].steam?.thumb == shot.thumb && media[0].steam?.full == shot.full)
+        #expect(shot.thumb?.lastPathComponent.hasSuffix(".600x338.jpg") == true && shot.full?.lastPathComponent.hasSuffix(".1920x1080.jpg") == true)
+        #expect(media[0].steam?.stream?.absoluteString.contains("hls_264_master.m3u8") == true)
+        #expect(OverviewImageSizes.thumb(media[0], tall: true) == shot.thumb && OverviewImageSizes.full(media[0], tall: false) == shot.full)
+        // No Steam screenshot: IGDB's screenshots, and the movies have no picture rather than a stretched poster
+        var noShots = complete
+        noShots.steam?.screenshots = []
+        let fallback = OverviewContent(details: noShots, library: [], region: nil).media
+        #expect(fallback.filter { $0.kind == .video }.allSatisfy { $0.steam?.thumb == nil && $0.steam?.full == nil })
+        #expect(fallback.filter { $0.kind == .screenshot }.allSatisfy { $0.steam == nil } && fallback.count == 11)
+        // A poster at least 600 px wide is the movie's own
+        noShots.steam?.movies = [.init(id: 5, thumbnail: "https://shared.akamai.steamstatic.com/x/movie.640x360.jpg", mp4: "http://cdn.akamai.steamstatic.com/x/movie_max.mp4")]
+        let own = try #require(OverviewContent(details: noShots, library: [], region: nil).media.first?.steam)
+        #expect(own.thumb?.lastPathComponent == "movie.640x360.jpg" && own.stream?.absoluteString == "https://cdn.akamai.steamstatic.com/x/movie_max.mp4")
+        // Steam's movies that AVPlayer cannot play (DASH or WebM only): YouTube's videos stay the fallback
+        var dashOnly = complete
+        dashOnly.steam?.movies = [.init(id: 6, dash: "https://video.akamai.steamstatic.com/x/dash_h264.mpd", webm: "https://video.akamai.steamstatic.com/x/movie_max.webm")]
+        let videos = OverviewContent(details: dashOnly, library: [], region: nil).media.filter { $0.kind == .video }
+        #if os(tvOS)
+        #expect(videos.isEmpty)
+        #else
+        #expect(videos.map(\.id) == ["x7mer01", "x7mer02"] && videos.allSatisfy { $0.steam == nil })
+        #endif
+    }
+
+    @Test func nativePlayerReportsLikeYouTubes() {
+        let video = OverviewVideo()
+        video.reset("steam-movie-1")
+        video.report(state: 3, time: 0, duration: 0, muted: false, loaded: 0, volume: 100)
+        #expect(video.playing && !video.started)
+        video.report(state: 1, time: 2.5, duration: 90, muted: false, loaded: 0.25, volume: 100)
+        #expect(video.duration == 90 && video.loaded == 0.25 && video.started)
+        video.reset("steam-movie-1")
+        video.firstFrame()
+        #expect(video.started)
+        // Without a player, the commands do nothing
+        video.setVolume(40)
+        #expect(video.volume == 100)
     }
 
     #if !os(tvOS)

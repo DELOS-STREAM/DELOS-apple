@@ -58098,6 +58098,71 @@
         }
       }
     },
+    "overview_video_failed_steam": {
+      "extractionState": "manual",
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam ho nenačetl. Zkontroluj připojení a zkus to znovu."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam konnte es nicht laden. Prüf die Verbindung und versuch es noch mal."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam couldn't load it. Check the connection and try again."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam no pudo cargarlo. Revisa la conexión y vuelve a intentarlo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam n'a pas pu la charger. Vérifie la connexion et réessaie."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam から読み込めませんでした。接続を確認して、もう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam에서 불러오지 못했습니다. 연결을 확인하고 다시 시도하세요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A Steam não conseguiu carregá-lo. Verifique a conexão e tente de novo."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam не зміг його завантажити. Перевір з'єднання і спробуй ще раз."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam 无法加载此视频。请检查网络连接后重试。"
+          }
+        }
+      }
+    },
     "overview_video_forward": {
       "extractionState": "manual",
       "localizations": {

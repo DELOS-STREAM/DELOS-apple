@@ -32,10 +32,18 @@ struct OverviewContent: Equatable {
 
     struct Media: Equatable, Identifiable {
         enum Kind: Equatable { case video, screenshot }
+        /// Steam's media: the carousel's picture, the viewer's and a movie's stream (HLS, else MP4) for AVPlayer.
+        struct Steam: Equatable {
+            let thumb: URL?
+            let full: URL?
+            var stream: URL? = nil
+        }
         let kind: Kind
-        /// IGDB's image id of a screenshot, the YouTube id of a video.
+        /// IGDB's image id of a screenshot, the YouTube id of a video; `steam-movie-<id>` and `steam-shot-<id>` for Steam's.
         let id: String
         let name: String?
+        /// Steam's media; nil for IGDB's screenshots and YouTube's videos.
+        var steam: Steam? = nil
     }
 
     struct Link: Equatable, Identifiable {
@@ -100,13 +108,7 @@ struct OverviewContent: Equatable {
         add(.keywords, Array(details.keywords.prefix(5)))
         self.groups = groups
 
-        // Videos first, then screenshots. Apple TV has no web view to play a video in: no videos there
-        #if os(tvOS)
-        let videos: [Media] = []
-        #else
-        let videos = details.videos.filter { !unplayable.contains($0.videoId) }.map { Media(kind: .video, id: $0.videoId, name: $0.name) }
-        #endif
-        media = videos + details.screenshots.map { Media(kind: .screenshot, id: $0.imageId, name: nil) }
+        media = Self.media(details, unplayable: unplayable)
 
         var links = details.websites.compactMap { site -> Link? in
             guard let url = URL(string: site.url), ["https", "http"].contains(url.scheme?.lowercased() ?? "") else { return nil }
@@ -138,6 +140,39 @@ struct OverviewContent: Equatable {
     static func genreName(_ name: String) -> String { name.replacingOccurrences(of: " (RPG)", with: "") }
     /// "Massively Multiplayer Online (MMO)" reads "MMO".
     static func modeName(_ name: String) -> String { name.hasPrefix("Massively") ? "MMO" : name }
+
+    /// The narrowest picture the carousel and the viewer take: Steam's own 293 px movie poster is never stretched.
+    static let posterWidth = 600
+
+    /// Steam's movies (the ones AVPlayer can play) first, then Steam's screenshots. YouTube's videos come only when Steam
+    /// has no movie (never on Apple TV, which has no web view, and never the ones in [unplayable]); IGDB's screenshots only
+    /// when Steam has no screenshot. A movie's picture is its own poster when that is at least ``posterWidth`` wide, else
+    /// Steam's first screenshot, else none (the surface).
+    static func media(_ details: GameDetails, unplayable: Set<String>) -> [Media] {
+        let shots = (details.steam?.screenshots ?? []).compactMap { shot -> Media? in
+            guard let full = SteamMedia.url(shot.full) else { return nil }
+            return Media(kind: .screenshot, id: "steam-shot-\(shot.id)", name: nil, steam: .init(thumb: SteamMedia.url(shot.thumbnail) ?? full, full: full))
+        }
+        let poster = shots.first?.steam
+        let movies = (details.steam?.movies ?? []).compactMap { movie -> Media? in
+            guard let stream = movie.stream else { return nil }
+            let own = SteamMedia.url(movie.thumbnail).flatMap { (SteamMedia.width($0) ?? 0) >= posterWidth ? $0 : nil }
+            return Media(kind: .video, id: "steam-movie-\(movie.id)", name: movie.name,
+                         steam: .init(thumb: own ?? poster?.thumb, full: own ?? poster?.full, stream: stream))
+        }
+        #if os(tvOS)
+        let youTube: [Media] = []
+        #else
+        let youTube = youTubeVideos(details).filter { !unplayable.contains($0.videoId) }.map { Media(kind: .video, id: $0.videoId, name: $0.name) }
+        #endif
+        let screenshots = shots.isEmpty ? details.screenshots.map { Media(kind: .screenshot, id: $0.imageId, name: nil) } : shots
+        return (movies.isEmpty ? youTube : movies) + screenshots
+    }
+
+    /// IGDB's YouTube videos, the fallback: none when Steam has a movie that plays.
+    static func youTubeVideos(_ details: GameDetails) -> [GameDetails.Video] {
+        details.steam?.movies.contains { $0.stream != nil } == true ? [] : details.videos
+    }
 
     static func multiplayer(_ m: GameDetails.Multiplayer?) -> [String] {
         guard let m else { return [] }

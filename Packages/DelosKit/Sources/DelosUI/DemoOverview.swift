@@ -3,9 +3,10 @@ import DelosData
 import Foundation
 
 /// DEBUG only: the demo's game overview data (the prototype's invented games, in the Worker's game-details shape) and its
-/// images. Every game gets the complete one (storyline, 9 screenshots, 2 videos, PEGI and ESRB) except every third IGDB
-/// id, which gets the sparse one (no storyline, no critics' rating, 23 player ratings, no age rating, 4 screenshots, one
-/// link), so both rules for missing data show.
+/// images. Every game gets the complete one (storyline, Steam's 2 movies and 9 screenshots over IGDB's 9 screenshots and
+/// 2 YouTube videos, PEGI and ESRB) except every third IGDB id, which gets the sparse one (no storyline, no critics'
+/// rating, 23 player ratings, no age rating, IGDB's 4 screenshots, one link), so both rules for missing data show. The
+/// movies stream Steam's real HLS trailers (DREDGE's), so the native player and the dock over it can be checked.
 enum DemoOverview {
     static func details(id: Int64) -> GameDetails {
         id % 3 == 0 ? sparse(id) : complete(id)
@@ -13,6 +14,19 @@ enum DemoOverview {
 
     private static func shots(_ prefix: String, _ count: Int) -> [GameDetails.Image] {
         (0..<count).map { GameDetails.Image(imageId: "\(prefix)\($0)", width: 1920, height: 1080) }
+    }
+
+    private static func steam(_ id: Int64) -> GameDetails.Steam {
+        let trailers = "https://video.akamai.steamstatic.com/store_trailers/1562430"
+        let posters = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps"
+        return GameDetails.Steam(appId: 2741160, movies: [
+            .init(id: 257052901, name: "Launch Trailer", thumbnail: "\(posters)/257052901/movie.293x165.jpg",
+                  hls: "\(trailers)/751913/2f166531a359b6bbad73e42bb417a30b2eb61798/1750701525/hls_264_master.m3u8?t=1725614790", highlight: true),
+            .init(id: 256938596, name: "Gameplay Overview", thumbnail: "\(posters)/256938596/movie.293x165.jpg",
+                  hls: "\(trailers)/553322/db0df35acf025e6ecd0c3305a8b97ed97c0bab33/1750701500/hls_264_master.m3u8?t=1680192002", highlight: true),
+        ], screenshots: (0..<9).map {
+            .init(id: $0, thumbnail: "\(posters)/2741160/ss_mer\(id)x\($0).600x338.jpg", full: "\(posters)/2741160/ss_mer\(id)x\($0).1920x1080.jpg")
+        })
     }
 
     static func complete(_ id: Int64) -> GameDetails {
@@ -39,7 +53,7 @@ enum DemoOverview {
             keywords: ["space station", "crafting", "artificial intelligence", "underwater"],
             languages: ["English", "French", "German", "Spanish", "Japanese", "Korean", "Czech", "Polish", "Italian", "Portuguese",
                         "Russian", "Ukrainian", "Chinese", "Turkish"],
-            externalGames: [.init(uid: "2741160", source: 1)])
+            externalGames: [.init(uid: "2741160", source: 1)], steam: steam(id))
     }
 
     static func sparse(_ id: Int64) -> GameDetails {
@@ -56,7 +70,8 @@ enum DemoOverview {
             languages: ["English", "French", "German"])
     }
 
-    /// Answers IGDB's and YouTube's image URLs with generated pictures: screenshots and video thumbnails 16:9, covers 2:3.
+    /// Answers IGDB's, YouTube's and Steam's image URLs with generated pictures: screenshots and video thumbnails 16:9,
+    /// covers 2:3. The movies' HLS streams are not pictures: AVPlayer loads them from Steam itself.
     struct ImageTransport: MetadataTransport {
         func response(for request: URLRequest) async throws -> MetadataHTTPResponse {
             let url = request.url!

@@ -18,6 +18,11 @@ The format is based on [Keep a Changelog 1.0.0](https://keepachangelog.com/en/1.
   under it (A plays or pauses, Left and Right seek 10 s, Y or the keyboard's M mutes, L1 and R1 browse); the viewer
   covers the top bar, so its count no longer overlaps the DELOS logo; nothing opens a browser or the
   YouTube app. Videos YouTube does not let other apps play are left out; Apple TV lists no videos.
+- The game overview's trailers and screenshots come from Steam when the game is on Steam: its trailers play in the
+  system's player (HLS, with DELOS's controls, the dock's glass blurring the moving picture under it, the blurred
+  picture until the first frame shows), on Apple TV too, and its screenshots show at 1920 × 1080 in the viewer. No ads,
+  no YouTube for those games; YouTube's trailers and IGDB's screenshots remain only for games Steam has none for. Game
+  details cached before this are fetched again once.
 - The game overview below the dashboard: Down on a game's cover (a swipe of the cover up, or the Game info chip at the
   bottom of the focused cover) continues the dashboard downward. The cover flies into the header, keeping its picture's
   shape as its frame turns from the wide first cover's into the portrait one, beside the game's logo (the dashboard's,

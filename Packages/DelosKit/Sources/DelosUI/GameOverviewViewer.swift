@@ -38,16 +38,26 @@ struct OverviewViewer: View {
         ZStack(alignment: .topLeading) {
             Color.black.ignoresSafeArea()
             if item.kind == .video, settled == index, !closing, video.error == nil, video.videoID == item.id {
-                #if !os(tvOS)
-                // While the overlay is hidden YouTube's own surface takes the touches and clicks (an ad's Skip); a tap there
-                // also brings the overlay back. While it shows, the overlay's tap layer takes them
-                OverviewVideoPlayer(videoID: item.id, video: video, interactive: !controls.visible, onTap: { controls.onInput() })
-                    .frame(width: target.width, height: target.height)
-                    .allowsHitTesting(!controls.visible)
-                    .accessibilityHidden(true)
-                    .transition(.identity)
-                    .transaction { $0.animation = nil; $0.disablesAnimations = true }
-                #endif
+                if let stream = item.steam?.stream {
+                    // A Steam movie in AVPlayer: an ordinary view under the dock, whose glass blurs the video
+                    OverviewNativePlayer(url: stream, video: video)
+                        .frame(width: target.width, height: target.height)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                        .transition(.identity)
+                        .transaction { $0.animation = nil; $0.disablesAnimations = true }
+                } else {
+                    #if !os(tvOS)
+                    // While the overlay is hidden YouTube's own surface takes the touches and clicks (an ad's Skip); a tap
+                    // there also brings the overlay back. While it shows, the overlay's tap layer takes them
+                    OverviewVideoPlayer(videoID: item.id, video: video, interactive: !controls.visible, onTap: { controls.onInput() })
+                        .frame(width: target.width, height: target.height)
+                        .allowsHitTesting(!controls.visible)
+                        .accessibilityHidden(true)
+                        .transition(.identity)
+                        .transaction { $0.animation = nil; $0.disablesAnimations = true }
+                    #endif
+                }
             }
             picture(item, tall: stage.height > 1200, target: target)
                 .id(index)
@@ -57,7 +67,7 @@ struct OverviewViewer: View {
                     removal: .modifier(active: Slide(x: -session.viewerDirection * stage.px(90), scale: 0.94, opacity: 0), identity: Slide(x: 0, scale: 1, opacity: 1))
                         .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42))))
             if item.kind == .video, let error = video.error {
-                OverviewVideoError(code: error).frame(width: target.width, height: target.height)
+                OverviewVideoError(code: error, steam: item.steam != nil).frame(width: target.width, height: target.height)
             }
             #if !os(tvOS)
             tapLayer(item)
@@ -187,8 +197,8 @@ struct OverviewViewer: View {
 
     #if !os(tvOS)
     /// Over the picture, under the dock. Touch: a tap shows or hides the overlay, a double tap in the left or right third
-    /// seeks 10 s. Pointer: a click plays or pauses. While the overlay is hidden over a video it lets the touches through to
-    /// YouTube's surface (``OverviewVideoPlayer/interactive``).
+    /// seeks 10 s. Pointer: a click plays or pauses. While the overlay is hidden over a YouTube video it lets the touches
+    /// through to YouTube's surface (``OverviewVideoPlayer/interactive``); over a Steam movie it always takes them.
     private func tapLayer(_ item: OverviewContent.Media) -> some View {
         let controls = video.controls
         return GeometryReader { proxy in
@@ -211,7 +221,7 @@ struct OverviewViewer: View {
                     }
                 }))
         }
-        .allowsHitTesting(controls.visible || item.kind != .video || video.videoID != item.id)
+        .allowsHitTesting(controls.visible || item.kind != .video || item.steam != nil || video.videoID != item.id)
         .accessibilityHidden(true)
     }
     #endif
