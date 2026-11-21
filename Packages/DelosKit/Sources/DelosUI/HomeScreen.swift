@@ -209,7 +209,8 @@ struct HomeScreen: View {
         }
         .onAppear {
             launcher.canOpen = { [metadata] app in metadata.hasOverview(app) }
-            launcher.open = { app, drag in openOverview(app, drag: drag) }
+            launcher.isFocused = { [focus] app in focus.focused == AnyHashable(GameLibrary.id(app)) }
+            launcher.open = { app, release in openOverview(app, release: release) }
         }
         .onAppear { navigator.takeInput(focus) { command in capture(command) } }
         .onDisappear { navigator.releaseInput(focus) }
@@ -260,13 +261,11 @@ struct HomeScreen: View {
     }
 
     /// The card of [app] as it shows in the row (focused: grown about its middle; the wide first cover only to the left), in
-    /// the screen's space.
-    private func cardFrame(_ app: HostApp, drag: Double = 0) -> CGRect? {
-        guard let frame = focus.registeredFrames[AnyHashable(GameLibrary.id(app))] else { return nil }
-        let s = CoverGeometry.focusScale
-        let width = frame.width * s, height = frame.height * s
-        let x = frame.width > frame.height ? frame.maxX - width : frame.midX - width / 2
-        return CGRect(x: x - homeOrigin.x, y: frame.midY - height / 2 - homeOrigin.y + drag, width: width, height: height)
+    /// the screen's space: at rest, or lifted [lift] points and grown by [scale] about its middle as a finger left it.
+    /// The frame is the row's layout of the cover (``OverviewLauncher/restFrames``), never one moved by a lift.
+    private func cardFrame(_ app: HostApp, lift: Double = 0, scale: Double = 1) -> CGRect? {
+        guard let frame = launcher.restFrames[app.id] ?? focus.registeredFrames[AnyHashable(GameLibrary.id(app))] else { return nil }
+        return OverviewMotion.cardFrame(rest: frame, lift: lift, scale: scale).offsetBy(dx: -homeOrigin.x, dy: -homeOrigin.y)
     }
 
     /// The card's picture as the row shows it now, for the flight (``OverviewSession/flightFrom``): its animation's frame
@@ -282,12 +281,18 @@ struct HomeScreen: View {
         return listed.first { GameLibrary.id($0) == id }
     }
 
-    /// Opens [app]'s overview: the card flies into the header (from [drag] points above its place when the finger swiped
-    /// it up), the other covers lift away, the page rises; the focus is on Play at once.
-    private func openOverview(_ app: HostApp, drag: Double = 0) {
-        guard overview == nil, !sheetOpen, metadata.hasOverview(app), let source = cardFrame(app, drag: drag) else { return }
+    /// Opens [app]'s overview: the card flies into the header (from where a finger let go of it when it swiped it up: its
+    /// lift, growth, opacity and speed), the other covers lift away, the page rises; the focus is on Play at once.
+    private func openOverview(_ app: HostApp, release: OverviewSwipeRelease? = nil) {
+        guard overview == nil, !sheetOpen, metadata.hasOverview(app),
+              let source = cardFrame(app, lift: release?.offset ?? 0, scale: release?.scale ?? 1) else { return }
         let session = OverviewSession(hostID: hostID, app: app, coverID: AnyHashable(GameLibrary.id(app)), source: source,
                                       details: metadata.details(for: app))
+        session.back = cardFrame(app)
+        session.fromOpacity = reducedMotion ? 1 : release?.opacity ?? 1
+        let velocity = release.map {
+            OverviewMotion.openVelocity(velocityY: $0.velocityY, from: source, to: OverviewMotion.headerSlot(stage), lift: stage.px(OverviewMotion.arc))
+        } ?? 0
         let apps = LibraryFilter.apply(filters, to: listed) { metadata.data(for: $0) }
         let selectedIndex = apps.firstIndex(where: { $0.id == app.id }) ?? 0
         let viewport = CGRect(origin: homeOrigin, size: CGSize(width: stage.px(stage.width), height: stage.px(stage.height)))
@@ -308,9 +313,12 @@ struct HomeScreen: View {
             try? await Task.sleep(for: .milliseconds(16))
             #if DEBUG && canImport(UIKit)
             OverviewFrameLog.shared.start("open")
+            OverviewFrameLog.shared.mark(String(format: "v=%.2f alpha=%.2f", velocity, session.fromOpacity))
             #endif
+            let spring: Animation = reducedMotion ? .easeOut(duration: 0.28)
+                : velocity > 0 ? OverviewMotion.swipeOpenSpring(velocity: velocity) : OverviewMotion.flightOpenSpring
             // Landed only once the overshoot has settled (the header's cover takes the flying one's place exactly)
-            withAnimation(reducedMotion ? .easeOut(duration: 0.28) : OverviewMotion.flightOpenSpring, completionCriteria: .removed) {
+            withAnimation(spring, completionCriteria: .removed) {
                 session.flight = 1
             } completion: {
                 #if DEBUG && canImport(UIKit)
@@ -353,8 +361,14 @@ struct HomeScreen: View {
             }
             session.ring.hide()
             var velocity = 0.0
+            // The flight lands exactly on the card at rest (its row's layout, no lift left): from the open overview straight
+            // there; turned around mid-opening, from where the flight left, turning into the card at rest on the way
+            let back = cardFrame(session.app) ?? session.back ?? session.source
+            session.back = back
+            session.closeStart = wasOpen ? 1 : min(max(session.drawn.value, 0), 1)
+            session.fromOpacity = 1
             if wasOpen {
-                if let source = cardFrame(session.app) { session.source = source }
+                session.source = back
                 // The header's picture as it shows now (its animation's frame) flies back into the card's still (the
                 // library's animations were released while the overview was open)
                 session.wide = session.source.width > session.source.height
@@ -363,7 +377,7 @@ struct HomeScreen: View {
                 if let release, !reducedMotion {
                     let handoff = OverviewMotion.pullHandoff(
                         slot: OverviewMotion.headerSlot(stage), pull: release.pull, scale: OverviewMotion.pullScale(release.pull / stage.scale),
-                        speed: release.speed, card: session.source)
+                        speed: release.speed, card: back)
                     session.flightSlot = handoff.frame
                     velocity = handoff.velocity
                 }
@@ -1333,7 +1347,7 @@ private struct Cover: View {
 
     /// Opens the game's overview (the Game info chip).
     private func openInfo() {
-        if let launcher, launcher.canOpen(app) { launcher.open(app, 0) }
+        if let launcher, launcher.canOpen(app) { launcher.open(app, nil) }
     }
 
     private func load() async {
