@@ -317,6 +317,29 @@ import Testing
         #expect(session.viewerClosing)
     }
 
+    @Test func viewerMorphPreservesSharedFocusAndReleasesPlayer() {
+        let session = OverviewSession(hostID: "h", app: HostApp(id: 1, title: "G"), coverID: AnyHashable("app-1"), source: .zero, details: youTube)
+        let media: [OverviewContent.Media] = [
+            .init(kind: .video, id: "v", name: nil),
+            .init(kind: .screenshot, id: "s", name: nil)
+        ]
+        session.viewer = 0
+        session.video.reset("v")
+        session.video.controls.focus = .previous
+        session.video.run = { _ in }
+        OverviewViewer.handle(.nextTab, session: session, media: media)
+        #expect(session.viewer == 1 && session.video.controls.focus == .previous)
+        #expect(session.video.videoID == nil && session.video.run == nil)
+        OverviewViewer.handle(.previousTab, session: session, media: media)
+        #expect(session.viewer == 0 && session.video.controls.focus == .previous)
+        #expect(OverviewDockFocus.back.surviving(playable: false, direction: 1) == .previous)
+        #expect(OverviewDockFocus.forward.surviving(playable: false, direction: -1) == .next)
+        #expect(OverviewDockFocus.volume.surviving(playable: false, direction: -1) == .next)
+        #expect(OverviewDockFocus.play.surviving(playable: false, direction: -1) == .previous)
+        #expect(OverviewDockFocus.play.surviving(playable: false, direction: 1) == .next)
+        #expect(OverviewDockFocus.close.surviving(playable: false, direction: 1) == .close)
+    }
+
     @Test func viewerDockFocusAndSeekFlash() {
         let session = OverviewSession(hostID: "h", app: HostApp(id: 1, title: "G"), coverID: AnyHashable("app-1"), source: .zero, details: youTube)
         let media = OverviewContent(details: youTube, library: [], region: nil).media

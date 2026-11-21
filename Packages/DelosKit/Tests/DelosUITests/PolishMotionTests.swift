@@ -42,6 +42,22 @@ import Testing
         #expect(SettingsReadingMotion.marqueeOffset(elapsed: 2, width: 0) == 0)
     }
 
+    @Test func bouncingMarqueePausesAtBothEndsWithoutWrapping() {
+        func offset(_ elapsed: Double) -> Double {
+            SettingsReadingMotion.bounceOffset(elapsed: elapsed, travel: 112, speed: 56)
+        }
+        #expect(offset(0.699) == 0)
+        #expect(abs(offset(1.7) - 56) < 0.0001)
+        #expect(abs(offset(2.7) - 112) < 0.0001)
+        #expect(abs(offset(3.5) - 112) < 0.0001)
+        #expect(abs(offset(4.6) - 56) < 0.0001)
+        #expect(abs(offset(5.6)) < 0.0001)
+        #expect(abs(offset(6.4)) < 0.0001)
+        #expect(abs(offset(7.5) - 56) < 0.0001)
+        #expect(SettingsReadingMotion.bounceOffset(elapsed: 2, travel: 0) == 0)
+        #expect(SettingsReadingMotion.bounceOffset(elapsed: 2, travel: 112, speed: 0) == 0)
+    }
+
     @Test func helpReadingSpeedAndPausesAreBounded() {
         #expect(SettingsReadingMotion.helpDuration(overflow: 100) == 5)
         #expect(SettingsReadingMotion.helpDuration(overflow: 1) == 1)

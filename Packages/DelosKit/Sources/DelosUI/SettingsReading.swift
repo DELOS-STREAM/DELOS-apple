@@ -19,6 +19,17 @@ enum SettingsReadingMotion {
         return phase < travel ? phase * speed : 0
     }
 
+    /// One initial reading pause, then alternating legs with a pause at each end; [travel] is the overflow.
+    static func bounceOffset(elapsed: Double, travel: Double, speed: Double = SettingsReadingMotion.speed) -> Double {
+        guard travel > 0, speed > 0, elapsed >= startDelay else { return 0 }
+        let leg = travel / speed
+        let phase = (elapsed - startDelay).truncatingRemainder(dividingBy: 2 * (leg + loopDelay))
+        if phase < leg { return phase * speed }
+        if phase < leg + loopDelay { return travel }
+        if phase < 2 * leg + loopDelay { return travel - (phase - leg - loopDelay) * speed }
+        return 0
+    }
+
     static func helpDuration(overflow: Double) -> Double {
         min(max(overflow / 20, 1), 120)
     }
@@ -30,12 +41,13 @@ enum SettingsReadingMotion {
 struct MarqueeLabel: View {
     let text: String
     let active: Bool
+    var bounce = false
 
     var body: some View {
         Text(text)
             .lineLimit(1)
             .hidden()
-            .overlay(alignment: .leading) { MarqueeTrack(key: text, active: active) { Text(text) } }
+            .overlay(alignment: .leading) { MarqueeTrack(key: text, active: active, bounce: bounce) { Text(text) } }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(text)
     }
@@ -47,12 +59,13 @@ struct MarqueeLabel: View {
 struct MarqueeContent<Key: Equatable, Content: View>: View {
     let key: Key
     var active = true
+    var bounce = false
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         MarqueeRoom { content().fixedSize() }
             .hidden()
-            .overlay(alignment: .leading) { MarqueeTrack(key: key, active: active, content: content) }
+            .overlay(alignment: .leading) { MarqueeTrack(key: key, active: active, bounce: bounce, content: content) }
     }
 }
 
@@ -76,6 +89,7 @@ private struct MarqueeRoom: Layout {
 private struct MarqueeTrack<Key: Equatable, Content: View>: View {
     let key: Key
     let active: Bool
+    let bounce: Bool
     @ViewBuilder let content: () -> Content
     @Environment(\.stage) private var stage
     @Environment(\.reducedMotion) private var reduced
@@ -87,16 +101,18 @@ private struct MarqueeTrack<Key: Equatable, Content: View>: View {
             let overflow = naturalWidth > proxy.size.width + 0.5
             let scrolling = overflow && active && !reduced
             TimelineView(.animation(paused: !scrolling)) { clock in
-                let offset = scrolling ? SettingsReadingMotion.marqueeOffset(
-                    elapsed: clock.date.timeIntervalSince(started), width: naturalWidth / stage.scale) : 0
+                let travel = max(0, (naturalWidth - proxy.size.width) / stage.scale)
+                let elapsed = clock.date.timeIntervalSince(started)
+                let offset = !scrolling ? 0 : (bounce
+                    ? SettingsReadingMotion.bounceOffset(elapsed: elapsed, travel: travel)
+                    : SettingsReadingMotion.marqueeOffset(elapsed: elapsed, width: naturalWidth / stage.scale))
                 let lap = naturalWidth / stage.scale + SettingsReadingMotion.gap
-                // Hidden at the left: what has scrolled away, back to nothing as the next lap's content arrives
-                let hiddenStart = scrolling ? stage.px(min(offset, lap - offset)) : 0
-                let hiddenEnd = overflow ? stage.px(36) : 0
+                let hiddenStart = scrolling ? stage.px(bounce ? offset : min(offset, lap - offset)) : 0
+                let hiddenEnd = overflow ? (bounce ? stage.px(travel - offset) : stage.px(36)) : 0
                 HStack(spacing: stage.px(SettingsReadingMotion.gap)) {
                     content().fixedSize()
                         .onGeometryChange(for: Double.self) { $0.size.width } action: { naturalWidth = $0 }
-                    if scrolling { content().fixedSize() }
+                    if scrolling && !bounce { content().fixedSize() }
                 }
                 .offset(x: -stage.px(offset))
                 .frame(width: proxy.size.width, alignment: .leading)
