@@ -36,7 +36,9 @@ struct OverviewViewer: View {
         let target = target(item)
         let controls = video.controls
         ZStack(alignment: .topLeading) {
+            // Flying to or from its tile, the page shows through as the picture leaves it (the tile takes over as it lands)
             Color.black.ignoresSafeArea()
+                .opacity(flies(item, target: target) ? zoom : 1)
             if item.kind == .video, settled == index, !closing, video.error == nil, video.videoID == item.id {
                 if let stream = item.steam?.stream {
                     // A Steam movie in AVPlayer: an ordinary view under the dock, whose glass blurs the video
@@ -178,11 +180,20 @@ struct OverviewViewer: View {
     }
 
 
+    /// Whether [item]'s picture flies to and from its tile (the tile is on screen and motion is not reduced).
+    private func flies(_ item: OverviewContent.Media, target: CGRect) -> Bool {
+        guard !reduced, let tile = session.thumbFrames[item.id] else { return false }
+        return tile.offsetBy(dx: -origin.x, dy: -origin.y).intersects(target)
+    }
+
     private func picture(_ item: OverviewContent.Media, tall: Bool, target: CGRect) -> some View {
         let thumb = session.thumbFrames[item.id].map { $0.offsetBy(dx: -origin.x, dy: -origin.y) }
         let from = thumb.flatMap { $0.intersects(target) ? $0 : nil }
         let z = reduced || from == nil ? 1 : zoom
-        let startScale = from.map { min($0.width / target.width, $0.height / target.height) } ?? 1
+        // The tile shows the picture filling it, enlarged by its parallax rim: the flight starts and ends at that size, so
+        // nothing grows or shrinks as the tile takes over; the whole picture fades over the flight's quarter at the tile,
+        // so the rim that overhangs the tile is gone as it lands
+        let startScale = from.map { OverviewMotion.viewerFlightScale(tile: $0.size, target: target.size, fills: item.kind == .video) } ?? 1
         let scale = Motion.lerp(startScale, 1, z)
         let dx = from.map { ($0.midX - target.width * startScale / 2) * (1 - z) } ?? 0
         let dy = from.map { ($0.midY - target.height * startScale / 2) * (1 - z) } ?? 0
@@ -193,11 +204,12 @@ struct OverviewViewer: View {
             .frame(width: target.width, height: target.height)
             .blur(radius: item.kind == .video ? stage.px(16) : 0, opaque: true)
             .clipped()
-            .background(Color.black)
+            // A screenshot's letterbox fades with the flight: at the tile only the picture is left
+            .background(Color.black.opacity(from == nil ? 1 : z))
             .scaleEffect(scale, anchor: .topLeading)
             .offset(x: dx + (item.kind == .video || reduced ? 0 : drag.width * 0.6),
                     y: dy + (item.kind == .video || reduced ? 0 : max(drag.height, 0)))
-            .opacity(playing ? 0 : (from == nil ? zoom : 1))
+            .opacity(playing ? 0 : (from == nil ? zoom : min(max(z * 4, 0), 1)))
             .animation(reduced ? nil : .easeOut(duration: 0.28), value: playing)
             .allowsHitTesting(false)
     }

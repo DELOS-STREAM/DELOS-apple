@@ -61,6 +61,12 @@ public enum Screen: Hashable, Sendable {
         return canGoBack
     }
 
+    /// The top bar's back button animates in and out here: on the dashboard it comes and goes only with game info.
+    var animatesTopBarBack: Bool {
+        if case .home = self { return true }
+        return false
+    }
+
     /// Settings, Profile and Devices take each other's place on the stack ([Navigator.openFromNavigation]).
     var replacesOnNavigation: Bool { self == .settings || self == .profile || self == .devices }
 

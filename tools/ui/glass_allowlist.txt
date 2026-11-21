@@ -5,6 +5,7 @@
 ArtworkScreen.swift | opacity: 0x73 / 255 | scrim under the filter sheet
 ArtworkScreen.swift | .background(Color(.sRGB, red: 5 / 255, green: 10 / 255, blue: 20 / 255, opacity: 0.6)) | veil over a loading tile
 ButtonCaptureLayer.swift | colors.scrim.color.ignoresSafeArea() | scrim behind the card
+GameOverviewViewer.swift | .background(Color.black.opacity(from == nil ? 1 : z)) | the viewer's letterbox, fading with its flight to the tile
 Layers.swift | colors.scrim.color) | the layers' scrim
 OverviewVideoPlayer.swift | Color.black.opacity(0.6) | veil over the thumbnail of a video that cannot play
 RowPopover.swift | Color.black.opacity(0.25) | scrim behind the popover
