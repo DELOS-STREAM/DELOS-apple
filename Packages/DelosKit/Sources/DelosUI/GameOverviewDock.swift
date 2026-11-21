@@ -128,13 +128,15 @@ struct OverviewDock: View {
             .stop(focus, focus: controls.focus, ring: ring)
     }
 
-    /// The count in gold and "N / M · title", on one line.
+    /// The count in gold and "N / M · title", on one line: the count stays put, only a title too long for the column
+    /// scrolls.
     private var info: some View {
         HStack(alignment: .firstTextBaseline, spacing: stage.px(10)) {
             Text("\(index + 1)").font(DelosFonts.unbounded(stage.tpx(34), .bold)).foregroundStyle(colors.accent.color).fixedSize()
-            MarqueeLabel(text: L("overview_viewer_count", media.count, title), active: true, bounce: true)
-                .font(DelosFonts.figtree(stage.tpx(28), .bold)).foregroundStyle(colors.text.color)
+            Text(L("overview_viewer_count", media.count, "").trimmingCharacters(in: .whitespaces)).fixedSize()
+            MarqueeLabel(text: title, active: true, bounce: true)
         }
+        .font(DelosFonts.figtree(stage.tpx(28), .bold)).foregroundStyle(colors.text.color)
         .monospacedDigit()
         .lineLimit(1)
         .accessibilityElement(children: .combine)
