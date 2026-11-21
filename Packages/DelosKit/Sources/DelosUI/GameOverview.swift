@@ -111,7 +111,7 @@ final class OverviewLauncher {
     /// A drag of [app]'s focused cover moved by [translation] (points).
     func drag(_ app: HostApp, translation: CGSize, slop: CGFloat) {
         guard canOpen(app), translation.height < 0 || dragApp == app.id else { return }
-        guard dragApp == app.id || (abs(translation.height) > slop && abs(translation.height) > abs(translation.width)) else { return }
+        guard dragApp == app.id || CoverDragDirection.of(translation: translation, minimumDistance: slop) == .verticalSwipe else { return }
         dragApp = app.id
         dragOffset = OverviewMotion.swipeFollow(translation.height)
     }
@@ -124,9 +124,15 @@ final class OverviewLauncher {
             dragOffset = 0
             dragApp = nil
         } else {
-            withAnimation(Motion.spring(500)) { dragOffset = 0 }
-            dragApp = nil
+            cancel(app)
         }
+    }
+
+    /// A recognizer lost its touch: settle only its own cover and never turn a cancelled swipe into an open.
+    func cancel(_ app: HostApp) {
+        guard dragApp == app.id else { return }
+        withAnimation(Motion.spring(500)) { dragOffset = 0 }
+        dragApp = nil
     }
 }
 
@@ -1431,9 +1437,9 @@ struct CoverDescent: ViewModifier {
             .animation(nil) { $0.opacity(mine ? 0 : 1) }
             .offset(y: dragged)
             #if os(iOS)
-            .simultaneousGesture(DragGesture(minimumDistance: OverviewMotion.swipeSlop)
-                .onChanged { value in if distance == 0 { launcher?.drag(app, translation: value.translation, slop: OverviewMotion.swipeSlop) } }
-                .onEnded { value in if distance == 0 { launcher?.end(app, translation: value.translation, threshold: stage.px(OverviewMotion.swipeOpen)) } })
+            .gesture(CoverSwipeGesture(
+                app: app, launcher: launcher, enabled: distance == 0 && !descent.active,
+                minimumDistance: OverviewMotion.swipeSlop, threshold: stage.px(OverviewMotion.swipeOpen)))
             #endif
     }
 }
